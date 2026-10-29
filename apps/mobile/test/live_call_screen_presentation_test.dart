@@ -10,7 +10,7 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 
 class _Session extends Mock implements LiveVoiceSession {}
 
-Future<_Session> _openCall(WidgetTester tester, {bool largeText = false}) async {
+Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool official=false}) async {
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   const toneChannel = MethodChannel('masanawa/call_tone');
   messenger.setMockMethodCallHandler(toneChannel, (_) async => true);
@@ -24,10 +24,10 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false}) async 
   when(() => session.close()).thenAnswer((_) async {});
   when(() => session.mute(any())).thenAnswer((_) async {});
   when(() => session.setSpeaker(any())).thenAnswer((_) async {});
-  const agent = AgentDirectoryEntry(
+  final agent = AgentDirectoryEntry(
     characterId: 'agent', characterVersionId: 'v1',
     displayName: 'Amina', roleLabel: 'Medicine', about: '',
-    presence: AgentPresence.available,
+    presence: AgentPresence.available,publicOfficialSimulation:official,
   );
   await tester.pumpWidget(MaterialApp(
     theme: buildMasanawaTheme(brightness: Brightness.light),
@@ -53,6 +53,15 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false}) async 
 }
 
 void main() {
+  testWidgets('public-official call discloses simulation at 320dp and 200% text', (tester) async {
+    tester.view.physicalSize=const Size(320,568);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    await _openCall(tester,largeText:true,official:true);
+    expect(find.text('AI simulation · Not the official or their office'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+    await tester.tap(find.text('End call'));await tester.pump();await tester.pump(const Duration(milliseconds:400));
+  });
+
   testWidgets('call fills the viewport and End closes the session and route', (tester) async {
     final session = await _openCall(tester);
     final screen=find.byKey(const ValueKey('masanawa-live-call-screen'));

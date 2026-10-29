@@ -56,6 +56,11 @@ class _Directory extends AgentDirectoryController {
  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(characterId:'agent',characterVersionId:'v1',displayName:'Amina',roleLabel:'AI',about:'',presence:AgentPresence.available,supportAgent:true)]);
  @override Future<void> refresh() async {}
 }
+class _OfficialDirectory extends _Directory {
+ @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(
+  characterId:'agent',characterVersionId:'v1',displayName:'Example Official',roleLabel:'Public official',about:'',
+  presence:AgentPresence.available,supportAgent:true,publicOfficialSimulation:true)]);
+}
 const _user=AuthUser(id:'account-a',name:'Fan',locale:'en',status:'ACTIVE',role:'USER',isNewUser:false,createdAt:'2026-10-12');
 const _tokens=AuthTokens(accessToken:'test',refreshToken:'test-refresh',accessExpiresIn:3600,user:_user);
 class _Session extends SessionController {
@@ -73,6 +78,12 @@ class _Wallet extends WalletController {
 }
 void main() {
  setUp(()=>SharedPreferences.setMockInitialValues({}));
+ testWidgets('direct official chat visibly identifies the AI simulation', (tester) async {
+  await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_OfficialDirectory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  expect(find.textContaining('AI simulation ·'),findsOneWidget);
+  expect(tester.takeException(),isNull);
+ });
  testWidgets('received voice note uses the Masana portrait and a wide shallow player',(tester)async{
   tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;
   addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);

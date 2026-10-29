@@ -1075,7 +1075,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         ),
                       ),
                       Text(
-                        workingLabel,
+                        agent.publicOfficialSimulation ? 'AI simulation · $workingLabel' : workingLabel,
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(
@@ -2420,6 +2420,9 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if(widget.agent.publicOfficialSimulation) const Padding(
+                  padding:EdgeInsets.only(top:7),
+                  child:Text('AI simulation · Not the official or their office',textAlign:TextAlign.center)),
                 const SizedBox(height: 7),
                 Semantics(
                   liveRegion: true,

@@ -18,6 +18,8 @@ describe('published persona identity for all conversation media', () => {
    expect(await reader.readPublished(scope)).toEqual({biography:'Grew up by the river; loves music and cooking.',personality:['wry','patient'],languages:['en','ha']});
    for(const override of [{tenantId:'tenant-b'},{characterId:'character-b'},{characterVersionId:'version-draft'},{characterVersionId:'version-old'}])
     expect(await reader.readPublished({...scope,...override})).toBeNull();
+   await db.exec(`UPDATE identity.character_versions SET constitution='{"biography":"Public record","publicOfficial":{"officialName":"Example Official","countryCode":"NG"}}' WHERE character_version_id='version-a'`);
+   await expect(reader.readPublished(scope)).rejects.toThrow('official_dossier_review_required');
    await db.exec(`UPDATE identity.characters SET state='disabled'`);
    expect(await reader.readPublished(scope)).toBeNull();
   } finally {await db.close();}

@@ -185,6 +185,7 @@ export function createAgentConversationService(input: {
       const admission = await input.authorizer.authorize({
         authorizationHeader: request.authorizationHeader,
         characterId: parseCanonicalId("character", request.characterId),
+        evidenceQuery:text.slice(0,500),
       });
       const session = await input.sessions.read({
         authority: admission.authority,
@@ -413,6 +414,7 @@ export function createAgentConversationService(input: {
       const admission = await input.authorizer.authorize({
         authorizationHeader: request.authorizationHeader,
         characterId,
+        ...(caption?{evidenceQuery:caption.slice(0,500)}:{}),
       });
       const session = await input.sessions.read({
         authority: admission.authority,
@@ -604,6 +606,7 @@ export function createAgentConversationService(input: {
       const admission = await input.authorizer.authorize({
         authorizationHeader: request.authorizationHeader,
         characterId,
+        ...(caption?{evidenceQuery:caption.slice(0,500)}:{}),
       });
       const session = await input.sessions.read({
         authority: admission.authority,

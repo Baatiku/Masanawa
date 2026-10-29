@@ -6,7 +6,7 @@ The owner selected **APC, ADC, NDC and PDP**. Research presidential aspirants/ca
 
 This replaces human post submission and the profession-based direction for new personas. The former twelve-item composer batch is superseded, not completed. Existing financial receipts and cancellation/recovery remain available. Sharing remains available.
 
-**Implementation is in progress on `feat/public-official-persona-pivot-oct28`; it is not deployed or accepted end to end.** No researched official has been admitted as a live persona, and no reviewed source accounts or provider credentials have been configured by this change.
+**Foundation merged in PR #593 at `125ceefda197cb6d1a6a8f36803a12a7ac62b5ea`, with all five exact-head hosted checks passing (head `af2a35c960d8342fc6ad24c4388df2db656289bc`). Follow-up admission/retrieval source is on `feat/official-evidence-admission-retrieval-oct29`. It is not deployed or accepted end to end.** No researched official has been admitted as a live persona, and no reviewed source accounts or provider credentials have been configured by this change.
 
 ## Existing implementation and proposed architecture
 
@@ -40,8 +40,9 @@ These are source changes, not a claim of production readiness. Tests already cov
 
 - [ ] Review presidential and governorship names against dated primary nomination documents; distinguish aspirants from confirmed candidates and review party changes.
 - [ ] Obtain usable Grokipedia references and corroborating primary records for a small first cohort; record licensing/usage basis and reviewer decisions.
-- [ ] Build and validate a repeatable trusted dossier admission workflow; reject incomplete, stale and mismatched identity packets.
-- [ ] Implement per-question retrieval over a larger evidence corpus with source citations; the current bounded initial evidence snippets do not constitute decades of comprehensive knowledge.
+- [x] Build and validate a repeatable trusted operator dossier admission workflow; reject incomplete/stale/mismatched packets, prevent fictional-identity reassignment, retain withdrawn evidence and immutable idempotent review receipts. See [operator guide](OFFICIAL-DOSSIER-OPERATOR-GUIDE-20261029.md).
+- [x] Rank bounded public evidence per text question/nonempty media caption, preserving required biography/primary records and rejecting marked officials without approved dossiers.
+- [ ] Add live-call and captionless voice-note retrieval, semantic/multilingual qualification and deeper evidence evaluation. Lexical text retrieval does not constitute decades of comprehensive knowledge.
 - [ ] Evaluate factual accuracy, dated offices/affiliations, quotation fidelity, unknown-answer behavior, prompt injection and chat/call consistency before admission.
 - [ ] Verify each chosen official social account and its stable provider ID; choose one active platform per official.
 - [ ] Configure authorized X/Meta access as server secrets and qualify permissions/usage rights. Never paste credentials into chat.
@@ -81,3 +82,9 @@ The implementation removes composer/Boost routes from all production entry point
 External admission work remains open: qualified X/Meta access, actual reviewed Grokipedia/primary biographies, new canonical identities with cleared imagery, deeper per-turn/voice retrieval, automated provider deletion compliance and an evaluated live pilot. No production credentials, importer flags or wallets were changed.
 
 Research verification, 29 October: primary-document text matching confirms 76 contiguous candidate/running-mate/party tuples. This is ticket transcription verification only. The other 26 tickets remain reported entries pending primary access/review, not negative findings about candidacy. All 102 remain `persona_admitted=false`.
+
+Admission/retrieval follow-up: initial six-file batch passed 39 tests; consolidated seven-file batch passed 44 tests, including old-policy retrieval, missing-dossier rejection, idempotent operator review and immutable receipts. Gateway TypeScript passed. Preview/apply command build and hosted checks are recorded at delivery, not assumed to activate real officials.
+
+The operator packet can also admit one reviewed social source atomically. Platform switches suspend prior source bindings and retain their provenance; cross-person account reassignment is refused. A failed source update rolls back the dossier review. All source accounts remain unconfigured in production. Gateway build and compiled preview with a deliberately invalid database sentinel passed, demonstrating that preview does not open a database connection.
+
+Disclosure continuation: direct-entry chat headers identify public officials as AI simulations, and full-screen calls explicitly say they are not the official or their office. Consolidated chat/call/MB-recovery/badge tests: 25 passed, including 320dp/200% text; Flutter analysis passed with informational lints only.
