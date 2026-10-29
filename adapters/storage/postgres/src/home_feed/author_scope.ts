@@ -15,7 +15,6 @@ export const officialSourceEligibility=`((p.source_provenance IS NULL AND NOT EX
  AND d.state='approved' AND d.review_expires_at>statement_timestamp()
  AND c.state='active' AND c.active_character_version_id=d.character_version_id AND own.kind='platform'
  AND EXISTS(SELECT 1 FROM masana.public_official_evidence e WHERE e.tenant_id=d.tenant_id
-  AND e.character_id=d.character_id AND e.state='approved' AND e.source_kind='grokipedia' AND e.valid_until>statement_timestamp())
- AND EXISTS(SELECT 1 FROM masana.public_official_evidence e WHERE e.tenant_id=d.tenant_id
-  AND e.character_id=d.character_id AND e.state='approved' AND e.source_kind='official_record' AND e.valid_until>statement_timestamp())
+  AND e.character_id=d.character_id AND e.state='approved' AND e.source_kind IN ('grokipedia','biographical_reference') AND e.valid_until>statement_timestamp())
+
 ))`;

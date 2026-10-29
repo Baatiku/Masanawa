@@ -5,7 +5,7 @@ import type { CharacterId } from "@masanawa/contracts";
  * is looked up through the canonical server character ID, never by display name. */
 export interface ApprovedMasanaDirectoryIdentity {
   readonly publicOfficialSimulation?:boolean;
-  readonly publicOfficial?:{officialName:string;office:string;identitySourceUrl:string;reviewedAt:string;reviewExpiresAt:string;verification:'source_reviewed';representation:'ai_simulation';biographicalFacts?:import('@masanawa/masana').MasanaBiographicalFacts};
+  readonly publicOfficial?:{officialName:string;office:string;identitySourceUrl:string;reviewedAt:string;reviewExpiresAt:string;verification:'source_reviewed';representation:'ai_simulation';biography?:string;biographicalFacts?:import('@masanawa/masana').MasanaBiographicalFacts};
   readonly portraitKey: string | null;
   readonly following: boolean;
   readonly socialChannels: readonly MasanaSocialChannel[];
@@ -28,6 +28,7 @@ export function createPgAgentMasanaIdentityReader(
         SELECT revision.character_id, media.media_id AS portrait_media_id,
           revision.profile->'socialChannels' AS social_channels,
           revision.profile->'biographicalFacts' AS biographical_facts,
+          revision.profile->>'lifeStory' AS public_biography,
           EXISTS(SELECT 1 FROM masana.follows following
             WHERE following.tenant_id=revision.tenant_id
               AND following.character_id=revision.character_id
@@ -49,7 +50,7 @@ export function createPgAgentMasanaIdentityReader(
       const simulations=await officials?.simulations(tenantId,characterIds);
       const result=new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       for(const raw of found.rows) {
-        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown};
+        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown};
         if(typeof row.character_id!=="string" ||
            !characterIds.includes(row.character_id as CharacterId)) {
           throw new Error("invalid_masana_identity_projection");
@@ -61,7 +62,7 @@ export function createPgAgentMasanaIdentityReader(
         const portraitKey=/^[a-z][a-z0-9_-]{1,39}$/.test(key) &&
           Object.hasOwn(MASANA_CHARACTER_DESIGNS,key)?key:null;
         result.set(row.character_id as CharacterId,
-          Object.freeze({...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
+          Object.freeze({...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
             socialChannels:validateMasanaSocialChannels(row.social_channels)}));
       }
       return result;

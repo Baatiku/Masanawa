@@ -50,7 +50,14 @@ export interface CharacterAssetReference extends ExternalReference {
   readonly mediaType?: string;
 }
 
+/** Identity marker only. Reviewed evidence/authority remain in the separate dossier. */
+export interface PublicOfficialCharacterIdentity {
+  readonly officialName: string;
+  readonly countryCode: 'NG';
+}
+
 export interface CharacterConstitution {
+  readonly publicOfficial?: PublicOfficialCharacterIdentity;
   readonly schemaVersion: 1;
   readonly displayName: string;
   readonly biography: string;

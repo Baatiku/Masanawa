@@ -1,3 +1,5 @@
+**Owner first-launch source update, 29 October:** Use reliable attributed sources for the initial public-official biographies and chat/call knowledge; Grokipedia is no longer exclusive for this launch. Approved references retain canonical URLs, source/check dates and actual per-person review. Social Status imports remain separate, original and attributed. This supersedes the Grokipedia-only restrictions below.
+
 **Owner navigation correction, 29 October:** Replace the Data root with Profile. Keep exactly five roots: Home, Chats, Wallet, Calls, Profile. Data redemption remains an authenticated secondary Wallet flow; preserve old Data deep links. Remove redundant root headings and Status top Saved control; retain ordinary Share and purchased-MB Tip. This supersedes older five-tab Data-root wording.
 
 **Grokipedia-only knowledge scope:** Chat/call persona evidence excludes X/Facebook posts as well as other biography sources. The requested verbatim X/Facebook Status feed remains separate and unchanged.

@@ -1,12 +1,14 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {isGrokipediaArticleUrl} from '@masanawa/agents';
+import {validateMasanaProfile,validateMasanaBiographicalFacts,type MasanaBiographicalFacts} from '@masanawa/masana';
+import {isApprovedBiographySourceUrl,isApprovedBiographyEvidence} from '@masanawa/agents';
 import {parseCanonicalId} from '@masanawa/contracts';
 import {withTransaction,type Pool} from '@masanawa/postgres';
 
-type EvidenceKind='grokipedia';
+type EvidenceKind='grokipedia'|'biographical_reference';
 export interface OfficialDossierPacket {
  tenantId:string;characterId:string;characterVersionId:string;
  officialName:string;office:string;countryCode:'NG';identitySourceUrl:string;reviewExpiresAt:string;
+ publicProfile?:{biography:string;lifeStory:string;biographicalFacts?:MasanaBiographicalFacts};
  socialSource?:{platform:'x'|'facebook';accountId:string;handle:string;rightsBasis:string;reviewExpiresAt:string};
  evidence:readonly {sourceUrl:string;kind:EvidenceKind;title:string;content:string;sourceDate:string;validUntil:string;licenseBasis:string}[];
 }
@@ -27,17 +29,24 @@ export function validateOfficialDossierPacket(raw:unknown,now=new Date()):Offici
   !Array.isArray(r.evidence)||r.evidence.length<1||r.evidence.length>100)return reject();
  const evidence=r.evidence.map(value=>{
   if(!value||typeof value!=='object'||Array.isArray(value))return reject();const e=value as Record<string,unknown>;
-  if(e.kind!=='grokipedia')return reject();
+  if(e.kind!=='grokipedia'&&e.kind!=='biographical_reference')return reject();
   const sourceUrl=url(e.sourceUrl),kind=e.kind as EvidenceKind;
-  if(!isGrokipediaArticleUrl(sourceUrl))return reject();
+  if(!isApprovedBiographyEvidence({kind,sourceUrl}))return reject();
   const sourceDate=text(e.sourceDate,10,10),date=Date.parse(sourceDate+'T00:00:00Z'),until=Date.parse(String(e.validUntil));
   if(!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)||!Number.isFinite(date)||new Date(date).toISOString().slice(0,10)!==sourceDate||
    date>+now||!Number.isFinite(until)||until<=+now||until>expires)return reject();
   return {sourceUrl,kind,title:text(e.title,1,240),content:text(e.content,1,4000),sourceDate,
    validUntil:new Date(until).toISOString(),licenseBasis:text(e.licenseBasis,5,500)};
  });
- if(!isGrokipediaArticleUrl(r.identitySourceUrl))return reject();
+ if(!isApprovedBiographySourceUrl(r.identitySourceUrl))return reject();
  if(new Set(evidence.map(e=>JSON.stringify([e.sourceUrl,e.content]))).size!==evidence.length)return reject();
+ let publicProfile:OfficialDossierPacket['publicProfile'];
+ if(r.publicProfile!==undefined){
+  if(!r.publicProfile||typeof r.publicProfile!=='object'||Array.isArray(r.publicProfile))return reject();
+  const p=r.publicProfile as Record<string,unknown>;
+  publicProfile={biography:text(p.biography,20,500),lifeStory:text(p.lifeStory,20,8000),
+   ...(p.biographicalFacts!==undefined?{biographicalFacts:validateMasanaBiographicalFacts(p.biographicalFacts)}:{})};
+ }
  let socialSource:OfficialDossierPacket['socialSource'];
  if(r.socialSource!==undefined){
   if(!r.socialSource||typeof r.socialSource!=='object'||Array.isArray(r.socialSource))return reject();
@@ -49,7 +58,7 @@ export function validateOfficialDossierPacket(raw:unknown,now=new Date()):Offici
  }
  try{return {tenantId:parseCanonicalId('tenant',String(r.tenantId)),characterId:parseCanonicalId('character',String(r.characterId)),
   characterVersionId:parseCanonicalId('character-version',String(r.characterVersionId)),officialName:text(r.officialName,2,160),
-  office:text(r.office,2,240),countryCode:'NG',identitySourceUrl:url(r.identitySourceUrl),reviewExpiresAt:new Date(expires).toISOString(),evidence,...(socialSource?{socialSource}:{})};
+  office:text(r.office,2,240),countryCode:'NG',identitySourceUrl:url(r.identitySourceUrl),reviewExpiresAt:new Date(expires).toISOString(),evidence,...(publicProfile?{publicProfile}:{}),...(socialSource?{socialSource}:{})};
  }catch{return reject();}
 }
 export async function admitOfficialDossier(pool:Pool,raw:unknown,reviewedBy:string){
@@ -69,8 +78,8 @@ export async function admitOfficialDossier(pool:Pool,raw:unknown,reviewedBy:stri
      AND (previous.constitution->'publicOfficial'->>'officialName' IS DISTINCT FROM $4
        OR previous.constitution->'publicOfficial'->>'countryCode' IS DISTINCT FROM 'NG'))
     AND EXISTS(SELECT 1 FROM masana.character_revisions m WHERE m.tenant_id=a.tenant_id
-      AND m.character_id=a.character_id AND m.state='approved')
-   FOR UPDATE OF a`,[packet.tenantId,packet.characterId,packet.characterVersionId,packet.officialName]);
+      AND m.character_id=a.character_id AND (m.state='approved' OR ($5 AND m.state='draft')))
+   FOR UPDATE OF a`,[packet.tenantId,packet.characterId,packet.characterVersionId,packet.officialName,packet.publicProfile!==undefined]);
   if(!found.rows[0])throw Error('official_canonical_admission_required');
   const old=await c.query(`SELECT official_name,state FROM masana.public_official_dossiers
    WHERE tenant_id=$1 AND character_id=$2 FOR UPDATE`,[packet.tenantId,packet.characterId]);
@@ -81,6 +90,20 @@ export async function admitOfficialDossier(pool:Pool,raw:unknown,reviewedBy:stri
   if(matching){
    if(matching.id!==prior.rows[0]?.id||old.rows[0]?.state!=='approved')throw Error('official_review_superseded');
    return {reviewId:String(matching.id),packetSha256,evidenceCount:Number(matching.evidence_count)};
+  }
+  if(packet.publicProfile){
+   const current=await c.query(`SELECT revision,profile FROM masana.character_revisions
+    WHERE tenant_id=$1 AND character_id=$2 AND state IN ('approved','draft')
+    ORDER BY (state='approved') DESC,revision DESC LIMIT 1 FOR UPDATE`,[packet.tenantId,packet.characterId]);
+   if(current.rows.length!==1)throw Error('official_profile_review_required');
+   const profile=validateMasanaProfile({...current.rows[0].profile,...packet.publicProfile});
+   const latest=await c.query(`SELECT COALESCE(MAX(revision),0)::int AS revision FROM masana.character_revisions
+    WHERE tenant_id=$1 AND character_id=$2`,[packet.tenantId,packet.characterId]);
+   await c.query(`UPDATE masana.character_revisions SET state='retired',updated_at=clock_timestamp()
+    WHERE tenant_id=$1 AND character_id=$2 AND state='approved'`,[packet.tenantId,packet.characterId]);
+   await c.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at)
+    VALUES($1,$2,$3,'approved',$4::jsonb,$5,clock_timestamp())`,
+    [packet.tenantId,packet.characterId,Number(latest.rows[0].revision)+1,JSON.stringify(profile),reviewedBy]);
   }
   await c.query(`INSERT INTO masana.public_official_dossiers(tenant_id,character_id,character_version_id,official_name,
    office,country_code,identity_source_url,reviewed_by,reviewed_at,review_expires_at,state)

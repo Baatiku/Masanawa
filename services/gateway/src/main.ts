@@ -49,6 +49,7 @@ import {
   createGbBillstackRepository,
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
+import {ensureOfficialPlatformAgents} from './official_roster_bootstrap.js';
 import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import {createGbCallRelay} from "./gb_calls/relay.js";
 import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
@@ -726,14 +727,15 @@ export async function startGatewayService(
           // prevents a staff-renamed profile from creating a new character on
           // restart and preserves its chats, Room, follow graph and voice.
           const identityRows=await database.featurePool!.query(
-            `SELECT revision.character_id, revision.profile->>'handle' AS handle
+            `SELECT DISTINCT ON (revision.character_id) revision.character_id, revision.profile->>'handle' AS handle
              FROM masana.character_revisions revision
              JOIN identity.characters character ON character.tenant_id=revision.tenant_id
                AND character.character_id=revision.character_id AND character.state='active'
              JOIN identity.character_ownership owner ON owner.tenant_id=revision.tenant_id
                AND owner.character_id=revision.character_id AND owner.kind='platform'
-             WHERE revision.tenant_id=$1 AND revision.state='approved'
-               AND revision.profile->>'handle' LIKE 'masana.%'`,
+             WHERE revision.tenant_id=$1 AND revision.state IN ('approved','retired')
+               AND revision.profile->>'handle' LIKE 'masana.%'
+             ORDER BY revision.character_id,revision.revision DESC`,
             [activePlatformTenantId],
           );
           const canonicalByHandle=new Map<string, import("@masanawa/contracts").CharacterId>();
@@ -760,6 +762,15 @@ export async function startGatewayService(
             tenantId:activePlatformTenantId,
             catalog:roster.catalog,
           });
+          const officialRoster=await ensureOfficialPlatformAgents({
+            tenantId:activePlatformTenantId,pool:database.featurePool!,
+            identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
+            profiles:database.platformAgentProfiles!,skillAssignments:database.characterSkillAssignments!,
+            skillDistribution:database.skillDistribution!,
+            legacySpecialists:roster.catalog.filter(item=>!item.seed.supportAgent).map(item=>item.characterId),
+          });
+          // Operational readback without biographies, citizen data or secrets.
+          process.stdout.write(JSON.stringify({event:'official_roster_ready',...officialRoster})+'\n');
         });
       } catch (error) {
         await database.close().catch(() => undefined);

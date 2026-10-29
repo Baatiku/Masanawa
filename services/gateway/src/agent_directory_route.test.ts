@@ -33,7 +33,7 @@ describe("agent directory route", () => {
             countryCode:'NG',countryName:'Nigeria',conversationStarters:['Hello'],
             socialChannels:[{platform:'x' as const,url:'https://x.com/example'}],
             publicOfficialSimulation:true,
-            publicOfficial:{biographicalFacts:{dateOfBirth:'1964-05-14',stateOfOrigin:'Kaduna'},officialName:'Example Official',office:'Governor',identitySourceUrl:'https://grokipedia.com/page/Example',
+            publicOfficial:{biography:'A full reviewed public biography.',biographicalFacts:{dateOfBirth:'1964-05-14',stateOfOrigin:'Kaduna'},officialName:'Example Official',office:'Governor',identitySourceUrl:'https://grokipedia.com/page/Example',
               reviewedAt:'2026-10-29T00:00:00Z',reviewExpiresAt:'2026-11-01T00:00:00Z',verification:'source_reviewed' as const,representation:'ai_simulation' as const},
             skillVersionIds:['must-not-leak'],privateCredential:'must-not-leak',
 
@@ -65,7 +65,7 @@ describe("agent directory route", () => {
     expect(body.agents[0]).not.toHaveProperty('privateCredential');
     expect(body.agents[0]).toMatchObject({portraitKey:'amina',following:true,countryCode:'NG',
       conversationStarters:['Hello'],socialChannels:[{platform:'x',url:'https://x.com/example'}],
-      publicOfficialSimulation:true,publicOfficial:{biographicalFacts:{dateOfBirth:'1964-05-14',stateOfOrigin:'Kaduna'},verification:'source_reviewed',representation:'ai_simulation'}});
+      publicOfficialSimulation:true,publicOfficial:{biography:'A full reviewed public biography.',biographicalFacts:{dateOfBirth:'1964-05-14',stateOfOrigin:'Kaduna'},verification:'source_reviewed',representation:'ai_simulation'}});
     expect(body.agents[0]).toMatchObject({
       supportAgent: true,
       defaultPlatformAgent: true,
