@@ -6,7 +6,7 @@ type SavedItem={kind:"post";id:string;savedAt:string;post?:Record<string,unknown
 
 /** One fan-private projection of the same eligible public Home posts as the feed. */
 export class PgSavedLibraryRepository {
-  constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false){}
+  constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false,private readonly enforceViewerSafety=false){}
   async list(tenant:string,fan:string,before:SavedCursor|null,limit:number):Promise<readonly SavedItem[]> {
     const sql=String.raw`WITH saved_items AS (
       SELECT 'post'::text AS kind, s.post_id AS id, s.created_at AS saved_at,
@@ -50,7 +50,7 @@ export class PgSavedLibraryRepository {
           'boostEligible',(p.paid_purged_at IS NULL AND p.state='published'),
           'viewerSaved',true) AS payload
       FROM feed.saves s JOIN feed.posts p ON p.tenant_id=s.tenant_id AND p.id=s.post_id
-      WHERE s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published' AND ${this.enforceOfficialSources?officialSourceEligibility:'true'}
+      WHERE ${this.enforceViewerSafety?`NOT EXISTS(SELECT 1 FROM feed.hidden_posts h WHERE h.tenant_id=p.tenant_id AND h.post_id=p.id AND h.fan_id=$2) AND `:''}s.tenant_id=$1 AND s.fan_id=$2 AND p.state='published' AND ${this.enforceOfficialSources?officialSourceEligibility:'true'}
         AND ((p.author_type='masana' AND EXISTS(
           SELECT 1 FROM masana.character_revisions r
           JOIN identity.characters a ON a.tenant_id=r.tenant_id AND a.character_id=r.character_id

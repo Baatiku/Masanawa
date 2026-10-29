@@ -1,3 +1,4 @@
+import 'post_report_review_screen.dart';
 import 'username_screen.dart';
 import 'dart:async';
 
@@ -594,6 +595,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
               ),
               const Divider(height: 1),
+              const PostReportAdminEntry(),
               ListTile(
                 key: const Key('settings-username'),
                 leading: Icon(Icons.alternate_email_rounded, color: u.brand),

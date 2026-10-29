@@ -54,6 +54,13 @@ class ApiClient {
           // Never follow a 3xx response with credentials or private bodies to
           // a different origin; the caller must explicitly handle redirects.
           options.followRedirects = false;
+          // Optional initiating-screen guard is evaluated at actual dispatch,
+          // before a queued action can inherit another account's bearer.
+          final accountGuard=options.extra['masanawaAccountGuard'];
+          if(accountGuard is bool Function() && !accountGuard()) {
+            handler.reject(_accountChanged(options));
+            return;
+          }
           // A retry retains the original epoch. A queued request from A must
           // never be dispatched using B's bearer after an account switch.
           if (_isProtected(options.path)) {

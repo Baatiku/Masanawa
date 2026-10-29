@@ -297,6 +297,11 @@ abstract class FeedApi {
   Future<List<FeedComment>> comments(String postId);
 }
 
+abstract class FeedSafetyApi {
+  Future<void> hidePost(String postId, bool hidden, bool Function() isCurrent);
+  Future<String> reportPost(String postId, String reason, bool Function() isCurrent);
+}
+
 abstract class ReactionFeedApi {
   /// One authoritative reaction per signed-in user and post; null clears it.
   Future<void> react(String postId, String? kind);
@@ -314,7 +319,7 @@ abstract class SearchFeedApi {
 
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
 class DioFeedApi
-    implements FeedApi, SearchFeedApi, ReactionFeedApi, SavedStatusLibraryApi {
+    implements FeedApi, SearchFeedApi, ReactionFeedApi, SavedStatusLibraryApi, FeedSafetyApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -328,6 +333,37 @@ class DioFeedApi
         if (key != null) 'Idempotency-Key': key,
       },
     );
+  }
+
+  @override
+  Future<void> hidePost(String postId, bool hidden, bool Function() isCurrent) async {
+    final options = await _options(authRequired: true);
+    if (!isCurrent()) throw StateError('Account changed');
+    options.followRedirects = false;
+    options.extra={...options.extra??{},'masanawaAccountGuard':isCurrent};
+    final result = await _dio.put<Map<String,dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(postId)}/hidden',
+      data: {'hidden': hidden}, options: options);
+    if (!isCurrent()) throw StateError('Account changed');
+    if (result.data?['hidden'] != hidden) throw const FormatException('Unverified hide');
+  }
+
+  @override
+  Future<String> reportPost(String postId, String reason, bool Function() isCurrent) async {
+    final options = await _options(authRequired: true);
+    if (!isCurrent()) throw StateError('Account changed');
+    options.followRedirects = false;
+    options.extra={...options.extra??{},'masanawaAccountGuard':isCurrent};
+    final result = await _dio.post<Map<String,dynamic>>(
+      '/v1/posts/${Uri.encodeComponent(postId)}/reports',
+      data: {'reason': reason}, options: options);
+    if (!isCurrent()) throw StateError('Account changed');
+    final id = result.data?['id'], state = result.data?['state'];
+    if (id is! String || !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$').hasMatch(id) ||
+        !['open','reviewed','dismissed'].contains(state)) {
+      throw const FormatException('Unverified report');
+    }
+    return id;
   }
 
   @override

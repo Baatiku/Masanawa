@@ -1,3 +1,4 @@
+import 'status_post_safety_menu.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -289,7 +290,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
           Expanded(child:Center(child:Text(t('Post not available','Babu labarin'))))
         else Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(children:[
           Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            StatusPostAuthorHeader(
+            Row(children:[Expanded(child:StatusPostAuthorHeader(
               post:p,
               agent:widget.authorDirectory[p.authorMasanaId],
               onProfile:p.isHuman
@@ -297,7 +298,12 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
                     ()=>widget.onHumanProfile!(p.authorHandle!))
                 : (widget.onMasanaProfile==null?null:
                     ()=>widget.onMasanaProfile!(p.authorMasanaId)),
-            ),
+            )),
+              StatusPostSafetyMenu(postId:p.id,accountKey:widget.accountKey,
+                api:widget.engagementApi is FeedSafetyApi?widget.engagementApi as FeedSafetyApi:null,
+                isCurrent:()=>mounted&&widget.enabled,
+                onHidden:()=>setState((){generation++;denied=true;post=null;comments=[];loading=false;loadingMore=false;reacting=false;})),
+            ]),
             const SizedBox(height:12),
             StatusPostBody(accountKey:widget.accountKey,postId:p.id,
               body:p.body,mode:StatusPostBodyMode.detail),

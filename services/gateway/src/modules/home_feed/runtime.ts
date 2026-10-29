@@ -1,3 +1,4 @@
+import {registerPostSafetyRoutes,type PostSafetyPort} from './safety_routes.js';
 import type {FastifyInstance,FastifyRequest} from "fastify";
 import {registerHomeFeedRoutes,type FeedRoutesOptions} from "./routes.js";
 import {registerAdminFeedReviewRoutes,type AdminReviewRoutesOptions} from "./admin_review_routes.js";
@@ -20,6 +21,7 @@ export interface StatusRuntime {
  /** Optional server-derived spam risk rule; ordinary authenticated comments are visible. */
  isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
+ safety?:PostSafetyPort;
  promotions?:PromotionPort;
  promotionsEnabled?:()=>boolean;
  publicLanding?:{port:{find(id:string):Promise<PublicStatusPost|null>;
@@ -57,7 +59,7 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
   scope.setErrorHandler((error,_request,reply)=>{
    const problem=error as {status?:number;statusCode?:number;code?:string};
    const status=problem.statusCode??problem.status;
-   if(status&&[401,403,404,409,410,422,503].includes(status)){
+   if(status&&[401,403,404,409,410,422,429,503].includes(status)){
     return reply.code(status).send({code:problem.code??"status_unavailable"});
    }
    return reply.code(503).send({code:"status_unavailable"});
@@ -119,6 +121,8 @@ export async function registerStatusRuntime(app:FastifyInstance,options:StatusRu
      typeof cursor==='string'?cursor:undefined);
   });
   await registerAdminFeedReviewRoutes(scope,{service:options.editorial,principal,tenant,enabled});
+  if(options.safety)await registerPostSafetyRoutes(scope,{port:options.safety,principal:resolve,
+   isEditor:async p=>await options.isEditor?.(p)===true,enabled});
   if(options.promotions)await registerPromotionRoutes(scope,{
     port:options.promotions,principal:resolve,
     isEditor:async session=>await options.isEditor?.(session)===true,

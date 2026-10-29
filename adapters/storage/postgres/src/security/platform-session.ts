@@ -1,3 +1,4 @@
+import {lockActiveUser} from '../identity/active_user.js';
 import {normalizeUsername,usernameCandidates} from '@masanawa/security';
 import {allocateReadableUsername} from './usernames.js';
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -265,6 +266,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
 
     async updateContactGeography(input){
       return withTransaction(pool,async client=>{
+        await lockActiveUser(client,input.tenantId,input.userId);
         const updated=await client.query(`UPDATE security.platform_user_profiles
           SET contact_phone=$3,country_iso=$4,subdivision_iso=$5,
             country_source='user_selected',
@@ -283,7 +285,9 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
     },
 
     async setPasswordCredential(input) {
-      await pool.query(
+      await withTransaction(pool,async client=>{
+      await lockActiveUser(client,input.tenantId,input.userId);
+      await client.query(
         `INSERT INTO security.platform_device_passwords(
            tenant_id,user_id,password_hash,attempts,max_attempts,
            locked_until,created_at,updated_at
@@ -293,6 +297,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
                locked_until=NULL,updated_at=EXCLUDED.updated_at`,
         [input.tenantId,input.userId,input.passwordHash,input.createdAt],
       );
+      });
     },
 
     async verifyPasswordCredential(input) {
@@ -353,6 +358,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
 
     async resetPasswordCredential(input) {
       return withTransaction(pool, async(client) => {
+        await lockActiveUser(client,input.tenantId,input.userId);
         const selected=await client.query<{password_hash:string}>(
           `SELECT password_hash FROM security.platform_device_passwords
            WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
@@ -415,7 +421,9 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
     },
 
     async registerDevice(input) {
-      await pool.query(
+      await withTransaction(pool,async client=>{
+      await lockActiveUser(client,input.tenantId,input.userId);
+      await client.query(
         `INSERT INTO security.platform_auth_devices(
            tenant_id,user_id,device_id,created_at,last_seen_at
          ) VALUES ($1,$2,$3,$4,$4)
@@ -423,6 +431,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
            SET last_seen_at=EXCLUDED.last_seen_at`,
         [input.tenantId,input.userId,input.deviceId,input.at],
       );
+      });
     },
 
     async isDeviceKnown(input) {
@@ -437,6 +446,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
 
     async attachIdentity(input) {
       return withTransaction(pool, async (client) => {
+        await lockActiveUser(client,input.tenantId,input.userId);
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           `auth:identity:${input.tenantId}:${input.channel}:${input.identifier}`,
         ]);
@@ -481,6 +491,7 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
 
     async replaceIdentity(input) {
       return withTransaction(pool,async(client)=>{
+        await lockActiveUser(client,input.tenantId,input.userId);
         const current=await client.query<{email:string|null;phone:string|null}>(
           `SELECT email,phone FROM security.platform_user_profiles
              WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,

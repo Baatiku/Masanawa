@@ -126,3 +126,12 @@ describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
 
 });
 
+
+it('applies private hidden-post filtering before pagination in production reads',async()=>{
+ const query=vi.fn(async(..._args:unknown[])=>({rows:[]}));
+ const repo=new PgHomeFeedRepository({query} as never,false,true);
+ await repo.find('tenant','fan','10000000-0000-4000-8000-000000000001');
+ expect(query.mock.calls[0]?.[0]).toContain('feed.hidden_posts');
+ expect(query.mock.calls[0]?.[0]).toContain('h.tenant_id=p.tenant_id');
+ expect(query.mock.calls[0]?.[0]).toContain('h.fan_id=$2');
+});

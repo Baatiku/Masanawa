@@ -92,8 +92,9 @@ const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
  ELSE NULL END AS author`;
 export class PgHomeFeedRepository {
  // Production enables the new schema policy; false supports pre-migration fixture stores.
- constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false){}
- private get access(){return this.enforceOfficialSources?`(${eligibleAuthor} AND ${officialSourceEligibility})`:eligibleAuthor;}
+ constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false,private readonly enforceViewerSafety=false){}
+ private get access(){const author=this.enforceOfficialSources?`(${eligibleAuthor} AND ${officialSourceEligibility})`:eligibleAuthor;
+  return this.enforceViewerSafety?`(${author} AND NOT EXISTS(SELECT 1 FROM feed.hidden_posts h WHERE h.tenant_id=p.tenant_id AND h.post_id=p.id AND h.fan_id=$2))`:author;}
  private get commentAccess(){return this.access.replace(/\$2\b/g,"$3");}
  async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true) {
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${this.access}

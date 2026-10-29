@@ -14,3 +14,12 @@ describe("saved Home SQL fences",()=>{
   expect(values).toEqual(["tenant-one","fan-one",null,null,null,21]);
  });
 });
+
+it('applies private hidden-post filtering before pagination in production reads',async()=>{
+ const query=vi.fn(async(..._args:unknown[])=>({rows:[]}));
+ const repo=new PgSavedLibraryRepository({query} as never,false,true);
+ await repo.list('tenant','fan',null,21);
+ expect(query.mock.calls[0]?.[0]).toContain('feed.hidden_posts');
+ expect(query.mock.calls[0]?.[0]).toContain('h.tenant_id=p.tenant_id');
+ expect(query.mock.calls[0]?.[0]).toContain('h.fan_id=$2');
+});

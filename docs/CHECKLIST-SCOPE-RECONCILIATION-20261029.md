@@ -55,9 +55,9 @@ Every stable ID is accounted for below. “Retired new work” removes the forme
 | SPE-C10 | Retired new paid-publication/rewards work |
 | SPE-C11 | Historical source completion |
 | SPE-C12 | Historical source completion |
-| SPE-C13 | Retained audit; promotion-specific additions retired |
+| SPE-C13 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-C14 | Historical source completion |
-| SPE-C15 | Retained audit; promotion-specific additions retired |
+| SPE-C15 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-C16 | Retired new paid-publication/rewards work |
 | SPE-C17 | Historical source completion |
 | SPE-C18 | Historical source completion |
@@ -97,7 +97,7 @@ Every stable ID is accounted for below. “Retired new work” removes the forme
 | SPE-F05 | Historical source completion |
 | SPE-F06 | Historical source completion |
 | SPE-F07 | Historical source completion |
-| SPE-F08 | Retained audit; promotion-specific additions retired |
+| SPE-F08 | Retained source implemented; exact-head hosted checks/merge required |
 
 ## Other active work
 
@@ -116,3 +116,21 @@ Consolidated mobile sharing/tipping/feed/detail/layout batch: 45 tests PASS. Flu
 Selected: SPE-F08 private contact/geography deletion propagation and SPE-D10 notification lifecycle privacy, with SPE-D01/D03/D09 financial-record preservation. Audit found newer notification preferences, Activity presentation history and queued alerts missing from qualified erasure. The deletion worker now removes those optional copies only after canonical disablement and financial clearance, inside its existing erasure transaction. Push registrations/presence are already revoked by the canonical access revoker. Financial journals and receipts remain intact. This is a focused repair, not closure of the entire retained checklist or provider qualification.
 
 Validation: consolidated privacy/identity/contact backend batch 38 PASS; 8 real-Postgres tests skipped locally and required on hosted CI. Country/contact/profile/account-epoch/deletion Flutter batch 55 PASS. Worker TypeScript and diff checks PASS. Exact-head hosted checks remain required. No production deletion or notification dispatch is performed.
+
+## Connected retained feed-safety batch — 29 October
+
+Selected remaining source work: SPE-C15/D07/D16 post-specific hide/report and operator complaint review. One shared Home/detail/Saved menu uses authenticated account-fenced mutations; only server-confirmed success changes the display. Private hiding is applied before SQL pagination and to original detail/Saved reads. Reports have fixed reason categories, one durable receipt per user/post/reason, a serialized 50-new-reports/day quota, and a capability-protected bounded queue and resolution receipt. Existing editorial review owns takedown. Ordinary Share and MB Tip remain independent; paid promotion creation stays retired. Forward migration 0023 preserves public posts, historical receipts and other accounts. Qualified account erasure removes optional hide preferences while required complaint-review records remain separate.
+
+All source/UI/migration/transport/test changes precede consolidated safety, shared-feed, privacy, TypeScript and Flutter analysis runs. Full D07 legal/retention authority and A16 external-object/cache erasure evidence are not inferred from these source controls.
+
+The same batch also adds a Settings review entry only after a current server capability check, an account-epoch-fenced operator queue with original-post navigation and confirmed reviewed/dismissed receipts, plus a dispatch-time guard preventing queued UI actions from inheriting another account's bearer. Cached role strings do not authorize review. A confirmed Hide cannot be undone by older feed/Saved responses. Operator content takedown remains an independent editorial decision.
+
+The private-write audit also found contact, password/device and identity-binding writes that could race canonical deletion and reintroduce private state. These writes and new feed-safety mutations now hold a shared canonical-user lock inside their transaction; a winning disable makes them fail closed. Existing real-PostgreSQL concurrent-disable acceptance now includes late contact, device, password and identity writes. No live account is disabled or erased by verification.
+
+Source checkpoints C13/C15/F08 are now fully implemented in their current retained scope, including checked-in eight-case layout baselines/semantics, shared safety controls/operator Settings, and private contact lifecycle plus disable/write barriers. Historical original completion count advances only after this batch passes hosted checks and merges; retired requirements remain retired. Other retained financial-history audits are still open.
+
+### Current source accounting for this batch
+
+Of the 59 formerly unchecked SPE requirements: 47 new paid-publication/reward requirements are retired; C13/C15/F08 now have complete retained source implementations (delivery depends on hosted checks/merge); nine retained historical finance/privacy/legal audits remain. The 29 previously checked requirements remain historical source evidence. The original 28 October totals are archived rather than silently presented as today's active queue.
+
+Verification: 71 connected mobile tests plus the shared matrix PASS, eight golden baselines compare normally (not only in generation mode), 109 backend tests PASS, 13 private-write/SQL tests PASS, workspace types and full build PASS, final Flutter analysis returns the existing 460 informational findings with zero errors/warnings. Real-Postgres suites remain mandatory on exact-head hosted CI; local skipped database tests are not counted as passes. These changes perform no live erasure, billable provider operation or deployment approval.
