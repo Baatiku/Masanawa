@@ -103,6 +103,15 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.profiles).toHaveLength(26);
    expect(f.profiles.find(p=>p.characterId===gwana)?.voiceName).toBe("Fola");
  });
+ it('repairs untouched shared female stock defaults but preserves later staff voice choices',async()=>{
+  const f=fixture(),tenant=createCanonicalId('tenant');await run(f,tenant);
+  f.profiles.forEach((profile,i)=>{f.profiles[i]={...profile,voiceName:'Aoede',revision:1};});
+  const edited=f.profiles[2]!;f.profiles[2]={...edited,voiceName:'CustomStudioVoice',revision:3};
+  await run(f,tenant);
+  expect(f.profiles[0]?.voiceName).toBe('Bodi');expect(f.profiles[1]?.voiceName).toBe('Fola');
+  expect(f.profiles[2]?.voiceName).toBe('CustomStudioVoice');
+  expect(new Set(f.profiles.map(p=>p.voiceName)).size).toBe(26);
+ });
  it("does not override hidden or administrator-customized characters",async()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
    f.presentations.push({schemaVersion:1,tenantId:tenant,

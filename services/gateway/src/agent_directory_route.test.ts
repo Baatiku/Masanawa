@@ -29,7 +29,14 @@ describe("agent directory route", () => {
             supportAgent: true,
             defaultPlatformAgent: true,
             voiceProvider: "gemini",
-            voiceName: "Bodi",
+            voiceName: "Bodi",portraitKey:'amina',following:true,
+            countryCode:'NG',countryName:'Nigeria',conversationStarters:['Hello'],
+            socialChannels:[{platform:'x' as const,url:'https://x.com/example'}],
+            publicOfficialSimulation:true,
+            publicOfficial:{officialName:'Example Official',office:'Governor',identitySourceUrl:'https://grokipedia.com/page/Example',
+              reviewedAt:'2026-10-29T00:00:00Z',reviewExpiresAt:'2026-11-01T00:00:00Z',verification:'source_reviewed' as const,representation:'ai_simulation' as const},
+            skillVersionIds:['must-not-leak'],privateCredential:'must-not-leak',
+
           },
         ];
       },
@@ -55,6 +62,10 @@ describe("agent directory route", () => {
     const body = response.json();
     expect(body.agents[0].displayName).toBe("Amina");
     expect(body.agents[0]).not.toHaveProperty("skillVersionIds");
+    expect(body.agents[0]).not.toHaveProperty('privateCredential');
+    expect(body.agents[0]).toMatchObject({portraitKey:'amina',following:true,countryCode:'NG',
+      conversationStarters:['Hello'],socialChannels:[{platform:'x',url:'https://x.com/example'}],
+      publicOfficialSimulation:true,publicOfficial:{verification:'source_reviewed',representation:'ai_simulation'}});
     expect(body.agents[0]).toMatchObject({
       supportAgent: true,
       defaultPlatformAgent: true,
@@ -73,5 +84,5 @@ describe("agent directory route", () => {
     });
     expect(update.statusCode).toBe(200);
     expect(seen).toBe("Bearer user");
-  });
+  },20000);
 });

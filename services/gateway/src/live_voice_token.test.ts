@@ -178,3 +178,21 @@ describe("Gemini Live ephemeral token compatibility", () => {
     }
   });
 });
+
+it('never falls back to a shared voice when configured platform persona metadata is missing',async()=>{
+ const fetchImpl=vi.fn();const service=createGeminiLiveTokenService({apiKey:'fixture-key',authorizer,
+  platformProfiles:{readForCharacter:async()=>null} as never,voiceName:'Aoede',fetchImpl:fetchImpl as never});
+ await expect(service.mint({characterId,authorizationHeader:'Bearer valid-user'})).rejects.toThrow();
+ expect(fetchImpl).not.toHaveBeenCalled();
+});
+it('pins each persona voice in provider constraints and the returned call grant',async()=>{
+ const selected:string[]=[];
+ for(const voiceName of ['Bodi','Fola']){
+  const service=createGeminiLiveTokenService({apiKey:'fixture-key',authorizer,voiceName:'Aoede',
+   platformProfiles:{readForCharacter:async()=>({voiceProvider:'gemini',voiceName})} as never,
+   fetchImpl:(async(_url,init)=>{const body=JSON.parse(String(init?.body));selected.push(body.bidiGenerateContentSetup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName);
+    return Response.json({name:'auth_tokens/safe-test-token-0123456789'});}) as typeof fetch});
+  expect((await service.mint({characterId,authorizationHeader:'Bearer valid-user'})).voiceName).toBe(voiceName);
+ }
+ expect(selected).toEqual(['Bodi','Fola']);
+});

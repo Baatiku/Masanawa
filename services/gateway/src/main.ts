@@ -1525,7 +1525,7 @@ export async function startGatewayService(
           voiceForCharacter: async (scope) => {
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
             if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
-            return undefined;
+            throw Object.assign(new Error('Persona voice configuration is unavailable'),{code:'agent.voice_unavailable'});
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),

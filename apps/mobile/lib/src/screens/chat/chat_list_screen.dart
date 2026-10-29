@@ -298,9 +298,7 @@ class ChatListScreen extends ConsumerWidget {
     final accountKey = session is SessionSignedIn
         ? session.user.id
         : 'signed-out';
-    final userName = session is SessionSignedIn
-        ? session.user.name
-        : 'Masanawa';
+
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
@@ -324,22 +322,6 @@ class ChatListScreen extends ConsumerWidget {
             tooltip: 'New chat',
             icon: const Icon(Icons.groups_outlined),
             onPressed: () => context.push('/masana'),
-          ),
-          IconButton(
-            tooltip: 'Settings & profile',
-            icon: CircleAvatar(
-              radius: 14,
-              backgroundColor: u.brandStrong,
-              child: Text(
-                userName.isNotEmpty ? userName[0].toUpperCase() : 'M',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            onPressed: () => context.push('/settings'),
           ),
         ],
       ),

@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../l10n/app_localizations.dart';
 import '../screens/calls/masana_only_calls_screen.dart';
 import '../screens/chat/chat_list_screen.dart';
-import '../gb_wallet/data_redemption_screen.dart';
+import '../screens/settings/settings_screen.dart';
+import '../ui/components/current_account_avatar.dart';
 import '../screens/status/status_screen.dart';
 import '../gb_wallet/gb_wallet_screen.dart';
 import '../screens/twin/shell_tab.dart';
@@ -13,7 +14,7 @@ import '../ui/components/masanawa_main_header.dart';
 import '../theme/masanawa_theme.dart';
 import '../state/session_state.dart';
 
-/// Canonical five-tab root shell: Home (Status feed) · Chats · Wallet · Calls · Data.
+/// Canonical five-tab root shell: Home (Status feed) · Chats · Wallet · Calls · Profile.
 ///
 /// This replaces the retired Home · Agents · Wallet · Talk shell. Each tab
 /// owns its screen; tabs only switch, they never fetch.
@@ -62,7 +63,7 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
     1 => const ChatListScreen(),
     2 => const GbWalletScreen(),
     3 => const MasanaOnlyCallsScreen(),
-    _ => const DataRedemptionScreen(),
+    _ => const SettingsScreen(embedded: true),
   };
 
   @override
@@ -142,9 +143,9 @@ class _FiveTabShellState extends ConsumerState<FiveTabShell> {
               label: strings.calls,
             ),
             NavigationDestination(
-              icon: const Icon(Icons.sim_card_outlined),
-              selectedIcon: const Icon(Icons.sim_card),
-              label: 'Data',
+              icon: const CurrentAccountAvatar(size: 28),
+              selectedIcon: const CurrentAccountAvatar(size: 30),
+              label: strings.profile,
             ),
           ],
         ),

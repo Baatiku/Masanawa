@@ -641,19 +641,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
               },
             ),
           ),
-        // Incident mode: new spending stays OFF, but the owner must still be
-        // able to review receipts, cancel reserves and delete their post.
-        if (!widget.authorScoped && !widget.ownPostsOnly &&
-            widget.promotions != null &&
-            widget.accountKey.isNotEmpty)
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: TextButton.icon(
-              onPressed: openMyPromotions,
-              icon: const Icon(Icons.receipt_long_outlined, size: 18),
-              label: Text(t('Promotion history', 'Tarihin tallace-tallace')),
-            ),
-          ),
         if (!widget.authorScoped &&
             !widget.ownPostsOnly &&
             widget.api is SearchFeedApi &&
@@ -766,14 +753,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                     ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: items.length + (cursor == null ? 0 : 1),
-                    separatorBuilder: (ctx, index) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Divider(
-                        height: 12,
-                        thickness: 0.7,
-                        color: context.masanawa.structuralBorder.withValues(alpha: 0.48),
-                      ),
-                    ),
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (ctx, i) {
                       if (i == items.length)
                         return Center(
@@ -791,12 +771,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                         child:Card(
                         key: ValueKey(post.id),
                         color: context.masanawa.surfaceCard,
-                        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                        elevation: 3,
+                        margin: EdgeInsets.symmetric(horizontal: MediaQuery.sizeOf(context).width >= 600 ? 16 : 0),
+                        elevation: 0,
                         shadowColor: Theme.of(context).colorScheme.shadow.withValues(alpha:0.17),
                         surfaceTintColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(16),
-                          side:BorderSide(color:context.masanawa.structuralBorder.withValues(alpha:0.38))),
+                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(MediaQuery.sizeOf(context).width >= 600 ? 10 : 0)),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => openPost(post),

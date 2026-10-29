@@ -2362,34 +2362,32 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
       backgroundColor: u.surfaceBg,
       bottomNavigationBar: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 76,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
-            child: FilledButton.icon(
-              key: const ValueKey('live-call-end-action'),
-              style: FilledButton.styleFrom(
-                backgroundColor: u.emergency,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(192, 54),
-                shape: const StadiumBorder(),
-              ),
-              onPressed: () async {
-                widget.session.endReason ??= CallEndReason.userEnded;
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+          decoration: BoxDecoration(color:u.surfaceCard,
+            borderRadius:const BorderRadius.vertical(top:Radius.circular(28))),
+          child: Wrap(alignment:WrapAlignment.center,spacing:20,runSpacing:12,children:[
+            _CallControl(label:_speaker?'Speaker':'Earpiece',
+              icon:_speaker?Icons.volume_up:Icons.hearing,selected:_speaker,
+              onTap:() async {final next=!_speaker;await widget.session.setSpeaker(next);
+                if(mounted)setState(()=>_speaker=next);}),
+            _CallControl(label:_muted?'Unmute':'Mute',
+              icon:_muted?Icons.mic_off:Icons.mic,selected:_muted,
+              onTap:() async {final next=!_muted;await widget.session.mute(next);
+                if(mounted)setState(()=>_muted=next);}),
+            _CallControl(key:const ValueKey('live-call-end-action'),label:'End call',
+              icon:Icons.call_end_rounded,danger:true,onTap:() async {
+                widget.session.endReason??=CallEndReason.userEnded;
                 await widget.session.close();
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              icon: const Icon(Icons.call_end_rounded),
-              label: const Text('End call'),
-            ),
-          ),
+                if(context.mounted)Navigator.of(context).pop();}),
+          ]),
         ),
       ),
       body: SafeArea(
         child: LayoutBuilder(builder: (context, constraints) {
           final compact = MediaQuery.sizeOf(context).height < 560;
-          final portraitSize = compact ? 116.0
-              : constraints.maxWidth < 360 ? 144.0 : 160.0;
+          final portraitSize = compact ? 128.0
+              : constraints.maxWidth < 360 ? 176.0 : 200.0;
           final verticalPadding = compact ? 16.0 : 24.0;
           final minContentHeight = constraints.maxHeight > 2 * verticalPadding
               ? constraints.maxHeight - 2 * verticalPadding : 0.0;
@@ -2407,9 +2405,10 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
               mainAxisSize: MainAxisSize.max,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                MasanaPortraitAvatar(
-                  key: const ValueKey('live-call-masana-portrait'),
-                  agent: widget.agent, size: portraitSize),
+                Center(child:SizedBox(width:portraitSize,height:portraitSize,
+                  child:MasanaPortraitAvatar(
+                    key: const ValueKey('live-call-masana-portrait'),
+                    agent: widget.agent, size: portraitSize))),
                 const SizedBox(height: 18),
                 Text(
                   widget.agent.displayName,
@@ -2457,34 +2456,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                   if(_recording!.recording)Text('Recording · saved on this device',style:TextStyle(color:u.emergency)),
                   if(_recording!.error!=null)Text(_recording!.error!,textAlign:TextAlign.center),
                 ],
-                const SizedBox(height: 30),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 32,
-                  runSpacing: 16,
-                  children: [
-                    _CallControl(
-                      label: _muted ? 'Unmute' : 'Mute',
-                      icon: _muted ? Icons.mic_off : Icons.mic,
-                      selected: _muted,
-                      onTap: () async {
-                        final next = !_muted;
-                        await widget.session.mute(next);
-                        if (mounted) setState(() => _muted = next);
-                      },
-                    ),
-                    _CallControl(
-                      label: _speaker ? 'Speaker' : 'Earpiece',
-                      icon: _speaker ? Icons.volume_up : Icons.hearing,
-                      selected: _speaker,
-                      onTap: () async {
-                        final next = !_speaker;
-                        await widget.session.setSpeaker(next);
-                        if (mounted) setState(() => _speaker = next);
-                      },
-                    ),
-                  ],
-                ),
+
               ],
             );
           },
@@ -2499,6 +2471,8 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
 
 class _CallControl extends StatelessWidget {
   const _CallControl({
+    super.key,
+    this.danger = false,
     required this.label,
     required this.icon,
     required this.onTap,
@@ -2508,32 +2482,22 @@ class _CallControl extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool selected;
+  final bool danger;
 
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
-    final color = selected ? u.brand : u.surfaceMuted;
-    return Column(
-      children: [
-        Material(
-          color: color,
-          shape: const CircleBorder(),
-          child: IconButton(
-            tooltip: label,
-            onPressed: onTap,
-            iconSize: 26,
-            constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
-            icon: Icon(
-              icon,
-              color: selected ? Colors.white : u.textPrimary,
-            ),
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text(label, style: TextStyle(color: u.textMuted, fontSize: 13,
-          fontWeight: FontWeight.w500)),
-      ],
-    );
+    final color = danger ? u.emergency : selected ? u.brand : u.surfaceMuted;
+    return Tooltip(message:label,child:Semantics(button:true,label:label,
+      onTap:onTap,toggled:danger?null:selected,child:ExcludeSemantics(child:Material(
+        color:Colors.transparent,child:InkWell(onTap:onTap,borderRadius:BorderRadius.circular(20),
+          child:SizedBox(width:72,child:Column(mainAxisSize:MainAxisSize.min,children:[
+            Container(width:60,height:60,decoration:BoxDecoration(color:color,shape:BoxShape.circle),
+              child:Icon(icon,size:26,color:selected||danger?Colors.white:u.textPrimary)),
+            const SizedBox(height:5),
+            Text(label,textAlign:TextAlign.center,style:TextStyle(color:u.textMuted,fontSize:13,fontWeight:FontWeight.w500)),
+          ])))))));
+
   }
 }
 

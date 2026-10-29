@@ -1,4 +1,5 @@
 import '../../gb_wallet/gb_retained_finance_screens.dart';
+import '../../ui/components/current_account_avatar.dart';
 import 'post_report_review_screen.dart';
 import 'username_screen.dart';
 import 'dart:async';
@@ -31,7 +32,8 @@ import 'clear_device_chats_dialog.dart';
 /// Account deletion must be handled by an authenticated durable server workflow;
 /// clearing local chats or logging out is not account deletion.
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -285,7 +287,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
-      appBar: AppBar(
+      appBar: widget.embedded ? null : AppBar(
         backgroundColor: u.surfaceCard,
         elevation: 0,
         leading: IconButton(
@@ -321,18 +323,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: u.brand.withValues(alpha: 0.15),
-                      child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                        style: TextStyle(
-                          color: u.brand,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                    const CurrentAccountAvatar(size: 60),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(

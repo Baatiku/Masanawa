@@ -1,3 +1,4 @@
+import {createGatewayApp} from "./app.js";
 import {afterAll,beforeAll,expect,it} from "vitest";
 import {readFile} from "node:fs/promises";
 import {PGlite} from "@electric-sql/pglite";
@@ -51,13 +52,19 @@ it("projects all 26 renamed stock portraits and authored countries through real 
  const service=createAgentDirectoryService({presentations,identities,
   authorizer:{authorize:async()=>({tenantId:tenant,userId:user,characterIds:ids})}});
  const entries=await service.list({authorizationHeader:"Bearer owner"});
+ const app=createGatewayApp({agentDirectory:service});
+ try{
+  const response=await app.inject({url:'/agent/directory',headers:{authorization:'Bearer owner'}});
+  expect(response.statusCode).toBe(200);
+  expect(response.json().agents).toEqual(JSON.parse(JSON.stringify(entries)));
+ }finally{await app.close();}
  expect(entries).toHaveLength(26);
  for(const [index,seed] of PROFESSIONAL_MASANA_CATALOG.entries()){
   expect(entries[index]).toMatchObject({characterId:ids[index],portraitKey:seed.key,
    displayName:"Staff renamed "+seed.key,countryCode:seed.countryCode,countryName:seed.countryName,
    following:index===2});
  }
-});
+},30000);
 it("fences approved identity by tenant and follows by user",async()=>{
  expect((await identities.read({tenantId:otherTenant,userId:user,characterIds:ids})).size).toBe(0);
  expect((await identities.read({tenantId:tenant,userId:otherUser,characterIds:ids})).get(ids[2]!)?.following).toBe(false);

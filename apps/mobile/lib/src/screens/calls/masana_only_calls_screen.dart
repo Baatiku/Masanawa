@@ -302,12 +302,6 @@ class _PrivateMasanaCallHistoryState
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-            child: Text('Calls',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700)),
-          ),
           if (widget.searchOpen) Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: TextField(

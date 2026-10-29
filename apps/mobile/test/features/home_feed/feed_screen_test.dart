@@ -197,7 +197,7 @@ void main() {
     expect(find.byIcon(Icons.share_outlined), findsOneWidget);
     expect(find.text('Views unavailable'), findsOneWidget);
     final card = tester.widget<Card>(find.byType(Card).first);
-    expect(card.elevation, greaterThan(1));
+    expect(card.elevation, 0, reason:'Phone feed cards use the owner-requested flatter presentation');
     expect(tester.takeException(), isNull);
   });
 

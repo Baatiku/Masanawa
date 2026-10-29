@@ -165,7 +165,7 @@ void main() {
     expect(find.byTooltip('New call'), findsOneWidget);
     expect(find.text('Individual audio only.'), findsNothing);
     expect(find.text('Calls with Masana'), findsNothing);
-    expect(find.text('Calls'), findsOneWidget);
+    expect(find.text('Calls'), findsNothing,reason:'The root heading is removed while call history remains visible');
   });
 
   testWidgets('tap individual call opens existing detail and Back preserves calls',
