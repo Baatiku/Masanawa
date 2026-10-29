@@ -1,3 +1,5 @@
+import {createWalletInquiryReviewAuthority} from './gb_wallet/review_authority.js';
+import {hashPlatformSessionToken} from '@masanawa/security';
 import {createOfficialSocialSync} from './official_social_store.js';
 import {createOfficialSocialFetcher,createOfficialSocialInspector} from './official_social_import.js';
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
@@ -38,7 +40,7 @@ import {
   PgFeedMediaAuthorization,
   createMasanaInboxRepository,
   createPostgresGbWalletRepository,
-  createGbWalletActivityRepository,
+  createGbWalletActivityRepository, PgRetainedFinanceRepository,
   createPostgresGbRequestRepository,
   createGbUsageReservations,
   recoverExpiredMbReplies,
@@ -1857,6 +1859,27 @@ export async function startGatewayService(
       summary: gbActivityStorage!.summary,
       listHolds: gbActivityStorage!.listHolds,findHold: gbActivityStorage!.findHold,
     } : undefined);
+  const retainedFinanceStorage=featurePool&&gbActivityStorage?new PgRetainedFinanceRepository(featurePool,{
+    activity:(a,reference)=>gbActivityStorage.find(a,reference),
+    hold:(a,reference)=>gbActivityStorage.findHold(a,reference),
+  }):undefined;
+  const financeAdmins=readPrincipalSet(env.MASANAWA_ADMIN_EMAILS??env.MASANAWA_ADMIN_PRINCIPALS??'');
+  const gbRetainedFinance:GatewayAppOptions['gbRetainedFinance']=options.appOptions?.gbRetainedFinance??
+    (retainedFinanceStorage&&sessions&&featureTenant?{
+      authorize:resolveFeatureFan,repository:retainedFinanceStorage,
+      reviewer:createWalletInquiryReviewAuthority({sessions:sessions!,adminEmails:financeAdmins,
+        linkedEmail:async(identity,email)=>{
+          const rows=await featurePool!.query(`SELECT 1 FROM identity.external_user_identities
+            WHERE tenant_id=$1 AND user_id=$2 AND system='masanawa' AND namespace='email' AND subject_value=$3`,
+            [identity.tenantId,identity.userId,email]);return rows.rows.length===1;
+        },
+        sessionsFor:async(identity,header)=>{
+          if(!database.platformSessions?.listSessions||!header.startsWith('Bearer '))return [];
+          return database.platformSessions.listSessions({tenantId:parseCanonicalId('tenant',identity.tenantId),
+            userId:parseCanonicalId('user',identity.userId),accessHash:hashPlatformSessionToken(header.slice(7)),at:new Date().toISOString()});
+        },
+      }),
+    }:undefined);
   // No legacy Credit Send fallback. The signer is a private Railway secret,
   // never a client-supplied or generated-on-each-request review authority.
   const mbSendReviewSecret = env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
@@ -2126,6 +2149,7 @@ export async function startGatewayService(
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
       ...(gbWalletActivity ? { gbWalletActivity } : {}),
+      ...(gbRetainedFinance?{gbRetainedFinance}:{}),
       ...(gbCalls ? {gbCalls} : {}),
       ...(mbRelay ? {gbCallRelay:mbRelay} : {}),
       ...(gbSendReview ? { gbSendReview } : {}),

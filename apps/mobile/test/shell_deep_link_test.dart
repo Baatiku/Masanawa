@@ -3,6 +3,18 @@ import 'package:masanawa/src/core/shell_deep_link.dart';
 import 'package:masanawa/src/core/pending_deep_link.dart';
 
 void main() {
+  test('current wallet notices open only original account-authorized receipts and inquiries',(){
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://wallet/activity/mb:12')),'/wallet/activity/mb%3A12');
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://wallet/activity/ngn:original-deposit')),'/wallet/activity/ngn%3Aoriginal-deposit');
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://wallet/activity')),'/wallet/activity');
+    expect(shellDeepLinkRoute(Uri.parse('masanawa://wallet/inquiry/10000000-0000-4000-8000-000000000001')),
+      '/wallet/inquiries/10000000-0000-4000-8000-000000000001');
+    for(final bad in ['masanawa://wallet/activity/mb:12?confirm=true','masanawa://wallet/activity/mb:12/pay',
+      'masanawa://wallet/inquiry/not-a-case','masanawa://wallet/activity/ngn:encoded%2Fother']){
+      expect(shellDeepLinkRoute(Uri.parse(bad)),isNull);
+    }
+  });
+
   test('chat and work links resolve to the canonical conversation', () {
     expect(shellDeepLinkRoute(Uri.parse('masanawa://chat/character_abc')),
         '/chat/character_abc');

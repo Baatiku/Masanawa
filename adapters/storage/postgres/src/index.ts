@@ -63,3 +63,6 @@ export type {NgnActor,NgnBalance,NgnExchange,NgnReceipt} from "./gb_wallet/ngn_r
 export { recoverExpiredMbReplies } from "./agents/mobile-shell.js";
 
 export {PgPostSafetyRepository} from './home_feed/safety_repository.js';
+
+export {PgRetainedFinanceRepository,readLegacyGroup,legacyGroupId} from './gb_wallet/retained_finance.js';
+export type {LegacyGroup,LegacyCursor,LegacyKind,EventCursor,CaseTarget} from './gb_wallet/retained_finance.js';

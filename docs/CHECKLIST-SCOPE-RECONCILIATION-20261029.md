@@ -15,7 +15,7 @@ Every stable ID is accounted for below. “Retired new work” removes the forme
 | SPE-A03 | Retired new paid-publication/rewards work |
 | SPE-A04 | Retired new paid-publication/rewards work |
 | SPE-A05 | Historical source completion |
-| SPE-A06 | Retained audit; promotion-specific additions retired |
+| SPE-A06 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-A07 | Retired new paid-publication/rewards work |
 | SPE-A08 | Historical source completion |
 | SPE-A09 | Retired new paid-publication/rewards work |
@@ -55,29 +55,29 @@ Every stable ID is accounted for below. “Retired new work” removes the forme
 | SPE-C10 | Retired new paid-publication/rewards work |
 | SPE-C11 | Historical source completion |
 | SPE-C12 | Historical source completion |
-| SPE-C13 | Retained source implemented; exact-head hosted checks/merge required |
+| SPE-C13 | Retained source delivered in merged #598 |
 | SPE-C14 | Historical source completion |
-| SPE-C15 | Retained source implemented; exact-head hosted checks/merge required |
+| SPE-C15 | Retained source delivered in merged #598 |
 | SPE-C16 | Retired new paid-publication/rewards work |
 | SPE-C17 | Historical source completion |
 | SPE-C18 | Historical source completion |
 | SPE-C19 | Retired new paid-publication/rewards work |
-| SPE-D01 | Retained audit; promotion-specific additions retired |
+| SPE-D01 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-D02 | Retired new paid-publication/rewards work |
-| SPE-D03 | Retained audit; promotion-specific additions retired |
+| SPE-D03 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-D04 | Retired new paid-publication/rewards work |
 | SPE-D05 | Retired new paid-publication/rewards work |
 | SPE-D06 | Retired new paid-publication/rewards work |
 | SPE-D07 | Retained audit; promotion-specific additions retired |
 | SPE-D08 | Retired new paid-publication/rewards work |
-| SPE-D09 | Retained audit; promotion-specific additions retired |
-| SPE-D10 | Retained audit; promotion-specific additions retired |
-| SPE-D11 | Retained audit; promotion-specific additions retired |
+| SPE-D09 | Retained source implemented; exact-head hosted checks/merge required |
+| SPE-D10 | Retained source implemented; exact-head hosted checks/merge required |
+| SPE-D11 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-D12 | Retired new paid-publication/rewards work |
 | SPE-D13 | Retired new paid-publication/rewards work |
 | SPE-D14 | Retired new paid-publication/rewards work |
 | SPE-D15 | Retired new paid-publication/rewards work |
-| SPE-D16 | Retained audit; promotion-specific additions retired |
+| SPE-D16 | Retained source implemented; exact-head hosted checks/merge required |
 | SPE-E01 | Historical source completion |
 | SPE-E02 | Retired new paid-publication/rewards work |
 | SPE-E03 | Retired new paid-publication/rewards work |
@@ -97,7 +97,7 @@ Every stable ID is accounted for below. “Retired new work” removes the forme
 | SPE-F05 | Historical source completion |
 | SPE-F06 | Historical source completion |
 | SPE-F07 | Historical source completion |
-| SPE-F08 | Retained source implemented; exact-head hosted checks/merge required |
+| SPE-F08 | Retained source delivered in merged #598 |
 
 ## Other active work
 
@@ -134,3 +134,17 @@ Source checkpoints C13/C15/F08 are now fully implemented in their current retain
 Of the 59 formerly unchecked SPE requirements: 47 new paid-publication/reward requirements are retired; C13/C15/F08 now have complete retained source implementations (delivery depends on hosted checks/merge); nine retained historical finance/privacy/legal audits remain. The 29 previously checked requirements remain historical source evidence. The original 28 October totals are archived rather than silently presented as today's active queue.
 
 Verification: 71 connected mobile tests plus the shared matrix PASS, eight golden baselines compare normally (not only in generation mode), 109 backend tests PASS, 13 private-write/SQL tests PASS, workspace types and full build PASS, final Flutter analysis returns the existing 460 informational findings with zero errors/warnings. Real-Postgres suites remain mandatory on exact-head hosted CI; local skipped database tests are not counted as passes. These changes perform no live erasure, billable provider operation or deployment approval.
+
+## Final connected retained-finance source pass — 29 October
+
+Feed-safety #598 merged at `524951b6e6958946b900b97559a837641395b3ff` after all eight exact-head hosted jobs passed. This pass implements the remaining feasible retained finance scopes A06/D01/D03/D09/D10/D11/D16; the checklist wording explicitly replaces retired product additions with the obligations that survive retirement.
+
+Historical groups derive from actual immutable purchased-MB movements and original reserve/release audit, with exact half-MB pending allocations kept nonredeemable. Filters, exact campaign-reference search and bounded keyset receipt pages never expose viewer identities. Group event-count validation reports changed history instead of silently showing a different aggregate. Receipt-linked inquiries are own-account, deduplicated and quota-bounded; separate financial-support authority requires a verified allowlisted email and fresh current-session authentication for original evidence and revision-checked annotations. These annotations have no money mutation path.
+
+Forward migrations add current committed MB/NGN/Data notices without backfill or raw-view/reply/call-second spam. Optional copies share-lock the active canonical User, so deletion cannot race a late write. Existing push/preferences/quiet-hours handling remains. Source-version-bound reports allow a fresh report after a real post edit and flag stale/unknown review context.
+
+Current original-ID accounting, conditional on this pass's exact-head green checks and merge: SPE **39 source/historical checked, 47 retired, 2 substantive external qualifications (A16/D07)**. UX remains **51 checked, 8 external qualifications**. Original combined 147 IDs therefore have **90 checked, 47 retired, 10 external open**. The separate 15-item persona pivot has **9 source checked, 6 external/data/launch open**. Across all 162 unique IDs: **99 checked, 47 retired, 16 substantive external checkpoints**. These counts do not represent live provider or deployment acceptance.
+
+The 16 external checkpoints are UX-R02/R03/R06/F03/W04/D05/D06/NGN06, SPE-A16/D07 and PO01/02/07/08/09/15. Actual provider outcome/finality/cost/validity evidence, external erasure/legal authority, licensed reviewed biographies/primary tickets/account ownership/API access and a real evaluated pilot remain necessary. There is no phone-only acceptance checkbox. The owner-whitelisted Flutterwave outbound IP is not a blocker; this pass neither purchases Data nor changes the approved 36-plan selection.
+
+Validation is recorded in CONTINUE-HERE after the consolidated run. No APK, live money/provider request, source activation or deployment approval is part of this source pass.

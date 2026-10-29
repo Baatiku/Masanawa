@@ -65,9 +65,10 @@ class PostReportAdminEntry extends ConsumerWidget {
 }
 
 class _Report {
-  const _Report(this.id, this.post, this.reason, this.at);
+  const _Report(this.id, this.post, this.reason, this.at, this.contentChanged);
   final String id, post, reason;
   final DateTime at;
+  final bool? contentChanged;
   factory _Report.read(Object? raw) {
     if (raw is! Map) throw const FormatException('Invalid report');
     final id = raw['id'],
@@ -98,7 +99,13 @@ class _Report {
         DateTime.tryParse(date) == null) {
       throw const FormatException('Invalid report');
     }
-    return _Report(id, post, reason, DateTime.parse(date));
+    return _Report(
+      id,
+      post,
+      reason,
+      DateTime.parse(date),
+      raw['content_changed'] is bool ? raw['content_changed'] as bool : null,
+    );
   }
 }
 
@@ -274,6 +281,15 @@ class _PostReportReviewState extends ConsumerState<PostReportReviewScreen> {
                             row.reason,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
+                          if (row.contentChanged != false)
+                            Text(
+                              t(
+                                row.contentChanged == true
+                                    ? 'Post changed since this report. Check the current original before taking action.'
+                                    : 'Original report version unavailable. Check the current post.',
+                                'Duba labarin na yanzu kafin ɗaukar mataki.',
+                              ),
+                            ),
                           Text(row.at.toLocal().toString()),
                           Text('${t('Post', 'Labari')}: ${row.post}'),
                           Text('${t('Report', 'Rahoto')}: ${row.id}'),

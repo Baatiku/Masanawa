@@ -94,6 +94,20 @@ String? shellDeepLinkRoute(Uri uri) {
     }
   }
 
+  // Current-ledger links are navigation only; each destination reauthorizes the original record.
+  if(uri.scheme=='masanawa'&&uri.host=='wallet'&&uri.queryParameters.isEmpty){
+    final parts=uri.pathSegments;
+    if(parts.length==1&&parts.single=='activity')return '/wallet/activity';
+    if(parts.length==2&&parts.first=='activity'&&
+      RegExp(r'^(mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160})$').hasMatch(parts.last)){
+      return '/wallet/activity/${Uri.encodeComponent(parts.last)}';
+    }
+    if(parts.length==2&&parts.first=='inquiry'&&
+      RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$').hasMatch(parts.last)){
+      return '/wallet/inquiries/${parts.last}';
+    }
+  }
+
   // P2P notifications must open only the authenticated Wallet surface;
   // the link is a navigation hint and never a payment authorization.
   if (uri.scheme == 'masanawa' && uri.host == 'wallet') {

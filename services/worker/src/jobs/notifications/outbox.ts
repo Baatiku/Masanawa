@@ -16,7 +16,7 @@ type ClaimedNotice = {
 const copy: Readonly<Record<string, { title: string; body: string }>> = {
   wallet: {
     title: "Wallet update",
-    body: "Open Wallet to view the verified update",
+    body: "Open Wallet to review this update",
   },
   calls: {
     title: "Missed Masana call",

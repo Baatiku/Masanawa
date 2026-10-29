@@ -162,7 +162,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
     final campaigns=rows('campaigns'),inactive=rows('inactivePosts'),
       earnings=rows('sharingEarnings'),notices=rows('lifecycleNotifications');
     final visibleCampaigns=campaigns.where(matchesCampaign).toList();
-    return Scaffold(appBar:AppBar(title:const Text('My promotions & earnings')),
+    return Scaffold(appBar:AppBar(title:const Text('Historical promotion records')),
       body:RefreshIndicator(onRefresh:refresh,child:ListView(
         padding:const EdgeInsets.all(16),children:[
         if(loading&&data==null)const Center(child:CircularProgressIndicator()),

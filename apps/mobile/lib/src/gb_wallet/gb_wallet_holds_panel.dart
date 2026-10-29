@@ -1,3 +1,4 @@
+import 'gb_retained_finance_screens.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -153,6 +154,7 @@ class _HoldDetailState extends ConsumerState<GbWalletHoldDetailScreen>{
         for(final entry in hold.entryIds)TextButton(onPressed:(){if(_current)Navigator.push<void>(context,MaterialPageRoute(
           builder:(_)=>GbWalletActivityDetailScreen(entryId:entry)));},child:Text('View posted entry $entry')),
         const SizedBox(height:12),
+        GbWalletInquiryButton(targetKind:'hold',reference:hold.operationId),
         const Text('This reservation is not an income or delivered-data receipt. Unused MB returns to its original bucket without a new posted credit. Only a posted entry can produce a journal receipt.'),
       ]));
   }
