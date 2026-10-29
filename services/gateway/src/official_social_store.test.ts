@@ -16,6 +16,7 @@ it('imports exact original Status, deduplicates, records source edits and never 
  INSERT INTO masana.character_revisions VALUES('t','official','approved');`);
  await db.exec(await readFile(new URL('../../../packages/feed/migrations/0001_feed.sql',import.meta.url),'utf8'));
  await db.exec(await readFile(new URL('../../../packages/feed/migrations/0017_official_social_sources.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../../../packages/feed/migrations/0022_official_social_reconciliation.sql',import.meta.url),'utf8'));
  await db.exec(`INSERT INTO feed.official_social_sources(tenant_id,character_id,platform,account_id,handle,rights_basis,state,reviewed_by,review_expires_at)
  VALUES('t','official','x','123','official','Reviewed permission','approved','reviewer',now()+interval '1 day')`);
  const pg={query:(s:string,v?:unknown[])=>db.query(s,v),connect:async()=>({query:(s:string,v?:unknown[])=>db.query(s,v),release(){}})};
@@ -33,6 +34,6 @@ it('imports exact original Status, deduplicates, records source edits and never 
  await sync.withdraw(source.id,'42');await due();await sync.runOnce();
  expect((await db.query('SELECT body,state FROM feed.posts')).rows).toEqual([{body:'',state:'removed'}]);
  await db.exec(`UPDATE masana.public_official_dossiers SET state='suspended'`);await due();
- text='New version after suspended identity';await expect(sync.runOnce()).rejects.toThrow('review_required');
+ text='New version after suspended identity';expect(await sync.runOnce()).toEqual({imported:0});
  }finally{await db.close();}
 },30000);

@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-10-29",
+  "mode": "read_only_inventory_and_research",
+  "requiredOfficialSourceVariablesPresent": false,
+  "geminiVariableNamesPresent": true,
+  "secretValuesRead": false,
+  "productionChanged": false,
+  "grokipedia": {
+    "status": "BLOCKED_SOURCE_ACCESS",
+    "urls": [
+      "https://grokipedia.com/page/Bola_Tinubu",
+      "https://grokipedia.com/page/Atiku_Abubakar",
+      "https://grokipedia.com/page/Peter_Obi",
+      "https://grokipedia.com/page/Sandy_Onor"
+    ]
+  },
+  "pendingPrimaryStates": [
+    "Akwa Ibom",
+    "Cross River",
+    "Ebonyi",
+    "Plateau",
+    "Sokoto",
+    "Taraba",
+    "Yobe"
+  ],
+  "pendingGovernorshipTickets": 26,
+  "remainingRealWorldActions": [
+    "Reviewed accessible biographies and rights",
+    "Official-account ownership and stable IDs",
+    "Authorized X/Meta API access",
+    "Real-provider factual/multilingual/voice evaluation and pilot"
+  ]
+}

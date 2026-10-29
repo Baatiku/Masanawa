@@ -17,6 +17,7 @@ import type {
 } from "@masanawa/agents";
 import type {
   AgentConversationAuthorizer,
+  AgentConversationAdmission,
   AgentConversationService,
 } from "./agent_conversation_contract.js";
 import type { NativeAudioRenderer } from "./native_audio.js";
@@ -32,8 +33,10 @@ function hashTurnPayload(value: string): string {
 function assertConversationSessionOpen(session: {
   readonly state: "active" | "closed";
   readonly expiresAt: string;
-}): void {
+  readonly characterVersionId?:string;
+},expectedVersion?:string): void {
   if (
+    (expectedVersion!==undefined&&session.characterVersionId!==expectedVersion) ||
     session.state !== "active" ||
     !Number.isFinite(Date.parse(session.expiresAt)) ||
     Date.parse(session.expiresAt) <= Date.now()
@@ -113,19 +116,31 @@ export function createAgentConversationService(input: {
     throw new RangeError("Alpha session duration must be at least one minute");
   }
 
+  function evidenceAccess(admission:AgentConversationAdmission,authorizationHeader:string|undefined){
+    if(!admission.presentation.narrative?.publicOfficial)return {};
+    return {readPublicEvidence:async(query:string)=>{
+      const current=await input.authorizer.authorize({authorizationHeader,characterId:admission.scope.characterId,evidenceQuery:query.slice(0,500)});
+      if(current.scope.tenantId!==admission.scope.tenantId||current.scope.userId!==admission.scope.userId||
+        current.scope.characterId!==admission.scope.characterId||current.characterVersionId!==admission.characterVersionId||
+        !current.presentation.narrative?.publicOfficial)throw Error('official_evidence_scope_changed');
+      return current.presentation.narrative.publicOfficial;
+    }};
+  }
+
   async function renderAudio(
     reply: string,
     scope: import("@masanawa/agents").CharacterSessionScope,
     signal?: AbortSignal,
     onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>,
     onAudioTranscriptDelta?: (delta: string) => void | Promise<void>,
+    official=false,
   ) {
     if (!input.nativeAudio || signal?.aborted) return undefined;
     return optionalAudioReply(async (audioSignal) => {
       const voiceName = await input.voiceForCharacter?.(scope);
       if (audioSignal.aborted) return undefined;
       return input.nativeAudio!.render(
-        reply, audioSignal,
+        official?reply.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,'$1').replace(/https?:\/\/\S+/g,''):reply, audioSignal,
         onAudioPcmChunk ? async (chunk) => {
           if (!audioSignal.aborted) await onAudioPcmChunk(chunk.toString("base64"));
         } : undefined,
@@ -192,7 +207,7 @@ export function createAgentConversationService(input: {
         scope: admission.scope,
         characterSessionId,
       });
-      assertConversationSessionOpen(session);
+      assertConversationSessionOpen(session,admission.presentation.narrative?.publicOfficial?admission.characterVersionId:undefined);
       await input.beforeTurn?.(request.authorizationHeader);
 
       if (input.mobileShell) {
@@ -262,6 +277,7 @@ export function createAgentConversationService(input: {
           characterVersionId: session.characterVersionId,
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
+          ...evidenceAccess(admission,request.authorizationHeader),
           conversationHistory: await conversationHistory(admission.scope,request.requestId),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
@@ -343,6 +359,7 @@ export function createAgentConversationService(input: {
           request.signal,
           request.onAudioPcmChunk,
           request.onAudioTranscriptDelta,
+          !!admission.presentation.narrative?.publicOfficial,
         );
         return Object.freeze({
           reply,
@@ -421,7 +438,7 @@ export function createAgentConversationService(input: {
         scope: admission.scope,
         characterSessionId,
       });
-      assertConversationSessionOpen(session);
+      assertConversationSessionOpen(session,admission.presentation.narrative?.publicOfficial?admission.characterVersionId:undefined);
       await input.beforeTurn?.(request.authorizationHeader);
 
       if (input.mobileShell) {
@@ -472,6 +489,7 @@ export function createAgentConversationService(input: {
           characterVersionId: session.characterVersionId,
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
+          ...evidenceAccess(admission,request.authorizationHeader),
           conversationHistory: await conversationHistory(admission.scope,request.requestId),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
@@ -529,7 +547,7 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!admission.presentation.narrative?.publicOfficial);
         return Object.freeze({
           reply,
           agentRunId,
@@ -613,7 +631,7 @@ export function createAgentConversationService(input: {
         scope: admission.scope,
         characterSessionId,
       });
-      assertConversationSessionOpen(session);
+      assertConversationSessionOpen(session,admission.presentation.narrative?.publicOfficial?admission.characterVersionId:undefined);
       await input.beforeTurn?.(request.authorizationHeader);
 
       if (input.mobileShell) {
@@ -671,6 +689,7 @@ export function createAgentConversationService(input: {
           characterVersionId: session.characterVersionId,
           skillVersionIds: session.bindings.skillVersionIds,
           presentation: admission.presentation,
+          ...evidenceAccess(admission,request.authorizationHeader),
           conversationHistory: await conversationHistory(admission.scope,request.requestId),
           surface: request.surface ?? "mobile",
           representation: request.representation ?? "platform-agent",
@@ -719,7 +738,7 @@ export function createAgentConversationService(input: {
           }).catch(() => undefined);
         }
 
-        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta);
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!admission.presentation.narrative?.publicOfficial);
         return Object.freeze({
           reply,
           agentRunId,

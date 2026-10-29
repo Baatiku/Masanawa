@@ -52,6 +52,8 @@ export type AgentConversationSurface = "mobile" | "whatsapp" | "telegram";
 export type AgentConversationRepresentation = "platform-agent" | "public-twin";
 
 export interface AgentStrategyRequest {
+  /** Server-only, authorized read of current public evidence; never a customer DTO. */
+  readonly readPublicEvidence?: (query:string)=>Promise<import('./public-official.js').PublicOfficialPersona>;
   readonly conversationHistory?: readonly AgentConversationHistoryMessage[];
   readonly onTextDelta?: (delta: string) => void | Promise<void>;
   readonly surface?: AgentConversationSurface;

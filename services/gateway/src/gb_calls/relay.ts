@@ -1,3 +1,5 @@
+import {createOfficialLiveEvidenceSession,officialLiveTool,officialLiveToolInstruction} from '../official_live_evidence.js';
+import type {PublicOfficialPersona} from '@masanawa/agents';
 import {createHash,randomBytes} from 'node:crypto';
 import type {Duplex} from 'node:stream';
 import type {IncomingMessage} from 'node:http';
@@ -11,7 +13,7 @@ export type ProviderVoiceGrant=Awaited<ReturnType<LiveVoiceTokenService['mint']>
 export type MbRelayGrant=ProviderVoiceGrant&{transport:'gateway_relay'};
 type Store=Pick<ReturnType<typeof createGbCallAdmissions>,
   'read'|'claimConnection'|'connected'|'checkpoint'|'disconnect'|'abandonConnection'|'finish'|'recover'>;
-interface Ticket {actor:GbCallActor;characterId:string;id:string;grant:ProviderVoiceGrant;expires:number;bytes:number;validateOwner:()=>Promise<void>}
+interface Ticket {readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>;actor:GbCallActor;characterId:string;id:string;grant:ProviderVoiceGrant;expires:number;bytes:number;validateOwner:()=>Promise<void>}
 interface Connection {actor:GbCallActor;stop(confirmed:boolean,finish:boolean):Promise<void>}
 interface RelayOptions {
   store:Store;publicOrigin:string;
@@ -96,6 +98,7 @@ export function createGbCallRelay(options:RelayOptions){
     }
     let chain=Promise.resolve(),stopping=false,setup=false,connected=false;
     let closedTask:Promise<void>|undefined;
+    const officialEvidence=ticket.readOfficialEvidence?createOfficialLiveEvidenceSession(ticket.readOfficialEvidence):undefined;
     let setupSent=false;
     let setupFrame:string|undefined,waiting:string[]=[],waitingBytes=0,queuedBytes=0;
     let heartbeat:ReturnType<typeof setInterval>|undefined;
@@ -161,6 +164,10 @@ export function createGbCallRelay(options:RelayOptions){
           };
           if(ticket.grant.systemInstruction)canonical.systemInstruction={parts:[{text:ticket.grant.systemInstruction}]};
           else delete canonical.systemInstruction;
+          if(officialEvidence){
+            canonical.tools=[officialLiveTool];
+            canonical.systemInstruction={parts:[{text:(ticket.grant.systemInstruction??'')+'\n'+officialLiveToolInstruction}]};
+          }
           if(input.sessionResumption){
             const saved=resumptions.get(ticket.id)?.handle;
             canonical.sessionResumption=saved?{handle:saved}:{};
@@ -209,6 +216,13 @@ export function createGbCallRelay(options:RelayOptions){
             },beatMs);
             for(const frame of waiting)send(provider,frame);waiting=[];waitingBytes=0;
           }
+        }
+        const toolCall=message.toolCall??message.tool_call;
+        if(toolCall){
+          if(!connected||!officialEvidence)throw rejected();
+          await assertAccess(ticket);
+          const result=await officialEvidence.respond(toolCall);
+          if(!stopping)send(provider,JSON.stringify(result));
         }
         const resume=(message.sessionResumptionUpdate??message.session_resumption_update) as
           {newHandle?:unknown;new_handle?:unknown}|undefined;
@@ -261,7 +275,7 @@ export function createGbCallRelay(options:RelayOptions){
   return {
     ready:()=>ready&&!closed,
     async start(){if(closed)throw rejected();await recover();recovery??=setInterval(()=>{void recover()},recoveryMs);},
-    async issue(actor:GbCallActor,characterId:string,id:string,grant:ProviderVoiceGrant,validateOwner:()=>Promise<void>):Promise<MbRelayGrant>{
+    async issue(actor:GbCallActor,characterId:string,id:string,grant:ProviderVoiceGrant,validateOwner:()=>Promise<void>,readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>):Promise<MbRelayGrant>{
       if(!ready||closed||typeof validateOwner!=='function')throw rejected();purge();
       const url=new URL(grant.websocketUrl);
       if(url.protocol!=='wss:'||url.hostname!=='generativelanguage.googleapis.com'||url.username||url.password||url.port||
@@ -280,7 +294,7 @@ export function createGbCallRelay(options:RelayOptions){
         ...(grant.systemInstruction?{systemInstruction:grant.systemInstruction}:{}),
       });
       const ticket:Ticket={actor:Object.freeze({tenantId:actor.tenantId,userId:actor.userId}),
-        characterId,id,grant:canonicalGrant,validateOwner,bytes:Buffer.byteLength(JSON.stringify(canonicalGrant)),
+        characterId,id,grant:canonicalGrant,validateOwner,...(readOfficialEvidence?{readOfficialEvidence}:{}),bytes:Buffer.byteLength(JSON.stringify(canonicalGrant)),
         expires:Math.min(now().getTime()+60000,Date.parse(grant.expiresAt))};
       if(!Number.isFinite(ticket.expires)||ticket.expires<=now().getTime())throw rejected();
       const admission=await verifyAdmission(ticket);

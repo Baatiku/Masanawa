@@ -81,6 +81,22 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     return {actor,characterId,id,store,relay,validate,validateOwner,report,issue,socket,open,setup,cleanup,origin,
       received,provider:()=>provider,grant:providerGrant,advanceClock:(ms:number)=>{clockOffset+=ms;}};
   }
+  it('serves only server-owned public evidence tools inside the authenticated call',async()=>{
+    const f=await fixture();const evidence={officialName:'Example Official',office:'Governor',countryCode:'NG' as const,identitySourceUrl:'https://example.gov.ng',reviewedAt:'2026-10-01',reviewExpiresAt:'2099-01-01',evidence:[]};
+    const lookup=vi.fn(async()=>evidence);
+    try{
+      const grant=await f.relay.issue(f.actor,f.characterId,f.id,f.grant,f.validateOwner,lookup);
+      const client=await f.open(grant);await f.setup(client);
+      const setup=f.received.find(r=>r.setup)!.setup as Record<string,any>;
+      expect(setup.tools[0].functionDeclarations[0].name).toBe('read_official_evidence');
+      f.provider()!.send(JSON.stringify({toolCall:{functionCalls:[{id:'fact-1',name:'read_official_evidence',args:{query:'historical office'}}]}}));
+      await until(async()=>f.received.some(r=>!!r.toolResponse));
+      expect(lookup).toHaveBeenCalledWith('historical office');
+      expect(JSON.stringify(f.received.find(r=>r.toolResponse))).toContain('Example Official');
+      const closed=once(client,'close');client.send(JSON.stringify({toolResponse:{functionResponses:[{name:'read_official_evidence',response:{invented:true}}]}}));await closed;
+      expect(JSON.stringify(f.received)).not.toContain('invented');
+    }finally{await f.cleanup();}
+  });
   it('keeps provider credentials private and locks setup to approved persona/model/voice',async()=>{
     const f=await fixture();
     try{

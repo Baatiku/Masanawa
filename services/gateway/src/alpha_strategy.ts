@@ -1,3 +1,4 @@
+import {prepareOfficialGrounding,officialAnswerContract,finalizeOfficialAnswer} from './official_answer.js';
 import { personaInstructions } from './persona_continuity.js';
 import type {
   AgentInferenceProvider,
@@ -20,8 +21,10 @@ export function createAlphaInferenceStrategy(input: {
     async execute(
       request: Parameters<AgentStrategy["execute"]>[0],
     ) {
+      const grounded=await prepareOfficialGrounding(request,input.inference);
+      const official=grounded.presentation.narrative?.publicOfficial;
       const instructions = [
-        ...personaInstructions(request.presentation),
+        ...personaInstructions(grounded.presentation),
         `You are ${request.presentation.displayName}, a Masanawa development Character.`,
         `Your current user-facing role is "${request.presentation.roleLabel}".`,
         ...(request.presentation.about
@@ -77,20 +80,22 @@ export function createAlphaInferenceStrategy(input: {
         }
       }
 
+      if(official)instructions.push(...officialAnswerContract);
       const result = await input.inference.generate(
         {
           systemInstructions: Object.freeze(instructions),
-          input: request.input,
+          input: grounded.input,
         },
         {
           ...(request.signal ? { signal: request.signal } : {}),
           maxOutputTokens: 2048,
-          ...(request.onTextDelta
+          ...(!official&&request.onTextDelta
             ? { onTextDelta: request.onTextDelta }
             : {}),
         },
       );
-      const reply = result.text.trim();
+      const reply = await finalizeOfficialAnswer(result.text,grounded,request);
+      if(official&&request.onTextDelta)await request.onTextDelta(reply);
       if (!reply) throw new Error("Alpha inference returned no text");
       return Object.freeze({
         reply,

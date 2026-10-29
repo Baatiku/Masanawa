@@ -1,3 +1,4 @@
+import {prepareOfficialGrounding,officialAnswerContract,finalizeOfficialAnswer} from './official_answer.js';
 import { personaInstructions } from './persona_continuity.js';
 import type {
   AgentInferenceProvider,
@@ -58,8 +59,10 @@ export function createProductionAgentStrategy(input: {
               "You are this Masanawa persona. Support and professional skills are available when relevant; they do not replace your character or turn every conversation into a service interaction.",
             ];
 
+      const grounded=await prepareOfficialGrounding(request,input.inference);
+      const official=grounded.presentation.narrative?.publicOfficial;
       const instructions = [
-        ...personaInstructions(request.presentation),
+        ...personaInstructions(grounded.presentation),
         ...surfaceInstructions,
         ...representationInstructions,
         "Follow the user's language and communication style unless they ask otherwise.",
@@ -112,19 +115,21 @@ export function createProductionAgentStrategy(input: {
         }
       }
 
+      if(official)instructions.push(...officialAnswerContract);
       const result = await input.inference.generate(
         {
           systemInstructions: Object.freeze(instructions),
-          input: request.input,
+          input: grounded.input,
           ...(request.conversationHistory ? {conversationHistory:request.conversationHistory} : {}),
         },
         {
           ...(request.signal ? { signal: request.signal } : {}),
           maxOutputTokens: 4096,
-          ...(request.onTextDelta ? { onTextDelta: request.onTextDelta } : {}),
+          ...(!official&&request.onTextDelta ? { onTextDelta: request.onTextDelta } : {}),
         },
       );
-      const reply = result.text.trim();
+      const reply = await finalizeOfficialAnswer(result.text,grounded,request);
+      if(official&&request.onTextDelta)await request.onTextDelta(reply);
       if (!reply) throw new Error("Production inference returned no text");
       return Object.freeze({
         reply,

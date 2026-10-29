@@ -6,7 +6,7 @@ The owner selected **APC, ADC, NDC and PDP**. Research presidential aspirants/ca
 
 This replaces human post submission and the profession-based direction for new personas. The former twelve-item composer batch is superseded, not completed. Existing financial receipts and cancellation/recovery remain available. Sharing remains available.
 
-**Foundation merged in PR #593 at `125ceefda197cb6d1a6a8f36803a12a7ac62b5ea`, with all five exact-head hosted checks passing (head `af2a35c960d8342fc6ad24c4388df2db656289bc`). Follow-up admission/retrieval source is on `feat/official-evidence-admission-retrieval-oct29`. It is not deployed or accepted end to end.** No researched official has been admitted as a live persona, and no reviewed source accounts or provider credentials have been configured by this change.
+**Foundation merged in PR #593 at `125ceefda197cb6d1a6a8f36803a12a7ac62b5ea`, with all five exact-head hosted checks passing (head `af2a35c960d8342fc6ad24c4388df2db656289bc`). Admission/retrieval merged in #594 at `01b448ebe5f945fbca365b3ff181c32328e68fe6`, exact head `72f1a86bc4668979556f4874ce2f8aa684a23c2e`, all eight hosted checks PASS (2,278 backend tests). The remaining code batch is on `feat/official-persona-completion-batch-oct29`. It is not deployed or accepted end to end.** No researched official has been admitted as a live persona, and no reviewed source accounts or provider credentials have been configured by this change.
 
 ## Existing implementation and proposed architecture
 
@@ -36,21 +36,25 @@ The [presidential ticket CSV](research/ng-2027-selected-party-presidential.csv) 
 
 These are source changes, not a claim of production readiness. Tests already cover retirement, stale verification, private continuity and exact source text. Local verification: workspace TypeScript passed; Flutter analysis passed with existing informational lints and no warnings/errors. The 34-file backend/architecture batch passed 178 tests with 24 skipped and one environment-registry failure; after registering all four new optional variables, the repaired registry plus updated evidence/eligibility policies passed all 7 tests. The earlier database setup timeouts disappeared when the batch ran serially with a 60-second setup allowance. Mobile batches passed 32 tests for feed/attribution/badges and 21 tests for retired historical management/profile/Saved; a final profile/badge/source batch passed 10 tests and Gateway TypeScript passed again. Hosted CI remains separately recorded below. Skipped real-Postgres suites are not live acceptance.
 
-## Remaining implementation and admission checklist
+## Current delivery checklist — 9 code checkpoints, 6 external/launch checkpoints
 
-- [ ] Review presidential and governorship names against dated primary nomination documents; distinguish aspirants from confirmed candidates and review party changes.
-- [ ] Obtain usable Grokipedia references and corroborating primary records for a small first cohort; record licensing/usage basis and reviewer decisions.
-- [x] Build and validate a repeatable trusted operator dossier admission workflow; reject incomplete/stale/mismatched packets, prevent fictional-identity reassignment, retain withdrawn evidence and immutable idempotent review receipts. See [operator guide](OFFICIAL-DOSSIER-OPERATOR-GUIDE-20261029.md).
-- [x] Rank bounded public evidence per text question/nonempty media caption, preserving required biography/primary records and rejecting marked officials without approved dossiers.
-- [ ] Add live-call and captionless voice-note retrieval, semantic/multilingual qualification and deeper evidence evaluation. Lexical text retrieval does not constitute decades of comprehensive knowledge.
-- [ ] Evaluate factual accuracy, dated offices/affiliations, quotation fidelity, unknown-answer behavior, prompt injection and chat/call consistency before admission.
-- [ ] Verify each chosen official social account and its stable provider ID; choose one active platform per official.
-- [ ] Configure authorized X/Meta access as server secrets and qualify permissions/usage rights. Never paste credentials into chat.
-- [x] Add original-source attribution to the shared post header in feed, detail and Saved; preserve metadata through reaction/save changes.
-- [x] Enforce source suspension, review/evidence expiry and exact canonical version at feed and Saved read time, including previously imported posts.
-- [ ] Complete provider deletion/compliance reconciliation; the current explicit withdrawal method alone is insufficient for automatic source-deletion handling.
-- [ ] Validate schema rollout, importer failure/retry behavior, accessibility and shared financial-history compatibility in consolidated checks.
-- [ ] Commit and review the scoped PR, pass required checks and merge; only then qualify deployment and a small source-backed live pilot.
+The nine code checkpoints close with this batch after its exact-head required checks pass and merge. Six actual data/access/launch checkpoints remain open; none is an owner-phone-only gate.
+
+- [ ] **PO01** Finish primary nomination/party review for the remaining 26 governorship tickets. Four presidential and 76 governorship tickets are already text-matched to primary documents.
+- [ ] **PO02** Obtain accessible licensed Grokipedia/primary biographies, dated speeches/positions and cleared imagery for the first cohort; record actual reviewer decisions.
+- [x] **PO03** Trusted operator dossier/source admission, exact canonical/version binding, no fictional-persona reassignment, immutable hashed receipts and safe retries.
+- [x] **PO04** Bounded public-evidence retrieval for text/captions and approved original social posts, with content-hash-bound citation identities and final freshness checks.
+- [x] **PO05** Captionless speech transcription, multilingual query expansion and server-owned live-call evidence lookup with current account/version checks and bounded read-only tools.
+- [x] **PO06** Checked source IDs/URLs and literal quotations before citizen output, honest insufficient-evidence fallback, and reviewed gold-case evaluation tooling. This validates provenance contracts, not all possible factual claims.
+- [ ] **PO07** Run the first cohort against real reviewed biographies and configured models/providers: factual accuracy, dated affiliations, quotations, unknowns, injection, multilingual and chat/voice consistency. Synthetic fixtures are not live qualification.
+- [ ] **PO08** Verify each selected official account's ownership and stable provider ID; choose one active source per person.
+- [ ] **PO09** Configure authorized X/Meta secrets and qualify actual access, usage rights, quotas and provider compliance obligations. Required variable names are absent from Railway's read-only inventory.
+- [x] **PO10** Original-source attribution shared across Home/detail/Saved; safe photo/story source links and metadata retained through reactions/save.
+- [x] **PO11** Source/dossier/evidence expiry, withdrawal, suspension and exact canonical version enforced at read time; AI disclosure persists when provenance verification expires.
+- [x] **PO12** Explicit per-object deletion/access reconciliation, X edit-history normalization, stable original timestamps, platform-wide rate backoff, bounded concurrency and independent head/backfill recovery.
+- [x] **PO13** Consolidated schema/recovery, source isolation, accessibility and historical-finance regression checks. Local: 197 backend tests and 62 mobile tests PASS; required hosted PostgreSQL/full-suite checks gate merge.
+- [x] **PO14** Scoped source PR, review and exact-head required checks before merge. Source-closed on the completion batch's green merge, not a deployment claim.
+- [ ] **PO15** Qualify production rollout and a genuinely sourced live pilot after PO02/PO07/PO08/PO09. No official profile, source account or importer has been activated by this batch.
 
 Do not mark these items complete merely because an adapter or schema exists. Do not retire old user finances or enable public profiles based on a research shortlist.
 
@@ -65,7 +69,7 @@ Configuration implemented in the branch:
 - `MASANAWA_OFFICIAL_FACEBOOK_BEARER` — server secret.
 - `MASANAWA_OFFICIAL_FACEBOOK_VERSION` — pinned supported Graph API version.
 
-No settings were changed in Railway. Start with a small reviewed cohort; the current one-source-per-minute worker must be extended with bounded concurrency, provider-aware quotas and compliance handling before a large roster.
+No settings were changed in Railway. Start with a small reviewed cohort; the completion batch adds bounded two-worker/eight-job polling, provider-aware backoff and per-object reconciliation. Actual quotas, cadence and compliance obligations need provider qualification before a large roster.
 
 ## Memory choices
 
@@ -88,3 +92,13 @@ Admission/retrieval follow-up: initial six-file batch passed 39 tests; consolida
 The operator packet can also admit one reviewed social source atomically. Platform switches suspend prior source bindings and retain their provenance; cross-person account reassignment is refused. A failed source update rolls back the dossier review. All source accounts remain unconfigured in production. Gateway build and compiled preview with a deliberately invalid database sentinel passed, demonstrating that preview does not open a database connection.
 
 Disclosure continuation: direct-entry chat headers identify public officials as AI simulations, and full-screen calls explicitly say they are not the official or their office. Consolidated chat/call/MB-recovery/badge tests: 25 passed, including 320dp/200% text; Flutter analysis passed with informational lints only.
+
+## 29 October one-pass completion batch — local verification complete; hosted merge gate
+
+All connected source changes are being made before one consolidated test phase, as requested by the owner. The batch covers speech/query grounding after turn reservation, server-only live evidence lookup, citation/quotation validation before citizen output, multilingual gold-case evaluation tooling, original social edits/deletion/access-loss reconciliation, durable provider backoff, bounded concurrency, head polling independent of backfill, and matching mobile source-link parsing. No new wallet operation or real-official identity is created.
+
+Read-only Railway OAuth inventory confirms the required official-source/X/Meta variable names are absent; values were withheld and no variables changed. Gemini variable names exist, which establishes configuration presence only. Research retries still could not read the four Grokipedia pages or seven primary state PDFs covering the remaining 26 tickets. These are substantive external/data dependencies; no candidate biography, image rights, account ownership, provider ID or live qualification has been invented.
+
+The completion batch also includes approved original social posts in public knowledge search, with content-hash-bound evidence IDs. Edited/withdrawn originals cannot silently retain the same citation identity. Text/voice-note answers re-read authorized evidence before final display; speech rendering omits raw source URLs while written replies retain citations. Real source accessibility and required API configuration findings are recorded in [external-readiness evidence](research/official-pivot-external-readiness-20261029.json).
+
+Verification: all planned connected source edits preceded the first consolidated run (196 backend tests, 62 mobile tests, workspace TypeScript and Flutter analysis PASS). Final audit added old-official-session version rejection before a new hold and single-quote fidelity checking; the second backend run passed 197 tests. Seventeen real-Postgres-only tests were skipped locally and remain required in hosted checks. Full workspace build PASS; both compiled operator commands passed offline preview with invalid provider/database sentinels and zero provider calls. A stale local compiled dependency found by the first evaluation preview was resolved by the full rebuild.
