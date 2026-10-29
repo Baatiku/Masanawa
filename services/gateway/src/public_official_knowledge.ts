@@ -1,4 +1,3 @@
-import {createHash} from 'node:crypto';
 import type {Pool} from '@masanawa/postgres';
 import {isGrokipediaArticleUrl,type PublicOfficialPersona} from '@masanawa/agents';
 function evidenceExcerpt(content:string,query:string){
@@ -9,7 +8,7 @@ function evidenceExcerpt(content:string,query:string){
 }
 const grokipediaSql="^https://(www[.])?grokipedia[.]com/page/[^/?#[:space:]]+$";
 /** Public evidence is deliberately separate from per-citizen conversational memory. */
-export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,options:{includeSocial?:boolean}={}){
+export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>){
  return {
   async read(tenantId:string,characterId:string,characterVersionId:string,query=''):Promise<PublicOfficialPersona|null>{
    const r=await pool.query(`SELECT d.*,c.active_character_version_id,c.state AS character_state,o.kind AS owner_kind FROM masana.public_official_dossiers d
@@ -20,30 +19,20 @@ export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,options:{i
    if(d.owner_kind!=='platform'||d.character_state!=='active'||d.active_character_version_id!==characterVersionId||d.character_version_id!==characterVersionId||d.state!=='approved'||Date.parse(d.review_expires_at)<=Date.now())
     throw Object.assign(new Error('official_dossier_review_required'),{statusCode:409});
    const terms=(query.slice(0,500).match(/[\p{L}\p{N}]+/gu)??[]).slice(0,24).map(x=>x.slice(0,40)).join(' | ');
-   const social=options.includeSocial?`UNION ALL (SELECT 'social:'||p.id::text||':'||sp.content_sha256 AS id,
-    sp.source_url,'Original '||s.platform||' post' AS title,p.body AS content,sp.original_published_at::date AS source_date,
-    'official_social'::text AS source_kind,sp.content_sha256
-    FROM feed.official_social_posts sp JOIN feed.official_social_sources s ON s.id=sp.source_id AND s.tenant_id=sp.tenant_id
-    JOIN feed.posts p ON p.tenant_id=sp.tenant_id AND p.id=sp.post_id AND p.author_masana_id=s.character_id
-    WHERE s.tenant_id=$1 AND s.character_id=$2 AND s.state='approved' AND s.review_expires_at>clock_timestamp()
-    AND sp.withdrawn_at IS NULL AND p.state='published' AND p.source_provenance->>'contentSha256'=sp.content_sha256
-    AND ($3='' OR to_tsvector('english',p.body)@@to_tsquery('english',$3))
-    ORDER BY CASE WHEN $3='' THEN 0 ELSE ts_rank(to_tsvector('english',p.body),to_tsquery('english',$3)) END DESC,sp.original_published_at DESC LIMIT 200)`:'';
    const e=await pool.query(`WITH corpus AS (
     SELECT id::text,source_url,title,content,source_date,source_kind,content_sha256 FROM masana.public_official_evidence
     WHERE tenant_id=$1 AND character_id=$2 AND state='approved' AND valid_until>clock_timestamp()
      AND source_kind='grokipedia' AND source_url ~ '${grokipediaSql}'
-    ${social}
    ) SELECT id,source_url,title,content,source_date,source_kind,content_sha256 FROM (
     SELECT *,row_number() OVER(PARTITION BY source_kind ORDER BY source_date DESC,id) AS kind_rank FROM corpus) e
     ORDER BY CASE WHEN source_kind='grokipedia' AND kind_rank=1 THEN 0 ELSE 1 END,
     CASE WHEN $3='' THEN 0 ELSE ts_rank(to_tsvector('english',content),to_tsquery('english',$3)) END DESC,
     source_date DESC,id LIMIT 6`,[tenantId,characterId,terms]);
-   // The owner selected Grokipedia as the sole biography corpus; social statements remain separate.
+   // Persona knowledge is Grokipedia-only. Original social posts remain in the separate status feed.
    if(!e.rows.some(x=>x.source_kind==='grokipedia'&&isGrokipediaArticleUrl(x.source_url)))
     throw Object.assign(new Error('official_evidence_incomplete'),{statusCode:409});
    let bytes=0;
-   const evidence=e.rows.filter(x=>x.source_kind==='grokipedia'?isGrokipediaArticleUrl(x.source_url):x.source_kind==='official_social'&&createHash('sha256').update(x.content).digest('hex')===x.content_sha256).map(x=>({id:String(x.id),sourceUrl:x.source_url,title:x.title,
+   const evidence=e.rows.filter(x=>x.source_kind==='grokipedia'&&isGrokipediaArticleUrl(x.source_url)).map(x=>({id:String(x.id),sourceUrl:x.source_url,title:x.title,
     content:evidenceExcerpt(x.content,query),sourceDate:new Date(x.source_date).toISOString().slice(0,10),kind:x.source_kind}))
     .filter(value=>{const size=Buffer.byteLength(JSON.stringify(value),'utf8');if(bytes+size>14000)return false;bytes+=size;return true;});
    if(!isGrokipediaArticleUrl(d.identity_source_url)||!evidence.some(x=>x.kind==='grokipedia'))

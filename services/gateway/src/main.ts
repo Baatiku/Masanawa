@@ -819,7 +819,7 @@ export async function startGatewayService(
     }
 
     const customerAuthorizers = createPlatformCustomerAuthorizers({
-      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,{includeSocial:true}))} : {}),
+      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool))} : {}),
       sessions: customerSessions,
       presentations: database.agentPresentations,
       skillAssignments: database.characterSkillAssignments,
@@ -1478,7 +1478,7 @@ export async function startGatewayService(
             ? { activity: database.mobileActivity }
             : {}),
           ...(database.featurePool ? {
-            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,{includeSocial:true})),
+            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool)),
           } : {}),
         })
       : undefined);

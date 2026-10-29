@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
-it('retrieves originals as dated statements with hash-bound IDs and removes withdrawn, changed or suspended evidence',async()=>{
+it('keeps approved original social posts in Status without admitting them to Grokipedia-only persona knowledge',async()=>{
  const db=new PGlite();try{
  await db.exec(`CREATE SCHEMA identity;CREATE SCHEMA masana;
  CREATE TABLE identity.characters(tenant_id text,character_id text,active_character_version_id text,state text,PRIMARY KEY(tenant_id,character_id));
@@ -20,10 +20,13 @@ it('retrieves originals as dated statements with hash-bound IDs and removes with
  const post=(await db.query<{id:string}>(`INSERT INTO feed.posts(tenant_id,author_masana_id,kind,body,published_by,idempotency_key,source_provenance)
  VALUES('t','official','text',$1,'importer','original',$2::jsonb) RETURNING id`,[text,JSON.stringify({contentSha256:sha})])).rows[0]!.id;
  await db.query(`INSERT INTO feed.official_social_posts(source_id,external_id,tenant_id,post_id,content_sha256,original_published_at,source_url) VALUES($1,'42','t',$2,$3,now(),'https://x.com/official/status/42')`,[source,post,sha]);
- const reader=createOfficialKnowledgeReader(db as never,{includeSocial:true});
+ const reader=createOfficialKnowledgeReader(db as never);
  const get=async()=>(await reader.read('t','official','v1','fuel subsidy'))!.evidence.filter(e=>e.kind==='official_social');
- expect((await get())[0]).toMatchObject({content:text,sourceUrl:'https://x.com/official/status/42'});expect((await get())[0]!.id).toContain(sha);
+ expect(await get()).toEqual([]);
+ expect((await db.query<{body:string}>('SELECT body FROM feed.posts WHERE id=$1',[post])).rows[0]!.body).toBe(text);
  await db.query(`UPDATE feed.posts SET body='Changed without original-source receipt' WHERE id=$1`,[post]);expect(await get()).toEqual([]);
  await db.query(`UPDATE feed.posts SET body=$2 WHERE id=$1`,[post,text]);await db.exec(`UPDATE feed.official_social_sources SET state='suspended'`);expect(await get()).toEqual([]);
+ await db.exec(`UPDATE masana.public_official_evidence SET state='withdrawn'`);
+ await expect(reader.read('t','official','v1','fuel subsidy')).rejects.toThrow('evidence_incomplete');
  }finally{await db.close();}
 },30000);

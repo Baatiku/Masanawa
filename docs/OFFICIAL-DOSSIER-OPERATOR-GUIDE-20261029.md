@@ -1,3 +1,5 @@
+**Grokipedia-only knowledge scope:** Chat/call persona evidence excludes X/Facebook posts as well as other biography sources. The requested verbatim X/Facebook Status feed remains separate and unchanged.
+
 **29 October owner clarification:** Grokipedia is the sole persona biography source. One actual reviewed Grokipedia article/chunk is sufficient; a second source and individual official permission are not admission requirements. Preserve source URL/content/date/audit basis. Do not substitute newspapers or an official website as biography evidence. Separately configured original social posts remain supported for the owner's requested status feed. The owner owns manual provider/live acceptance; admission still requires actual source contents, not invented biography text.
 
 # Reviewed public-official dossier admission

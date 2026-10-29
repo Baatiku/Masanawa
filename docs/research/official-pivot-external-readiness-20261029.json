@@ -41,6 +41,7 @@
     "candidateDiscovery": "latest dated online reporting; INEC optional",
     "liveProviderAndPersonaAcceptance": "owner-run",
     "billstackDeposits": "owner-confirmed working",
-    "individualOfficialPermissionRequired": false
+    "individualOfficialPermissionRequired": false,
+    "personaKnowledgeScope": "Grokipedia only; X/Facebook originals remain Status-only"
   }
 }
