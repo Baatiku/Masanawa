@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:masanawa/src/core/providers.dart';
 import 'package:masanawa/src/core/network/api_client.dart';
@@ -63,6 +64,27 @@ ApiClient client({Completer<Response<dynamic>>? follow}) {
   return ApiClient(dio: dio)..accessToken = 'test';
 }
 void main() {
+  testWidgets('profile Call enters live voice for the canonical identity', (tester) async {
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, __) => const MasanaProfileScreen(agent: old)),
+      GoRoute(path: '/chat/:id', builder: (_, state) => Scaffold(
+        body: Text('identity=${state.pathParameters['id']};entry=${state.uri.queryParameters['entry']}'))),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(ProviderScope(overrides: [
+      agentDirectoryProvider.overrideWith(Directory.new),
+      sessionProvider.overrideWith(SignedIn.new),
+      apiClientProvider.overrideWithValue(client()),
+    ], child: MaterialApp.router(routerConfig: router)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Call'));
+    await tester.pumpAndSettle();
+    expect(find.text('identity=character_amina;entry=live-voice'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Biography'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('offline portrait metadata stays identity-safe and explicit Retry restores verified key',
       (tester) async {
     final directory = RetryingDirectory();
@@ -108,7 +130,7 @@ void main() {
     expect(find.text('Following'), findsNothing);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('profile follows canonical portrait refresh and promotes recent posts without biography', (tester) async {
+  testWidgets('profile refresh preserves canonical portrait and displays published biography', (tester) async {
     final directory = Directory();
     await tester.pumpWidget(ProviderScope(overrides: [
       agentDirectoryProvider.overrideWith(() => directory),
@@ -117,7 +139,10 @@ void main() {
     ], child: const MaterialApp(home: MasanaProfileScreen(agent: old))));
     await tester.pumpAndSettle();
     expect(find.text('About'), findsNothing);
-    expect(find.text('Long old description'), findsNothing);
+    expect(find.text('Biography'), findsOneWidget);
+    expect(find.text('Long old description'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Call'), findsOneWidget);
     expect(find.text('Long old greeting'), findsNothing);
     expect(find.text('Recent posts'), findsOneWidget);
     directory.update();
