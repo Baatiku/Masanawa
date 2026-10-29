@@ -5,7 +5,7 @@ import type { CharacterId, CharacterVersionId, TenantId } from '@masanawa/contra
 /** Read only the exact admitted published identity, never a draft or another tenant. */
 export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials?:ReturnType<typeof import('./public_official_knowledge.js').createOfficialKnowledgeReader>) {
   return Object.freeze({
-    async readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: CharacterVersionId}): Promise<AgentPersonaNarrative | null> {
+    async readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: CharacterVersionId;query?:string}): Promise<AgentPersonaNarrative | null> {
       const result = await pool.query(`SELECT v.constitution FROM identity.character_versions v
         JOIN identity.characters c ON c.tenant_id=v.tenant_id AND c.character_id=v.character_id
           AND c.active_character_version_id=v.character_version_id
@@ -18,7 +18,8 @@ export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials
       if (typeof value.biography !== 'string') return null;
       const list = (key: string, max: number, length: number) => Object.freeze(Array.isArray(value[key])
         ? (value[key] as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, max).map(v => v.slice(0, length)) : []);
-      const official=await officials?.read(input.tenantId,input.characterId,input.characterVersionId);
+      const official=await officials?.read(input.tenantId,input.characterId,input.characterVersionId,input.query);
+      if(value.publicOfficial&&!official)throw Object.assign(new Error('official_dossier_review_required'),{statusCode:409});
       return Object.freeze({...(official?{publicOfficial:official}:{}),biography: value.biography.slice(0, 8000), personality: list('personality', 8, 300), languages: list('languages', 12, 32)});
     },
   });

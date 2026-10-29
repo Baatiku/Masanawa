@@ -30,6 +30,7 @@ export interface AgentConversationAuthorizer {
   authorize(input: {
     readonly authorizationHeader: string | undefined;
     readonly characterId: CharacterId;
+    readonly evidenceQuery?: string;
   }): Promise<AgentConversationAdmission>;
 }
 

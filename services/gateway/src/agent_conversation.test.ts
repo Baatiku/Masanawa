@@ -139,8 +139,10 @@ describe("Alpha conversation service", () => {
       },
     };
 
+    const publicQueries:unknown[]=[];
     const authorizer: AgentConversationAuthorizer = {
       async authorize(input) {
+        publicQueries.push(input.evidenceQuery);
         expect(input.characterId).toBe(f.scope.characterId);
         return f.admission;
       },
@@ -222,6 +224,7 @@ describe("Alpha conversation service", () => {
       correlationId: createCanonicalId("correlation"),
     });
     expect(mediaSet.reply).toBe("I reviewed both attachments.");
+    expect(publicQueries).toEqual([undefined,"hello",undefined,"Compare these"]);
     expect(listHistory).toHaveBeenCalledTimes(3);
     for(const call of listHistory.mock.calls) expect(call[0]).toEqual({scope:f.scope,limit:16});
     expect(render).toHaveBeenNthCalledWith(1,"Text: hello",expect.any(AbortSignal),undefined,{voiceName:"Fora"});

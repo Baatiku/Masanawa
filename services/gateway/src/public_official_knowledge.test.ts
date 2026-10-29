@@ -23,6 +23,17 @@ it('scopes reviewed public facts to active exact versions and excludes expired/w
  await expect(reader.read('t','official','old')).rejects.toThrow('review_required');
  const prompt=officialPersonaInstructions(result!).join('\n');expect(prompt).toContain('AI simulation');expect(prompt).toContain('Do not invent');
  expect((await reader.directory('t',['official'])).get('official')).toMatchObject({verification:'source_reviewed',representation:'ai_simulation'});
+ await db.exec(`INSERT INTO masana.public_official_evidence(tenant_id,character_id,source_url,source_kind,title,content,content_sha256,source_date,valid_until,state,license_basis,reviewed_by)
+  SELECT 't','official','https://example.gov.ng/speech/'||i,'speech','Recent speech','School buildings and community programmes','${'d'.repeat(64)}','2026-10-01',now()+interval '7 days','approved','Reviewed permission','reviewer' FROM generate_series(1,8) AS i;
+  INSERT INTO masana.public_official_evidence(tenant_id,character_id,source_url,source_kind,title,content,content_sha256,source_date,valid_until,state,license_basis,reviewed_by)
+  VALUES('t','official','https://example.gov.ng/subsidy','speech','Old subsidy statement',repeat('Historical preamble. ',140)||'Fuel subsidy policy statement from the historical record','${'e'.repeat(64)}','2012-01-01',now()+interval '7 days','approved','Reviewed permission','reviewer');`);
+ expect((await reader.read('t','official','v1'))!.evidence.some(e=>e.title==='Old subsidy statement')).toBe(false);
+ const relevant=await reader.read('t','official','v1','What did they say about fuel subsidy?');
+ expect(relevant!.evidence.some(e=>e.title==='Old subsidy statement'&&e.content.includes('Fuel subsidy policy'))).toBe(true);
+ expect(relevant!.evidence.every(e=>Buffer.byteLength(e.content,'utf8')<=1000)).toBe(true);
+ expect(Buffer.byteLength(JSON.stringify(relevant!.evidence),'utf8')).toBeLessThan(14100);
+ expect(relevant!.evidence.some(e=>e.kind==='grokipedia')).toBe(true);
+ expect(relevant!.evidence.some(e=>e.kind==='official_record')).toBe(true);
  await db.exec(`UPDATE masana.public_official_dossiers SET state='suspended'`);
  await expect(reader.read('t','official','v1')).rejects.toThrow('review_required');
  expect((await reader.directory('t',['official'])).size).toBe(0);

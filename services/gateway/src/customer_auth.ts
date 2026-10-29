@@ -1318,7 +1318,7 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
   sessions: PlatformCustomerSessionAuthorizer;
   presentations: AgentPresentationRepository;
   personaReader?: {
-    readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: import('@masanawa/contracts').CharacterVersionId}): Promise<import('@masanawa/agents').AgentPersonaNarrative | null>;
+    readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: import('@masanawa/contracts').CharacterVersionId;query?:string}): Promise<import('@masanawa/agents').AgentPersonaNarrative | null>;
   };
   skillAssignments: CharacterSkillAssignmentRepository;
   relationships: UserRelationshipReader;
@@ -1474,6 +1474,7 @@ export function createPlatformCustomerAuthorizers(input: Readonly<{
       });
       const narrative = await input.personaReader?.readPublished({
         tenantId: identity.tenantId, characterId, characterVersionId: presentation.characterVersionId,
+        ...(request.evidenceQuery?{query:request.evidenceQuery.slice(0,500)}:{}),
       });
       if (input.personaReader && !narrative) throw new CustomerAuthError("PERSONA_UNAVAILABLE", 409);
       const requestId = createCanonicalId("request");
