@@ -44,6 +44,28 @@ export function validateMasanaSocialChannels(value:unknown):readonly MasanaSocia
   }));
 }
 
+/** Optional public biographical facts on an approved profile revision. */
+export interface MasanaBiographicalFacts {
+  readonly dateOfBirth?: string;
+  readonly stateOfOrigin?: string;
+  readonly cityOfOrigin?: string;
+}
+export function validateMasanaBiographicalFacts(value: unknown): MasanaBiographicalFacts {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('invalid_biographicalFacts');
+  const raw=value as Record<string,unknown>, result:Record<string,string>={};
+  for(const key of Object.keys(raw)) {
+    if(!['dateOfBirth','stateOfOrigin','cityOfOrigin'].includes(key)) throw new TypeError('invalid_biographicalFacts');
+    const v=raw[key];
+    if(typeof v!=='string'||!v.trim()||v.length>100||/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(v)) throw new TypeError('invalid_'+key);
+    if(key==='dateOfBirth') {
+      const date=new Date(v+'T00:00:00Z');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(v)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==v||date.getTime()>Date.now()) throw new TypeError('invalid_dateOfBirth');
+    }
+    result[key]=v.trim();
+  }
+  return Object.freeze(result);
+}
+
 export type MasanaRevisionState = "draft" | "approved" | "retired";
 export interface MasanaProfile {
   readonly handle: string;
@@ -58,6 +80,7 @@ export interface MasanaProfile {
   readonly portraitMediaId: string | null;
   readonly bannerMediaId: string | null;
   readonly socialChannels?: readonly MasanaSocialChannel[];
+  readonly biographicalFacts?: MasanaBiographicalFacts;
 }
 export interface PublishedMasana {
   readonly characterId: string;
@@ -112,6 +135,7 @@ export function validateMasanaProfile(value: unknown): MasanaProfile {
     portraitMediaId: maybe("portraitMediaId"),
     bannerMediaId: maybe("bannerMediaId"),
     socialChannels: validateMasanaSocialChannels(p.socialChannels),
+    ...(p.biographicalFacts!==undefined?{biographicalFacts:validateMasanaBiographicalFacts(p.biographicalFacts)}:{}),
   });
 }
 

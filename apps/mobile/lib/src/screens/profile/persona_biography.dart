@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../agents/agent_directory.dart';
 
 /// Displays only published directory facts. Missing dates, parties and career
@@ -18,6 +19,9 @@ class PersonaBiography extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = theme.brightness == Brightness.dark
+        ? theme.colorScheme.primary
+        : const Color(0xFF006653);
     final official = agent.publicOfficial;
     final simulation = agent.publicOfficialSimulation;
     Widget section(String title, Widget child) => Padding(
@@ -36,59 +40,103 @@ class PersonaBiography extends StatelessWidget {
         ],
       ),
     );
-    Widget fact(IconData icon, String label, String value) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: theme.colorScheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: theme.textTheme.labelMedium),
-                const SizedBox(height: 2),
-                Text(value, style: theme.textTheme.bodyLarge),
-              ],
-            ),
-          ),
-        ],
+    final facts = <({IconData icon, String label, String value})>[
+      if (official?.dateOfBirth case final String birth)
+        (
+          icon: Icons.calendar_month_outlined,
+          label: 'Date of birth',
+          value: DateFormat.yMMMd(
+            Localizations.localeOf(context).toString(),
+          ).format(DateTime.parse(birth)),
+        ),
+      if (official?.stateOfOrigin != null || official?.cityOfOrigin != null)
+        (
+          icon: Icons.location_on_outlined,
+          label: official?.stateOfOrigin != null
+              ? 'State of origin'
+              : 'City of origin',
+          value: [
+            official?.cityOfOrigin,
+            official?.stateOfOrigin,
+          ].whereType<String>().join(', '),
+        ),
+      (
+        icon: Icons.work_outline,
+        label: simulation ? 'Public role' : 'Focus',
+        value: official?.office ?? agent.roleLabel,
       ),
-    );
+      if (agent.countryName case final String country when country.isNotEmpty)
+        (icon: Icons.flag_outlined, label: 'Country', value: country),
+    ];
+    if (facts.length.isOdd && official != null) {
+      facts.add((
+        icon: Icons.fact_check_outlined,
+        label: 'Biography reviewed',
+        value: MaterialLocalizations.of(
+          context,
+        ).formatMediumDate(official.reviewedAt.toLocal()),
+      ));
+    }
+    Widget fact(({IconData icon, String label, String value}) item) =>
+        Container(
+          key: ValueKey('quick-fact-${item.label}'),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: .045),
+            border: Border.all(color: accent.withValues(alpha: .08)),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: accent.withValues(alpha: .08),
+                child: Icon(item.icon, size: 22, color: accent),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                item.label,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                item.value,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         section(
-          'At a glance',
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  fact(
-                    Icons.account_balance_outlined,
-                    simulation ? 'Public role' : 'Focus',
-                    official?.office ?? agent.roleLabel,
-                  ),
-                  if (agent.countryName case final String country
-                      when country.isNotEmpty)
-                    fact(Icons.public_outlined, 'Country', country),
-                  if (official != null)
-                    fact(
-                      Icons.fact_check_outlined,
-                      'Biography reviewed',
-                      MaterialLocalizations.of(
-                        context,
-                      ).formatFullDate(official.reviewedAt.toLocal()),
+          'Quick facts',
+          Column(
+            children: [
+              for (var i = 0; i < facts.length; i += 2)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: fact(facts[i])),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: i + 1 < facts.length
+                              ? fact(facts[i + 1])
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
                     ),
-                ],
-              ),
-            ),
+                  ),
+                ),
+            ],
           ),
         ),
         section(
