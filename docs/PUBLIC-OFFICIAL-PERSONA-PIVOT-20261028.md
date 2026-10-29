@@ -23,7 +23,7 @@ Grokipedia is the requested biographical reference, corroborated by primary reco
 
 ## Research scope
 
-The [presidential ticket CSV](research/ng-2027-selected-party-presidential.csv) records four selected-party tickets reviewed against the attached [INEC primary list](https://www.inecnigeria.org/documents/press/2027%20PRESIDENTIAL%20FINAL%20LIST.pdf): APC — Bola Ahmed Tinubu; ADC — Atiku Abubakar; NDC — Peter Gregory Obi; PDP — Sandy Ojang Onor. This verifies ticket-list text, not persona biographies, accounts or endorsement. Governorship rows remain separately pending.
+The [presidential ticket CSV](research/ng-2027-selected-party-presidential.csv) records four selected-party tickets reviewed against the attached [INEC primary list](https://www.inecnigeria.org/documents/press/2027%20PRESIDENTIAL%20FINAL%20LIST.pdf): APC — Bola Ahmed Tinubu; ADC — Atiku Abubakar; NDC — Peter Gregory Obi; PDP — Sandy Ojang Onor. This verifies ticket-list text, not persona biographies, accounts or endorsement. Governorship verification is recorded per row: 76 primary ticket text matches and 26 still pending.
 
 ## Work already present in the branch
 
@@ -32,7 +32,7 @@ The [presidential ticket CSV](research/ng-2027-selected-party-presidential.csv) 
 - Directory/profile metadata and a provenance tick that expires and is not trusted from an offline cache. The tick means source reviewed, not official endorsement.
 - X/Facebook source adapters preserving original text, author matching and source URLs, with durable import deduplication, edit revisions, leases, checkpoints and withdrawal support.
 - A background importer available behind a disabled-by-default switch. This is polling, not an instant delivery guarantee.
-- Research queue at [selected-party governorship CSV](research/ng-2027-selected-party-governorship.csv): 102 reported tickets across 28 states, with primary-document links. Rows explicitly remain pending primary-document review and are not live profile admissions.
+- Research queue at [selected-party governorship CSV](research/ng-2027-selected-party-governorship.csv): 102 reported tickets across 28 states, with primary-document links. 76 candidate/running-mate/party tuples now match the primary INEC PDF text; 26 remain pending because primary PDFs could not be read. All biographies and live admissions remain pending.
 
 These are source changes, not a claim of production readiness. Tests already cover retirement, stale verification, private continuity and exact source text. Local verification: workspace TypeScript passed; Flutter analysis passed with existing informational lints and no warnings/errors. The 34-file backend/architecture batch passed 178 tests with 24 skipped and one environment-registry failure; after registering all four new optional variables, the repaired registry plus updated evidence/eligibility policies passed all 7 tests. The earlier database setup timeouts disappeared when the batch ran serially with a 60-second setup allowance. Mobile batches passed 32 tests for feed/attribution/badges and 21 tests for retired historical management/profile/Saved; a final profile/badge/source batch passed 10 tests and Gateway TypeScript passed again. Hosted CI remains separately recorded below. Skipped real-Postgres suites are not live acceptance.
 
@@ -79,3 +79,5 @@ Use [INEC publications](https://www.inecnigeria.org/press) and attached original
 The implementation removes composer/Boost routes from all production entry points, including Saved and owner profiles. Existing receipt, cancellation and deletion recovery remains. New source-policy SQL also prevents unsourced editorial posts under an admitted public-official identity from appearing publicly. AI disclosure persists when verification expires; the verification expiry is bounded by required evidence validity. Profile sources expose the biography reference and review date.
 
 External admission work remains open: qualified X/Meta access, actual reviewed Grokipedia/primary biographies, new canonical identities with cleared imagery, deeper per-turn/voice retrieval, automated provider deletion compliance and an evaluated live pilot. No production credentials, importer flags or wallets were changed.
+
+Research verification, 29 October: primary-document text matching confirms 76 contiguous candidate/running-mate/party tuples. This is ticket transcription verification only. The other 26 tickets remain reported entries pending primary access/review, not negative findings about candidacy. All 102 remain `persona_admitted=false`.
