@@ -21,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
 
 import '../../agents/agent_directory.dart';
+import '../../agents/agent_feedback.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../../chat/chat_format.dart';
 import '../../chat/chat_emoji_panel.dart';
@@ -479,6 +480,30 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final result = await AppPermissions.request(permission);
     if (result.granted) return true;
     if (!mounted) return false;
+    if (permission == AppPermission.microphone) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(Icons.mic_off_rounded),
+          title: const Text('Microphone unavailable', textAlign: TextAlign.center),
+          content: Text(result.permanentlyDenied
+              ? 'Microphone access is disabled. Enable it in your phone settings to make a call.'
+              : 'Allow microphone access to make a voice call.',
+            textAlign: TextAlign.center),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close')),
+            if (result.permanentlyDenied) FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                AppPermissions.openSettings();
+              }, child: const Text('Microphone settings')),
+          ],
+        ),
+      );
+      return false;
+    }
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(
@@ -531,6 +556,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     HapticFeedback.mediumImpact();
     setState(() {});
     await recorder.start(isOwnerCurrent: sameAccount);
+    // A native recorder may fail asynchronously after the mic tap. Clear its
+    // failed instance so the next tap can retry and explain the real reason.
+    if (identical(_inlineRecorder, recorder) &&
+        recorder.state == VoiceNoteState.failed) {
+      final message = recorder.error ?? 'Microphone recording could not start. Try again.';
+      await _cancelInlineRecording();
+      if (sameAccount()) await _showVoiceNoteFailure(message);
+    }
   }
 
   Future<void> _cancelInlineRecording() async {
@@ -626,7 +659,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         final failure = recorder.error;
         await _cancelInlineRecording();
         if (sameAccount() && failure != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+          await _showVoiceNoteFailure(failure);
         }
         return;
       }
@@ -647,11 +680,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         await ref.read(aiChatProvider.notifier).sendAttachment(
           widget.characterId, note, onAccepted: releaseAcceptedRecorder,
         );
-      } catch (_) {
+      } catch (error) {
         if (!sameAccount()) { await _cancelInlineRecording(); return; }
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save this voice note. Please retry.')),
-        );
+        await _showVoiceNoteFailure(AgentFeedback.fromError(error).message);
       }
     } finally {
       _voiceNoteSending = false;
@@ -869,7 +900,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         shellConfig?.feature('liveVoice', fallback: true) ?? true;
     final allMessages = thread?.messages ?? const <AiChatMessage>[];
     final query = _search.text.trim().toLowerCase();
-    final messages = allMessages;
+    // Old clients stored the editorial greeting as an AI bubble. A profile
+    // introduction is disclosure, never an authored conversation turn.
+    final first = allMessages.isEmpty ? null : allMessages.first;
+    final messages = first != null && !first.isUser &&
+            first.parts.isEmpty && first.allAttachments.isEmpty &&
+            first.text.trim() == (agent?.greeting?.trim() ?? '')
+        ? allMessages.skip(1).toList(growable: false)
+        : allMessages;
     final searchMatches = query.isEmpty
         ? const <AiChatMessage>[]
         : allMessages
@@ -930,14 +968,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         ? 'Uploading attachment…'
         : 'Waiting for reply…';
 
-    if (widget.entryMode != AiChatEntryMode.liveVoice &&
-        widget.entryMode != AiChatEntryMode.liveTalk &&
-        _inlineVoiceSession == null && _modalVoiceSession == null && !LiveCallForeground.active) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _inlineVoiceSession != null || _modalVoiceSession != null || LiveCallForeground.active) return;
-        ref.read(aiChatProvider.notifier).seedGreeting(agent.characterId, agent.greeting);
-      });
-    }
     if (!_initialEntryHandled) {
       _initialEntryHandled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1211,15 +1241,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             Expanded(
               child: CustomPaint(
                 painter: _ChatTexturePainter(u.textMuted.withValues(alpha: .055)),
-                child: messages.isEmpty && !sending
-                  ? const SizedBox.shrink()
-                  : SuperListView.builder(
+                child: SuperListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 12,
                       ),
-                      itemCount: messages.length +
+                      itemCount: messages.length + 1 +
                           (sending &&
                                   !messages.any((m) =>
                                       !m.isUser &&
@@ -1227,10 +1255,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                               ? 1
                               : 0),
                       itemBuilder: (context, index) {
-                        if (index >= messages.length) {
+                        if (index == 0) {
+                          return _PersonaChatDisclosure(
+                            name: agent.displayName,
+                            publicOfficial: agent.publicOfficialSimulation,
+                          );
+                        }
+                        final messageIndex = index - 1;
+                        if (messageIndex >= messages.length) {
                           return const _TypingBubble(waiting: true);
                         }
-                        final message = messages[index];
+                        final message = messages[messageIndex];
                         if (!message.isUser && message.deliveryStatus == 'streaming' &&
                             message.text.trim().isEmpty && message.parts.isEmpty) {
                           return const _TypingBubble(waiting: true);
@@ -1246,7 +1281,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         final failure = failedParts.isEmpty
                             ? null
                             : failedParts.first;
-                        final previous = index > 0 ? messages[index - 1] : null;
+                        final previous = messageIndex > 0 ? messages[messageIndex - 1] : null;
                         final showDate = previous == null ||
                             !_sameDay(previous.createdAt, message.createdAt);
                         return _VoicePlaybackScope(
@@ -1326,7 +1361,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                   onRetry: failure == null || sending
                                       ? null
                                       : () async {
-                                          if (failure.actionLabel == 'Sign in') {
+                                          if (failure.actionLabel == 'Add MB') {
+                                            context.push('/wallet/add');
+                                          } else if (failure.actionLabel == 'Sign in') {
                                             await ref
                                                 .read(sessionProvider.notifier)
                                                 .logout();
@@ -1774,6 +1811,69 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     );
   }
 
+  Future<void> _showVoiceStartFailure(Object error) async {
+    if (!mounted) return;
+    final permissionDenied = error is PlatformException &&
+        (error.code.toLowerCase().contains('permission') ||
+         error.code.toLowerCase().contains('microphone'));
+    final feedback = permissionDenied
+        ? const AgentFeedback('Microphone access is needed to make a voice call.',
+            recovery: AgentRecovery.microphone)
+        : AgentFeedback.fromError(error);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(feedback.recovery == AgentRecovery.addMb
+            ? Icons.account_balance_wallet_outlined
+            : feedback.recovery == AgentRecovery.microphone
+                ? Icons.mic_off_outlined : Icons.info_outline_rounded),
+        title: const Text('Call could not start', textAlign: TextAlign.center),
+        content: Text(feedback.message, textAlign: TextAlign.center),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close')),
+          if (feedback.recovery == AgentRecovery.addMb)
+            FilledButton(onPressed: () {
+              Navigator.pop(dialogContext);
+              context.push('/wallet/add');
+            }, child: const Text('Add MB')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showVoiceNoteFailure(String reason) async {
+    if (!mounted) return;
+    final permission = reason.toLowerCase().contains('permission') ||
+        reason.toLowerCase().contains('microphone access');
+    final shortage = reason.toLowerCase().contains('not enough mb');
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(permission ? Icons.mic_off_rounded :
+          shortage ? Icons.account_balance_wallet_outlined : Icons.info_outline_rounded),
+        title: const Text('Voice note unavailable', textAlign: TextAlign.center),
+        content: Text(reason, textAlign: TextAlign.center),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close')),
+          if (permission) FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              AppPermissions.openSettings();
+            }, child: const Text('Microphone settings')),
+          if (shortage) FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.push('/wallet/add');
+            }, child: const Text('Add MB')),
+        ],
+      ),
+    );
+  }
+
   Future<MbCallAdmission?> _reviewAndAdmitMbCall(
     AgentDirectoryEntry agent, MbCallFlow flow, bool Function() stillOwner,
   ) async {
@@ -1987,13 +2087,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           state: 'available', durationMs: 60 * 1000).catchError((_) {});
         rethrow;
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() => _inlineVoiceState = LiveVoiceState.failed);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Voice could not start. Check MB balance, '
-            'previous call recovery, or connection and try again.'),
-        ));
+        await _showVoiceStartFailure(error);
       }
     } finally {
       _mbCallStarting = false;
@@ -2114,12 +2211,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
         }
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Voice could not start. Check MB balance, '
-            'previous call recovery, or connection and try again.'),
-        ));
+        await _showVoiceStartFailure(error);
       }
     } finally {
       _mbCallStarting = false;
@@ -3201,6 +3295,43 @@ class _ReplyComposerPreview extends StatelessWidget {
   }
 }
 
+/// WhatsApp-style informational marker: not a message, not authored by the
+/// simulated person and never included in unread counts or persisted history.
+class _PersonaChatDisclosure extends StatelessWidget {
+  const _PersonaChatDisclosure({required this.name, required this.publicOfficial});
+  final String name;
+  final bool publicOfficial;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.masanawa;
+    return Center(child: Container(
+      key: const ValueKey('masana-ai-chat-disclosure'),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      constraints: const BoxConstraints(maxWidth: 320),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Semantics(
+        label: 'AI persona disclosure',
+        child: Text(
+          publicOfficial
+              ? 'I am an AI persona based on the public profile of $name. '
+                  'I am not the real person or their official representative. '
+                  'Contact the administrator for enquiries.'
+              : 'I am an AI persona called $name, not a real person. '
+                  'Contact the administrator for enquiries.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            fontSize: 11, color: colors.textMuted, height: 1.45),
+        ),
+      ),
+    ));
+  }
+}
+
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.message,
@@ -3367,8 +3498,10 @@ class _ChatBubble extends StatelessWidget {
                 maxWidth: MediaQuery.of(context).size.width * 0.82,
               ),
               decoration: BoxDecoration(
-                color: isUser ? u.bubbleOut : u.surfaceCard,
-                borderRadius: BorderRadius.only(
+                color: failure != null ? u.surfaceMuted
+                    : isUser ? u.bubbleOut : u.surfaceCard,
+                borderRadius: failure != null ? BorderRadius.circular(12)
+                    : BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
                   bottomLeft: Radius.circular(isUser ? 14 : 4),
@@ -3490,11 +3623,11 @@ class _ChatBubble extends StatelessWidget {
                       ),
                   ],
                   if (failure != null)
-                    TextButton.icon(
+                    Center(child: TextButton.icon(
                       onPressed: onRetry,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: Text(failure.actionLabel ?? 'Try again'),
-                    ),
+                    )),
                   const SizedBox(height: 3),
                   Row(
                     mainAxisSize: MainAxisSize.min,

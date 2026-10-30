@@ -93,9 +93,9 @@ void main() {
       child: const MaterialApp(home: GbRequestScreen()),
     ));
     expect(find.text('Request MB'), findsOneWidget);
-    expect(find.text('New request'), findsOneWidget);
-    expect(find.text('Incoming'), findsOneWidget);
-    expect(find.text('Sent'), findsOneWidget);
+    expect(find.text('New request'), findsNothing);
+    expect(find.text('Incoming'), findsNothing);
+    expect(find.text('Sent'), findsNothing);
     final button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Send request'));
     expect(button.onPressed, isNull);
@@ -118,7 +118,7 @@ void main() {
       child: const MaterialApp(home: GbRequestScreen()),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Requests you can choose to pay'), findsOneWidget);
+    expect(find.text('MB requests'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('request-quick-100')));
     await tester.pump();
     expect(tester.widget<TextField>(find.byKey(
@@ -130,10 +130,8 @@ void main() {
     expect(tester.widget<FilledButton>(find.widgetWithText(
       FilledButton, 'Send request')).onPressed, isNotNull,
       reason: 'Requests allow any positive whole MB, including 1 MB');
-    await tester.ensureVisible(find.text('Sent'));
-    await tester.tap(find.text('Sent'));
-    await tester.pump();
-    expect(find.text('Requests you asked others to pay'), findsOneWidget);
+    expect(find.text('Sent'), findsNothing);
+    expect(find.text('Incoming'), findsNothing);
     expect(find.text('Confirm payment'), findsNothing);
     expect(keys, isEmpty);
     expect(tester.takeException(), isNull);
@@ -176,7 +174,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('payer explicitly declines without a Pay POST, with terminal readback',
+  testWidgets('payer history and action controls are absent from Request MB',
       (tester) async {
     tester.view.physicalSize = const Size(390, 1050);
     tester.view.devicePixelRatio = 1;
@@ -188,17 +186,11 @@ void main() {
       apiClientProvider.overrideWithValue(_declineFixture(writes)),
     ], child: const MaterialApp(home: GbRequestScreen())));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Decline'));
-    expect(find.text('Pay request'), findsOneWidget);
-    await tester.tap(find.text('Decline'));
-    await tester.pumpAndSettle();
-    expect(find.text('Decline request?'), findsOneWidget);
-    expect(writes, isEmpty, reason: 'The confirmation dialog cannot move MB');
-    await tester.tap(find.text('Confirm decline'));
-    await tester.pumpAndSettle();
-    expect(writes, ['/v1/gb/wallet/requests/mbreq_abcdefghijklmnopqrstuvwx/decline']);
-    expect(find.text('Declined'), findsOneWidget);
+    expect(find.text('Decline'), findsNothing);
     expect(find.text('Pay request'), findsNothing);
+    expect(find.text('Sent'), findsNothing);
+    expect(find.text('Incoming'), findsNothing);
+    expect(writes, isEmpty);
     expect(tester.takeException(), isNull);
   });
 }

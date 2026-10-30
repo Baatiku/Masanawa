@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,21 +6,27 @@ import 'package:go_router/go_router.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'gb_balance_card.dart';
-import 'gb_wallet_summary.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_activity_screen.dart';
-import 'gb_promotion_journal.dart';
 import 'ngn_wallet.dart';
+import 'gb_wallet_summary.dart';
 
 /// Single authoritative MB wallet. The compact card never displays a
 /// fabricated zero or any historical Credits/MSNW balance.
-class GbWalletScreen extends ConsumerWidget {
+class GbWalletScreen extends ConsumerStatefulWidget {
   const GbWalletScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GbWalletScreen> createState() => _GbWalletScreenState();
+}
+
+class _GbWalletScreenState extends ConsumerState<GbWalletScreen> {
+  GbWalletOwner? _lastOwner;
+  GbWalletBalance? _lastVerified;
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.masanawa;
-    final theme = Theme.of(context);
     final session = ref.watch(sessionProvider);
     final owner = session is SessionSignedIn
         ? (accountId: session.user.id,
@@ -28,13 +35,25 @@ class GbWalletScreen extends ConsumerWidget {
         : null;
     final balanceState = owner == null
         ? null : ref.watch(gbWalletSummaryProvider(owner));
-    final balance = balanceState?.valueOrNull;
+    if (owner != _lastOwner) {
+      _lastOwner = owner;
+      _lastVerified = null; // Never show another login's cached funds.
+    }
+    final failure = balanceState?.error;
+    final authorizationRejected = failure is DioException &&
+        const {401, 403, 410}.contains(failure.response?.statusCode);
+    if (authorizationRejected) {
+      _lastVerified = null; // Revoked authority is not an offline cache miss.
+    }
+    final fresh = authorizationRejected ? null : balanceState?.valueOrNull;
+    if (fresh != null) _lastVerified = fresh;
+    final balance = fresh ?? _lastVerified;
+    final stale = fresh == null && balance != null;
     final loading = balanceState?.isLoading ?? false;
 
     Future<void> refresh() async {
       if (owner == null) return;
       ref.invalidate(gbWalletSummaryProvider(owner));
-      ref.invalidate(gbPromotionJournalProvider(owner));
       ref.invalidate(ngnWalletBalanceProvider(owner));
       ref.invalidate(ngnBankAccountProvider(owner));
       ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,unit:'all',
@@ -55,47 +74,27 @@ class GbWalletScreen extends ConsumerWidget {
         children: [
           GbWalletBalanceCard(balance: balance, loading: loading, compact: true,
             ownerName: session is SessionSignedIn ? session.user.name : null),
-          if (balance == null && !loading)
+          if (stale || (balance == null && !loading))
             Center(
               child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: TextButton.icon(
-                  onPressed: owner == null ? null : refresh,
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: Text(owner == null ? 'Sign in' : 'Try again'),
-                ),
-              ),
-            ),
-          if (balance != null)
-            Theme(
-              data: theme.copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                key: const ValueKey('gb-wallet-breakdown'),
-                tilePadding: const EdgeInsets.symmetric(horizontal: 3),
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                dense: true,
-                title: Text('Balance details',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.textMuted)),
-                children: [
-                  _BalanceBreakdown('Purchased available', balance.purchasedAvailableMb),
-                  _BalanceBreakdown('Welcome · restricted', balance.welcomeAvailableMb),
-                  if (balance.reservedPurchasedMb != null) ...[
-                    _BalanceBreakdown('Purchased reserved · all holds',
-                      balance.reservedPurchasedMb!),
-                    _BalanceBreakdown('Welcome reserved', balance.reservedWelcomeMb!),
-                  ] else
-                    _BalanceBreakdown('Reserved · all holds', balance.reservedMb),
-                  if (owner != null)
-                    _PromotionBalanceDetails(owner: owner),
-                  if (balance.frozen)
-                    Text('Wallet restricted',
-                      style: TextStyle(color: theme.colorScheme.error)),
-                ],
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(children: [
+                  Icon(Icons.wifi_off_rounded, size: 21, color: colors.textMuted),
+                  const SizedBox(height: 5),
+                  Text(stale ? 'Last verified balance · Check your connection'
+                      : 'Check your connection and retry',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall),
+                  TextButton.icon(
+                    onPressed: owner == null ? null : refresh,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: Text(owner == null ? 'Sign in' : 'Retry'),
+                  ),
+                ]),
               ),
             ),
           const SizedBox(height: 8),
-          Text('Quick actions', style: theme.textTheme.titleMedium?.copyWith(
+          Text('Quick actions', style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           LayoutBuilder(builder: (context, constraints) {
@@ -136,65 +135,6 @@ class GbWalletScreen extends ConsumerWidget {
         ],
       ),
     );
-  }
-}
-
-class _BalanceBreakdown extends StatelessWidget {
-  const _BalanceBreakdown(this.label, this.mb);
-  final String label;
-  final int mb;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    child: Row(children: [
-      Expanded(child: Text(label)),
-      const SizedBox(width: 12),
-      Text('${groupedMb(mb)} MB', style: const TextStyle(
-        fontWeight: FontWeight.w600)),
-    ]),
-  );
-}
-
-/// Promotion records are a separate bounded read, never a replacement for
-/// the authoritative MB wallet summary or a released-earnings ledger.
-class _PromotionBalanceDetails extends ConsumerWidget {
-  const _PromotionBalanceDetails({required this.owner});
-  final GbWalletOwner owner;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final projection = ref.watch(gbPromotionJournalProvider(owner));
-    final journal = projection.valueOrNull;
-    if (journal == null) return ListTile(
-      dense: true,
-      title: Text(projection.isLoading
-          ? 'Checking campaign reservations and sharing earnings…'
-          : 'Campaign and earnings details unavailable'),
-      subtitle: projection.hasError
-          ? const Text('The wallet balance above is unchanged.') : null,
-      trailing: projection.hasError ? IconButton(
-        tooltip: 'Retry campaign and earnings details',
-        icon: const Icon(Icons.refresh),
-        onPressed: () => ref.invalidate(gbPromotionJournalProvider(owner))) : null,
-    );
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Divider(),
-      _BalanceBreakdown('Campaign MB reserved · loaded receipts',
-        journal.reservedCampaignMb),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        child: Row(children: [
-          const Expanded(child: Text('Sharing earnings · pending shown')),
-          const SizedBox(width: 12),
-          Text(journal.pendingEarnedLabel,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        ])),
-      const Padding(padding: EdgeInsets.symmetric(horizontal: 8),
-        child: Text('These figures cover up to 100 recent campaigns and 100 '
-          'earning groups, not an all-time ledger total. Campaign reservations '
-          'are not an additional balance; pending half-MB earnings cannot be '
-          'sent or redeemed. Released rewards are not reported here.')),
-    ]);
   }
 }
 

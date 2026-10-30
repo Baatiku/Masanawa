@@ -8,6 +8,7 @@ import 'package:masanawa/src/gb_wallet/gb_wallet_summary.dart';
 import 'package:masanawa/src/gb_wallet/gb_promotion_journal.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_activity.dart';
 import 'package:masanawa/src/gb_wallet/gb_wallet_screen.dart';
+import 'package:masanawa/src/gb_wallet/ngn_wallet.dart';
 import 'package:masanawa/src/gb_wallet/data_redemption_screen.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_catalogue.dart';
 import 'package:masanawa/src/gb_wallet/gb_data_pending_store.dart';
@@ -132,17 +133,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('10.85 GB'), findsOneWidget);
     expect(find.text('10,850 MB'), findsNothing);
-    await tester.tap(find.text('Balance details'));
-    await tester.pumpAndSettle();
-    expect(find.text('475 MB'), findsOneWidget);
-    expect(find.text('125 MB'), findsOneWidget);
-    expect(find.text('25 MB'), findsOneWidget);
-    expect(find.text('Purchased available'), findsOneWidget);
-    expect(find.text('Welcome · restricted'), findsOneWidget);
-    expect(find.text('Campaign MB reserved · loaded receipts'), findsOneWidget);
-    expect(find.text('15 MB'), findsOneWidget);
-    expect(find.text('1.5 MB'), findsOneWidget);
+    expect(find.text('Balance details'), findsNothing);
+    expect(find.text('Purchased available'), findsNothing);
+    expect(find.text('Welcome · restricted'), findsNothing);
+    expect(find.text('Campaign MB reserved · loaded receipts'), findsNothing);
     expect(find.text('Exact MB balance unavailable'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wallet preserves verified NGN and bank rows through a failed refresh',
+      (tester) async {
+    var offline = false;
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
+        const GbWalletBalance(totalMb: 500, availableMb: 500,
+          purchasedAvailableMb: 0, welcomeAvailableMb: 500,
+          reservedMb: 0, frozen: false)),
+      ngnWalletBalanceProvider.overrideWith((ref, owner) async {
+        if (offline) throw StateError('network disconnected');
+        return const NgnWalletBalance(350000, 0, false, true);
+      }),
+      ngnBankAccountProvider.overrideWith((ref, owner) async {
+        if (offline) throw StateError('network disconnected');
+        return const NgnBankAccount('assigned', bank: '9PSB',
+          number: '1234567890', name: 'Masanawa fan');
+      }),
+      gbActivityPageProvider.overrideWith((ref, request) async =>
+        const GbActivityPage([], null)),
+    ], child: const MaterialApp(home: Scaffold(body: GbWalletScreen()))));
+    await tester.pumpAndSettle();
+    expect(find.text('₦3,500'), findsOneWidget);
+    expect(find.text('1234567890'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(GbWalletScreen)));
+    final owner = (accountId: 'fan-1', authorizationEpoch:
+      container.read(sessionProvider.notifier).authorizationEpoch);
+    offline = true;
+    container.invalidate(ngnWalletBalanceProvider(owner));
+    container.invalidate(ngnBankAccountProvider(owner));
+    await tester.pumpAndSettle();
+    expect(find.text('₦3,500'), findsOneWidget);
+    expect(find.text('1234567890'), findsOneWidget);
+    expect(find.textContaining('Check your connection'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

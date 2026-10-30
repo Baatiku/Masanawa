@@ -109,6 +109,53 @@ async function ensureAccount(
 
 export function createPostgresGbWalletRepository(pool: Pool) {
   return {
+    /** Idempotent 500 MB restricted allowance for an authenticated active
+     * customer, including accounts created after the existing-user backfill.
+     * Earlier verified-phone welcome claims count as already awarded. */
+    async ensureUniversalWelcome({tenantId,userId}:GbAccountKey):Promise<boolean> {
+      assertKey(tenantId,'tenant');
+      assertKey(userId,'user');
+      return withTransaction(pool,async client=>{
+        const identity=await client.query<{state:string}>(
+          `SELECT state FROM identity.users WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
+          [tenantId,userId]);
+        if(identity.rows[0]?.state!=='active')
+          throw new Error('gb.wallet.ineligible_welcome_identity');
+        const prior=await client.query(
+          `SELECT 1 FROM gb_wallet.welcome_claims WHERE tenant_id=$1 AND account_id=$2`,
+          [tenantId,userId]);
+        const hasPrior=prior.rowCount!==0;
+        const operationId='launch500_'+createHash('md5')
+          .update(tenantId+':'+userId).digest('hex');
+        const claim=await client.query(
+          `INSERT INTO gb_wallet.universal_welcome_claims
+           (tenant_id,account_id,granted_mb,operation_id)
+           VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING
+           RETURNING account_id`,
+          [tenantId,userId,hasPrior?0:500,hasPrior?null:operationId]);
+        if(claim.rowCount!==1||hasPrior)return false;
+        await ensureAccount(client,tenantId,'human',userId);
+        await client.query(
+          `INSERT INTO gb_wallet.operations
+           (tenant_id,operation_id,actor_id,idempotency_key,request_sha256,
+            operation_kind,amount_mb,state)
+           VALUES ($1,$2,$3,'welcome:universal:v1',$4,
+            'welcome_grant',500,'completed')`,
+          [tenantId,operationId,userId,createHash('sha256')
+            .update(tenantId+':'+userId+':launch500').digest('hex')]);
+        await client.query(
+          `INSERT INTO gb_wallet.movements
+           (tenant_id,operation_id,from_kind,from_id,to_kind,to_id,
+            source_bucket,target_bucket,amount_mb)
+           VALUES ($1,$2,'issuance','welcome','human',$3,
+            'issuance','welcome',500)`,[tenantId,operationId,userId]);
+        await client.query(
+          `UPDATE gb_wallet.accounts SET welcome_mb=welcome_mb+500,
+            version=version+1 WHERE tenant_id=$1 AND
+            account_kind='human' AND account_id=$2`,[tenantId,userId]);
+        return true;
+      });
+    },
     async read({ tenantId, userId }: GbAccountKey): Promise<GbWalletSnapshot | null> {
       assertKey(tenantId, "tenant");
       assertKey(userId, "actor");
@@ -134,6 +181,17 @@ export function createPostgresGbWalletRepository(pool: Pool) {
         throw new TypeError("Only a server HMAC fingerprint can be used");
       }
       return withTransaction(pool, async client => {
+        // Serialize with universal welcome on the same identity before either
+        // path issues a movement. The older phone grant must never give an
+        // already-credited universal customer a second 500 MB.
+        await client.query(
+          `SELECT 1 FROM identity.users WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,
+          [input.tenantId,input.userId]);
+        const universal = await client.query(
+          `SELECT 1 FROM gb_wallet.universal_welcome_claims
+           WHERE tenant_id=$1 AND account_id=$2`,
+          [input.tenantId,input.userId]);
+        if (universal.rowCount !== 0) return false;
         await ensureAccount(client, input.tenantId, "human", input.userId);
         const operation = await client.query(
           `INSERT INTO gb_wallet.operations

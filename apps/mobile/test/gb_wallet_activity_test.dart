@@ -150,8 +150,14 @@ void main() {
     expect(find.textContaining('UTC '),findsNothing);
     expect(find.text('Posted activity totals'),findsNothing);
     expect(tester.getBottomRight(find.text('+₦100.00')).dy,lessThan(744));
-    expect(tester.getSize(find.byKey(const ValueKey('activity-unit-all'))).height,greaterThanOrEqualTo(48));
-    expect(tester.getSize(find.ancestor(of:find.text('Analysis'),matching:find.byType(ListTile))).height,greaterThanOrEqualTo(48));
+    expect(find.text('Filter'),findsOneWidget);
+    expect(find.text('Export'),findsOneWidget);
+    expect(find.text('Analysis'),findsNothing);
+    expect(find.text('Wallet inquiries'),findsNothing);
+    expect(find.textContaining('Reservations'),findsNothing);
+    await tester.tap(find.text('Filter'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('activity-unit-all')),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
 
@@ -258,6 +264,8 @@ void main() {
     await tester.pump();
     fake.responses[null]=GbActivityPage([
       item('ngn:deposit_new',500050,unit:'NGN',kind:'deposit')],null);
+    await tester.tap(find.text('Filter'));
+    await tester.pumpAndSettle();
     await tester.dragUntilVisible(find.byKey(const ValueKey('activity-unit-NGN')).hitTestable(),
       find.byType(ListView),const Offset(0,180));
     await tester.tap(find.byKey(const ValueKey('activity-unit-NGN')));
@@ -376,41 +384,33 @@ void main() {
     expect(tester.takeException(),isNull);
   });
 
-  testWidgets('authoritative period summaries separate units and switch periods', (tester) async {
-    final fake=_Activity()..responses[null]=const GbActivityPage([],null);
-    await mount(tester,fake);
-    expect(find.text('Received: +500 MB'),findsOneWidget);
-    expect(find.text('Used: −200 MB'),findsOneWidget);
-    expect(find.text('Received: +₦5,000.50'),findsOneWidget);
-    await tester.tap(find.text('Last 7 days'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Last 30 days'));
-    await tester.pumpAndSettle();
-    expect(fake.summaryRequests,[7,30]);
-    expect(find.text('Spent: −₦100.00'),findsOneWidget);
-    expect(tester.takeException(),isNull);
-  });
-
-  testWidgets('offline totals stay unavailable without erasing verified journal rows; Retry is isolated', (tester) async {
+  testWidgets('transactions omit legacy summaries while retaining server journal rows', (tester) async {
     final fake=_Activity()..failSummary=true
       ..responses[null]=GbActivityPage([item('mb:posted_1',-200)],null);
     await mount(tester,fake);
-    expect(find.text('Period totals unavailable. No zero balance is assumed.'),findsOneWidget);
-    await tester.dragUntilVisible(find.text('−200 MB'),
-      find.byType(ListView),const Offset(0,-140));
+    expect(find.text('Received: +500 MB'),findsNothing);
+    expect(find.text('Period totals unavailable. No zero balance is assumed.'),findsNothing);
+    expect(find.text('Analysis'),findsNothing);
+    expect(fake.summaryRequests,isEmpty);
     expect(find.text('−200 MB'),findsOneWidget);
-    fake.failSummary=false;
-    await tester.dragUntilVisible(find.text('Retry totals'),
-      find.byType(ListView),const Offset(0,150));
-    await tester.tap(find.text('Retry totals'));
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('failed transaction refresh keeps only the current verified journal and filter/export', (tester) async {
+    final fake=_Activity()..responses[null]=GbActivityPage([
+      item('mb:verified',-125)],null);
+    final container=await mount(tester,fake);
+    expect(find.text('−125 MB'),findsOneWidget);
+    fake.fail=true;
+    final owner=(accountId:'fan_a',authorizationEpoch:
+      container.read(sessionProvider.notifier).authorizationEpoch);
+    container.invalidate(gbActivityPageProvider((owner:owner,limit:20,
+      unit:'all',filters:gbActivityAllFilters)));
     await tester.pumpAndSettle();
-    expect(fake.summaryRequests,[7,7]);
-    await tester.dragUntilVisible(find.text('Received: +500 MB'),
-      find.byType(ListView),const Offset(0,-120));
-    expect(find.text('Received: +500 MB'),findsOneWidget);
-    await tester.dragUntilVisible(find.text('−200 MB'),
-      find.byType(ListView),const Offset(0,-140));
-    expect(find.text('−200 MB'),findsOneWidget);
+    expect(find.text('−125 MB'),findsOneWidget);
+    expect(find.text('Filter'),findsOneWidget);
+    expect(find.text('Export'),findsOneWidget);
+    expect(find.textContaining('Check your connection'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
 
@@ -434,65 +434,6 @@ void main() {
     final uninitialized={'state':'uninitialized','opening':0,'closing':0,'recordedBalance':null,'reserved':null,'available':null,'debt':null};
     expect(GbActivityPeriodSummary.read({...raw,'MB':zero,'NGN':zero,
       'reconciliation':{'MB':uninitialized,'NGN':uninitialized}},7).reconciliation!.mb.available,isNull);
-  });
-
-  testWidgets('Activity shows matched MB holds and NGN reversal debt at narrow large text RTL', (tester)async{
-    tester.view.physicalSize=const Size(320,1000);tester.view.devicePixelRatio=1;
-    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
-    final fake=_Activity()..reconciliation=const GbActivityReconciliation(
-      mb:GbActivityBalanceReconciliation(state:'matched',opening:700,closing:1000,recordedBalance:1000,reserved:250,available:750,debt:0),
-      ngn:GbActivityBalanceReconciliation(state:'matched',opening:-580050,closing:-90000,recordedBalance:-90000,reserved:0,available:0,debt:90000));
-    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
-      gbActivityTransportProvider.overrideWithValue(fake)],child:MaterialApp(home:MediaQuery(
-        data:const MediaQueryData(textScaler:TextScaler.linear(2)),child:const Directionality(
-          textDirection:TextDirection.rtl,child:GbWalletActivityScreen())))));
-    await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.text('Analysis').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
-    await tester.tap(find.text('Analysis'));await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.text('MB: Reconciled balance').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
-    expect(find.text('Reserved: 250 MB'),findsOneWidget);expect(find.text('Available: 750 MB'),findsOneWidget);
-    await tester.dragUntilVisible(find.text('Reversal debt: ₦900.00').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
-    expect(find.text('Posted closing: −₦900.00'),findsOneWidget);expect(tester.takeException(),isNull);
-  });
-
-  testWidgets('late reconciled balances cannot cross an account switch', (tester)async{
-    final pending=Completer<GbActivityPeriodSummary>();
-    final fake=_Activity()..pendingSummary=pending;
-    final container=ProviderContainer(overrides:[sessionProvider.overrideWith(_Session.new),
-      gbActivityTransportProvider.overrideWithValue(fake)]);
-    addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(container:container,
-      child:const MaterialApp(home:GbWalletActivityScreen())));
-    await tester.pump();fake.pendingSummary=null;
-    (container.read(sessionProvider.notifier) as _Session).switchAccount();
-    await tester.pump();
-    pending.complete(GbActivityPeriodSummary(days:7,fromAt:DateTime.utc(2026,10,18),toAt:DateTime.utc(2026,10,25),
-      mb:const GbActivityAmounts(500,200,300),ngn:const GbActivityAmounts(0,0,0),
-      reconciliation:const GbActivityReconciliation(
-        mb:GbActivityBalanceReconciliation(state:'matched',opening:700,closing:1000,recordedBalance:1000,reserved:250,available:750,debt:0),
-        ngn:GbActivityBalanceReconciliation(state:'uninitialized',opening:0,closing:0))));
-    await tester.pumpAndSettle();
-    expect(fake.summaryRequests,[7,7]);expect(find.text('Available: 750 MB'),findsNothing);
-    expect(find.text('MB: Reconciled balance'),findsNothing);
-    await tester.ensureVisible(find.text('Analysis'));
-    await tester.tap(find.text('Analysis'));await tester.pumpAndSettle();
-    expect(find.text('Balance check unavailable'),findsOneWidget);
-    expect(tester.takeException(),isNull);
-  });
-
-  testWidgets('missing and mismatched wallets never claim a reconciled or available balance', (tester)async{
-    final fake=_Activity()..reconciliation=const GbActivityReconciliation(
-      mb:GbActivityBalanceReconciliation(state:'mismatch',opening:700,closing:1000,recordedBalance:1001,reserved:250,available:751,debt:0),
-      ngn:GbActivityBalanceReconciliation(state:'uninitialized',opening:0,closing:0));
-    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
-      gbActivityTransportProvider.overrideWithValue(fake)],child:const MaterialApp(home:GbWalletActivityScreen())));
-    await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.text('Analysis').hitTestable(),find.byType(ListView).first,const Offset(0,-180));
-    await tester.tap(find.text('Analysis'));await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.text('No NGN wallet has been initialized.').hitTestable(),find.byType(ListView).first,const Offset(0,-160));
-    expect(find.text('MB: Balance needs reconciliation'),findsOneWidget);
-    expect(find.textContaining('Available:'),findsNothing);expect(find.textContaining('Reconciled balance'),findsNothing);
-    expect(tester.takeException(),isNull);
   });
 
   testWidgets('detail reads authoritative exact ID and copies its original reference', (tester) async {

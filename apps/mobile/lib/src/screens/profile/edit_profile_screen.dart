@@ -1,10 +1,4 @@
-import '../settings/username_screen.dart';
 import 'package:dio/dio.dart';
-import '../../finance/identity_details_screen.dart';
-import '../settings/account_security_screen.dart';
-import '../settings/account_data_screen.dart';
-import '../settings/notification_preferences_screen.dart';
-import 'person_profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -250,7 +244,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final avatar = _removeAvatar ? null : profile?.avatarUrl?.trim();
     return Scaffold(
       backgroundColor: u.surfaceBg,
-      appBar: AppBar(title: const Text('My profile')),
+      appBar: AppBar(title: const Text('Edit profile')),
       body: _loading
           ? const MasanawaProfileSkeleton(semanticLabel: 'Loading your profile')
           : profile == null && !_creatingProfile
@@ -314,30 +308,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           ),
                         ),
                       const SizedBox(height: 22),
-                      Text(
-                        'Public profile',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Your name, photo and bio are visible on your public profile.',
-                      ),
-                      if (profile != null)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.visibility_outlined),
-                          title: const Text('View public profile'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _saving
-                              ? null
-                              : () => Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => PersonProfileScreen(
-                                      handle: profile.handle,
-                                    ),
-                                  ),
-                                ),
-                        ),
                       const SizedBox(height: 12),
                       TextFormField(
                         key: const ValueKey('profile-edit-name'),
@@ -394,23 +364,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               : 'Enter a valid handle (2–40 characters)',
                         )
                       else
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.alternate_email_rounded),
-                          title: Text('@${profile!.handle}'),
-                          trailing: const Icon(Icons.edit_outlined),
-                          onTap: _saving || _requiresReload || _changed ? null : () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const UsernameScreen(),
-                              ),
-                            );
-                            if (mounted) _load();
-                          },
-                          subtitle: Text(_changed
-                            ? 'Save your profile changes before editing your username.'
-                            : 'Change your username. Previous profile links stay connected to you.'),
-                        ),
+                        Center(child: Text('@${profile!.handle}',
+                          style: Theme.of(context).textTheme.bodySmall)),
                       if (_error != null) ...[
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -420,7 +375,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           ),
                         ),
                         Align(
-                          alignment: Alignment.centerLeft,
+                          alignment: Alignment.center,
                           child: TextButton.icon(
                             key: const ValueKey('profile-reload'),
                             onPressed: _saving ? null : _load,
@@ -449,51 +404,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                     : 'Save profile',
                               ),
                       ),
-                      const SizedBox(height: 28),
-                      Text(
-                        'Your account',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Private details and controls. These do not appear on your public profile.',
-                      ),
-                      const SizedBox(height: 8),
-                      for (final entry in <(String, IconData, Widget)>[
-                        (
-                          'Identity details',
-                          Icons.verified_user_outlined,
-                          const IdentityDetailsScreen(),
-                        ),
-                        (
-                          'Account security',
-                          Icons.lock_outline,
-                          const AccountSecurityScreen(),
-                        ),
-                        (
-                          'Notifications',
-                          Icons.notifications_outlined,
-                          const NotificationPreferencesScreen(),
-                        ),
-                        (
-                          'Account data & privacy',
-                          Icons.manage_accounts_outlined,
-                          const AccountDataScreen(),
-                        ),
-                      ])
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(entry.$2),
-                          title: Text(entry.$1),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _saving
-                              ? null
-                              : () => Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => entry.$3,
-                                  ),
-                                ),
-                        ),
                     ],
                   ),
                 ),

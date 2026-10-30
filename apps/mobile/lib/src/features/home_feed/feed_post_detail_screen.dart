@@ -326,7 +326,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
               onLongLike:widget.engagementApi is ReactionFeedApi?
                 (anchor)=>unawaited(_chooseReaction(anchor)):null),
             Text(t('Comments','Sharhi')+' ('+p.commentCount.toString()+')'),
-            Row(children:[
+            Row(mainAxisAlignment:MainAxisAlignment.center,children:[
               ChoiceChip(label:Text(t('Newest','Sabbi')),selected:sort=='newest',
                 onSelected:(_){setState(()=>sort='newest');refresh();}),
               const SizedBox(width:8),

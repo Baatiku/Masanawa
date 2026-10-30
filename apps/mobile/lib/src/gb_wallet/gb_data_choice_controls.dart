@@ -17,6 +17,7 @@ class GbDataNetworkChoices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.center,
     spacing: 6,
     runSpacing: 4,
     children: [
@@ -52,6 +53,7 @@ class GbDataValidityChoices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.center,
     spacing: 6,
     runSpacing: 4,
     children: [
