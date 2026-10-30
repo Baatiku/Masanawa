@@ -82,12 +82,12 @@ export const OFFICIAL_PORTRAITS:readonly OfficialPortrait[]=Object.freeze([
   {
     "characterId": "character_01a189e8-72ea-7004-8490-732180ec6e9a",
     "officialName": "Enyong Michael Okon",
-    "imageUrl": "https://www.nairaland.com/attachments/14937767_img20220206wa0000_jpeg1d990acf184c1095e718d22bdfcf34b9",
-    "sourceUrl": "https://www.nairaland.com/6973832/uyo-pdp-backs-mike-enyong",
-    "credit": "nairaland.com",
+    "imageUrl": "https://image.api.sportal365.com/process/smp-images-production/pulse.ng/26072024/3f6aec88-d012-47d0-a92f-a89507719bab",
+    "sourceUrl": "https://www.pulse.ng/story/appeal-court-sacks-akwa-ibom-pdp-governorship-candidate-restores-umo-eno-2024072607445774648",
+    "credit": "Pulse Nigeria",
     "licenseLabel": "Attributed source photograph",
     "checkedAt": "2026-10-30",
-    "assetKey": "78e013c4e8434ec271166a4a0e737add"
+    "assetKey": "e666c497d586b15e9e11c9e5c27ecde8"
   },
   {
     "characterId": "character_01a189e8-72ea-7004-8490-80ddcad550b1",
@@ -226,22 +226,23 @@ export const OFFICIAL_PORTRAITS:readonly OfficialPortrait[]=Object.freeze([
   {
     "characterId": "character_01a189e8-72ec-70ed-be47-641e53f858e7",
     "officialName": "Gwamna Jamil Isyaku",
-    "imageUrl": "https://nigeriannewsleader.com/images/Dr._Jamilu_Isyaku_Gwamna_1.jpg",
-    "sourceUrl": "https://nigeriannewsleader.com/index.php/politics/guber-2023-how-i-will-tackle-poverty-in-gombe-state-if-elected-gov-gwamna-pdp-aspirant",
-    "credit": "nigeriannewsleader.com",
+    "imageUrl": "https://pbs.twimg.com/media/HOLbyB3XoAAhbuq.jpg",
+    "sourceUrl": "https://x.com/drjamilgwamna",
+    "credit": "Dr. Jamil Isyaku Gwamna, public X profile",
     "licenseLabel": "Attributed source photograph",
     "checkedAt": "2026-10-30",
-    "assetKey": "93ebe1c8b4d394d44454d081847f1023"
+    "assetKey": "2d5f147fbc88bc8f3f9189a6834bec65"
   },
   {
     "characterId": "character_01a189e8-72ec-70ed-be47-74728a25ebc2",
     "officialName": "Sabo Mohammed Nakudu",
-    "imageUrl": "https://static.africa-press.net/nigeria/sites/3/2026/04/sm_1775423589.190108.jpg",
-    "sourceUrl": "https://www.africa-press.net/nigeria/parties/former-jigawa-central-senator-nakudu-joins-adc",
-    "credit": "africa-press.net",
-    "licenseLabel": "Attributed source photograph",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/9/98/Nakudu_2023.jpg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Nakudu_2023.jpg",
+    "credit": "Mohammedadu",
+    "licenseLabel": "CC BY-SA 4.0",
     "checkedAt": "2026-10-30",
-    "assetKey": "610b38f8353c2c7234a07063a805d7df"
+    "assetKey": "f7d034e2530006192fa86658613e9c7b",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
   },
   {
     "characterId": "character_01a189e8-72ec-70ed-be47-7f3dc8131e3a",
@@ -408,12 +409,12 @@ export const OFFICIAL_PORTRAITS:readonly OfficialPortrait[]=Object.freeze([
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-47016a9ae377",
     "officialName": "Emmanuel David Ombugadu",
-    "imageUrl": "https://ombugadu.com/images/1024/15220392/Hon.-David-Ombugadu.-NGilpBuo1ZTBH9oBseqowg.jpg",
-    "sourceUrl": "https://ombugadu.com/en/about/",
-    "credit": "ombugadu.com",
+    "imageUrl": "https://pbs.twimg.com/profile_images/2037303337348104192/ckUpaHa8_400x400.jpg",
+    "sourceUrl": "https://x.com/davidombugadu23",
+    "credit": "David E. Ombugadu, public X profile",
     "licenseLabel": "Attributed source photograph",
     "checkedAt": "2026-10-30",
-    "assetKey": "56e9aad9672d62c28099c9c146fb23e1"
+    "assetKey": "700c4409365282e9c29aed755a6dc056"
   },
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-5502f4282469",
@@ -439,12 +440,12 @@ export const OFFICIAL_PORTRAITS:readonly OfficialPortrait[]=Object.freeze([
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-6ea1a1029d96",
     "officialName": "Lawal Jimi Adebisi",
-    "imageUrl": "https://static.africa-press.net/nigeria/sites/3/2022/12/postQueueImg_1669893429.57.jpg",
-    "sourceUrl": "https://www.africa-press.net/nigeria/policy/ill-appeal-court-judgment-on-ogun-pdp-guber-ticket-jimi-lawal-vows",
-    "credit": "africa-press.net",
+    "imageUrl": "https://www.thecable.ng/wp-content/uploads/2022/11/IMG-20221109-WA0001-e1723631851441.jpg",
+    "sourceUrl": "https://www.thecable.ng/icpc-invites-el-rufais-ex-adviser-jimi-lawal-over-alleged-fraud/",
+    "credit": "TheCable",
     "licenseLabel": "Attributed source photograph",
     "checkedAt": "2026-10-30",
-    "assetKey": "ddb839fb5ce3ef51f6dedf7edaa75d3e"
+    "assetKey": "0dfddad12bd34db40251564632554389"
   },
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-76ecbdea7cec",

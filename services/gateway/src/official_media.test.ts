@@ -72,3 +72,14 @@ it('survives a fresh reader with verified disk-cached pixels when the original s
   expect(await next.read(key)).toEqual(expected);expect(network).toBe(0);expect(next.stats().persisted).toBe(1);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+it('backs off a rate-limited reviewed source and caches a later real image response',async()=>{
+ const png=await sharp({create:{width:20,height:20,channels:3,background:'green'}}).png().toBuffer();
+ let calls=0;
+ const reader=createOfficialMediaReader((async()=>{
+  calls++;
+  if(calls===1)return new Response(null,{status:429,headers:{'retry-after':'1'}});
+  return new Response(new Uint8Array(png),{headers:{'content-type':'image/png'}});
+ }) as typeof fetch);
+ const bytes=await reader.read(OFFICIAL_MEDIA_ASSETS[0]!.key);
+ expect(calls).toBe(2);expect((await sharp(bytes!).metadata()).format).toBe('webp');
+},10000);
