@@ -2947,21 +2947,23 @@ class _Composer extends StatelessWidget {
                   previewPlaying ? Icons.pause_rounded
                       : Icons.play_arrow_rounded, size: 22)),
             const SizedBox(width: 3),
-            IconButton.filled(
-              tooltip: 'Send voice note',
-              onPressed: sending ? null : onSendVoiceNote,
-              icon: const Icon(Icons.send_rounded, size: 22)),
+            Semantics(container: true, button: true, label: 'Send voice note',
+              child: ExcludeSemantics(child: IconButton.filled(
+                tooltip: 'Send voice note',
+                onPressed: sending ? null : onSendVoiceNote,
+                icon: const Icon(Icons.send_rounded, size: 22)))),
           ]),
           if (isRecording && !recordingLocked)
             Text(holdActive ? 'Slide to cancel · up to lock'
-                : 'Recording · tap stop to preview',
+                : 'Recording voice note',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: u.textMuted, fontSize: 11)),
           if (!isRecording)
-            Center(child: TextButton.icon(
-              onPressed: onReRecord,
-              icon: const Icon(Icons.replay_rounded, size: 16),
-              label: const Text('Record again'))),
+            Center(child: Tooltip(message: 'Record again',
+              child: TextButton.icon(
+                onPressed: onReRecord,
+                icon: const Icon(Icons.replay_rounded, size: 16),
+                label: const Text('Record again')))),
         ]),
       ),
     );
