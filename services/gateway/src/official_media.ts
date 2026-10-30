@@ -7,7 +7,7 @@ export const OFFICIAL_PARTIES=Object.freeze({
  APC:{name:'All Progressives Congress',imageUrl:'https://cdn.legit.ng/images/1120/c80c390d3b880d90.jpeg?v=1',sourceUrl:'https://www.legit.ng/1197958-full-list-political-parties-nigeria-leaders.html'},
  ADC:{name:'African Democratic Congress',imageUrl:'https://adc.org.ng/storage/blog/adc-condemns-inadequate-military-funding-and-calls-for-urgent-action.jpg',sourceUrl:'https://adc.org.ng/news-single/adc-condemns-inadequate-military-funding-and-calls-for-urgent-action'},
  NDC:{name:'Nigeria Democratic Congress',imageUrl:'https://dailyobserver.ng/public/storage/FB_IMG_1782482226926.webp',sourceUrl:'https://dailyobserver.ng/public/court-voids-ndc-registration-orders-fresh-hearing-over-party-logo-dispute'},
- PDP:{name:'Peoples Democratic Party',imageUrl:'https://assets.sunnewsonline.com/2020/12/PDP-logo.jpg',sourceUrl:'https://thesun.ng/kano-pdp-threatens-to-sue-state-electoral-commission-over-illegal-use-of-logo/'},
+ PDP:{name:'Peoples Democratic Party',imageUrl:'https://punchng.com/wp-content/uploads/2026/06/PDP-LOGO_1782487562.webp',sourceUrl:'https://punchng.com/2027-pdp-uploads-70-of-gov-assembly-candidates/'},
 });
 export const publicOfficialMediaUrl=(key:string)=>`https://api.masanawa.com/public/persona-media/${key}`;
 export const OFFICIAL_MEDIA_ASSETS=Object.freeze([
@@ -21,6 +21,8 @@ export function partyEmblemUrl(code:keyof typeof OFFICIAL_PARTIES){return public
 export function createOfficialMediaReader(fetcher:typeof fetch=fetch,onFailure?:(key:string,error:unknown)=>void,cacheDir?:string){
  const cache=new Map<string,Buffer>(),pending=new Map<string,Promise<Buffer|null>>();
  const diskBacked=new Set<string>(),failedAt=new Map<string,number>();
+ const nextHostSlot=new Map<string,number>(),blockedUntil=new Map<string,number>();
+ const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
  const hosts=new Set(OFFICIAL_MEDIA_ASSETS.map(a=>new URL(a.url).hostname));
  async function load(key:string):Promise<Buffer|null>{
   const asset=OFFICIAL_MEDIA_ASSETS.find(a=>a.key===key);if(!asset)return null;
@@ -36,7 +38,24 @@ export function createOfficialMediaReader(fetcher:typeof fetch=fetch,onFailure?:
   }
   let url=new URL(asset.url),response:Response|undefined;
   for(let n=0;n<4;n++){
-   response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(12000),headers:{'user-agent':'MasanawaPortraits/1.0 (public attributed persona photographs)'}});
+   for(let attempt=0;attempt<3;attempt++){
+    const remaining=(blockedUntil.get(url.hostname)??0)-Date.now();
+    if(remaining>15000)throw Error('portrait_source_rate_limited');
+    if(remaining>0)await wait(remaining);
+    if(url.hostname.endsWith('.wikimedia.org')){
+     const slot=Math.max(Date.now(),nextHostSlot.get(url.hostname)??0);
+     nextHostSlot.set(url.hostname,slot+2500);
+     if(slot>Date.now())await wait(slot-Date.now());
+    }
+    response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(12000),headers:{'user-agent':'MasanawaPortraits/1.0 (https://masanawa.com; attributed public portrait cache)'}});
+    if(response.status!==429)break;
+    await response.body?.cancel();
+    const retry=response.headers.get('retry-after');
+    const delay=retry&&/^\d+$/.test(retry)?Number(retry)*1000:retry&&Number.isFinite(Date.parse(retry))?Math.max(0,Date.parse(retry)-Date.now()):2000*(attempt+1);
+    blockedUntil.set(url.hostname,Date.now()+Math.max(1000,delay));
+    if(attempt===2||delay>15000)throw Error('portrait_source_rate_limited');
+   }
+   if(!response)throw Error('portrait_source_unavailable');
    if(![301,302,303,307,308].includes(response.status))break;
    const next=new URL(response.headers.get('location')??'',url);await response.body?.cancel();
    if(next.protocol!=='https:'||next.username||next.password||next.port||!hosts.has(next.hostname))throw Error('portrait_redirect_rejected');url=next;
