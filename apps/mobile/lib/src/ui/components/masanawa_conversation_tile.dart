@@ -48,9 +48,16 @@ class MasanawaConversationTile extends StatelessWidget {
         contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 0, 12, 0),
         horizontalTitleGap: 12,
         leading: avatar,
-        title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: colors.textPrimary, fontSize: 16.5,
-            fontWeight: FontWeight.w600)),
+        title: Row(children: [
+          if (pinned) ...[
+            Icon(Icons.push_pin, size: 14, color: colors.brandStrong),
+            const SizedBox(width: 5),
+          ],
+          Expanded(child: Text(name, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colors.textPrimary, fontSize: 16.5,
+              fontWeight: FontWeight.w600))),
+        ]),
         subtitle: Padding(
           padding: const EdgeInsetsDirectional.only(top: 3),
           child: preview,
@@ -91,8 +98,7 @@ class MasanawaConversationTile extends StatelessWidget {
                     style: const TextStyle(color: Colors.white,
                       fontSize: 11, fontWeight: FontWeight.w700)),
                 )
-              else if (pinned)
-                Icon(Icons.push_pin, size: 15, color: colors.textMuted),
+
             ],
           ),
         ),

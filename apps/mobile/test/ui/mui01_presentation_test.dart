@@ -157,7 +157,7 @@ void main() {
       expect(rect.height, inInclusiveRange(44, 48));
       final field = tester.widget<TextField>(find.byType(TextField));
       expect(field.decoration!.fillColor, buildMasanawaTheme(brightness: Brightness.light).inputDecorationTheme.fillColor);
-      expect(field.decoration!.enabledBorder!.borderSide.color, MasanawaColors.light().structuralBorder);
+      expect(field.decoration!.enabledBorder!.borderSide.style, BorderStyle.none);
     },
   );
 
