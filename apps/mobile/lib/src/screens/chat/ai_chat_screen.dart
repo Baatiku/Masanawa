@@ -1306,8 +1306,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                   return false;
                                 },
                                 background: Container(
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.only(left: 14),
+                                  alignment: AlignmentDirectional.centerStart,
+                                   padding: const EdgeInsetsDirectional.only(start: 14),
                                   child: Container(
                                     width: 32,
                                     height: 32,
@@ -3003,11 +3003,12 @@ class _Composer extends StatelessWidget {
           icon: Icons.attach_file,
           onPressed: onAttach,
         ),
-        _ComposerIcon(
-          tooltip: 'Camera',
-          icon: Icons.camera_alt_outlined,
-          onPressed: onCamera,
-        ),
+        if (!hasText)
+          _ComposerIcon(
+            tooltip: 'Camera',
+            icon: Icons.camera_alt_outlined,
+            onPressed: onCamera,
+          ),
       ],
     );
   }
@@ -3335,6 +3336,7 @@ class _PersonaChatDisclosure extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.message,
+    required this.grouped,
     required this.agent,
     required this.selected,
     required this.highlighted,
@@ -3353,6 +3355,7 @@ class _ChatBubble extends StatelessWidget {
   });
 
   final AiChatMessage message;
+  final bool grouped;
   final AgentDirectoryEntry agent;
   final bool selected;
   final bool highlighted;
@@ -3482,12 +3485,9 @@ class _ChatBubble extends StatelessWidget {
     final failure = failedParts.isEmpty ? null : failedParts.first;
     final attachments = message.allAttachments;
     return Align(
-      alignment: failure != null ? Alignment.center : isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: failure != null ? Alignment.center : isUser ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
       child: GestureDetector(
         onLongPress: () => _showActions(context),
-        onHorizontalDragEnd: (details) {
-          if ((details.primaryVelocity ?? 0) > 250) onReply();
-        },
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -3495,7 +3495,7 @@ class _ChatBubble extends StatelessWidget {
               margin: const EdgeInsets.symmetric(vertical: 3),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.82,
+                maxWidth: MediaQuery.sizeOf(context).width * 0.86,
               ),
               decoration: BoxDecoration(
                 color: failure != null ? u.surfaceMuted

@@ -13,6 +13,7 @@ import '../../state/session_state.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
 import '../../agents/masana_portrait_avatar.dart';
+import '../../ui/components/masanawa_conversation_tile.dart';
 
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
@@ -75,7 +76,7 @@ class ChatListScreen extends ConsumerWidget {
           color: u.textMuted,
         ),
         'read' => Icon(Icons.done_all_rounded, size: 14, color: u.tickRead),
-        _ => Icon(Icons.done_rounded, size: 14, color: u.textMuted),
+        _ => null, // Never imply delivery without an authoritative state.
       };
     }
 
@@ -255,28 +256,23 @@ class ChatListScreen extends ConsumerWidget {
                 itemBuilder: (_, index) {
                   final thread = archived[index];
                   final agent = directory.find(thread.characterId)!;
-                  return ListTile(
-                    leading: const Icon(Icons.archive_outlined),
-                    title: Text(
-                      thread.title?.trim().isNotEmpty == true
-                          ? thread.title!
-                          : agent.displayName,
-                    ),
-                    subtitle: Text(
-                      _snippet(thread),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Unarchive',
-                      icon: const Icon(Icons.unarchive_outlined),
-                      onPressed: () {
-                        ref
-                            .read(aiChatProvider.notifier)
-                            .toggleArchive(thread.characterId);
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
+                  return MasanawaConversationTile(
+                    key: ValueKey('archived-${thread.characterId}'),
+                    avatar: MasanaPortraitAvatar(agent: agent, size: 52),
+                    name: thread.title?.trim().isNotEmpty == true
+                        ? thread.title! : agent.displayName,
+                    preview: Text(_snippet(thread), maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    time: formatChatTime(thread.lastMessageActivityAt),
+                    pinned: thread.pinned,
+                    unread: thread.unread,
+                    actionTooltip: 'Unarchive',
+                    actionIcon: Icons.unarchive_outlined,
+                    onAction: () {
+                      ref.read(aiChatProvider.notifier)
+                          .toggleArchive(thread.characterId);
+                      Navigator.pop(sheetContext);
+                    },
                     onTap: () {
                       Navigator.pop(sheetContext);
                       context.push('/chat/${thread.characterId}');
@@ -329,79 +325,21 @@ class ChatListScreen extends ConsumerWidget {
         key: ValueKey(accountKey),
         masanaThreads: session is SessionSignedIn
             ? chat.threads.values
-                  .where((t) => directory.find(t.characterId) != null)
+                  .where((t) => directory.find(t.characterId) != null && !t.archived)
                   .toList()
             : const [],
         masanaRow: (thread) {
           final agent = directory.find(thread.characterId)!;
           final last = thread.lastMessage;
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 6,
-            ),
-            leading: MasanaPortraitAvatar(agent: agent, size: 52),
-            title: Row(
-              children: [
-                if (thread.pinned) ...[
-                  Icon(Icons.push_pin, size: 14, color: u.brandStrong),
-                  const SizedBox(width: 5),
-                ],
-                Expanded(
-                  child: Text(
-                    thread.title?.trim().isNotEmpty == true
-                        ? thread.title!
-                        : agent.displayName,
-                    style: TextStyle(
-                      color: u.textPrimary,
-                      fontSize: 16.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: _buildSubtitle(u, thread),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  last == null ? '' : formatChatTime(last.createdAt),
-                  style: TextStyle(
-                    color: thread.unread > 0 ? u.brandStrong : u.textMuted,
-                    fontSize: 12,
-                    fontWeight: thread.unread > 0
-                        ? FontWeight.w700
-                        : FontWeight.w400,
-                  ),
-                ),
-                if (thread.unread > 0) ...[
-                  const SizedBox(height: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: u.brandStrong,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '${thread.unread}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          return MasanawaConversationTile(
+            key: ValueKey('local-${thread.characterId}'),
+            avatar: MasanaPortraitAvatar(agent: agent, size: 52),
+            name: thread.title?.trim().isNotEmpty == true
+                ? thread.title! : agent.displayName,
+            preview: _buildSubtitle(u, thread),
+            time: last == null ? '' : formatChatTime(last.createdAt),
+            pinned: thread.pinned,
+            unread: thread.unread,
             onLongPress: () => _threadActions(context, ref, thread),
             onTap: () => context.push('/chat/${thread.characterId}'),
           );

@@ -1,5 +1,8 @@
 import '../../features/masana_chat/inbox_search.dart';
 import '../../agents/masana_portrait_avatar.dart';
+import '../../chat/chat_format.dart';
+import '../../ui/components/masanawa_conversation_tile.dart';
+import '../../theme/masanawa_theme.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -161,7 +164,13 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       _remoteQuery,
       ref.read(sessionProvider.notifier).authorizationEpoch,
     ]);
-    final offline = !ref.watch(aiChatProvider).online;
+    final localState = ref.watch(aiChatProvider);
+    final offline = !localState.online;
+    // Archived local conversations may be found by server search but must
+    // never leak back into the active inbox.
+    final archivedIds = localState.threads.values
+        .where((thread) => thread.archived)
+        .map((thread) => thread.characterId).toSet();
     final server = !offline && _remoteQuery.isNotEmpty &&
             _remoteQuery == _query
         ? ref.watch(_serverSearch(serverKey))
@@ -187,10 +196,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         serverById[result.characterId] = result;
       }
     }
-    final rows = <({DateTime at, String id, Widget row})>[];
-    final localIds = <String>{};
+    final rows = <({DateTime at, String id, bool pinned, Widget row})>[];
+    final localIds = <String>{...archivedIds};
     for (final t in widget.masanaThreads) {
-        if (!localIds.add(t.characterId)) continue;
+        if (t.archived || !localIds.add(t.characterId)) continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
         if (_query.isNotEmpty &&
             !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
@@ -201,6 +210,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         rows.add((
           at: t.lastMessageActivityAt,
           id: t.characterId,
+          pinned: t.pinned,
           row: widget.masanaRow(t),
         ));
     }
@@ -209,58 +219,60 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       rows.add((
         at: result.lastActivityAt ?? DateTime.utc(1970),
         id: result.characterId,
-        row: ListTile(
+        pinned: result.pinned,
+        row: MasanawaConversationTile(
           key: ValueKey('remote-${result.characterId}'),
-          leading: MasanaPortraitAvatar(
+          avatar: MasanaPortraitAvatar(
             characterId: result.characterId,
             agent: ref.watch(agentDirectoryProvider).find(result.characterId),
             displayName: result.displayName,
-            size: 44,
+            size: 52,
           ),
-          title: Text(result.displayName),
-          subtitle: Text(
+          name: result.displayName,
+          preview: Text(
             result.lastMessage.isEmpty ? result.profession : result.lastMessage,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: context.masanawa.textMuted, fontSize: 14),
           ),
-          trailing: IconButton(
-            tooltip: result.pinned
-                ? 'Unpin server conversation'
-                : 'Pin server conversation',
-            icon: Icon(result.pinned ? Icons.push_pin : Icons.push_pin_outlined),
-            onPressed: () async {
-              final owner = ref.read(sessionProvider);
-              final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-              final access = ref.read(masanaInboxSearchProvider);
-              try {
-                final nextRevision = await access.setPinned(
-                  bearer: session.tokens.accessToken,
-                  characterId: result.characterId,
-                  pinned: !result.pinned,
-                  expectedRevision: result.revision,
-                );
-                if (mounted && identical(owner, ref.read(sessionProvider)) &&
-                    epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
-                  setState(() => _confirmedPinUpdates[result.characterId] =
-                      result.withPin(!result.pinned, nextRevision));
-                  ref.invalidate(_serverSearch(serverKey));
-                }
-              } catch (_) {
-                if (mounted && identical(owner, ref.read(sessionProvider)) &&
-                    epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Could not update pin.')),
-                  );
-                }
+          time: result.lastActivityAt == null
+              ? '' : formatChatTime(result.lastActivityAt!.toLocal()),
+          unread: result.unreadCount,
+          pinned: result.pinned,
+          actionTooltip: result.pinned
+              ? 'Unpin server conversation' : 'Pin server conversation',
+          actionIcon: result.pinned
+              ? Icons.push_pin : Icons.push_pin_outlined,
+          onAction: () async {
+            final owner = ref.read(sessionProvider);
+            final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+            final access = ref.read(masanaInboxSearchProvider);
+            try {
+              final nextRevision = await access.setPinned(
+                bearer: session.tokens.accessToken,
+                characterId: result.characterId,
+                pinned: !result.pinned,
+                expectedRevision: result.revision,
+              );
+              if (mounted && identical(owner, ref.read(sessionProvider)) &&
+                  epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+                setState(() => _confirmedPinUpdates[result.characterId] =
+                    result.withPin(!result.pinned, nextRevision));
+                ref.invalidate(_serverSearch(serverKey));
               }
-            },
-          ),
+            } catch (_) {
+              if (mounted && identical(owner, ref.read(sessionProvider)) &&
+                  epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not update pin.')),
+                );
+              }
+            }
+          },
           onTap: () {
             final owner = ref.read(sessionProvider);
             if (owner is! SessionSignedIn) return;
             final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
             context.push('/chat/${Uri.encodeComponent(result.characterId)}');
-            // The read receipt may fail without blocking navigation.
             unawaited(() async {
               if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
                   epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
@@ -270,7 +282,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                   characterId: result.characterId,
                 );
               } catch (_) {
-                // The chat screen can retry the original acknowledgement.
+                // Preserve original receipt; chat screen retries acknowledgement.
               }
             }());
           },
@@ -278,6 +290,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       ));
     }
     rows.sort((a, b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       final time = b.at.compareTo(a.at);
       return time != 0 ? time : a.id.compareTo(b.id);
     });
@@ -327,9 +340,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     semanticsLabel: 'Searching server conversations'),
                 if (server?.hasError == true)
                   ListTile(
-                    title: const Text(
-                      'Server conversations are not available yet. Showing saved conversations.',
-                    ),
+                    title: const Text('Server search unavailable. Saved conversations remain visible.', textAlign: TextAlign.center),
                     trailing: IconButton(
                       tooltip: 'Retry server search',
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
@@ -351,7 +362,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     semanticsLabel: 'Loading more conversations'),
                 if (firstPage != null && _pageError && _remoteQuery == _query)
                   ListTile(
-                    title: const Text('Could not load more conversations. Previous results are saved.'),
+                    title: const Text('Could not load more conversations. Previous results are saved.', textAlign: TextAlign.center),
                     trailing: IconButton(
                       tooltip: 'Retry loading conversations',
                       onPressed: () {
