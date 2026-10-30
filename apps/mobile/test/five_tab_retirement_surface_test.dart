@@ -49,7 +49,8 @@ void main() {
     final editor = _source('screens/profile/edit_profile_screen.dart');
     final masana = _source('screens/profile/masana_profile_screen.dart');
     expect(settings, isNot(contains('settings-my-masana')));
-    expect(settings, contains('Home · Chats · Wallet · Calls · Data'));
+    expect(settings, contains("ValueKey('profile-edit-entry')"));
+    expect(settings, isNot(contains('/rooms/')));
     expect(editor, isNot(contains('MyMasanaScreen')));
     expect(masana, isNot(contains('/rooms/')));
     expect(masana, isNot(contains('Creator')));

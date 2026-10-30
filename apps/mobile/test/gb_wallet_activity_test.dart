@@ -265,9 +265,11 @@ void main() {
     fake.responses[null]=GbActivityPage([
       item('ngn:deposit_new',500050,unit:'NGN',kind:'deposit')],null);
     await tester.tap(find.text('Filter'));
-    await tester.pumpAndSettle();
-    await tester.dragUntilVisible(find.byKey(const ValueKey('activity-unit-NGN')).hitTestable(),
-      find.byType(ListView),const Offset(0,180));
+    // A pending pagination request displays an indeterminate progress bar.
+    // Do not wait for every animation to settle before selecting a filter.
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const ValueKey('activity-unit-NGN')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('activity-unit-NGN')));
     await tester.pump();
     fake.pending!.complete(GbActivityPage([item('mb:stale',999)],null));

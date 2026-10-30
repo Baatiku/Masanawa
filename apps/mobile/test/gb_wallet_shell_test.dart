@@ -91,7 +91,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Redeem Data'));await tester.pumpAndSettle();
     expect(tester.widget<Text>(find.text('Redeem Data')).maxLines,isNull);
-    expect(find.text('Buy Data'),findsNWidgets(2));
+    expect(find.text('Buy Data'),findsOneWidget,
+      reason:'The simplified wallet has one Buy Data action, not a duplicate');
     expect(find.text('Add data'),findsNothing);expect(find.text('Redeem'),findsNothing);
     await tester.dragUntilVisible(find.text('Recent transactions'),find.byType(ListView),const Offset(0,-180));
     await tester.pumpAndSettle();

@@ -407,7 +407,11 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
       _more.clear();
       _next = null;
     }
-    final currentPage = authorizationRejected ? null : first?.valueOrNull;
+    // Riverpod may retain the previous value while a refresh is loading or
+    // after it fails. Render those verified rows, but never call them fresh:
+    // the centered offline notice must remain visible alongside the list.
+    final currentPage = authorizationRejected || first?.isLoading == true ||
+        first?.hasError == true ? null : first?.valueOrNull;
     if (currentPage != null) _lastVerifiedPage=currentPage;
     final initial = currentPage ?? _lastVerifiedPage;
     final stale = currentPage == null && initial != null;
