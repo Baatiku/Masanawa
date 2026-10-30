@@ -1,3 +1,84 @@
+bool isOfficialPublicMediaUrl(String raw) {
+  final u = Uri.tryParse(raw);
+  return u != null &&
+      u.scheme == 'https' &&
+      u.host == 'api.masanawa.com' &&
+      u.userInfo.isEmpty &&
+      !u.hasPort &&
+      !u.hasQuery &&
+      !u.hasFragment &&
+      RegExp(r'^/public/persona-media/[a-f0-9]{32}$').hasMatch(u.path);
+}
+
+class OfficialPortrait {
+  const OfficialPortrait(
+    this.url,
+    this.sourceUrl,
+    this.credit,
+    this.licenseLabel,
+    this.licenseUrl,
+  );
+  final String url, sourceUrl, credit, licenseLabel;
+  final String? licenseUrl;
+  static OfficialPortrait? read(Object? raw) {
+    if (raw is! Map) return null;
+    final url = raw['url'],
+        source = raw['sourceUrl'],
+        credit = raw['credit'],
+        label = raw['licenseLabel'];
+    if (url is! String ||
+        !isOfficialPublicMediaUrl(url) ||
+        source is! String ||
+        Uri.tryParse(source)?.scheme != 'https' ||
+        credit is! String ||
+        credit.isEmpty ||
+        credit.length > 200 ||
+        label is! String ||
+        label.length > 100)
+      return null;
+    final license = raw['licenseUrl'];
+    return OfficialPortrait(
+      url,
+      source,
+      credit,
+      label,
+      license is String && license.startsWith('https://creativecommons.org/')
+          ? license
+          : null,
+    );
+  }
+}
+
+class OfficialParty {
+  const OfficialParty(
+    this.code,
+    this.name,
+    this.emblemUrl,
+    this.sourceUrl,
+    this.checkedAt,
+  );
+  final String code, name, emblemUrl, sourceUrl, checkedAt;
+  static OfficialParty? read(Object? raw) {
+    if (raw is! Map ||
+        !const ['APC', 'ADC', 'NDC', 'PDP'].contains(raw['code']))
+      return null;
+    final name = raw['name'],
+        url = raw['emblemUrl'],
+        source = raw['sourceUrl'],
+        date = raw['checkedAt'];
+    if (name is! String ||
+        name.length > 100 ||
+        url is! String ||
+        !isOfficialPublicMediaUrl(url) ||
+        source is! String ||
+        Uri.tryParse(source)?.scheme != 'https' ||
+        date is! String ||
+        DateTime.tryParse(date) == null)
+      return null;
+    return OfficialParty(raw['code'] as String, name, url, source, date);
+  }
+}
+
 class PublicOfficialIdentity {
   const PublicOfficialIdentity(
     this.officialName,
@@ -10,7 +91,11 @@ class PublicOfficialIdentity {
     this.cityOfOrigin,
     this.biography,
     this.birthPlace,
+    this.portrait,
+    this.party,
   });
+  final OfficialPortrait? portrait;
+  final OfficialParty? party;
   final String officialName, office, sourceUrl;
   final DateTime reviewedAt, expiresAt;
   final String? dateOfBirth, stateOfOrigin, cityOfOrigin, biography, birthPlace;
@@ -69,6 +154,8 @@ class PublicOfficialIdentity {
       stateOfOrigin: fact('stateOfOrigin'),
       cityOfOrigin: fact('cityOfOrigin'),
       birthPlace: fact('birthPlace'),
+      portrait: OfficialPortrait.read(raw['portrait']),
+      party: OfficialParty.read(raw['party']),
       biography:
           raw['biography'] is String &&
               (raw['biography'] as String).trim().isNotEmpty &&

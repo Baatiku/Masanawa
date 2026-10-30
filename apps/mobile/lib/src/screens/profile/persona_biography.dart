@@ -210,6 +210,22 @@ class PersonaBiography extends StatelessWidget {
                     'Chat and calls explore documented public history and views; '
                     'answers are not new statements or commitments from this person.',
                   ),
+                  if (official?.portrait case final OfficialPortrait photo) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Photo: ${photo.credit} · ${photo.licenseLabel}. Display resized/cropped; no endorsement.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    TextButton(
+                      onPressed: () => onSource(photo.sourceUrl),
+                      child: const Text('Portrait source'),
+                    ),
+                    if (photo.licenseUrl case final String license)
+                      TextButton(
+                        onPressed: () => onSource(license),
+                        child: const Text('Photo licence'),
+                      ),
+                  ],
                   if (official != null) ...[
                     const SizedBox(height: 12),
                     OutlinedButton.icon(

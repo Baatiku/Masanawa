@@ -1,3 +1,4 @@
+import {registerOfficialMediaRoutes} from './official_media.js';
 import {registerGbRetainedFinanceRoutes,type GbRetainedFinancePorts} from './gb_wallet/retained_finance_routes.js';
 import {registerUsernameRoutes,type UsernamePorts} from './usernames.js';
 import {MbCallAdmissionRequiredError} from "./gb_calls/public_token_policy.js";
@@ -172,6 +173,7 @@ const AgentDirectoryEntrySchema = Type.Object(
     defaultPlatformAgent: Type.Boolean(),
     voiceProvider: Type.Union([Type.String(), Type.Null()]),
     voiceName: Type.Union([Type.String(), Type.Null()]),
+    avatarUrl:Type.Optional(Type.String({maxLength:2048})),
     portraitKey: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9_-]{1,39}$'})),
     following: Type.Optional(Type.Boolean()),
     countryCode: Type.Optional(Type.Union([Type.String({pattern:'^[A-Z]{2}$'}),Type.Null()])),
@@ -187,6 +189,8 @@ const AgentDirectoryEntrySchema = Type.Object(
       reviewedAt:Type.String(),reviewExpiresAt:Type.String(),
       verification:Type.Literal('source_reviewed'),representation:Type.Literal('ai_simulation'),
       biography:Type.Optional(Type.String({maxLength:8000})),
+      portrait:Type.Optional(Type.Object({url:Type.String(),sourceUrl:Type.String(),credit:Type.String(),licenseLabel:Type.String(),licenseUrl:Type.Optional(Type.String())},{additionalProperties:false})),
+      party:Type.Optional(Type.Object({code:Type.String(),name:Type.String(),emblemUrl:Type.String(),sourceUrl:Type.String(),checkedAt:Type.String()},{additionalProperties:false})),
       biographicalFacts:Type.Optional(Type.Object({dateOfBirth:Type.Optional(Type.String({pattern:'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'})),stateOfOrigin:Type.Optional(Type.String({maxLength:100})),cityOfOrigin:Type.Optional(Type.String({maxLength:100})),birthPlace:Type.Optional(Type.String({maxLength:100}))},{additionalProperties:false})),
     },{additionalProperties:false})),
   },
@@ -285,6 +289,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     requestTimeout: 30_000,
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  registerOfficialMediaRoutes(app);
   const now = options.now ?? nowInstant;
   const checks = options.readinessChecks ?? [];
 

@@ -1,3 +1,4 @@
+import 'persona_affiliations.dart';
 import '../../agents/public_official_badge.dart';
 import '../../calls/masana_voice_route.dart';
 import 'persona_biography.dart';
@@ -257,6 +258,10 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
                         ),
                       ),
                     ),
+                  PersonaAffiliations(
+                    agent: agent,
+                    onSource: _openBiographySource,
+                  ),
                   if (directory.error != null || current == null) ...[
                     const SizedBox(height: 12),
                     Card(
