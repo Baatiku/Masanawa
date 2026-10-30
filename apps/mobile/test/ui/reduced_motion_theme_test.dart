@@ -6,7 +6,7 @@ void main() {
   test('input fill and focus follow semantic palette', () {
     final theme = buildMasanawaTheme(brightness: Brightness.light);
     final colors = MasanawaColors.light();
-    expect(theme.inputDecorationTheme.fillColor, colors.surfaceMuted);
+    expect(theme.inputDecorationTheme.fillColor, colors.fieldSurface);
     expect(theme.inputDecorationTheme.focusedBorder,
         isA<OutlineInputBorder>());
     final border = theme.inputDecorationTheme.focusedBorder! as OutlineInputBorder;

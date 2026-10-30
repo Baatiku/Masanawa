@@ -204,7 +204,7 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
                         decoration: InputDecoration(
                           counterText: '',
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
+                          fillColor: Theme.of(context).inputDecorationTheme.fillColor,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(
                               MasanawaTokens.radius['md']!,

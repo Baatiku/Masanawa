@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/theme/masanawa_theme.dart';
+import 'package:masanawa/src/ui/components/primary_button.dart';
 
 void main() {
   test('R01 selects the requested semantic palette without overrides', () {
@@ -31,6 +32,13 @@ void main() {
     expect(theme.scaffoldBackgroundColor, Colors.white);
     expect(theme.extension<MasanawaColors>()!.surfaceMuted,
         const Color(0xFFE7FCEB));
+    expect(theme.extension<MasanawaColors>()!.fieldSurface,
+        const Color(0xFFF1F4F3));
+    expect(theme.inputDecorationTheme.fillColor, const Color(0xFFF1F4F3));
+    expect(theme.chipTheme.backgroundColor, const Color(0xFFF1F4F3));
+    expect(theme.chipTheme.selectedColor,
+        const Color(0xFF25D366).withValues(alpha: .14));
+    expect(theme.colorScheme.primaryContainer, const Color(0xFFE7FCEB));
     expect(theme.appBarTheme.systemOverlayStyle!.statusBarIconBrightness,
         Brightness.dark);
   });
@@ -57,5 +65,28 @@ void main() {
     expect(foreground, const Color(0xFF111B21));
     expect(theme.floatingActionButtonTheme.foregroundColor,
         const Color(0xFF111B21));
+  });
+
+  test('dark mode keeps inputs neutral while selections remain distinct', () {
+    final theme = buildMasanawaTheme(brightness: Brightness.dark);
+    final colors = theme.extension<MasanawaColors>()!;
+    expect(theme.inputDecorationTheme.fillColor, colors.fieldSurface);
+    expect(colors.fieldSurface, const Color(0xFF25333B));
+    expect(colors.fieldSurface, isNot(colors.surfaceMuted));
+    expect(theme.colorScheme.primaryContainer, colors.surfaceMuted);
+  });
+
+  testWidgets('primary actions are green while disabled actions are neutral gray',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: buildMasanawaTheme(brightness: Brightness.light),
+      home: Scaffold(body: Column(children: [
+        PrimaryButton(label: 'Continue', onPressed: () {}),
+        const PrimaryButton(label: 'Unavailable', onPressed: null),
+      ])),
+    ));
+    final materials = tester.widgetList<Material>(find.byType(Material)).toList();
+    expect(materials.any((m) => m.color == const Color(0xFF25D366)), isTrue);
+    expect(materials.any((m) => m.color == const Color(0xFFF1F4F3)), isTrue);
   });
 }

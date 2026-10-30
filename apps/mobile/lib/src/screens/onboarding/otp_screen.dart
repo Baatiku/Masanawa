@@ -266,7 +266,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
+                          fillColor: Theme.of(context).inputDecorationTheme.fillColor,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(
                               MasanawaTokens.radius['md']!,

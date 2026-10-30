@@ -26,19 +26,20 @@ class PrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
+    final onBrand = Theme.of(context).colorScheme.onPrimary;
     final canPress = enabled && !loading && onPressed != null;
     final labelWidget = Text(
       label,
       textAlign: TextAlign.center,
       softWrap: true,
       style: TextStyle(
-        color: canPress ? Colors.white : u.textMuted,
+        color: canPress ? onBrand : u.textMuted,
         fontSize: MasanawaTokens.fontSize['md'],
         fontWeight: FontWeight.w600,
       ),
     );
     final button = Material(
-      color: canPress ? u.brand : u.surfaceMuted,
+      color: canPress ? u.brand : u.fieldSurface,
       borderRadius: BorderRadius.circular(MasanawaTokens.radius['lg']!),
       child: InkWell(
         onTap: canPress ? onPressed : null,
@@ -60,12 +61,12 @@ class PrimaryButton extends StatelessWidget {
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        canPress ? Colors.white : u.textMuted,
+                        canPress ? onBrand : u.textMuted,
                       ),
                     ),
                   )
                 else if (icon != null)
-                  Icon(icon, size: 20, color: canPress ? Colors.white : u.textMuted),
+                  Icon(icon, size: 20, color: canPress ? onBrand : u.textMuted),
                 if (loading || icon != null) const SizedBox(width: 8),
                 if (expand) Flexible(child: labelWidget) else labelWidget,
               ],

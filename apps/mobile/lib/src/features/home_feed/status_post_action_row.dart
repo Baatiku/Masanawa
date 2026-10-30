@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/masanawa_theme.dart';
 import 'feed_api.dart';
 
 /// Shared three-action Status strip. Home, original detail and historical
@@ -24,6 +25,7 @@ class StatusPostActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.masanawa;
     final ha = Localizations.localeOf(context).languageCode == 'ha';
     String t(String en, String haus) => ha ? haus : en;
     return Padding(
@@ -36,6 +38,7 @@ class StatusPostActionRow extends StatelessWidget {
           child: Tooltip(message: tooltip ?? label,
             child: TextButton.icon(
               style: TextButton.styleFrom(
+                foregroundColor: colors.textMuted,
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 minimumSize: const Size(0, 48),
               ),
@@ -56,6 +59,10 @@ class StatusPostActionRow extends StatelessWidget {
                 triggerMode: TooltipTriggerMode.manual,
                 child: TextButton.icon(
                   style: TextButton.styleFrom(
+                    foregroundColor: post.currentReaction == null
+                        ? colors.textMuted : colors.brandStrong,
+                    backgroundColor: post.currentReaction == null
+                        ? null : colors.surfaceMuted,
                     padding: const EdgeInsets.symmetric(horizontal: 2),
                     minimumSize: const Size(0, 48),
                   ),

@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
 import 'gb_balance_card.dart';
+import '../ui/components/masanawa_section_heading.dart';
 import 'gb_recipient_lookup.dart';
 import 'gb_wallet_summary.dart';
 
@@ -496,8 +497,8 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
             label: 'Find recipient',
           ),
           const SizedBox(height: 12),
-          Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700)),
+          MasanawaSectionHeading('Quick amounts',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           Center(child: SingleChildScrollView(
             key: const ValueKey('send-quick-amounts'),

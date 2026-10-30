@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import '../ui/components/masanawa_section_heading.dart';
 import 'gb_balance_card.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_activity_screen.dart';
@@ -94,8 +95,7 @@ class _GbWalletScreenState extends ConsumerState<GbWalletScreen> {
               ),
             ),
           const SizedBox(height: 8),
-          Text('Quick actions', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700)),
+          const MasanawaSectionHeading('Quick actions'),
           const SizedBox(height: 12),
           LayoutBuilder(builder: (context, constraints) {
             final tileWidth = (constraints.maxWidth - 12) / 2;

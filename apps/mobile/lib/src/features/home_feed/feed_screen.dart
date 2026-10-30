@@ -809,6 +809,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     if (widget.statusTips != null && !post.isHuman)
                                       IconButton(
                                         tooltip: t('Tip MB', 'Kyautar MB'),
+                                        style: IconButton.styleFrom(
+                                          foregroundColor: context.masanawa.brandStrong,
+                                          backgroundColor: context.masanawa.surfaceMuted),
                                         onPressed: pendingActions.contains(post.id)
                                             ? null : () => tipPost(post),
                                         icon: const Icon(Icons.volunteer_activism_outlined),

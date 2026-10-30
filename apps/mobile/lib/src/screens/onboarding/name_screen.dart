@@ -218,7 +218,7 @@ class _NameScreenState extends ConsumerState<NameScreen> {
               hintText: l10n.fullNameExample,
               prefixIcon: const Icon(Icons.person_outline),
               filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
+              fillColor: Theme.of(context).inputDecorationTheme.fillColor,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(
                   MasanawaTokens.radius['md']!,
