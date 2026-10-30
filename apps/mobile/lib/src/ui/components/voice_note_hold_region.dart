@@ -22,7 +22,8 @@ class _HoldRegionState extends State<VoiceNoteHoldRegion>{
   }
   void move(LongPressMoveUpdateDetails details){
     if(!active||handled||locked)return;
-    if(details.offsetFromOrigin.dx<=-72){handled=true;unawaited(finish(cancel:true));}
+    if(details.offsetFromOrigin.dx *
+        (Directionality.of(context)==TextDirection.ltr?1:-1)<=-72){handled=true;unawaited(finish(cancel:true));}
     else if(details.offsetFromOrigin.dy<=-72){locked=true;widget.onLock();}
   }
   Future<void> finish({required bool cancel})async{

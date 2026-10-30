@@ -1085,13 +1085,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               ? TextField(
                   controller: _search,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Search this chat',
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
-                    fillColor: MasanawaFeatureColors.searchFill,
-                    border: InputBorder.none,
+                    fillColor: u.fieldSurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      borderSide: BorderSide.none),
                   ),
                   onChanged: (_) {
                     setState(() => _searchIndex = 0);
@@ -2639,17 +2641,13 @@ class _AttachOption extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: gradient,
+                gradient: LinearGradient(colors: [
+                  u.brand.withValues(alpha: .16),
+                  u.brand.withValues(alpha: .07),
+                ]),
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
               ),
-              child: Icon(icon, color: Colors.white, size: 26),
+              child: Icon(icon, color: u.brandStrong, size: 25),
             ),
             const SizedBox(height: 7),
             Text(
@@ -4009,7 +4007,9 @@ class _ImageAttachment extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.file(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 250, maxHeight: 260),
+          child: Image.file(
           file,
           width: 220,
           height: galleryPaths.length > 1 ? 126 : null,
@@ -4021,6 +4021,7 @@ class _ImageAttachment extends StatelessWidget {
             alignment: Alignment.center,
             child: const Icon(Icons.broken_image_outlined),
           ),
+        ),
         ),
       ),
     );
