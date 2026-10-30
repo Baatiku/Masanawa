@@ -226,7 +226,7 @@ class _GbWalletActivitySectionState extends ConsumerState<GbWalletActivitySectio
       if(owner!=null && (offline || visible==null))
         Center(child:Column(children:[
           const Text('Check your connection',textAlign:TextAlign.center),
-          TextButton.icon(tooltip:'Retry wallet activity',
+          TextButton.icon(
             icon:const Icon(Icons.refresh),label:const Text('Retry'),
             onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,
               unit:'all',filters:gbActivityAllFilters)))),

@@ -48,7 +48,7 @@ class AgentFeedback {
       if (error.code == 'NETWORK_UNREACHABLE') {
         return const AgentFeedback('Check your connection and try again.');
       }
-      if (error.code == 'gb.call.unavailable' || error.statusCode == 503) {
+      if (error.code == 'gb.call.unavailable') {
         return const AgentFeedback('The voice service is unavailable right now. Please retry shortly.');
       }
       if (error.statusCode == 403 || error.statusCode == 404) {
