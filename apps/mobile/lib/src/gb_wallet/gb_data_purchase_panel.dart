@@ -17,13 +17,16 @@ import 'gb_wallet_summary.dart';
 class GbDataPurchasePanel extends ConsumerStatefulWidget {
   const GbDataPurchasePanel({super.key, required this.owner,
     required this.quote, required this.onStarted, required this.onResolved,
-    required this.onFinished});
+    required this.onFinished, this.onInsufficientBalance,
+    this.reviewVisible = false});
 
   final GbDataOwner owner;
   final GbReadOnlyQuote? quote;
   final VoidCallback onStarted;
   final VoidCallback onResolved;
   final VoidCallback onFinished;
+  final VoidCallback? onInsufficientBalance;
+  final bool reviewVisible;
 
   @override
   ConsumerState<GbDataPurchasePanel> createState() => _GbDataPurchasePanelState();
@@ -94,6 +97,19 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     final random = math.Random.secure();
     return 'redeem_${List<int>.generate(24, (_) => random.nextInt(256))
         .map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  // The Gateway returns this exact 409 only when the purchased-MB reserve
+  // failed, before a journal claim or provider dispatch. Generic 409, 404,
+  // timeout and transport errors are NOT evidence that it is safe to retry.
+  static bool _definiteInsufficientMb(Object error) {
+    if (error is! DioException || error.response?.statusCode != 409) {
+      return false;
+    }
+    final body = error.response?.data;
+    if (body is! Map) return false;
+    final detail = body['error'];
+    return detail is Map && detail['code'] == 'insufficient_purchased_mb';
   }
 
   Future<void> _restore() async {
@@ -193,16 +209,20 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
       if (!_current(generation)) return;
       setState(() {
         _busy = false;
-        _error = 'Original purchase not yet confirmed. '
-            'Keep this request and check again; no new purchase was sent.';
+        _error = 'Previous purchase could not be checked.';
       });
     }
   }
 
   Future<void> _purchase() async {
     final quote = widget.quote;
+    final wallet = ref.read(gbWalletSummaryProvider(widget.owner));
+    final verified = wallet.hasError || wallet.isLoading
+        ? null : wallet.valueOrNull;
     if (_busy || _restoring || _recoveryBlocked || !_isOwner || _pending != null ||
         _operationId != null || quote == null ||
+        verified == null || verified.frozen ||
+        verified.purchasedAvailableMb < quote.bundle.costMb ||
         !quote.expiresAt.isAfter(DateTime.now().toUtc())) return;
     final saved = GbPendingDataPurchase(
       idempotencyKey: _originalKey(), bundleId: quote.bundle.id,
@@ -243,12 +263,35 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
       );
       if (!_current(generation)) return;
       await _accept(response.data, generation);
-    } catch (_) {
+    } catch (error) {
       if (!_current(generation)) return;
+      if (_definiteInsufficientMb(error)) {
+        // This response proves the reserve was rejected before provider work.
+        // A successful secure-slot clear permits an ordinary fresh review;
+        // if clearing fails, retain the original idempotency lock instead.
+        try {
+          await ref.read(gbDataPendingStoreProvider).clear(widget.owner.accountId);
+          if (!_current(generation)) return;
+          setState(() {
+            _pending = null;
+            _busy = false;
+            _error = null;
+          });
+          ref.invalidate(gbWalletSummaryProvider(widget.owner));
+          widget.onInsufficientBalance?.call();
+          widget.onResolved();
+        } catch (_) {
+          if (!_current(generation)) return;
+          setState(() {
+            _busy = false;
+            _error = 'Previous purchase could not be reset.';
+          });
+        }
+        return;
+      }
       setState(() {
         _busy = false;
-        _error = 'Purchase outcome unconfirmed. Find the original purchase; '
-            'do not submit another one.';
+        _error = 'Previous purchase needs checking.';
       });
     }
   }
@@ -289,19 +332,38 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
         widget.quote == null && _error == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final colors = context.masanawa;
+    final balance = ref.watch(gbWalletSummaryProvider(widget.owner));
+    final verified = balance.hasError || balance.isLoading
+        ? null : balance.valueOrNull;
+    final quote = widget.quote;
+    final canAfford = quote != null && verified != null &&
+        !verified.frozen &&
+        verified.purchasedAvailableMb >= quote.bundle.costMb;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (_restoring || _busy) const LinearProgressIndicator(minHeight: 3),
       if (_restoring)
         const Padding(padding: EdgeInsets.all(12),
-          child: Text('Checking your original data purchase…')),
-      if (_error != null)
+          child: Text('Checking previous purchase…',
+            textAlign: TextAlign.center)),
+      if (_error != null && _pending == null && !_recoveryBlocked)
         Padding(padding: const EdgeInsets.symmetric(vertical: 9),
           child: Text(_error!, textAlign: TextAlign.center,
             style: TextStyle(color: theme.colorScheme.error))),
-      if (!_restoring && _pending == null && _operationId == null &&
+      if (!widget.reviewVisible && !_restoring && _pending == null && _operationId == null &&
+          widget.quote != null)
+        if (!canAfford)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(verified == null
+                ? 'Check your data balance connection.'
+                : verified.frozen
+                ? 'Your data balance is unavailable.'
+                : 'Not enough redeemable MB. Buy Data to continue.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.colorScheme.error))),
+      if (!widget.reviewVisible && !_restoring && _pending == null && _operationId == null &&
           widget.quote != null)
         FilledButton.icon(
-          onPressed: !_busy && !_recoveryBlocked &&
+          onPressed: canAfford && !_busy && !_recoveryBlocked &&
               widget.quote!.expiresAt.isAfter(DateTime.now().toUtc())
               ? _purchase : null,
           icon: const Icon(Icons.shopping_bag_outlined),
@@ -309,20 +371,25 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
         ),
       if (!_restoring && _pending == null && _operationId == null &&
           _recoveryBlocked)
-        OutlinedButton.icon(
-          onPressed: _restore, icon: const Icon(Icons.lock_reset_rounded),
-          label: const Text('Retry secure recovery')),
+        Center(child: Column(children: [
+          const Text('Could not restore the previous purchase.',
+            textAlign: TextAlign.center),
+          OutlinedButton.icon(
+            onPressed: _restore, icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try again')),
+        ])),
       if (_pending != null && _operationId == null)
         Card(child: Padding(padding: const EdgeInsets.all(14),
           child: Column(children: [
-            Text('Purchase outcome unconfirmed',
-              style: theme.textTheme.titleMedium),
-            const SizedBox(height: 7),
-            const Text('The original request is saved. Do not buy again.'),
+            Text(_error == null
+                ? 'Previous purchase is being checked.'
+                : 'Previous purchase needs checking.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium),
             const SizedBox(height: 9),
             OutlinedButton.icon(onPressed: _busy ? null : _recoverOriginal,
               icon: const Icon(Icons.search_rounded),
-              label: const Text('Find original purchase')),
+              label: const Text('Check previous purchase')),
           ]))),
       if (_operationId != null)
         Card(child: Padding(padding: const EdgeInsets.all(14),

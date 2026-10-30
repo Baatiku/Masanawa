@@ -44,6 +44,8 @@ class _Fixture {
   int purchasePosts = 0, lookups = 0, reconciles = 0;
   bool loseAcknowledgement = true;
   bool lookupUnavailable = false;
+  bool rejectInsufficient = false;
+  int spendableMb = 10000;
   String? purchaseKey;
   final originalId = 'data_${'a' * 48}';
   late final api = _makeApi();
@@ -68,6 +70,14 @@ class _Fixture {
           reason: 'Encrypted original intent must precede financial POST');
         purchasePosts++;
         purchaseKey = (options.data as Map)['idempotencyKey'] as String;
+        if (rejectInsufficient) {
+          spendableMb = 0;
+          handler.reject(DioException(requestOptions: options,
+            type: DioExceptionType.badResponse,
+            response: Response(requestOptions: options, statusCode: 409,
+              data: {'error': {'code': 'insufficient_purchased_mb'}})));
+          return;
+        }
         if (loseAcknowledgement) {
           handler.reject(DioException(requestOptions: options,
             type: DioExceptionType.connectionTimeout));
@@ -119,8 +129,8 @@ class _Fixture {
       apiClientProvider.overrideWithValue(api),
       gbDataPendingStoreProvider.overrideWithValue(store),
       gbWalletSummaryProvider.overrideWith((ref, owner) async =>
-        const GbWalletBalance(totalMb: 10000, availableMb: 10000,
-          purchasedAvailableMb: 10000, welcomeAvailableMb: 0,
+        GbWalletBalance(totalMb: spendableMb, availableMb: spendableMb,
+          purchasedAvailableMb: spendableMb, welcomeAvailableMb: 0,
           reservedMb: 0, frozen: false)),
     ],
     child: MaterialApp(home: Scaffold(body: ListView(children: [
@@ -194,8 +204,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(f.purchasePosts, 1);
     expect(f.store.records['fan'], isNotNull);
-    expect(find.text('Find original purchase'), findsOneWidget);
-    await tester.tap(find.text('Find original purchase'));
+    expect(find.text('Check previous purchase'), findsOneWidget);
+    await tester.tap(find.text('Check previous purchase'));
     await tester.pumpAndSettle();
     expect(f.purchasePosts, 1);
     expect(f.lookups, 1);
@@ -213,6 +223,114 @@ void main() {
     expect(f.reconciles, 1);
     expect(f.purchasePosts, 1);
     expect(find.text('Data delivered'), findsOneWidget);
+    expect(f.store.records, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('zero purchased MB keeps confirm disabled and never writes intent',
+      (tester) async {
+    final f = _Fixture()..spendableMb = 0;
+    await tester.pumpWidget(f.app(quote: f.quote()));
+    await tester.pumpAndSettle();
+    expect(find.text('Not enough redeemable MB. Buy Data to continue.'),
+      findsOneWidget);
+    expect(tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm data purchase')).onPressed,
+      isNull);
+    expect(f.store.records, isEmpty);
+    expect(f.purchasePosts, 0);
+  });
+
+  testWidgets('definitive insufficient reserve rejection clears original lock',
+      (tester) async {
+    final f = _Fixture()..rejectInsufficient = true;
+    await tester.pumpWidget(f.app(quote: f.quote()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm data purchase'));
+    await tester.pumpAndSettle();
+    expect(f.purchasePosts, 1);
+    expect(f.store.records, isEmpty,
+      reason: 'Gateway proves the reserve was rejected before dispatch');
+    expect(find.text('Not enough redeemable MB. Buy Data to continue.'),
+      findsOneWidget);
+    expect(tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm data purchase')).onPressed,
+      isNull);
+    expect(find.textContaining('Purchase outcome unconfirmed'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(f.app(quote: f.quote()));
+    await tester.pumpAndSettle();
+    expect(f.lookups, 0);
+    expect(f.purchasePosts, 1);
+  });
+
+  testWidgets('uncertain original preserves lock but no longer replaces chooser',
+      (tester) async {
+    final f = _Fixture()..lookupUnavailable = true;
+    f.store.records['fan'] = GbPendingDataPurchase.fromJson({
+      'idempotencyKey': 'redeem_${'b' * 48}',
+      'bundleId': 'MTN:2gb', 'version': 'approved-v1',
+      'recipientPhone': '+2348031234567', 'costMb': 2000,
+    });
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      apiClientProvider.overrideWithValue(f.api),
+      gbDataPendingStoreProvider.overrideWithValue(f.store),
+      gbDataCatalogueProvider.overrideWith((ref, owner) async => [f.quote().bundle]),
+      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
+        const GbWalletBalance(totalMb: 0, availableMb: 0,
+          purchasedAvailableMb: 0, welcomeAvailableMb: 0,
+          reservedMb: 0, frozen: false)),
+    ], child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen()))));
+    await tester.pumpAndSettle();
+    expect(find.text('Data plans'), findsOneWidget);
+    expect(find.text('Start over'), findsOneWidget);
+    expect(find.text('Previous purchase needs checking.'), findsOneWidget);
+    expect(find.text('Purchase outcome unconfirmed'), findsNothing);
+    expect(find.text('Checking your original data purchase'), findsNothing);
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    expect(f.store.records['fan'], isNotNull,
+      reason: 'A visual reset cannot discard an uncertain purchase');
+    expect(f.purchasePosts, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('zero balance review sheet is legible but cannot continue',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final f = _Fixture()..spendableMb = 0;
+    await tester.pumpWidget(ProviderScope(overrides: [
+      sessionProvider.overrideWith(_SignedIn.new),
+      apiClientProvider.overrideWithValue(f.api),
+      gbDataPendingStoreProvider.overrideWithValue(f.store),
+      gbDataCatalogueProvider.overrideWith((ref, owner) async => [f.quote().bundle]),
+      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
+        const GbWalletBalance(totalMb: 0, availableMb: 0,
+          purchasedAvailableMb: 0, welcomeAvailableMb: 0,
+          reservedMb: 0, frozen: false)),
+    ], child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen()))));
+    await tester.pumpAndSettle();
+    expect(find.text('No redeemable MB. Buy Data to continue.'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '08031234567');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Monthly'));
+    await tester.tap(find.text('Monthly'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('2 GB'));
+    await tester.tap(find.text('2 GB'));
+    await tester.pumpAndSettle();
+    expect(find.text('Review data purchase'), findsOneWidget);
+    expect(find.text('Available data'), findsOneWidget);
+    expect(find.text('Not enough redeemable MB. Buy Data to continue.'),
+      findsOneWidget);
+    expect(tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Continue to purchase')).onPressed,
+      isNull);
+    expect(f.purchasePosts, 0);
     expect(f.store.records, isEmpty);
     expect(tester.takeException(), isNull);
   });

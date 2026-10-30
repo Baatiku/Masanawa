@@ -40,6 +40,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   bool _loadingQuote = false;
   bool _purchaseLocked = false;
   bool _showingResult = false;
+  bool _reviewOpen = false;
   int _generation = 0;
 
   @override
@@ -58,6 +59,20 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     _loadingQuote = false;
   }
 
+  // Reset only the editable draft. Never erase the durable original purchase
+  // or its idempotency key: a genuinely uncertain charge must still reconcile.
+  void _startOver() {
+    setState(() {
+      _clearQuote();
+      _phone.clear();
+      _network = null;
+      _manualNetwork = false;
+      _validity = GbDataValidityPeriod.daily;
+      _bundleId = null;
+      _showingResult = false;
+    });
+  }
+
   bool _isOwner(GbDataOwner owner) {
     final session = ref.read(sessionProvider);
     return session is SessionSignedIn &&
@@ -68,7 +83,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
 
   Future<void> _pastePhone(GbDataOwner owner) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (!mounted || !_isOwner(owner) || _purchaseLocked) return;
+    if (!mounted || !_isOwner(owner)) return;
     final value = data?.text?.trim();
     if (value == null || normalizeNigerianDataPhone(value) == null) {
       setState(
@@ -86,7 +101,8 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   }
 
   Future<void> _reload(GbDataOwner owner) async {
-    if (_purchaseLocked) return; // Preserve the original uncertain request.
+    // Refreshing the read-only catalogue and balances does not create a
+    // second payment, even while an older purchase is unresolved.
     setState(() {
       _clearQuote();
       _bundleId = null;
@@ -153,41 +169,83 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   }
 
   Future<void> _showPurchaseReview(GbDataOwner owner, GbReadOnlyQuote quote) async {
+    if (_reviewOpen) return;
+    setState(() => _reviewOpen = true);
+    try {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       isDismissible: false,
       enableDrag: false,
       useSafeArea: true,
-      builder: (sheetContext) => PopScope(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) => Consumer(builder: (context, sheetRef, _) {
+        final session = sheetRef.watch(sessionProvider);
+        if (session is! SessionSignedIn ||
+            session.user.id != owner.accountId ||
+            sheetRef.read(sessionProvider.notifier).authorizationEpoch !=
+                owner.authorizationEpoch) {
+          return Center(child: TextButton(
+            onPressed: () => Navigator.pop(sheetContext),
+            child: const Text('Close review')));
+        }
+        final balance = sheetRef.watch(gbWalletSummaryProvider(owner));
+        final verified = balance.hasError || balance.isLoading
+            ? null : balance.valueOrNull;
+        final enough = verified != null && !verified.frozen &&
+            verified.purchasedAvailableMb >= quote.bundle.costMb;
+        final theme = Theme.of(context);
+        return PopScope(
           canPop: !_purchaseLocked,
           child: FractionallySizedBox(
             heightFactor: .82,
             child: ListView(padding: const EdgeInsets.all(20), children: [
               Row(children: [
                 Expanded(child: Text('Review data purchase',
-                  style: Theme.of(sheetContext).textTheme.titleLarge)),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700))),
                 IconButton(
                   tooltip: 'Close review',
                   onPressed: _purchaseLocked ? null : () => Navigator.pop(sheetContext),
                   icon: const Icon(Icons.close_rounded)),
               ]),
+              const SizedBox(height: 18),
+              Center(child: Column(children: [
+                Text(quote.bundle.allowanceLabel,
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.w800)),
+                if (quote.bundle.extrasLabel != null)
+                  Text(quote.bundle.extrasLabel!, textAlign: TextAlign.center),
+              ])),
+              const SizedBox(height: 22),
+              Card(child: Padding(padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  _ReviewLine('Network', quote.bundle.network),
+                  _ReviewLine('Recipient', quote.recipientPhone),
+                  _ReviewLine('Validity', '${quote.bundle.validityDays} days'),
+                  _ReviewLine('Data debit', '${groupedMb(quote.bundle.costMb)} MB'),
+                ]))),
               const SizedBox(height: 12),
-              Text(quote.bundle.allowanceLabel,
-                style: Theme.of(sheetContext).textTheme.headlineMedium),
-              if (quote.bundle.extrasLabel != null)
-                Text(quote.bundle.extrasLabel!),
-              const SizedBox(height: 12),
-              _ReviewLine('Network', quote.bundle.network),
-              _ReviewLine('Recipient', quote.recipientPhone),
-              _ReviewLine('Validity', '${quote.bundle.validityDays} days'),
-              _ReviewLine('Data debit', '${groupedMb(quote.bundle.costMb)} MB'),
-              const _ReviewLine('Fee', '0 MB'),
-              const SizedBox(height: 12),
-              const Text('Check the number before buying. Delivery may remain pending.'),
-              const SizedBox(height: 16),
+              Card(child: Padding(padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  _ReviewLine('Available data', verified == null
+                      ? 'Unavailable'
+                      : '${groupedMb(verified.purchasedAvailableMb)} MB'),
+                  if (!enough)
+                    Padding(padding: const EdgeInsets.only(top: 8),
+                      child: Text(verified == null
+                          ? 'Check your data balance connection.'
+                          : verified.frozen
+                          ? 'Your data balance is unavailable.'
+                          : 'Not enough redeemable MB. Buy Data to continue.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.colorScheme.error))),
+                ]))),
+              const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: () async {
+                onPressed: !enough || _purchaseLocked ? null : () async {
                   Navigator.pop(sheetContext);
                   await Future<void>.delayed(Duration.zero);
                   final target = _purchaseSectionKey.currentContext;
@@ -196,13 +254,17 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                       duration: const Duration(milliseconds: 250));
                   }
                 },
-                icon: const Icon(Icons.shopping_bag_outlined),
+                icon: const Icon(Icons.check_circle_outline_rounded),
                 label: const Text('Continue to purchase'),
               ),
             ]),
           ),
-        ),
+        );
+      }),
     );
+    } finally {
+      if (mounted) setState(() => _reviewOpen = false);
+    }
   }
 
   @override
@@ -223,6 +285,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _bundleId = null;
       _purchaseLocked = false;
       _showingResult = false;
+      _reviewOpen = false;
       _owner = owner;
       _lastVerifiedBundles = null;
       _lastVerifiedWallet = null;
@@ -270,8 +333,49 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           const SizedBox(height: 14),
           GbWalletBalanceCard(balance: currentWallet ?? _lastVerifiedWallet,
               loading: wallet?.isLoading ?? false, compact: true),
+          const SizedBox(height: 12),
+          if (!_purchaseLocked && _quote == null &&
+              wallet?.hasError != true && !(wallet?.isLoading ?? true) &&
+              currentWallet?.purchasedAvailableMb == 0)
+            Padding(padding: const EdgeInsets.only(bottom: 10),
+              child: Text('No redeemable MB. Buy Data to continue.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.colorScheme.error))),
+          if (owner != null)
+            KeyedSubtree(key: _purchaseSectionKey, child: GbDataPurchasePanel(
+              key: ValueKey('data-purchase-${owner.accountId}-${owner.authorizationEpoch}'),
+              owner: owner,
+              quote: _quote,
+              reviewVisible: _reviewOpen,
+              onStarted: () {
+                if (mounted && !_purchaseLocked && _isOwner(owner)) {
+                  setState(() => _purchaseLocked = true);
+                }
+              },
+              onResolved: () {
+                if (mounted && _purchaseLocked && _isOwner(owner)) {
+                  setState(() => _purchaseLocked = false);
+                }
+              },
+              onFinished: () {
+                if (mounted && _isOwner(owner)) {
+                  setState(() => _showingResult = true);
+                }
+              },
+              onInsufficientBalance: () {
+                if (mounted && _isOwner(owner)) {
+                  setState(() {
+                    _clearQuote();
+                    _bundleId = null;
+                    _showingResult = false;
+                  });
+                }
+              },
+            )),
           const SizedBox(height: 18),
-          if (_quote == null && !_purchaseLocked && !_showingResult) ...[
+          // A saved uncertain purchase no longer replaces the entire Data
+          // screen. The chooser stays available; only payment stays locked.
+          if (_quote == null && !_showingResult) ...[
           LayoutBuilder(builder: (context, constraints) {
             final network = DropdownButtonFormField<String>(
               key: ValueKey('data-network-selector-${_network ?? 'none'}'),
@@ -287,7 +391,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                     '9MOBILE' => '9mobile', _ => value,
                   },overflow:TextOverflow.ellipsis)),
                 ]))],
-              onChanged: owner == null || _purchaseLocked ? null : (value) {
+              onChanged: owner == null ? null : (value) {
                 if (value == null) return;
                 setState(() {
                   _network = value; _manualNetwork = true;
@@ -298,7 +402,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             );
             final phoneField = TextField(
             controller: _phone,
-            enabled: owner != null && !_purchaseLocked,
+            enabled: owner != null,
             keyboardType: TextInputType.phone,
             onChanged: (value) => setState(() {
               _clearQuote();
@@ -315,7 +419,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               hintText: '08012345678',
               prefixIcon: const Icon(Icons.phone_android_outlined),
               suffixIcon:IconButton(tooltip:'Paste mobile number',
-                onPressed:owner==null||_purchaseLocked?null:()=>_pastePhone(owner),
+                onPressed:owner==null?null:()=>_pastePhone(owner),
                 icon:const Icon(Icons.content_paste_outlined)),
               isDense: true,
               focusedBorder: OutlineInputBorder(
@@ -345,17 +449,23 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   color: colors.textMuted)),
             ),
           const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: Text('Data plans',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+          Wrap(alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6, runSpacing: 4, children: [
+            Text('Data plans',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            TextButton.icon(
+              onPressed: _startOver,
+              icon: const Icon(Icons.restart_alt_rounded, size: 19),
+              label: const Text('Start over')),
             if (owner != null) IconButton(
               tooltip: 'Refresh verified data bundles',
-              onPressed: _purchaseLocked ? null : () => _reload(owner),
+              onPressed: () => _reload(owner),
               icon: const Icon(Icons.refresh)),
           ]),
           GbDataValidityChoices(
             period: _validity,
-            enabled: owner != null && _network != null && !_purchaseLocked,
+            enabled: owner != null && _network != null,
             onChanged: (choice) {
               if (choice == _validity) return;
               setState(() { _validity = choice; _bundleId = null; _clearQuote(); });
@@ -405,13 +515,14 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                       key: ValueKey('verified-data-bundle-${bundle.id}'),
                       bundle: bundle,
                       selected: _bundleId == bundle.id,
-                      onSelect: _purchaseLocked || currentBundles == null ||
+                      onSelect: currentBundles == null ||
                           catalogue?.hasError == true ? () {} : () {
                         setState(() {
                           _bundleId = bundle.id;
                           _clearQuote();
                         });
-                        if (validPhone && owner != null) _requestQuote(owner, bundle);
+                        if (validPhone && owner != null && !_purchaseLocked)
+                          _requestQuote(owner, bundle);
                       },
                     ),
                   ),
@@ -440,33 +551,6 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               style: theme.textTheme.labelSmall?.copyWith(
                 color: colors.textMuted))),
           ],
-          if (_quote == null && _purchaseLocked)
-            Padding(padding: const EdgeInsets.all(10),
-              child: Text('Checking your original data purchase',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium)),
-          const SizedBox(height: 12),
-          if (owner != null)
-            KeyedSubtree(key: _purchaseSectionKey, child: GbDataPurchasePanel(
-              key: ValueKey('data-purchase-${owner.accountId}-${owner.authorizationEpoch}'),
-              owner: owner,
-              quote: _quote,
-              onStarted: () {
-                if (mounted && !_purchaseLocked && _isOwner(owner)) {
-                  setState(() => _purchaseLocked = true);
-                }
-              },
-              onResolved: () {
-                if (mounted && _purchaseLocked && _isOwner(owner)) {
-                  setState(() => _purchaseLocked = false);
-                }
-              },
-              onFinished: () {
-                if (mounted && _isOwner(owner)) {
-                  setState(() => _showingResult = true);
-                }
-              },
-            )),
           if (_quote != null && !_purchaseLocked && !_showingResult)
             TextButton.icon(
               onPressed: () => setState(_clearQuote),
