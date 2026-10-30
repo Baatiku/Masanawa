@@ -150,6 +150,11 @@ void main() {
     expect(find.textContaining('UTC '),findsNothing);
     expect(find.text('Posted activity totals'),findsNothing);
     expect(tester.getBottomRight(find.text('+₦100.00')).dy,lessThan(744));
+    final rowRight = tester.getTopRight(
+      find.byKey(const ValueKey('activity-ngn:deposit_1'))).dx;
+    final amountRight = tester.getTopRight(find.text('+₦100.00')).dx;
+    expect(rowRight - amountRight, inInclusiveRange(0, 12),
+      reason: 'The amount/status column must reach the right edge of Activity');
     expect(find.text('Filter'),findsOneWidget);
     expect(find.text('Export'),findsOneWidget);
     expect(find.text('Analysis'),findsNothing);

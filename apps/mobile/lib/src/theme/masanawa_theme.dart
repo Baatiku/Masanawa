@@ -23,6 +23,7 @@ class MasanawaColors extends ThemeExtension<MasanawaColors> {
     required this.surfaceBg,
     required this.surfaceCard,
     required this.surfaceMuted,
+    required this.fieldSurface,
     required this.structuralBorder,
     required this.bubbleOut,
     required this.chatBg,
@@ -43,6 +44,7 @@ class MasanawaColors extends ThemeExtension<MasanawaColors> {
   final Color surfaceBg;
   final Color surfaceCard;
   final Color surfaceMuted;
+  final Color fieldSurface;
   final Color structuralBorder;
   final Color bubbleOut;
   final Color chatBg;
@@ -69,6 +71,7 @@ class MasanawaColors extends ThemeExtension<MasanawaColors> {
       surfaceBg: hex(t.surfaceBg),
       surfaceCard: hex(t.surfaceCard),
       surfaceMuted: hex(t.surfaceMuted),
+      fieldSurface: hex(t.fieldSurface),
       structuralBorder: hex(t.structuralBorder),
       bubbleOut: hex(t.bubbleOut),
       chatBg: hex(t.chatBg),
@@ -92,6 +95,7 @@ class MasanawaColors extends ThemeExtension<MasanawaColors> {
     Color? surfaceBg,
     Color? surfaceCard,
     Color? surfaceMuted,
+    Color? fieldSurface,
     Color? structuralBorder,
     Color? bubbleOut,
     Color? chatBg,
@@ -112,6 +116,7 @@ class MasanawaColors extends ThemeExtension<MasanawaColors> {
       surfaceBg: surfaceBg ?? this.surfaceBg,
       surfaceCard: surfaceCard ?? this.surfaceCard,
       surfaceMuted: surfaceMuted ?? this.surfaceMuted,
+      fieldSurface: fieldSurface ?? this.fieldSurface,
       structuralBorder: structuralBorder ?? this.structuralBorder,
       bubbleOut: bubbleOut ?? this.bubbleOut,
       chatBg: chatBg ?? this.chatBg,
@@ -138,6 +143,7 @@ class MasanawaColors extends ThemeExtension<MasanawaColors> {
       surfaceBg: l(surfaceBg, other.surfaceBg),
       surfaceCard: l(surfaceCard, other.surfaceCard),
       surfaceMuted: l(surfaceMuted, other.surfaceMuted),
+      fieldSurface: l(fieldSurface, other.fieldSurface),
       structuralBorder: l(structuralBorder, other.structuralBorder),
       bubbleOut: l(bubbleOut, other.bubbleOut),
       chatBg: l(chatBg, other.chatBg),
@@ -187,12 +193,16 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
     brightness: brightness,
     primary: masanawa.brand,
     onPrimary: isDark ? Colors.black87 : masanawa.textPrimary,
+    primaryContainer: masanawa.surfaceMuted,
+    onPrimaryContainer: masanawa.textPrimary,
     secondary: masanawa.brandStrong,
     onSecondary: isDark ? Colors.black87 : Colors.white,
     error: masanawa.emergency,
     onError: Colors.white,
     surface: masanawa.surfaceCard,
     onSurface: masanawa.textPrimary,
+    surfaceContainerLow: masanawa.fieldSurface,
+    surfaceContainerHigh: masanawa.fieldSurface,
     surfaceContainerHighest: masanawa.surfaceMuted,
     onSurfaceVariant: masanawa.textMuted,
     outline: masanawa.structuralBorder,
@@ -322,7 +332,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: masanawa.surfaceMuted,
+      backgroundColor: masanawa.fieldSurface,
       selectedColor: masanawa.brand.withValues(alpha: .14),
       side: BorderSide(color: masanawa.structuralBorder),
       shape: RoundedRectangleBorder(
@@ -350,7 +360,7 @@ ThemeData buildMasanawaTheme({required Brightness brightness}) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: masanawa.surfaceMuted,
+      fillColor: masanawa.fieldSurface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

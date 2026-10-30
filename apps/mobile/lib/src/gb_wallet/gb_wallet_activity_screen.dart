@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import '../ui/components/masanawa_section_heading.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
 
@@ -161,6 +162,7 @@ class GbActivityTile extends StatelessWidget {
                   if (!stacked) ...[
                     const SizedBox(width: 12),
                     Flexible(
+                      fit: FlexFit.tight,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [amount, const SizedBox(height: 5), badge],
@@ -204,14 +206,9 @@ class _GbWalletActivitySectionState extends ConsumerState<GbWalletActivitySectio
     final visible=fresh??_lastVerified;
     final offline=page?.hasError==true || (page?.isLoading==true && visible!=null);
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      Wrap(alignment:WrapAlignment.spaceBetween,
-        crossAxisAlignment:WrapCrossAlignment.center,children:[
-        Text('Recent transactions',style:Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight:FontWeight.w700)),
-        TextButton.icon(
+      MasanawaSectionHeading('Recent transactions', trailing: TextButton.icon(
           onPressed:owner==null?null:()=>context.push('/wallet/activity'),
-          label:const Text('See all'),icon:const Icon(Icons.chevron_right)),
-      ]),
+          label:const Text('See all'),icon:const Icon(Icons.chevron_right))),
       const SizedBox(height:8),
       if(owner==null)
         const Padding(padding:EdgeInsets.all(16),child:Text('Sign in to see wallet activity.'))
@@ -748,7 +745,7 @@ class _HistoryFilter extends StatelessWidget {
     isExpanded: true,
     decoration: InputDecoration(
       filled: true,
-      fillColor: context.masanawa.surfaceMuted,
+      fillColor: context.masanawa.fieldSurface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

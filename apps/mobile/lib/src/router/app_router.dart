@@ -222,7 +222,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/wallet/add',
-        builder: (_, __) => const RechargePackagesScreen(),
+        pageBuilder: (_, state) => CustomTransitionPage<void>(
+          key: state.pageKey,
+          opaque: false,
+          barrierDismissible: false,
+          barrierColor: Colors.black54,
+          transitionDuration: const Duration(milliseconds: 250),
+          reverseTransitionDuration: const Duration(milliseconds: 180),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            if (MediaQuery.disableAnimationsOf(context)) return child;
+            return SlideTransition(
+              position: Tween<Offset>(begin: const Offset(0, 1),
+                end: Offset.zero).animate(CurvedAnimation(
+                  parent: animation, curve: Curves.easeOutCubic)),
+              child: child,
+            );
+          },
+          child: const RechargePackagesScreen(),
+        ),
       ),
       GoRoute(
         path: '/wallet/request',

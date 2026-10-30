@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
+import '../ui/components/masanawa_section_heading.dart';
 import 'gb_data_catalogue.dart';
 import 'gb_data_choice_controls.dart';
 import 'gb_data_purchase_panel.dart';
@@ -449,11 +450,10 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   color: colors.textMuted)),
             ),
           const SizedBox(height: 16),
+          const MasanawaSectionHeading('Data plans'),
           Wrap(alignment: WrapAlignment.center,
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 6, runSpacing: 4, children: [
-            Text('Data plans',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             TextButton.icon(
               onPressed: _startOver,
               icon: const Icon(Icons.restart_alt_rounded, size: 19),

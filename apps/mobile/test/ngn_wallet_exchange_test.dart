@@ -124,6 +124,9 @@ class _Fixture {
               'version': 'fixture-v1',
               'exchangeEnabled': true,
               'packages': [
+                {'sizeGb': 1, 'expectedMb': 1000, 'totalKobo': 50000},
+                {'sizeGb': 2, 'expectedMb': 2000, 'totalKobo': 100000},
+                {'sizeGb': 5, 'expectedMb': 5000, 'totalKobo': 250000},
                 {'sizeGb': 10, 'expectedMb': 10000, 'totalKobo': 500000},
               ],
             };
@@ -306,6 +309,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('0000000100'), findsNothing);
       expect(find.text('9PSB Fixture'), findsNothing);
+      expect(find.text('NGN balance'), findsNothing,
+        reason: 'The package sheet has no prominent wallet balance block');
+      final first = tester.getTopLeft(find.byKey(const ValueKey('gb-package-1')));
+      final fourth = tester.getTopLeft(find.byKey(const ValueKey('gb-package-10')));
+      expect(first.dy, fourth.dy,
+        reason: 'Four package tiles must fit on a regular phone row');
+      expect(first.dx, lessThan(fourth.dx));
       await tester.tap(find.text('10 GB'));
       await tester.pump();
       await tester.tap(find.text('Continue'));
@@ -314,7 +324,7 @@ void main() {
       expect(f.posts, isEmpty);
       await tester.tap(find.byTooltip('Back to packages'));
       await tester.pumpAndSettle();
-      expect(find.text('Choose a package'), findsNothing);
+      expect(find.text('Choose a package'), findsOneWidget);
       expect(find.byKey(const ValueKey('gb-package-10')), findsOneWidget);
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();

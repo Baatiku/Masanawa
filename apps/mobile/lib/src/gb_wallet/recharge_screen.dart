@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
+import '../theme/masanawa_theme.dart';
+import '../ui/components/masanawa_section_heading.dart';
 import 'gb_wallet_summary.dart';
 import 'ngn_wallet.dart';
 import 'ngn_exchange_review.dart';
@@ -276,6 +278,18 @@ class _RechargePackagesScreenState
         ? null
         : ref.watch(ngnWalletBalanceProvider(owner));
     final review = _review;
+    final colors = context.masanawa;
+    final insets = MediaQuery.viewInsetsOf(context);
+    void closeOrBack() {
+      if (_busy) return;
+      if (review != null && !_uncertain && !_completed) {
+        setState(() => _review = null);
+      } else if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/home?tab=wallet');
+      }
+    }
     return PopScope(
       canPop: review == null || _uncertain || _completed,
       onPopInvokedWithResult: (didPop, result) {
@@ -283,42 +297,47 @@ class _RechargePackagesScreenState
           setState(() => _review = null);
         }
       },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: review != null && !_uncertain && !_completed
-              ? IconButton(
-                  tooltip: 'Back to packages',
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() => _review = null),
-                  icon: const Icon(Icons.arrow_back),
-                )
-              : null,
-          title: Text(
-            review == null
-                ? 'Buy Data'
-                : _completed
-                ? 'Data added'
-                : 'Review exchange',
-          ),
-        ),
-        body: ListView(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: insets.bottom),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 560,
+              maxHeight: (MediaQuery.sizeOf(context).height - insets.bottom) * .92),
+            child: Material(
+              color: colors.surfaceCard,
+              elevation: 16,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              clipBehavior: Clip.antiAlias,
+              child: SafeArea(top: false, child: Column(children: [
+                const SizedBox(height: 10),
+                Container(width: 34, height: 4,
+                  decoration: BoxDecoration(color: colors.structuralBorder,
+                    borderRadius: BorderRadius.circular(20))),
+                Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 8, 0),
+                  child: Row(children: [
+                    const SizedBox(width: 48),
+                    Expanded(child: Text(review == null ? 'Buy Data'
+                        : _completed ? 'Data added' : 'Review exchange',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700))),
+                    IconButton(
+                      tooltip: review != null && !_uncertain && !_completed
+                          ? 'Back to packages' : 'Close Buy Data',
+                      onPressed: _busy ? null : closeOrBack,
+                      icon: Icon(review != null && !_uncertain && !_completed
+                          ? Icons.arrow_back_rounded : Icons.close_rounded),
+                    ),
+                  ]),
+                ),
+                Expanded(child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             if (owner == null)
               const Text('Sign in to buy data.')
             else ...[
-              Text(
-                'NGN balance',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              Text(
-                cash?.valueOrNull == null
-                    ? 'Balance unavailable'
-                    : formatNgn(cash!.valueOrNull!.balanceKobo),
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
               if (_loading || _busy) const LinearProgressIndicator(),
               if (_error != null)
                 Text(
@@ -326,46 +345,57 @@ class _RechargePackagesScreenState
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               if (review == null) ...[
+                const MasanawaSectionHeading('Choose a package'),
+                const SizedBox(height: 12),
                 if (!_enabled && !_loading)
                   const Text('Package exchange is currently unavailable.'),
                 LayoutBuilder(builder: (context, constraints) {
                   final scale = MediaQuery.textScalerOf(context).scale(1);
-                  final columns = scale >= 1.8 ? 1 : constraints.maxWidth >= 390 && scale < 1.3 ? 3 : 2;
+                  final columns = scale >= 1.8 ? 2 : scale > 1.3 ||
+                      constraints.maxWidth < 280 ? 3 : 4;
                   return GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _packages.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: columns,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: columns == 1 ? 3.2 : 1.5,
+                      crossAxisSpacing: 7,
+                      mainAxisSpacing: 7,
+                      childAspectRatio: columns == 4 ? .83 : 1.1,
                     ),
                     itemBuilder: (context, index) {
                       final p = _packages[index];
                       final selected = _selected == p.gb && _custom.text.isEmpty;
-                      final scheme = Theme.of(context).colorScheme;
                       return Material(
-                        color: selected ? scheme.primaryContainer : scheme.surface,
+                        color: selected ? colors.surfaceMuted : colors.fieldSurface,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant),
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: selected
+                              ? colors.brand : colors.structuralBorder,
+                            width: selected ? 1.6 : 1),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           key: ValueKey('gb-package-${p.gb}'),
-                          onTap: _busy ? null : () => setState(() {
+                          onTap: _busy || !_enabled ? null : () => setState(() {
                             _selected = p.gb;
                             _custom.clear();
                           }),
-                          child: Column(
+                          child: Padding(padding: const EdgeInsets.all(4), child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text('${p.gb} GB', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 4),
-                              Text(formatNgn(p.kobo), style: Theme.of(context).textTheme.bodyMedium),
+                              Text('${p.gb} GB', maxLines: 1,
+                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 3),
+                              Text(formatNgn(p.kobo), maxLines: 2,
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall),
+                              if (selected) Icon(Icons.check_circle_rounded,
+                                size: 14, color: colors.brandStrong),
                             ],
-                          ),
+                          )),
                         ),
                       );
                     },
@@ -412,6 +442,17 @@ class _RechargePackagesScreenState
                 const SizedBox(height: 10),
                 Text('NGN cost: ${formatNgn(review.amountKobo)}'),
                 const SizedBox(height: 10),
+                if (!_completed && !_uncertain &&
+                    (cash?.valueOrNull == null || cash!.valueOrNull!.frozen ||
+                     cash.valueOrNull!.balanceKobo < review.amountKobo))
+                  Padding(padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(cash?.valueOrNull == null
+                        ? 'Balance unavailable. Refresh before confirming.'
+                        : cash!.valueOrNull!.frozen
+                        ? 'NGN balance is temporarily unavailable.'
+                        : 'Not enough NGN. Fund your wallet to continue.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Theme.of(context).colorScheme.error))),
                 if (_completed) ...[
                   const Text('Exchange completed'),
                   SelectableText('Receipt: ${review.operationId}'),
@@ -465,6 +506,10 @@ class _RechargePackagesScreenState
                 ),
             ],
           ],
+                )),
+              ])),
+            ),
+          ),
         ),
       ),
     );

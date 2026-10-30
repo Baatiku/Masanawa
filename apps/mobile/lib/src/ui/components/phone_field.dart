@@ -250,7 +250,7 @@ class _PhoneFieldState extends State<PhoneField> {
                 : '${_country.displayCode} …',
             hintStyle: TextStyle(color: u.textMuted),
             filled: true,
-            fillColor: u.surfaceCard,
+            fillColor: u.fieldSurface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(MasanawaTokens.radius['md']!),
               borderSide: BorderSide(color: u.structuralBorder),

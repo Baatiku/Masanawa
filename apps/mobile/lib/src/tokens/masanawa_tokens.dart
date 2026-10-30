@@ -29,6 +29,7 @@ class ColorTokens {
     required this.surfaceBg,
     required this.surfaceCard,
     required this.surfaceMuted,
+    required this.fieldSurface,
     required this.structuralBorder,
     required this.bubbleOut,
     required this.chatBg,
@@ -48,6 +49,8 @@ class ColorTokens {
   final String surfaceBg;
   final String surfaceCard;
   final String surfaceMuted;
+  /// Neutral editable/search surfaces; distinct from green selections.
+  final String fieldSurface;
   final String structuralBorder;
 
   /// Outgoing message bubble. Values read from the WhatsApp 2.26 APK
@@ -83,6 +86,7 @@ final class MasanawaTokens {
     surfaceBg: '#FFFFFF',
     surfaceCard: '#FFFFFF',
     surfaceMuted: '#E7FCEB',
+    fieldSurface: '#F1F4F3',
     structuralBorder: '#E9EDEF',
     bubbleOut: '#D9FDD3',
     chatBg: '#F7F5EF',
@@ -103,6 +107,7 @@ final class MasanawaTokens {
     surfaceBg: '#0B141A',
     surfaceCard: '#202C33',
     surfaceMuted: '#2A3942',
+    fieldSurface: '#25333B',
     structuralBorder: '#2F3B43',
     bubbleOut: '#144D37',
     chatBg: '#0B141A',
