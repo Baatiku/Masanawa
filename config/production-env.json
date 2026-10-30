@@ -1243,6 +1243,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Pinned supported Meta Graph API version for the original official Page importer, for example v26.0; validate provider support before enabling."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_PORTRAIT_CACHE_DIR",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional dedicated directory for normalized public official portrait/emblem cache files. Production defaults to the public-portrait-cache subdirectory on the existing persistent volume; never expose arbitrary volume files."
     }
   ]
 }

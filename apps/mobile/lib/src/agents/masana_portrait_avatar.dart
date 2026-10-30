@@ -91,15 +91,23 @@ int _findNameIndex(String displayName) {
 /// A missing or unknown approved key deliberately yields no bundled image.
 String? portraitPhotoAssetForKey(String? key) {
   final index = key == null ? -1 : _portraitKeys.indexOf(key);
-  return index < 0 ? null : 'assets/masana/portraits/${_portraitKeys[index]}.webp';
+  return index < 0
+      ? null
+      : 'assets/masana/portraits/${_portraitKeys[index]}.webp';
 }
+
 String? portraitAssetForKey(String? key) {
   final index = key == null ? -1 : _portraitKeys.indexOf(key);
-  return index < 0 ? null : 'assets/masana/avatars/portrait_${index.toString().padLeft(2, '0')}.svg';
+  return index < 0
+      ? null
+      : 'assets/masana/avatars/portrait_${index.toString().padLeft(2, '0')}.svg';
 }
+
 String? bannerAssetForKey(String? key) {
   final index = key == null ? -1 : _portraitKeys.indexOf(key);
-  return index < 0 ? null : 'assets/masana/banners/banner_${index.toString().padLeft(2, '0')}.svg';
+  return index < 0
+      ? null
+      : 'assets/masana/banners/banner_${index.toString().padLeft(2, '0')}.svg';
 }
 
 String? portraitPhotoAssetFor(String displayName) {
@@ -112,21 +120,29 @@ String? portraitPhotoAssetFor(String displayName) {
 
 String? portraitAssetFor(String displayName) {
   final index = _findNameIndex(displayName);
-  return index < 0 ? null : 'assets/masana/avatars/portrait_${index.toString().padLeft(2, '0')}.svg';
+  return index < 0
+      ? null
+      : 'assets/masana/avatars/portrait_${index.toString().padLeft(2, '0')}.svg';
 }
 
 String? bannerAssetFor(String displayName) {
   final index = _findNameIndex(displayName);
-  return index < 0 ? null : 'assets/masana/banners/banner_${index.toString().padLeft(2, '0')}.svg';
+  return index < 0
+      ? null
+      : 'assets/masana/banners/banner_${index.toString().padLeft(2, '0')}.svg';
 }
 
 /// Persist only immutable, public official portraits. Never cache short-lived
 /// account-owned signed URLs, which may contain temporary access credentials.
 bool isPublicMasanawaPortraitUrl(String raw) {
   final uri = Uri.tryParse(raw);
-  if (uri == null || uri.scheme != 'https' ||
+  if (uri == null ||
+      uri.scheme != 'https' ||
       uri.host != 'raw.githubusercontent.com' ||
-      uri.userInfo.isNotEmpty || uri.hasPort || uri.hasQuery || uri.hasFragment) {
+      uri.userInfo.isNotEmpty ||
+      uri.hasPort ||
+      uri.hasQuery ||
+      uri.hasFragment) {
     return false;
   }
   return RegExp(
@@ -145,6 +161,7 @@ class MasanaPortraitAvatar extends StatelessWidget {
   });
 
   final AgentDirectoryEntry? agent;
+
   /// When provided, never select a bundled portrait by a potentially stale
   /// call-history or remote-inbox display name. Only the matching canonical
   /// directory entry can supply an approved portrait key.
@@ -155,10 +172,12 @@ class MasanaPortraitAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final matchesIdentity = agent != null &&
+    final matchesIdentity =
+        agent != null &&
         (characterId == null || agent!.characterId == characterId);
-    final name = (displayName ??
-        (matchesIdentity ? agent!.displayName : null) ?? '').trim();
+    final name =
+        (displayName ?? (matchesIdentity ? agent!.displayName : null) ?? '')
+            .trim();
     // Agent objects have server-owned canonical IDs and must never use fuzzy
     // display-name matching, even when the stock portrait is unavailable.
     final canonical = characterId != null || agent != null;
@@ -172,15 +191,26 @@ class MasanaPortraitAvatar extends StatelessWidget {
     // Canonical platform Masana use only the approved bundled media projection.
     // An unverified history/status URL or a cached legacy avatarUrl cannot
     // substitute for a missing/revoked server-owned portrait key.
-    final url = canonical ? null : avatarUrl;
-    final initial = matchesIdentity ? agent!.initial
+    final officialPhoto =
+        matchesIdentity && agent!.publicOfficial?.current == true
+        ? agent!.publicOfficial?.portrait
+        : null;
+    final url = canonical ? officialPhoto?.url : avatarUrl;
+    final initial = matchesIdentity
+        ? agent!.initial
         : (name.isNotEmpty ? name[0].toUpperCase() : 'M');
 
     Widget fallbackSvgOrUrl() {
       if (url != null && url.isNotEmpty) {
-        if (isPublicMasanawaPortraitUrl(url)) {
+        if (isPublicMasanawaPortraitUrl(url) || isOfficialPublicMediaUrl(url)) {
           return CachedNetworkImage(
-            imageUrl: url,width: size,height: size,fit: BoxFit.cover,
+            imageUrl: url,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            alignment: officialPhoto != null
+                ? Alignment.topCenter
+                : Alignment.center,
             placeholder: (_, __) => _initial(initial),
             errorWidget: (_, __, ___) => _initial(initial),
           );
@@ -206,7 +236,9 @@ class MasanaPortraitAvatar extends StatelessWidget {
     }
 
     return Semantics(
-      label: name.isEmpty ? 'Masana profile avatar' : 'Profile avatar for $name',
+      label: name.isEmpty
+          ? 'Masana profile avatar'
+          : 'Profile avatar for $name',
       image: true,
       child: ExcludeSemantics(
         child: ClipOval(
@@ -230,16 +262,16 @@ class MasanaPortraitAvatar extends StatelessWidget {
   }
 
   Widget _initial(String letter) => ColoredBox(
-        color: MasanawaFeatureColors.informationBlue,
-        child: Center(
-          child: Text(
-            letter,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: size * .37,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+    color: MasanawaFeatureColors.informationBlue,
+    child: Center(
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * .37,
+          fontWeight: FontWeight.bold,
         ),
-      );
+      ),
+    ),
+  );
 }
