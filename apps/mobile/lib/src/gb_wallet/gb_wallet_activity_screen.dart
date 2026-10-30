@@ -152,9 +152,14 @@ class GbActivityTile extends StatelessWidget {
                         ),
                         if (stacked) ...[
                           const SizedBox(height: 8),
-                          amount,
-                          const SizedBox(height: 4),
-                          badge,
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [amount, const SizedBox(height: 4), badge],
+                            ),
+                          ),
                         ],
                       ],
                     ),
