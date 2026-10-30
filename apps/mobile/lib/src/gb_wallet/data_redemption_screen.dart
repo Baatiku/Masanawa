@@ -334,6 +334,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           GbWalletBalanceCard(balance: currentWallet ?? _lastVerifiedWallet,
               loading: wallet?.isLoading ?? false, compact: true),
           const SizedBox(height: 12),
+          if (!_purchaseLocked && _quote == null &&
+              wallet?.hasError != true && !(wallet?.isLoading ?? true) &&
+              currentWallet?.purchasedAvailableMb == 0)
+            Padding(padding: const EdgeInsets.only(bottom: 10),
+              child: Text('No redeemable MB. Buy Data to continue.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.colorScheme.error))),
           if (owner != null)
             KeyedSubtree(key: _purchaseSectionKey, child: GbDataPurchasePanel(
               key: ValueKey('data-purchase-${owner.accountId}-${owner.authorizationEpoch}'),
@@ -442,9 +449,11 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   color: colors.textMuted)),
             ),
           const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: Text('Data plans',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+          Wrap(alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6, runSpacing: 4, children: [
+            Text('Data plans',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             TextButton.icon(
               onPressed: _startOver,
               icon: const Icon(Icons.restart_alt_rounded, size: 19),
@@ -529,13 +538,6 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 style: TextStyle(color: theme.colorScheme.error)),
             )),
           const SizedBox(height: 12),
-          if (!_purchaseLocked && _quote == null &&
-              wallet?.hasError != true && !(wallet?.isLoading ?? true) &&
-              currentWallet?.purchasedAvailableMb == 0)
-            Padding(padding: const EdgeInsets.only(bottom: 10),
-              child: Text('No redeemable MB. Buy Data to continue.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: theme.colorScheme.error))),
           FilledButton.icon(
             onPressed: _quote != null && owner != null
                 ? () => _showPurchaseReview(owner, _quote!)
