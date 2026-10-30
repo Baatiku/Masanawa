@@ -27,7 +27,7 @@ class _EmptyDirectory extends AgentDirectoryController {
   AgentDirectoryState build() => const AgentDirectoryState(loading: false);
 }
 void main() {
-  testWidgets('single inbox includes archived history and reorders only when a message arrives', (tester) async {
+  testWidgets('archived history remains outside active inbox even when newer or pinned', (tester) async {
     AiChatMessage message(int day) => AiChatMessage(id: 'm$day', isUser: false,
       text: 'received', createdAt: DateTime.utc(2026, 10, day));
     final old = ChatThread(characterId: 'old', archived: true, pinned: true,
@@ -46,11 +46,12 @@ void main() {
       ),
     )))));
     await tester.pumpAndSettle();
-    expect(tester.getCenter(find.text('recent')).dy, lessThan(tester.getCenter(find.text('old')).dy));
+    expect(find.text('recent'), findsOneWidget);
+    expect(find.text('old'), findsNothing);
     rows.value = [old.copyWith(messages: [...old.messages, message(26)]), recent];
     await tester.pump();
-    expect(find.text('old'), findsOneWidget);
-    expect(tester.getCenter(find.text('old')).dy, lessThan(tester.getCenter(find.text('recent')).dy));
+    expect(find.text('old'), findsNothing);
+    expect(find.text('recent'), findsOneWidget);
     expect(find.byType(ChoiceChip), findsNothing);
     expect(tester.takeException(), isNull);
   });

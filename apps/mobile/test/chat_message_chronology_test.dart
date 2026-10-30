@@ -6,7 +6,7 @@ AiChatMessage message(String id, int day, {String status = 'sent'}) =>
     createdAt: DateTime.utc(2026, 10, day), deliveryStatus: status);
 
 void main() {
-  test('pins drafts archive flags and failed retries do not override message chronology', () {
+  test('pinned chats lead active inbox while drafts and retries do not change chronology', () {
     final older = ChatThread(characterId: 'older', pinned: true,
       draft: 'edited today', updatedAt: DateTime.utc(2026, 10, 25),
       messages: [message('old', 10), message('failed', 25, status: 'failed')]);
@@ -17,7 +17,8 @@ void main() {
     final state = AiChatState(threads: {
       for (final thread in [older, archived, recent]) thread.characterId: thread,
     });
-    expect(state.chatList.map((t) => t.characterId), ['recent', 'older', 'archived']);
+    expect(state.chatList.map((t) => t.characterId), ['older', 'recent']);
+    expect(older.lastMessageActivityAt, DateTime.utc(2026, 10, 10));
     expect(older.pinned, isTrue);
     expect(archived.archived, isTrue);
     expect(older.messages, hasLength(2));

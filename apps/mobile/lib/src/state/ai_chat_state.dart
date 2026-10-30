@@ -516,9 +516,10 @@ class AiChatState {
 
   List<ChatThread> get chatList {
     final list = threads.values
-        .where((t) => t.messages.isNotEmpty)
+        .where((t) => !t.archived && (t.messages.isNotEmpty || t.draft.isNotEmpty || t.draftVoice != null || t.draftAttachments.isNotEmpty))
         .toList();
     list.sort((a, b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       final time = b.lastMessageActivityAt.compareTo(a.lastMessageActivityAt);
       return time != 0 ? time : a.characterId.compareTo(b.characterId);
     });

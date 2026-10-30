@@ -23,11 +23,11 @@ class ConversationSearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.masanawa;
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: colors.structuralBorder),
+      borderRadius: BorderRadius.circular(24),
+      borderSide: BorderSide.none,
     );
     final focusedBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(24),
       borderSide: BorderSide(color: colors.brandStrong, width: 2),
     );
     return Padding(
@@ -46,8 +46,8 @@ class ConversationSearchField extends StatelessWidget {
             filled: true,
             fillColor: Theme.of(context).inputDecorationTheme.fillColor ?? colors.fieldSurface,
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
+              horizontal: 16,
+              vertical: 11,
             ),
             prefixIcon: Icon(Icons.search, color: colors.textMuted, size: 24),
             suffixIcon: value.text.isEmpty

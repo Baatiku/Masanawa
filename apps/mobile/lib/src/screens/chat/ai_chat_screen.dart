@@ -97,6 +97,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   bool _hasText = false;
   List<ChatAttachment> _pendingAttachments = const [];
   AiChatMessage? _replyingTo;
+  AiChatMessage? _editingMessage;
+  String? _draftBeforeEdit;
   bool _showSearch = false;
   final _search = TextEditingController();
   int _searchIndex = 0;
@@ -245,7 +247,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     _input.addListener(() {
       final hasText = _input.text.isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
-      ref.read(aiChatProvider.notifier).setDraft(widget.characterId, _input.text);
+      if (_editingMessage == null) {
+        ref.read(aiChatProvider.notifier).setDraft(widget.characterId, _input.text);
+      }
     });
     _scroll.addListener(() {
       if (!_scroll.hasClients) return;
@@ -334,6 +338,20 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   void _sendText() {
     if (ref.read(aiChatProvider).sendingIn.contains(widget.characterId)) return;
     final text = _input.text;
+    final editing = _editingMessage;
+    if (editing != null) {
+      if (text.trim().isEmpty || editing.deleted || !editing.isUser) return;
+      ref.read(aiChatProvider.notifier).editMessage(
+        widget.characterId, editing.id, text.trim());
+      final previousDraft = _draftBeforeEdit ?? '';
+      setState(() {
+        _editingMessage = null;
+        _draftBeforeEdit = null;
+        _showEmoji = false;
+      });
+      _input.text = previousDraft;
+      return;
+    }
     final attachments = _pendingAttachments;
     if (text.trim().isEmpty && attachments.isEmpty) return;
     final reply = _replyingTo;
@@ -1067,13 +1085,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               ? TextField(
                   controller: _search,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Search this chat',
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
-                    fillColor: MasanawaFeatureColors.searchFill,
-                    border: InputBorder.none,
+                    fillColor: u.fieldSurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      borderSide: BorderSide.none),
                   ),
                   onChanged: (_) {
                     setState(() => _searchIndex = 0);
@@ -1284,6 +1304,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         final previous = messageIndex > 0 ? messages[messageIndex - 1] : null;
                         final showDate = previous == null ||
                             !_sameDay(previous.createdAt, message.createdAt);
+                        final grouped = previous != null && !showDate &&
+                            previous.isUser == message.isUser &&
+                            !previous.deleted && !message.deleted &&
+                            message.createdAt.difference(previous.createdAt)
+                                .inMinutes.abs() < 5;
                         return _VoicePlaybackScope(
                           message: message,
                           onStart: _beginVoiceSequence,
@@ -1306,8 +1331,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                   return false;
                                 },
                                 background: Container(
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.only(left: 14),
+                                  alignment: AlignmentDirectional.centerStart,
+                                   padding: const EdgeInsetsDirectional.only(start: 14),
                                   child: Container(
                                     width: 32,
                                     height: 32,
@@ -1324,6 +1349,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                 ),
                                 child: _ChatBubble(
                                   message: message,
+                                  grouped: grouped,
                                   agent: agent,
                                   selected: _selectedMessageIds.contains(message.id),
                                   highlighted: highlightedSearchId == message.id,
@@ -1473,7 +1499,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 attachments: _pendingAttachments,
                 onRemove: _removePendingAttachment,
               ),
-            if (_replyingTo != null)
+            if (_editingMessage != null)
+              _ReplyComposerPreview(
+                message: _editingMessage!,
+                senderName: 'Editing message',
+                onClose: _cancelEditing,
+              ),
+            if (_replyingTo != null && _editingMessage == null)
               _ReplyComposerPreview(
                 message: _replyingTo!,
                 senderName: _replyingTo!.isUser ? 'You' : agent.displayName,
@@ -2241,38 +2273,24 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     );
   }
 
+  void _cancelEditing() {
+    final draft = _draftBeforeEdit ?? '';
+    setState(() { _editingMessage = null; _draftBeforeEdit = null; });
+    _input.text = draft;
+    _composerFocus.requestFocus();
+  }
+
   Future<void> _editMessage(AiChatMessage message) async {
-    final editor = TextEditingController(text: message.text);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit message'),
-        content: TextField(
-          controller: editor,
-          autofocus: true,
-          minLines: 1,
-          maxLines: 6,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, editor.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    editor.dispose();
-    if (result != null) {
-      ref.read(aiChatProvider.notifier).editMessage(
-        widget.characterId,
-        message.id,
-        result,
-      );
-    }
+    if (!message.isUser || message.deleted) return;
+    _draftBeforeEdit = _input.text;
+    setState(() {
+      _editingMessage = message;
+      _replyingTo = null;
+      _showEmoji = false;
+    });
+    _input.text = message.text;
+    _input.selection = TextSelection.collapsed(offset: _input.text.length);
+    _composerFocus.requestFocus();
   }
 
   Future<void> _renameConversation() async {
@@ -2623,17 +2641,13 @@ class _AttachOption extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: gradient,
+                gradient: LinearGradient(colors: [
+                  u.brand.withValues(alpha: .16),
+                  u.brand.withValues(alpha: .07),
+                ]),
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
               ),
-              child: Icon(icon, color: Colors.white, size: 26),
+              child: Icon(icon, color: u.brandStrong, size: 25),
             ),
             const SizedBox(height: 7),
             Text(
@@ -2895,76 +2909,62 @@ class _Composer extends StatelessWidget {
     final durationMs = isRecording
         ? recorder!.elapsed.inMilliseconds
         : recorder!.note?.durationMs ?? recorder!.elapsed.inMilliseconds;
-    final label = isRecording
-        ? (recordingLocked ? 'Recording locked' :
-            holdActive ? 'Slide left to cancel · up to lock' : 'Recording voice note')
-        : 'Review voice note';
-    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return SafeArea(
       top: false,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         decoration: BoxDecoration(
           color: u.surfaceCard,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .07),
-            blurRadius: 12, offset: const Offset(0, -3))],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [BoxShadow(
+            color: Colors.black.withValues(alpha: .06), blurRadius: 7,
+            offset: const Offset(0, -2))],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(children: [
-              if (isRecording) ...[const _BlinkingRedDot(), const SizedBox(width: 8)],
-              Text(formatDurationMs(durationMs),
-                style: TextStyle(color: u.textPrimary, fontSize: 19,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()])),
-              const SizedBox(width: 12),
-              Expanded(child: Text(label, maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: TextStyle(color: u.textMuted, fontSize: 12))),
-            ]),
-            const SizedBox(height: 8),
-            SizedBox(height: 30, child: _VoiceWaveform(
-              values: recorder!.waveform, progress: 1, enabled: false,
-              onSeek: (_) {})),
-            const SizedBox(height: 10),
-            Row(children: [
-              IconButton.filledTonal(
-                tooltip: isRecording ? 'Cancel recording' : 'Discard',
-                onPressed: onCancelRecording,
-                icon: Icon(Icons.delete_outline_rounded, color: u.emergency),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Tooltip(
-                message: isRecording ? 'Stop & review' :
-                  previewPlaying ? 'Pause preview' : 'Play preview',
-                child: FilledButton.tonalIcon(
-                onPressed: isRecording ? onStopRecording : onTogglePreview,
-                icon: Icon(isRecording ? Icons.stop_rounded :
-                  previewPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                label: Text(isRecording ? (largeText ? 'Review' : 'Stop & review') :
-                  previewPlaying ? (largeText ? 'Pause' : 'Pause preview') :
-                    (largeText ? 'Play' : 'Play preview')),
-              ))),
-              const SizedBox(width: 10),
-              Semantics(container: true, button: true, label: 'Send voice note',
-                child: ExcludeSemantics(child: IconButton.filled(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            if (isRecording) ...[
+              const _BlinkingRedDot(),
+              const SizedBox(width: 6),
+            ],
+            Text(formatDurationMs(durationMs), style: TextStyle(
+              color: u.textPrimary, fontSize: 14,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()])),
+            const SizedBox(width: 6),
+            Expanded(child: SizedBox(height: 30, child: _VoiceWaveform(
+              values: recorder!.waveform, progress: 1,
+              enabled: false, onSeek: (_) {}))),
+            IconButton(
+              tooltip: isRecording ? 'Cancel recording' : 'Discard',
+              onPressed: onCancelRecording,
+              icon: Icon(Icons.delete_outline, color: u.emergency, size: 22)),
+            IconButton.filledTonal(
+              tooltip: isRecording ? 'Stop & review'
+                  : previewPlaying ? 'Pause preview' : 'Play preview',
+              onPressed: isRecording ? onStopRecording : onTogglePreview,
+              icon: Icon(isRecording ? Icons.stop_rounded :
+                  previewPlaying ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded, size: 22)),
+            const SizedBox(width: 3),
+            Semantics(container: true, button: true, label: 'Send voice note',
+              child: ExcludeSemantics(child: IconButton.filled(
                 tooltip: 'Send voice note',
                 onPressed: sending ? null : onSendVoiceNote,
-                icon: const Icon(Icons.send_rounded),
-                iconSize: 25,
-                constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
-              ))),
-            ]),
-            if (!isRecording) Align(alignment: Alignment.center,
-              child: Tooltip(message: 'Record again', child: TextButton.icon(onPressed: onReRecord,
-                icon: const Icon(Icons.replay_rounded, size: 18),
+                icon: const Icon(Icons.send_rounded, size: 22)))),
+          ]),
+          if (isRecording && !recordingLocked)
+            Text(holdActive ? 'Slide to cancel · up to lock'
+                : 'Recording voice note',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: u.textMuted, fontSize: 11)),
+          if (!isRecording)
+            Center(child: Tooltip(message: 'Record again',
+              child: TextButton.icon(
+                onPressed: onReRecord,
+                icon: const Icon(Icons.replay_rounded, size: 16),
                 label: const Text('Record again')))),
-          ],
-        ),
+        ]),
       ),
     );
   }
@@ -3003,11 +3003,12 @@ class _Composer extends StatelessWidget {
           icon: Icons.attach_file,
           onPressed: onAttach,
         ),
-        _ComposerIcon(
-          tooltip: 'Camera',
-          icon: Icons.camera_alt_outlined,
-          onPressed: onCamera,
-        ),
+        if (!hasText)
+          _ComposerIcon(
+            tooltip: 'Camera',
+            icon: Icons.camera_alt_outlined,
+            onPressed: onCamera,
+          ),
       ],
     );
   }
@@ -3335,6 +3336,7 @@ class _PersonaChatDisclosure extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.message,
+    required this.grouped,
     required this.agent,
     required this.selected,
     required this.highlighted,
@@ -3353,6 +3355,7 @@ class _ChatBubble extends StatelessWidget {
   });
 
   final AiChatMessage message;
+  final bool grouped;
   final AgentDirectoryEntry agent;
   final bool selected;
   final bool highlighted;
@@ -3370,92 +3373,59 @@ class _ChatBubble extends StatelessWidget {
   final ShellActionHandler? onShellAction;
 
   Future<void> _showActions(BuildContext context) async {
-    final action = await showModalBottomSheet<String>(
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final anchor = context.findRenderObject();
+    final rect = anchor is RenderBox
+        ? Rect.fromPoints(
+            anchor.localToGlobal(Offset.zero, ancestor: overlay),
+            anchor.localToGlobal(anchor.size.bottomRight(Offset.zero),
+                ancestor: overlay))
+        : Rect.fromLTWH(24, 96, overlay.size.width - 48, 44);
+    // Compact, message-anchored reactions and actions. No human-chat claims.
+    final action = await showMenu<String>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.reply),
-              title: const Text('Reply'),
-              onTap: () => Navigator.pop(sheetContext, 'reply'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy_outlined),
-              title: const Text('Copy'),
-              onTap: () => Navigator.pop(sheetContext, 'copy'),
-            ),
-            if (onEdit != null)
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit'),
-                onTap: () => Navigator.pop(sheetContext, 'edit'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.forward_outlined),
-              title: const Text('Forward'),
-              onTap: () => Navigator.pop(sheetContext, 'forward'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('Share'),
-              onTap: () => Navigator.pop(sheetContext, 'share'),
-            ),
-            if (onSaveMedia != null)
-              ListTile(
-                leading: const Icon(Icons.download_outlined),
-                title: const Text('Save media'),
-                onTap: () => Navigator.pop(sheetContext, 'save'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.checklist_outlined),
-              title: const Text('Select'),
-              onTap: () => Navigator.pop(sheetContext, 'select'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete'),
-              onTap: () => Navigator.pop(sheetContext, 'delete'),
-            ),
-            if (!message.isUser) ...[
-              const Divider(height: 1),
-              for (final item in const [
-                ('regenerate', Icons.refresh, 'Regenerate'),
-                ('shorter', Icons.compress, 'Shorter'),
-                ('detail', Icons.subject, 'More detailed'),
-                ('simple', Icons.lightbulb_outline, 'Explain simply'),
-                ('translate', Icons.translate, 'Translate'),
-                ('audio', Icons.volume_up_outlined, 'Read aloud'),
-                ('continue', Icons.playlist_add, 'Continue'),
-              ])
-                ListTile(
-                  leading: Icon(item.$2),
-                  title: Text(item.$3),
-                  onTap: () => Navigator.pop(sheetContext, 'agent:${item.$1}'),
+      position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
+      constraints: const BoxConstraints(maxWidth: 300),
+      items: [
+        PopupMenuItem<String>(
+          enabled: false, height: 48,
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
+                InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => Navigator.of(context).pop('react:$emoji'),
+                  child: Padding(padding: const EdgeInsets.all(5),
+                    child: Text(emoji, style: const TextStyle(fontSize: 21))),
                 ),
-            ],
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => Navigator.pop(sheetContext, 'react:$emoji'),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(emoji, style: const TextStyle(fontSize: 24)),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
+            ]),
         ),
-      ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'reply', child: Text('Reply')),
+        const PopupMenuItem(value: 'copy', child: Text('Copy')),
+        if (onEdit != null)
+          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+        const PopupMenuItem(value: 'forward', child: Text('Forward')),
+        const PopupMenuItem(value: 'share', child: Text('Share')),
+        if (onSaveMedia != null)
+          const PopupMenuItem(value: 'save', child: Text('Save media')),
+        const PopupMenuItem(value: 'select', child: Text('Select')),
+        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        if (!message.isUser) ...[
+          const PopupMenuDivider(),
+          for (final item in const [
+            ('regenerate', 'Regenerate'),
+            ('shorter', 'Shorter'),
+            ('detail', 'More detailed'),
+            ('simple', 'Explain simply'),
+            ('translate', 'Translate'),
+            ('audio', 'Read aloud'),
+            ('continue', 'Continue'),
+          ])
+            PopupMenuItem<String>(
+              value: 'agent:${item.$1}', child: Text(item.$2)),
+        ],
+      ],
     );
     if (action == null) return;
     if (action == 'reply') onReply();
@@ -3482,31 +3452,28 @@ class _ChatBubble extends StatelessWidget {
     final failure = failedParts.isEmpty ? null : failedParts.first;
     final attachments = message.allAttachments;
     return Align(
-      alignment: failure != null ? Alignment.center : isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: failure != null ? Alignment.center : isUser ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
       child: GestureDetector(
         onLongPress: () => _showActions(context),
-        onHorizontalDragEnd: (details) {
-          if ((details.primaryVelocity ?? 0) > 250) onReply();
-        },
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Container(
-              margin: const EdgeInsets.symmetric(vertical: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              margin: EdgeInsets.symmetric(vertical: grouped ? 1 : 4),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.82,
+                maxWidth: MediaQuery.sizeOf(context).width * 0.86,
               ),
               decoration: BoxDecoration(
                 color: failure != null ? u.surfaceMuted
                     : isUser ? u.bubbleOut : u.surfaceCard,
                 borderRadius: failure != null ? BorderRadius.circular(12)
-                    : BorderRadius.only(
-                  topLeft: const Radius.circular(14),
-                  topRight: const Radius.circular(14),
-                  bottomLeft: Radius.circular(isUser ? 14 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 14),
-                ),
+                    : BorderRadiusDirectional.only(
+                        topStart: Radius.circular(isUser || grouped ? 13 : 4),
+                        topEnd: Radius.circular(!isUser || grouped ? 13 : 4),
+                        bottomStart: const Radius.circular(13),
+                        bottomEnd: const Radius.circular(13),
+                      ),
                 border: selected || highlighted
                     ? Border.all(
                         color: highlighted ? u.warning : u.brand,
@@ -3629,7 +3596,8 @@ class _ChatBubble extends StatelessWidget {
                       label: Text(failure.actionLabel ?? 'Try again'),
                     )),
                   const SizedBox(height: 3),
-                  Row(
+                  Align(alignment: AlignmentDirectional.centerEnd,
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (message.editedAt != null)
@@ -3654,8 +3622,8 @@ class _ChatBubble extends StatelessWidget {
                             'failed' => Icons.error_outline,
                             'stopped' => Icons.stop_circle_outlined,
                             'sent' => Icons.done,
-                            'read' => Icons.done_all,
-                            _ => Icons.done_all,
+                            'delivered' || 'read' => Icons.done_all,
+                            _ => Icons.schedule,
                           },
                           size: 14,
                           color: message.deliveryStatus == 'failed'
@@ -3669,13 +3637,14 @@ class _ChatBubble extends StatelessWidget {
                       ],
                     ],
                   ),
+                  ),
                 ],
               ),
             ),
             if ((message.reaction ?? '').isNotEmpty)
-              Positioned(
-                right: isUser ? 8 : null,
-                left: isUser ? null : 8,
+              PositionedDirectional(
+                end: isUser ? 8 : null,
+                start: isUser ? null : 8,
                 bottom: -6,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -4040,7 +4009,9 @@ class _ImageAttachment extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.file(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 250, maxHeight: 260),
+          child: Image.file(
           file,
           width: 220,
           height: galleryPaths.length > 1 ? 126 : null,
@@ -4052,6 +4023,7 @@ class _ImageAttachment extends StatelessWidget {
             alignment: Alignment.center,
             child: const Icon(Icons.broken_image_outlined),
           ),
+        ),
         ),
       ),
     );

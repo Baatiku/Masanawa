@@ -75,7 +75,6 @@ class TestChats extends AiChatController {
     'character_00000000-0000-0000-0000-000000000001': ChatThread(
       characterId: 'character_00000000-0000-0000-0000-000000000001',
       title: 'Local history',
-      archived: true,
       updatedAt: DateTime.utc(2026, 10, 13),
       messages: [
         AiChatMessage(id:'m1', isUser:false, text:'Cached',
@@ -376,7 +375,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 380));
     await tester.pump();
     expect(find.text('Local history'), findsOneWidget);
-    expect(find.textContaining('Server conversations are not available yet'), findsOneWidget);
+    expect(find.textContaining('Server search unavailable'), findsOneWidget);
     expect(find.byTooltip('Retry server search'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
