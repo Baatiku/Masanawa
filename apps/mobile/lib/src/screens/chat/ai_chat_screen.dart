@@ -2911,76 +2911,60 @@ class _Composer extends StatelessWidget {
     final durationMs = isRecording
         ? recorder!.elapsed.inMilliseconds
         : recorder!.note?.durationMs ?? recorder!.elapsed.inMilliseconds;
-    final label = isRecording
-        ? (recordingLocked ? 'Recording locked' :
-            holdActive ? 'Slide left to cancel · up to lock' : 'Recording voice note')
-        : 'Review voice note';
-    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return SafeArea(
       top: false,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         decoration: BoxDecoration(
           color: u.surfaceCard,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .07),
-            blurRadius: 12, offset: const Offset(0, -3))],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [BoxShadow(
+            color: Colors.black.withValues(alpha: .06), blurRadius: 7,
+            offset: const Offset(0, -2))],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(children: [
-              if (isRecording) ...[const _BlinkingRedDot(), const SizedBox(width: 8)],
-              Text(formatDurationMs(durationMs),
-                style: TextStyle(color: u.textPrimary, fontSize: 19,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()])),
-              const SizedBox(width: 12),
-              Expanded(child: Text(label, maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: TextStyle(color: u.textMuted, fontSize: 12))),
-            ]),
-            const SizedBox(height: 8),
-            SizedBox(height: 30, child: _VoiceWaveform(
-              values: recorder!.waveform, progress: 1, enabled: false,
-              onSeek: (_) {})),
-            const SizedBox(height: 10),
-            Row(children: [
-              IconButton.filledTonal(
-                tooltip: isRecording ? 'Cancel recording' : 'Discard',
-                onPressed: onCancelRecording,
-                icon: Icon(Icons.delete_outline_rounded, color: u.emergency),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Tooltip(
-                message: isRecording ? 'Stop & review' :
-                  previewPlaying ? 'Pause preview' : 'Play preview',
-                child: FilledButton.tonalIcon(
-                onPressed: isRecording ? onStopRecording : onTogglePreview,
-                icon: Icon(isRecording ? Icons.stop_rounded :
-                  previewPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                label: Text(isRecording ? (largeText ? 'Review' : 'Stop & review') :
-                  previewPlaying ? (largeText ? 'Pause' : 'Pause preview') :
-                    (largeText ? 'Play' : 'Play preview')),
-              ))),
-              const SizedBox(width: 10),
-              Semantics(container: true, button: true, label: 'Send voice note',
-                child: ExcludeSemantics(child: IconButton.filled(
-                tooltip: 'Send voice note',
-                onPressed: sending ? null : onSendVoiceNote,
-                icon: const Icon(Icons.send_rounded),
-                iconSize: 25,
-                constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
-              ))),
-            ]),
-            if (!isRecording) Align(alignment: Alignment.center,
-              child: Tooltip(message: 'Record again', child: TextButton.icon(onPressed: onReRecord,
-                icon: const Icon(Icons.replay_rounded, size: 18),
-                label: const Text('Record again')))),
-          ],
-        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            if (isRecording) ...[
+              const _BlinkingRedDot(),
+              const SizedBox(width: 6),
+            ],
+            Text(formatDurationMs(durationMs), style: TextStyle(
+              color: u.textPrimary, fontSize: 14,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()])),
+            const SizedBox(width: 6),
+            Expanded(child: SizedBox(height: 30, child: _VoiceWaveform(
+              values: recorder!.waveform, progress: 1,
+              enabled: false, onSeek: (_) {}))),
+            IconButton(
+              tooltip: isRecording ? 'Cancel recording' : 'Discard',
+              onPressed: onCancelRecording,
+              icon: Icon(Icons.delete_outline, color: u.emergency, size: 22)),
+            IconButton.filledTonal(
+              tooltip: isRecording ? 'Stop & review'
+                  : previewPlaying ? 'Pause preview' : 'Play preview',
+              onPressed: isRecording ? onStopRecording : onTogglePreview,
+              icon: Icon(isRecording ? Icons.stop_rounded :
+                  previewPlaying ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded, size: 22)),
+            const SizedBox(width: 3),
+            IconButton.filled(
+              tooltip: 'Send voice note',
+              onPressed: sending ? null : onSendVoiceNote,
+              icon: const Icon(Icons.send_rounded, size: 22)),
+          ]),
+          if (isRecording && !recordingLocked)
+            Text(holdActive ? 'Slide to cancel · up to lock'
+                : 'Recording · tap stop to preview',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: u.textMuted, fontSize: 11)),
+          if (!isRecording)
+            Center(child: TextButton.icon(
+              onPressed: onReRecord,
+              icon: const Icon(Icons.replay_rounded, size: 16),
+              label: const Text('Record again'))),
+        ]),
       ),
     );
   }
@@ -3389,92 +3373,59 @@ class _ChatBubble extends StatelessWidget {
   final ShellActionHandler? onShellAction;
 
   Future<void> _showActions(BuildContext context) async {
-    final action = await showModalBottomSheet<String>(
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final anchor = context.findRenderObject();
+    final rect = anchor is RenderBox
+        ? Rect.fromPoints(
+            anchor.localToGlobal(Offset.zero, ancestor: overlay),
+            anchor.localToGlobal(anchor.size.bottomRight(Offset.zero),
+                ancestor: overlay))
+        : Rect.fromLTWH(24, 96, overlay.size.width - 48, 44);
+    // Compact, message-anchored reactions and actions. No human-chat claims.
+    final action = await showMenu<String>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.reply),
-              title: const Text('Reply'),
-              onTap: () => Navigator.pop(sheetContext, 'reply'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy_outlined),
-              title: const Text('Copy'),
-              onTap: () => Navigator.pop(sheetContext, 'copy'),
-            ),
-            if (onEdit != null)
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit'),
-                onTap: () => Navigator.pop(sheetContext, 'edit'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.forward_outlined),
-              title: const Text('Forward'),
-              onTap: () => Navigator.pop(sheetContext, 'forward'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('Share'),
-              onTap: () => Navigator.pop(sheetContext, 'share'),
-            ),
-            if (onSaveMedia != null)
-              ListTile(
-                leading: const Icon(Icons.download_outlined),
-                title: const Text('Save media'),
-                onTap: () => Navigator.pop(sheetContext, 'save'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.checklist_outlined),
-              title: const Text('Select'),
-              onTap: () => Navigator.pop(sheetContext, 'select'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete'),
-              onTap: () => Navigator.pop(sheetContext, 'delete'),
-            ),
-            if (!message.isUser) ...[
-              const Divider(height: 1),
-              for (final item in const [
-                ('regenerate', Icons.refresh, 'Regenerate'),
-                ('shorter', Icons.compress, 'Shorter'),
-                ('detail', Icons.subject, 'More detailed'),
-                ('simple', Icons.lightbulb_outline, 'Explain simply'),
-                ('translate', Icons.translate, 'Translate'),
-                ('audio', Icons.volume_up_outlined, 'Read aloud'),
-                ('continue', Icons.playlist_add, 'Continue'),
-              ])
-                ListTile(
-                  leading: Icon(item.$2),
-                  title: Text(item.$3),
-                  onTap: () => Navigator.pop(sheetContext, 'agent:${item.$1}'),
+      position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
+      constraints: const BoxConstraints(maxWidth: 300),
+      items: [
+        PopupMenuItem<String>(
+          enabled: false, height: 48,
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
+                InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => Navigator.of(context).pop('react:$emoji'),
+                  child: Padding(padding: const EdgeInsets.all(5),
+                    child: Text(emoji, style: const TextStyle(fontSize: 21))),
                 ),
-            ],
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => Navigator.pop(sheetContext, 'react:$emoji'),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(emoji, style: const TextStyle(fontSize: 24)),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
+            ]),
         ),
-      ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'reply', child: Text('Reply')),
+        const PopupMenuItem(value: 'copy', child: Text('Copy')),
+        if (onEdit != null)
+          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+        const PopupMenuItem(value: 'forward', child: Text('Forward')),
+        const PopupMenuItem(value: 'share', child: Text('Share')),
+        if (onSaveMedia != null)
+          const PopupMenuItem(value: 'save', child: Text('Save media')),
+        const PopupMenuItem(value: 'select', child: Text('Select')),
+        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        if (!message.isUser) ...[
+          const PopupMenuDivider(),
+          for (final item in const [
+            ('regenerate', 'Regenerate'),
+            ('shorter', 'Shorter'),
+            ('detail', 'More detailed'),
+            ('simple', 'Explain simply'),
+            ('translate', 'Translate'),
+            ('audio', 'Read aloud'),
+            ('continue', 'Continue'),
+          ])
+            PopupMenuItem<String>(
+              value: 'agent:${item.$1}', child: Text(item.$2)),
+        ],
+      ],
     );
     if (action == null) return;
     if (action == 'reply') onReply();
