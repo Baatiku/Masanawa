@@ -1284,6 +1284,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         final previous = messageIndex > 0 ? messages[messageIndex - 1] : null;
                         final showDate = previous == null ||
                             !_sameDay(previous.createdAt, message.createdAt);
+                        final grouped = previous != null && !showDate &&
+                            previous.isUser == message.isUser &&
+                            !previous.deleted && !message.deleted &&
+                            message.createdAt.difference(previous.createdAt)
+                                .inMinutes.abs() < 5;
                         return _VoicePlaybackScope(
                           message: message,
                           onStart: _beginVoiceSequence,
@@ -1324,6 +1329,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                 ),
                                 child: _ChatBubble(
                                   message: message,
+                                  grouped: grouped,
                                   agent: agent,
                                   selected: _selectedMessageIds.contains(message.id),
                                   highlighted: highlightedSearchId == message.id,
@@ -3492,8 +3498,8 @@ class _ChatBubble extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Container(
-              margin: const EdgeInsets.symmetric(vertical: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              margin: EdgeInsets.symmetric(vertical: grouped ? 1 : 4),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.sizeOf(context).width * 0.86,
               ),
@@ -3501,12 +3507,12 @@ class _ChatBubble extends StatelessWidget {
                 color: failure != null ? u.surfaceMuted
                     : isUser ? u.bubbleOut : u.surfaceCard,
                 borderRadius: failure != null ? BorderRadius.circular(12)
-                    : BorderRadius.only(
-                  topLeft: const Radius.circular(14),
-                  topRight: const Radius.circular(14),
-                  bottomLeft: Radius.circular(isUser ? 14 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 14),
-                ),
+                    : BorderRadiusDirectional.only(
+                        topStart: Radius.circular(isUser || grouped ? 13 : 4),
+                        topEnd: Radius.circular(!isUser || grouped ? 13 : 4),
+                        bottomStart: const Radius.circular(13),
+                        bottomEnd: const Radius.circular(13),
+                      ),
                 border: selected || highlighted
                     ? Border.all(
                         color: highlighted ? u.warning : u.brand,
@@ -3654,8 +3660,8 @@ class _ChatBubble extends StatelessWidget {
                             'failed' => Icons.error_outline,
                             'stopped' => Icons.stop_circle_outlined,
                             'sent' => Icons.done,
-                            'read' => Icons.done_all,
-                            _ => Icons.done_all,
+                            'delivered' || 'read' => Icons.done_all,
+                            _ => Icons.schedule,
                           },
                           size: 14,
                           color: message.deliveryStatus == 'failed'
@@ -3673,9 +3679,9 @@ class _ChatBubble extends StatelessWidget {
               ),
             ),
             if ((message.reaction ?? '').isNotEmpty)
-              Positioned(
-                right: isUser ? 8 : null,
-                left: isUser ? null : 8,
+              PositionedDirectional(
+                end: isUser ? 8 : null,
+                start: isUser ? null : 8,
                 bottom: -6,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
