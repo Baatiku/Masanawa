@@ -1,6 +1,9 @@
 import {expect,it} from 'vitest';
 import sharp from 'sharp';
 import Fastify from 'fastify';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createOfficialMediaReader,OFFICIAL_MEDIA_ASSETS,registerOfficialMediaRoutes} from './official_media.js';
 import {OFFICIAL_PORTRAITS} from './official_portraits.js';
 import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
@@ -57,4 +60,15 @@ it('rejects HTML, oversized responses, invalid images and redirects outside revi
   const reader=createOfficialMediaReader((async()=>response) as typeof fetch);
   expect(await reader.read(OFFICIAL_MEDIA_ASSETS[0]!.key)).toBeNull();
  }
+});
+it('survives a fresh reader with verified disk-cached pixels when the original source is unavailable',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'official-portrait-'));
+ const png=await sharp({create:{width:40,height:50,channels:3,background:'green'}}).png().toBuffer();
+ const key=OFFICIAL_MEDIA_ASSETS[0]!.key;
+ try{
+  const first=createOfficialMediaReader((async()=>new Response(new Uint8Array(png),{headers:{'content-type':'image/png'}})) as typeof fetch,undefined,dir);
+  const expected=await first.read(key);expect(first.stats().persisted).toBe(1);
+  let network=0;const next=createOfficialMediaReader((async()=>{network++;throw Error('source unavailable');}) as typeof fetch,undefined,dir);
+  expect(await next.read(key)).toEqual(expected);expect(network).toBe(0);expect(next.stats().persisted).toBe(1);
+ }finally{await rm(dir,{recursive:true,force:true});}
 });

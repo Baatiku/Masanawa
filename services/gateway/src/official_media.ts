@@ -1,4 +1,6 @@
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import {readFile,mkdir,stat,writeFile,rename,unlink} from 'node:fs/promises';
+import {join} from 'node:path';
 import sharp from 'sharp';
 import {OFFICIAL_PORTRAITS} from './official_portraits.js';
 export const OFFICIAL_PARTIES=Object.freeze({
@@ -16,11 +18,22 @@ export function partyEmblemUrl(code:keyof typeof OFFICIAL_PARTIES){return public
 /** Fixed reviewed catalogue only: no request can provide a URL or expand the
  * fetch scope. Bound bytes, pixels, redirects and time; strip metadata and
  * normalize actual decodable images to webp. Concurrent reads share one fetch. */
-export function createOfficialMediaReader(fetcher:typeof fetch=fetch,onFailure?:(key:string,error:unknown)=>void){
+export function createOfficialMediaReader(fetcher:typeof fetch=fetch,onFailure?:(key:string,error:unknown)=>void,cacheDir?:string){
  const cache=new Map<string,Buffer>(),pending=new Map<string,Promise<Buffer|null>>();
+ const diskBacked=new Set<string>(),failedAt=new Map<string,number>();
  const hosts=new Set(OFFICIAL_MEDIA_ASSETS.map(a=>new URL(a.url).hostname));
  async function load(key:string):Promise<Buffer|null>{
   const asset=OFFICIAL_MEDIA_ASSETS.find(a=>a.key===key);if(!asset)return null;
+  if(cacheDir){
+   const path=join(cacheDir,key+'.webp');
+   try{
+    if((await stat(path)).size>1_000_000)throw Error('portrait_cache_invalid');
+    const bytes=await readFile(path),metadata=await sharp(bytes,{limitInputPixels:512*512}).metadata();
+    if(metadata.format!=='webp'||!metadata.width||!metadata.height||metadata.width>512||metadata.height>512)throw Error('portrait_cache_invalid');
+    await sharp(bytes).stats(); // Decode pixels; a header alone is not proof.
+    cache.set(key,bytes);diskBacked.add(key);return bytes;
+   }catch{/* A missing/corrupt cache entry may be repaired from its reviewed source. */}
+  }
   let url=new URL(asset.url),response:Response|undefined;
   for(let n=0;n<4;n++){
    response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(12000),headers:{'user-agent':'MasanawaPortraits/1.0 (public attributed persona photographs)'}});
@@ -34,17 +47,23 @@ export function createOfficialMediaReader(fetcher:typeof fetch=fetch,onFailure?:
   try{for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>10_000_000)throw Error('portrait_too_large');chunks.push(part.value);}}
   finally{await reader.cancel().catch(()=>undefined);}
   const encoded=await sharp(Buffer.concat(chunks),{limitInputPixels:25_000_000,animated:false}).rotate().resize({width:512,height:512,fit:'inside',withoutEnlargement:true}).webp({quality:85}).toBuffer();
+  if(cacheDir){
+   const path=join(cacheDir,key+'.webp'),temporary=path+'.'+randomUUID()+'.pending';
+   try{await mkdir(cacheDir,{recursive:true,mode:0o700});await writeFile(temporary,encoded,{mode:0o600});await rename(temporary,path);diskBacked.add(key);}
+   catch{await unlink(temporary).catch(()=>undefined);onFailure?.(key,Error('portrait_disk_cache_unavailable'));}
+  }
   cache.set(key,encoded);return encoded;
  }
- return {async read(key:string){
+ return {stats:()=>({cached:cache.size,persisted:diskBacked.size}),async read(key:string){
   if(!OFFICIAL_MEDIA_ASSETS.some(a=>a.key===key))return null;
   if(cache.has(key))return cache.get(key)!;
-  let result=pending.get(key);if(!result){result=load(key).catch(error=>{onFailure?.(key,error);return null;}).finally(()=>pending.delete(key));pending.set(key,result);}return result;
+  if(Date.now()-(failedAt.get(key)??0)<60_000)return null;
+  let result=pending.get(key);if(!result){result=load(key).catch(error=>{failedAt.set(key,Date.now());onFailure?.(key,error);return null;}).finally(()=>pending.delete(key));pending.set(key,result);}return result;
  }};
 }
 const reader=createOfficialMediaReader(fetch,(assetKey,error)=>{
  process.stdout.write(JSON.stringify({event:'official_media_fetch_failed',assetKey,reason:error instanceof Error?error.message.slice(0,100):'unknown'})+'\n');
-});
+},process.env.NODE_ENV==='production'?(process.env.MASANAWA_OFFICIAL_PORTRAIT_CACHE_DIR??'/data/whatsapp-auth/public-portrait-cache'):undefined);
 export function registerOfficialMediaRoutes(app:import('fastify').FastifyInstance,mediaReader=reader){
  if(process.env.NODE_ENV==='production')app.addHook('onListen',async()=>{
   // Warm in the background; provider slowness must not block Wallet/readiness.
@@ -55,7 +74,7 @@ export function registerOfficialMediaRoutes(app:import('fastify').FastifyInstanc
     const result=await Promise.all(batch.map(a=>mediaReader.read(a.key)));
     result.forEach((image,j)=>{if(image)decoded++;else failures.push(batch[j]!.key);});
    }
-   process.stdout.write(JSON.stringify({event:'official_media_ready',total:OFFICIAL_MEDIA_ASSETS.length,decoded,failed:failures.length,failedAssetKeys:failures})+'\n');
+   process.stdout.write(JSON.stringify({event:'official_media_ready',total:OFFICIAL_MEDIA_ASSETS.length,decoded,...mediaReader.stats(),failed:failures.length,failedAssetKeys:failures})+'\n');
   })();
  });
  app.get<{Params:{key:string}}>('/public/persona-media/:key',async(request,reply)=>{
