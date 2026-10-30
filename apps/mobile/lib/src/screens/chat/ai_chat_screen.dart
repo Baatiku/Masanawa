@@ -97,6 +97,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   bool _hasText = false;
   List<ChatAttachment> _pendingAttachments = const [];
   AiChatMessage? _replyingTo;
+  AiChatMessage? _editingMessage;
+  String? _draftBeforeEdit;
   bool _showSearch = false;
   final _search = TextEditingController();
   int _searchIndex = 0;
@@ -245,7 +247,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     _input.addListener(() {
       final hasText = _input.text.isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
-      ref.read(aiChatProvider.notifier).setDraft(widget.characterId, _input.text);
+      if (_editingMessage == null) {
+        ref.read(aiChatProvider.notifier).setDraft(widget.characterId, _input.text);
+      }
     });
     _scroll.addListener(() {
       if (!_scroll.hasClients) return;
@@ -334,6 +338,20 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   void _sendText() {
     if (ref.read(aiChatProvider).sendingIn.contains(widget.characterId)) return;
     final text = _input.text;
+    final editing = _editingMessage;
+    if (editing != null) {
+      if (text.trim().isEmpty || editing.deleted || !editing.isUser) return;
+      ref.read(aiChatProvider.notifier).editMessage(
+        widget.characterId, editing.id, text.trim());
+      final previousDraft = _draftBeforeEdit ?? '';
+      setState(() {
+        _editingMessage = null;
+        _draftBeforeEdit = null;
+        _showEmoji = false;
+      });
+      _input.text = previousDraft;
+      return;
+    }
     final attachments = _pendingAttachments;
     if (text.trim().isEmpty && attachments.isEmpty) return;
     final reply = _replyingTo;
@@ -1479,7 +1497,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 attachments: _pendingAttachments,
                 onRemove: _removePendingAttachment,
               ),
-            if (_replyingTo != null)
+            if (_editingMessage != null)
+              _ReplyComposerPreview(
+                message: _editingMessage!,
+                senderName: 'Editing message',
+                onClose: _cancelEditing,
+              ),
+            if (_replyingTo != null && _editingMessage == null)
               _ReplyComposerPreview(
                 message: _replyingTo!,
                 senderName: _replyingTo!.isUser ? 'You' : agent.displayName,
@@ -2247,38 +2271,24 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     );
   }
 
+  void _cancelEditing() {
+    final draft = _draftBeforeEdit ?? '';
+    setState(() { _editingMessage = null; _draftBeforeEdit = null; });
+    _input.text = draft;
+    _composerFocus.requestFocus();
+  }
+
   Future<void> _editMessage(AiChatMessage message) async {
-    final editor = TextEditingController(text: message.text);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit message'),
-        content: TextField(
-          controller: editor,
-          autofocus: true,
-          minLines: 1,
-          maxLines: 6,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, editor.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    editor.dispose();
-    if (result != null) {
-      ref.read(aiChatProvider.notifier).editMessage(
-        widget.characterId,
-        message.id,
-        result,
-      );
-    }
+    if (!message.isUser || message.deleted) return;
+    _draftBeforeEdit = _input.text;
+    setState(() {
+      _editingMessage = message;
+      _replyingTo = null;
+      _showEmoji = false;
+    });
+    _input.text = message.text;
+    _input.selection = TextSelection.collapsed(offset: _input.text.length);
+    _composerFocus.requestFocus();
   }
 
   Future<void> _renameConversation() async {
@@ -3635,7 +3645,8 @@ class _ChatBubble extends StatelessWidget {
                       label: Text(failure.actionLabel ?? 'Try again'),
                     )),
                   const SizedBox(height: 3),
-                  Row(
+                  Align(alignment: AlignmentDirectional.centerEnd,
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (message.editedAt != null)
@@ -3674,6 +3685,7 @@ class _ChatBubble extends StatelessWidget {
                         ),
                       ],
                     ],
+                  ),
                   ),
                 ],
               ),
