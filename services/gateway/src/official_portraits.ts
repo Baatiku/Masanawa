@@ -409,12 +409,12 @@ export const OFFICIAL_PORTRAITS:readonly OfficialPortrait[]=Object.freeze([
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-47016a9ae377",
     "officialName": "Emmanuel David Ombugadu",
-    "imageUrl": "https://pbs.twimg.com/profile_images/2037303337348104192/ckUpaHa8_400x400.jpg",
-    "sourceUrl": "https://x.com/davidombugadu23",
-    "credit": "David E. Ombugadu, public X profile",
+    "imageUrl": "https://global.ariseplay.com/amg/www.thisdaylive.com/uploads/Davematics-Ombugadu.gif",
+    "sourceUrl": "https://www.thisdaylive.com/2024/04/12/ombugadu-joins-pdp-national-chairmanship-race/",
+    "credit": "THISDAY",
     "licenseLabel": "Attributed source photograph",
     "checkedAt": "2026-10-30",
-    "assetKey": "700c4409365282e9c29aed755a6dc056"
+    "assetKey": "846c645b1b6e4f60fe813333e66d45ed"
   },
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-5502f4282469",
@@ -440,12 +440,12 @@ export const OFFICIAL_PORTRAITS:readonly OfficialPortrait[]=Object.freeze([
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-6ea1a1029d96",
     "officialName": "Lawal Jimi Adebisi",
-    "imageUrl": "https://www.thecable.ng/wp-content/uploads/2022/11/IMG-20221109-WA0001-e1723631851441.jpg",
-    "sourceUrl": "https://www.thecable.ng/icpc-invites-el-rufais-ex-adviser-jimi-lawal-over-alleged-fraud/",
-    "credit": "TheCable",
+    "imageUrl": "https://global.ariseplay.com/amg/www.thisdaylive.com/uploads/Jimi-Lawal-.jpg",
+    "sourceUrl": "https://www.thisdaylive.com/2023/03/07/ogun-2023-jimi-lawal-denies-endorsing-another-candidate/",
+    "credit": "THISDAY",
     "licenseLabel": "Attributed source photograph",
     "checkedAt": "2026-10-30",
-    "assetKey": "0dfddad12bd34db40251564632554389"
+    "assetKey": "d810ddfb79a43204b4b44a0f6a2b2bfe"
   },
   {
     "characterId": "character_01a189e8-72ec-70ed-be48-76ecbdea7cec",
