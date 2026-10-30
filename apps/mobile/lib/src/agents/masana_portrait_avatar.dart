@@ -208,6 +208,9 @@ class MasanaPortraitAvatar extends StatelessWidget {
             width: size,
             height: size,
             fit: BoxFit.cover,
+            alignment: officialPhoto != null
+                ? Alignment.topCenter
+                : Alignment.center,
             placeholder: (_, __) => _initial(initial),
             errorWidget: (_, __, ___) => _initial(initial),
           );
