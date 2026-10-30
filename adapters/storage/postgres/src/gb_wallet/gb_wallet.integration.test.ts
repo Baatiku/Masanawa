@@ -30,6 +30,51 @@ describeDatabase("isolated GB wallet serializable accounting", () => {
     userId: createCanonicalId("user"),
   });
 
+  async function activeCustomer(actor:ReturnType<typeof identity>) {
+    await pool.query(`INSERT INTO identity.tenants
+      (tenant_id,state,created_at,updated_at) VALUES($1,'active',now(),now())`,
+      [actor.tenantId]);
+    await pool.query(`INSERT INTO identity.users
+      (tenant_id,user_id,state,created_at,updated_at)
+      VALUES($1,$2,'active',now(),now())`,[actor.tenantId,actor.userId]);
+  }
+
+  it('grants existing/new authenticated users 500 restricted MB once even under concurrent visits', async () => {
+    const actor=identity();
+    await activeCustomer(actor);
+    const results=await Promise.all(Array.from({length:4},
+      ()=>repo().ensureUniversalWelcome(actor)));
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await repo().ensureUniversalWelcome(actor)).toBe(false);
+    expect(await repo().read(actor)).toMatchObject({
+      welcomeMb:500,purchasedMb:0,reservedWelcomeMb:0,
+    });
+    const movement=await pool.query(`SELECT COUNT(*)::int AS count
+      FROM gb_wallet.movements WHERE tenant_id=$1 AND to_id=$2
+      AND source_bucket='issuance'`,[actor.tenantId,actor.userId]);
+    expect(movement.rows[0].count).toBe(1);
+  });
+
+  it('does not reissue 500 MB to a customer with an older verified-phone grant',async()=>{
+    const actor=identity();
+    await activeCustomer(actor);
+    await repo().grantWelcome({...actor,
+      verifiedPhoneHmac:createHash('sha256').update(actor.userId).digest('hex'),
+      operationId:createCanonicalId('operation')});
+    expect(await repo().ensureUniversalWelcome(actor)).toBe(false);
+    expect((await repo().read(actor))?.welcomeMb).toBe(500);
+  });
+
+  it('rejects a late phone-welcome attempt after the universal allowance',async()=>{
+    const actor=identity();
+    await activeCustomer(actor);
+    expect(await repo().ensureUniversalWelcome(actor)).toBe(true);
+    expect(await repo().grantWelcome({...actor,
+      verifiedPhoneHmac:createHash('sha256').update(actor.userId).digest('hex'),
+      operationId:createCanonicalId('operation')})).toBe(false);
+    expect((await repo().read(actor))?.welcomeMb).toBe(500);
+  });
+
   it("grants restricted welcome exactly once across duplicate identity and phone", async () => {
     const a = identity(), b = { tenantId:a.tenantId, userId:createCanonicalId("user") };
     const digest = createHash("sha256").update("test-only-phone-hmac").digest("hex");

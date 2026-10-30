@@ -99,8 +99,6 @@ class _PrivateMasanaCallHistoryState
   CancelToken? _cancel;
   int _generation = 0;
   String _query = '';
-  String _connection='all',_days='all';
-  CallHistorySummary? _summary;
   List<CallHistoryItem> _history = [];
   String? _next;
   bool _loading = true, _failed = false, _pageFailed = false;
@@ -128,7 +126,7 @@ class _PrivateMasanaCallHistoryState
     if (!identical(oldWidget.credentials, widget.credentials)) {
       _generation++;
       _cancel?.cancel();
-      _history=[];_next=null;_summary=null;
+      _history=[];_next=null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_load(reset: true));
       });
@@ -151,7 +149,6 @@ class _PrivateMasanaCallHistoryState
     setState(() {
       _query = value.trim();
       _history = [];
-      _summary = null;
       _next = null;
       _failed = false;
       _pageFailed = false;
@@ -181,7 +178,7 @@ class _PrivateMasanaCallHistoryState
       final page = await ref.read(callHistoryTransportProvider).loadPage(
         cursor: after,
         query: _query,
-        connection:_connection,days:_days,
+        connection:'all',days:'all',
         cancelToken: token,
       );
       if (!mounted || generation != _generation || !_isCurrent) return;
@@ -200,20 +197,18 @@ class _PrivateMasanaCallHistoryState
         _next = page.calls.isEmpty || page.nextCursor == after
             ? null : page.nextCursor;
         _loading = false;
-        _summary=page.summary;
       });
     } catch (error) {
       if (!mounted || generation != _generation || !_isCurrent) return;
       setState(() {
         _loading = false;
-        if(reset)_summary=null;
         if (error is DioException &&
             const [401, 403, 410].contains(error.response?.statusCode)) {
           _history = [];
           _next = null;
         }
-        _failed = reset || _history.isEmpty;
-        _pageFailed = !reset && _history.isNotEmpty;
+        _failed = _history.isEmpty;
+        _pageFailed = _history.isNotEmpty;
       });
     }
   }
@@ -330,30 +325,6 @@ class _PrivateMasanaCallHistoryState
           ),
           if (_query.length > 80)
             const ListTile(title: Text('Search must be 80 characters or fewer')),
-          Wrap(spacing:8,runSpacing:8,children:[
-            for(final choice in const [('all','All calls'),('connected','Connected'),('not_connected','No confirmed connection')])
-              ChoiceChip(label:Text(choice.$2),selected:_connection==choice.$1,
-                onSelected:(_){if(_connection==choice.$1)return;
-                  _connection=choice.$1;_onQuery(_query);}),
-          ]),
-          Wrap(spacing:8,runSpacing:8,children:[
-            for(final period in const [('all','All time'),('7','7 days'),('30','30 days')])
-              ChoiceChip(label:Text(period.$2),selected:_days==period.$1,
-                onSelected:(_){if(_days==period.$1)return;
-                  _days=period.$1;_onQuery(_query);}),
-          ]),
-          if(_summary!=null) Padding(padding:const EdgeInsets.symmetric(vertical:12),
-            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text('${_summary!.calls} matching ${_summary!.calls==1?'call':'calls'}'),
-              Text(_summary!.calls>0 && _summary!.unverifiedCalls==_summary!.calls
-                ? 'Verified connected time unavailable'
-                : 'Verified connected time: ${(_summary!.verifiedConnectedMs/1000).toStringAsFixed(3).replaceFirst(RegExp(r"\.?0+$"),"")} s'),
-              Text(_summary!.calls>0 && _summary!.unverifiedCalls+_summary!.pendingUsageCalls==_summary!.calls
-                ? 'Settled charges unavailable'
-                : 'Confirmed charges: ${_summary!.chargedMb} MB'),
-              if(_summary!.unverifiedCalls>0)Text('${_summary!.unverifiedCalls} calls without verified usage'),
-              if(_summary!.pendingUsageCalls>0)Text('${_summary!.pendingUsageCalls} calls awaiting settled usage'),
-            ])),
           if (_loading) const LinearProgressIndicator(),
           if (_history.isEmpty && !_loading && !_failed && _query.length <= 80)
             Padding(
@@ -367,6 +338,17 @@ class _PrivateMasanaCallHistoryState
               ]),
             ),
           ..._historyRows(),
+          if (_pageFailed && _history.isNotEmpty)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(children: [
+                Icon(Icons.wifi_off_rounded, size: 22,
+                  color: context.masanawa.textMuted),
+                const SizedBox(height: 6),
+                const Text('Showing recent calls · Check your connection',
+                  textAlign: TextAlign.center),
+                TextButton(onPressed: () => _load(reset: true),
+                  child: const Text('Retry')),
+              ])),
           if (_failed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 40),
@@ -374,7 +356,8 @@ class _PrivateMasanaCallHistoryState
                 Icon(Icons.wifi_off_rounded, size: 34,
                     color: context.masanawa.textMuted),
                 const SizedBox(height: 12),
-                Text('Calls unavailable',
+                Text('Check your connection',
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium),
                 TextButton(
                   onPressed: () => _load(reset: true),

@@ -28,6 +28,8 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   final _phone = TextEditingController();
   final _purchaseSectionKey = GlobalKey();
   GbDataOwner? _owner;
+  List<GbVerifiedBundle>? _lastVerifiedBundles;
+  GbWalletBalance? _lastVerifiedWallet;
   String? _network;
   bool _manualNetwork = false;
   GbDataValidityPeriod? _validity = GbDataValidityPeriod.daily;
@@ -222,11 +224,19 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       _purchaseLocked = false;
       _showingResult = false;
       _owner = owner;
+      _lastVerifiedBundles = null;
+      _lastVerifiedWallet = null;
     }
 
     final catalogue = owner == null
         ? null : ref.watch(gbDataCatalogueProvider(owner));
-    final bundles = catalogue?.valueOrNull ?? const <GbVerifiedBundle>[];
+    final deniedCatalogue = catalogue?.error is DioException &&
+        const {401, 403, 410}.contains(
+          (catalogue!.error as DioException).response?.statusCode);
+    if (deniedCatalogue) _lastVerifiedBundles = null;
+    final currentBundles = deniedCatalogue ? null : catalogue?.valueOrNull;
+    if (currentBundles != null) _lastVerifiedBundles = currentBundles;
+    final bundles = currentBundles ?? _lastVerifiedBundles ?? const <GbVerifiedBundle>[];
     final visible = bundles.where((bundle) => gbBundleMatchesSelection(
       bundle, network: _network, period: _validity)).toList();
     GbVerifiedBundle? selected;
@@ -234,10 +244,17 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
       if (bundle.id == _bundleId) selected = bundle;
     }
     final wallet = owner == null ? null : ref.watch(gbWalletSummaryProvider(owner));
+    final deniedWallet = wallet?.error is DioException &&
+        const {401, 403, 410}.contains(
+          (wallet!.error as DioException).response?.statusCode);
+    if (deniedWallet) _lastVerifiedWallet = null;
+    final currentWallet = deniedWallet ? null : wallet?.valueOrNull;
+    if (currentWallet != null) _lastVerifiedWallet = currentWallet;
     final phone = _phone.text.trim();
     final validPhone = normalizeNigerianDataPhone(phone) != null;
     final canQuote = owner != null && selected != null && validPhone &&
-        !_purchaseLocked && !_loadingQuote && !(catalogue?.isLoading ?? false);
+        !_purchaseLocked && !_loadingQuote && !(catalogue?.isLoading ?? false) &&
+        currentBundles != null && catalogue?.hasError != true;
     final theme = Theme.of(context);
     final colors = context.masanawa;
     return RefreshIndicator(
@@ -251,7 +268,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700)),
           const SizedBox(height: 14),
-          GbWalletBalanceCard(balance: wallet?.valueOrNull,
+          GbWalletBalanceCard(balance: currentWallet ?? _lastVerifiedWallet,
               loading: wallet?.isLoading ?? false, compact: true),
           const SizedBox(height: 18),
           if (_quote == null && !_purchaseLocked && !_showingResult) ...[
@@ -349,7 +366,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             const LinearProgressIndicator(minHeight: 3),
           if (catalogue?.hasError ?? false)
             _DataEmptyState(
-              title: 'Bundles unavailable',
+              title: 'Check your connection',
               icon: Icons.wifi_off_rounded,
               onRetry: owner == null ? null : () => _reload(owner),
             ),
@@ -388,7 +405,8 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                       key: ValueKey('verified-data-bundle-${bundle.id}'),
                       bundle: bundle,
                       selected: _bundleId == bundle.id,
-                      onSelect: _purchaseLocked ? () {} : () {
+                      onSelect: _purchaseLocked || currentBundles == null ||
+                          catalogue?.hasError == true ? () {} : () {
                         setState(() {
                           _bundleId = bundle.id;
                           _clearQuote();

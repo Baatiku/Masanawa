@@ -1,45 +1,16 @@
-import 'gb_retained_finance_screens.dart';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../state/session_state.dart';
 import '../theme/masanawa_theme.dart';
-import 'gb_promotion_journal.dart';
-import 'gb_promotion_activity_panel.dart';
 import 'gb_wallet_activity.dart';
 import 'gb_wallet_summary.dart';
-import 'gb_wallet_holds_panel.dart';
-
-String _balanceStatus(GbActivityReconciliation? check){
-  if(check==null)return 'Balance check unavailable';
-  if(check.mb.state=='mismatch'||check.ngn.state=='mismatch')return 'Needs reconciliation';
-  if(check.mb.state=='uninitialized'&&check.ngn.state=='uninitialized')return 'Wallets not initialized';
-  return 'Recorded balances checked';
-}
-
-Widget _balanceCheck(BuildContext context,String unit,GbActivityBalanceReconciliation? check){
-  String amount(int n){
-    final sign=n<0?'−':'';
-    return unit=='MB'?'$sign${_groupActivity(n.abs())} MB':'$sign${_ngnActivity(n.abs())}';
-  }
-  if(check==null)return Text('$unit balance check unavailable. Refresh totals to retry.');
-  if(check.state=='uninitialized')return Text('No $unit wallet has been initialized.');
-  return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-    Text('$unit: ${check.state=='matched'?'Reconciled balance':'Balance needs reconciliation'}',
-      style:Theme.of(context).textTheme.titleSmall),
-    Wrap(spacing:18,runSpacing:8,children:[
-      Text('Opening: ${amount(check.opening)}'),Text('Posted closing: ${amount(check.closing)}'),
-      if(check.state=='matched')...[
-        Text('Available: ${amount(check.available!)}'),
-        if(unit=='MB')Text('Reserved: ${amount(check.reserved!)}'),
-        if(unit=='NGN'&&check.debt!>0)Text('Reversal debt: ${amount(check.debt!)}'),
-      ],
-    ]),
-    if(check.state=='mismatch')const Text('Available funds are not verified here. Check again or contact support.'),
-  ]);
-}
 
 GbWalletOwner? _ownerFor(WidgetRef ref) {
   final session=ref.watch(sessionProvider);
@@ -57,11 +28,6 @@ String _amountText(GbActivityItem row) {
   if(row.unit=='NGN')return '$sign₦${group(absolute~/100)}.${(absolute%100).toString().padLeft(2,'0')}';
   return '$sign${group(absolute)} MB';
 }
-
-String _groupActivity(int n)=>n.toString().replaceAllMapped(
-  RegExp(r'\B(?=(\d{3})+(?!\d))'),(_)=>',');
-String _ngnActivity(int kobo)=>'₦${_groupActivity(kobo~/100)}.'
-  '${(kobo%100).toString().padLeft(2,'0')}';
 
 List<Widget> _datedActivityTiles(BuildContext context,Iterable<GbActivityItem> items) {
   final children=<Widget>[];
@@ -212,14 +178,31 @@ class GbActivityTile extends StatelessWidget {
 }
 
 /// Small authoritative preview in Wallet; no invented empty activity state.
-class GbWalletActivitySection extends ConsumerWidget {
+class GbWalletActivitySection extends ConsumerStatefulWidget {
   const GbWalletActivitySection({super.key,this.previewCount=5});
   final int previewCount;
+
   @override
-  Widget build(BuildContext context,WidgetRef ref) {
+  ConsumerState<GbWalletActivitySection> createState() => _GbWalletActivitySectionState();
+}
+
+class _GbWalletActivitySectionState extends ConsumerState<GbWalletActivitySection> {
+  GbWalletOwner? _lastOwner;
+  GbActivityPage? _lastVerified;
+
+  @override
+  Widget build(BuildContext context) {
     final owner=_ownerFor(ref);
     final page=owner==null?null:ref.watch(gbActivityPageProvider((owner:owner,limit:5,
       unit:'all',filters:gbActivityAllFilters)));
+    if(owner!=_lastOwner){_lastOwner=owner;_lastVerified=null;}
+    final denied=page?.error is DioException &&
+      const {401,403,410}.contains((page!.error as DioException).response?.statusCode);
+    if(denied)_lastVerified=null;
+    final fresh=denied?null:page?.valueOrNull;
+    if(fresh!=null)_lastVerified=fresh;
+    final visible=fresh??_lastVerified;
+    final offline=page?.hasError==true || (page?.isLoading==true && visible!=null);
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       Wrap(alignment:WrapAlignment.spaceBetween,
         crossAxisAlignment:WrapCrossAlignment.center,children:[
@@ -232,23 +215,22 @@ class GbWalletActivitySection extends ConsumerWidget {
       const SizedBox(height:8),
       if(owner==null)
         const Padding(padding:EdgeInsets.all(16),child:Text('Sign in to see wallet activity.'))
-      else if(page!.isLoading && page.valueOrNull==null)
+      else if(page!.isLoading && visible==null)
         const ListTile(leading:CircularProgressIndicator(),title:Text('Loading wallet activity…'))
-      else if(page.hasError || page.valueOrNull==null)
-        ListTile(
-          title:const Text('Wallet activity is unavailable right now.'),
-          subtitle:const Text('No transaction has been assumed or changed.'),
-          trailing:IconButton(tooltip:'Retry wallet activity',
-            icon:const Icon(Icons.refresh),
-            onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,
-              unit:'all',filters:gbActivityAllFilters)))),
-        )
-      else if(page.valueOrNull!.items.isEmpty)
+      else if(visible?.items.isEmpty==true)
         const Padding(padding:EdgeInsets.symmetric(vertical:22),
           child:Center(child:Text('No posted MB or NGN activity yet.')))
       else
-        for(final item in page.valueOrNull!.items.take(previewCount))
+        for(final item in visible?.items.take(widget.previewCount) ?? const <GbActivityItem>[])
           GbActivityTile(key:ValueKey('wallet-preview-${item.id}'),item:item),
+      if(owner!=null && (offline || visible==null))
+        Center(child:Column(children:[
+          const Text('Check your connection',textAlign:TextAlign.center),
+          TextButton.icon(
+            icon:const Icon(Icons.refresh),label:const Text('Retry'),
+            onPressed:()=>ref.invalidate(gbActivityPageProvider((owner:owner,limit:5,
+              unit:'all',filters:gbActivityAllFilters)))),
+        ])),
     ]);
   }
 }
@@ -263,6 +245,7 @@ class GbWalletActivityScreen extends ConsumerStatefulWidget {
 
 class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen> {
   GbWalletOwner? _owner;
+  GbActivityPage? _lastVerifiedPage;
   final _more=<GbActivityItem>[];
   final _seen=<String>{};
   String? _next;
@@ -270,9 +253,8 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   CancelToken? _cancel;
   int _request=0;
   String _unit='all';
-  int _days=7;
   String _purpose='all',_status='all',_direction='all',_period='all',_reference='';
-  bool _badReference=false,_showFacets=false,_showPromotionHistory=false;
+  bool _badReference=false,_showFacets=false,_exporting=false;
   final _referenceInput=TextEditingController();
 
   GbActivityFilters get _facets=>(purpose:_purpose,status:_status,
@@ -300,6 +282,7 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
   void _reset() {
     ++_request;_cancel?.cancel();_cancel=null;
     _more.clear();_seen.clear();_next=null;
+    _lastVerifiedPage=null;
     _loadedMore=_loadingMore=_pageError=false;
   }
   @override
@@ -334,6 +317,66 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     }
   }
 
+  /// Export the complete selected result, not merely the visible first page.
+  /// A bounded export fails closed if a result is too large or ownership changes.
+  Future<void> _export(GbWalletOwner owner) async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    File? temporary;
+    bool sameOwner() {
+      final current = ref.read(sessionProvider);
+      return mounted && _owner == owner && current is SessionSignedIn &&
+          current.user.id == owner.accountId &&
+          ref.read(sessionProvider.notifier).authorizationEpoch == owner.authorizationEpoch;
+    }
+    String cell(String input) {
+      final safe = input.replaceAll(RegExp(r'[\r\n]'), ' ');
+      final guarded = RegExp(r'^[=+@\-]').hasMatch(safe) ? "'$safe" : safe;
+      return '"${guarded.replaceAll('"', '""')}"';
+    }
+    try {
+      final rows = <GbActivityItem>[];
+      final cursors = <String>{};
+      String? cursor;
+      do {
+        if (!sameOwner()) return;
+        final page = await ref.read(gbActivityTransportProvider).page(
+          limit: 30, cursor: cursor, unit: _unit, filters: _facets);
+        rows.addAll(page.items);
+        if (rows.length > 5000) throw StateError('Export exceeds 5000 rows');
+        cursor = page.nextCursor;
+        if (cursor != null && !cursors.add(cursor)) {
+          throw StateError('Repeated transaction cursor');
+        }
+      } while (cursor != null);
+      if (!sameOwner()) return;
+      final csv = StringBuffer('Timestamp UTC,Transaction,Amount,Unit,Status,Reference\r\n');
+      for (final row in rows) {
+        csv.writeln([
+          row.createdAt.toUtc().toIso8601String(), row.title,
+          row.amount.toString(), row.unit, row.status, row.operationId,
+        ].map(cell).join(','));
+      }
+      final dir = await getTemporaryDirectory();
+      temporary = File('${dir.path}/masanawa-transactions-${DateTime.now().microsecondsSinceEpoch}.csv');
+      await temporary.writeAsString(csv.toString(), flush: true);
+      if (!sameOwner()) return;
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(temporary.path, mimeType: 'text/csv')],
+        subject: 'Masanawa transactions',
+      ));
+    } catch (_) {
+      if (sameOwner()) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not export transactions. Check your connection and retry.'),
+      ));
+    } finally {
+      if (temporary != null) {
+        try { await temporary.delete(); } on FileSystemException catch (_) {}
+      }
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final owner = _ownerFor(ref);
@@ -341,7 +384,6 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
       _reset();
       _owner = owner;
       _unit = 'all';
-      _days = 7;
       _purpose = 'all';
       _status = 'all';
       _direction = 'all';
@@ -349,7 +391,6 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
       _reference = '';
       _badReference = false;
       _showFacets = false;
-      _showPromotionHistory = false;
       _referenceInput.clear();
     }
     final request = owner == null
@@ -358,16 +399,22 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
     final first = request == null
         ? null
         : ref.watch(gbActivityPageProvider(request));
-    final summaryRequest = owner == null ? null : (owner: owner, days: _days);
-    final summary = summaryRequest == null
-        ? null
-        : ref.watch(gbActivitySummaryProvider(summaryRequest));
-    final promotion = owner == null || !_showPromotionHistory
-        ? null
-        : ref.watch(gbPromotionJournalProvider(owner));
-    final promotionJournal = promotion?.valueOrNull;
-    final totals = summary?.valueOrNull;
-    final initial = first?.valueOrNull;
+    final failure = first?.error;
+    final authorizationRejected = failure is DioException &&
+        const {401, 403, 410}.contains(failure.response?.statusCode);
+    if (authorizationRejected) {
+      _lastVerifiedPage = null; // Invalid authorization cannot display old rows.
+      _more.clear();
+      _next = null;
+    }
+    // Riverpod may retain the previous value while a refresh is loading or
+    // after it fails. Render those verified rows, but never call them fresh:
+    // the centered offline notice must remain visible alongside the list.
+    final currentPage = authorizationRejected || first?.isLoading == true ||
+        first?.hasError == true ? null : first?.valueOrNull;
+    if (currentPage != null) _lastVerifiedPage=currentPage;
+    final initial = currentPage ?? _lastVerifiedPage;
+    final stale = currentPage == null && initial != null;
     final entries = <GbActivityItem>[
       ...?initial?.items,
       if (initial != null) ..._more,
@@ -381,10 +428,9 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
           ? const Center(child: Text('Sign in to view wallet activity.'))
           : RefreshIndicator(
               onRefresh: () async {
-                setState(_reset);
+                final previous = _lastVerifiedPage;
+                setState(() { _reset(); _lastVerifiedPage = previous; });
                 ref.invalidate(gbActivityPageProvider(request!));
-                ref.invalidate(gbActivitySummaryProvider(summaryRequest!));
-                ref.invalidate(gbPromotionJournalProvider(owner));
                 try {
                   await ref.read(gbActivityPageProvider(request).future);
                 } catch (_) {
@@ -396,6 +442,29 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 children: [
+                  Center(child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const ValueKey('activity-toggle-more-filters'),
+                        onPressed: () => setState(() => _showFacets = !_showFacets),
+                        icon: const Icon(Icons.tune_rounded),
+                        label: const Text('Filter'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const ValueKey('activity-export'),
+                        onPressed: _exporting ? null : () => _export(owner),
+                        icon: _exporting
+                            ? const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.ios_share_rounded),
+                        label: const Text('Export'),
+                      ),
+                    ],
+                  )),
+                  if (_showFacets) ...[
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final category = _HistoryFilter(
@@ -446,10 +515,11 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                     },
                   ),
                   const SizedBox(height: 10),
-                  SingleChildScrollView(
+                  Center(child: SingleChildScrollView(
                     key: const ValueKey('wallet-activity-unit-filters'),
                     scrollDirection: Axis.horizontal,
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         for (final choice in const <String, String>{
                           'all': 'All activity',
@@ -475,40 +545,16 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                           ),
                       ],
                     ),
-                  ),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      TextButton.icon(
-                        key: const ValueKey('activity-toggle-more-filters'),
-                        onPressed: () =>
-                            setState(() => _showFacets = !_showFacets),
-                        icon: Icon(
-                          _showFacets ? Icons.keyboard_arrow_up : Icons.tune,
-                        ),
-                        label: Text(
-                          _showFacets ? 'Hide filters' : 'More filters',
-                        ),
-                      ),
-                      if (_filtered)
-                        const Padding(
-                          padding: EdgeInsetsDirectional.only(start: 8),
-                          child: Text(
-                            'Filtered',
-                            semanticsLabel: 'History filters are active',
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (_showFacets) ...[
+                  )),
                     const SizedBox(height: 8),
-                    Text(
+                    Center(child: Text(
                       'Direction',
                       style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
+                    )),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                         children: [
                           for (final choice in const <String, String>{
                             'all': 'In & out',
@@ -533,16 +579,16 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                               ),
                             ),
                         ],
-                      ),
                     ),
                     const SizedBox(height: 10),
-                    Text(
+                    Center(child: Text(
                       'History period',
                       style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
+                    )),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                         children: [
                           for (final choice in const <String, String>{
                             'all': 'All dates',
@@ -565,7 +611,6 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                               ),
                             ),
                         ],
-                      ),
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -605,48 +650,33 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                         ),
                       ],
                     ),
-                  ],
                   if (_filtered)
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
+                    Center(
                       child: TextButton.icon(
                         onPressed: _clearFilters,
                         icon: const Icon(Icons.filter_alt_off),
                         label: const Text('Clear filters'),
                       ),
                     ),
+                  ],
                   const SizedBox(height: 12),
-                  _ActivityOverview(
-                    owner: owner,
-                    days: _days,
-                    totals: totals,
-                    loading: summary?.isLoading == true,
-                    onPeriod: (days) {
-                      if (_days != days) setState(() => _days = days);
-                    },
-                    onRetry: () => ref.invalidate(
-                      gbActivitySummaryProvider(summaryRequest!),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   if (initial == null && first?.isLoading == true)
                     const ListTile(
                       title: Text('Loading verified activity…'),
                       leading: CircularProgressIndicator(),
                     ),
-                  if (initial == null && first?.hasError == true)
-                    ListTile(
-                      title: const Text('Could not verify wallet activity.'),
-                      subtitle: const Text(
-                        'Previous balances and funds are unchanged.',
-                      ),
-                      trailing: IconButton(
+                  if (stale || (initial == null && first?.hasError == true))
+                    Center(child: Column(children: [
+                      const Icon(Icons.wifi_off_rounded),
+                      Text(stale ? 'Showing previous transactions · Check your connection'
+                          : 'Check your connection and retry',
+                        textAlign: TextAlign.center),
+                      TextButton.icon(
                         icon: const Icon(Icons.refresh),
-                        tooltip: 'Retry wallet activity',
-                        onPressed: () =>
-                            ref.invalidate(gbActivityPageProvider(request!)),
+                        label: const Text('Retry'),
+                        onPressed: () => ref.invalidate(gbActivityPageProvider(request!)),
                       ),
-                    ),
+                    ])),
                   if (initial != null && byId.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(24),
@@ -692,67 +722,6 @@ class _GbWalletActivityScreenState extends ConsumerState<GbWalletActivityScreen>
                         onPressed: () => _loadMore(owner, cursor),
                         icon: const Icon(Icons.expand_more),
                         label: const Text('Load more activity'),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  GbWalletHoldsPanel(
-                    key: ValueKey(('wallet-holds', owner)),
-                    owner: owner,
-                  ),
-                  const Divider(height: 24),
-                  ListTile(
-                    key: const ValueKey('wallet-promotion-history-toggle'),
-                    title: const Text('Historical promotion records'),
-                    subtitle: const Text(
-                      'Review reserved, spent and pending MB separately from posted activity.',
-                    ),
-                    trailing: Icon(
-                      _showPromotionHistory
-                          ? Icons.expand_less
-                          : Icons.expand_more,
-                    ),
-                    onTap: () => setState(
-                      () => _showPromotionHistory = !_showPromotionHistory,
-                    ),
-                  ),
-                  ListTile(key:const ValueKey('wallet-inquiries'),title:const Text('Wallet inquiries'),
-                    subtitle:const Text('Review requests linked to your original receipts'),
-                    trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push<void>(context,MaterialPageRoute(
-                      builder:(_)=>const GbWalletInquiriesScreen()))),
-                  if(_showPromotionHistory)TextButton(onPressed:()=>Navigator.push<void>(context,MaterialPageRoute(
-                    builder:(_)=>const GbLegacyFinanceHistoryScreen())),child:const Text('Full historical activity and receipts')),
-                  if (_showPromotionHistory && promotion?.isLoading == true)
-                    const ListTile(
-                      title: Text('Loading private promotion history…'),
-                    ),
-                  if (promotionJournal != null &&
-                      (promotionJournal.campaigns.isNotEmpty ||
-                          promotionJournal.earnings.isNotEmpty))
-                    GbPromotionActivityPanel(
-                      key: ValueKey(
-                        'promotion-history-${owner.accountId}-${owner.authorizationEpoch}',
-                      ),
-                      journal: promotionJournal,
-                    ),
-                  if (_showPromotionHistory &&
-                      promotionJournal != null &&
-                      promotionJournal.campaigns.isEmpty &&
-                      promotionJournal.earnings.isEmpty)
-                    const ListTile(
-                      title: Text(
-                        'No funded campaigns or referral allocations yet.',
-                      ),
-                    ),
-                  if (_showPromotionHistory && promotion?.hasError == true)
-                    ListTile(
-                      title: const Text('Promotion history unavailable.'),
-                      subtitle: const Text(
-                        'Posted MB and NGN activity remains available.',
-                      ),
-                      trailing: TextButton(
-                        onPressed: () =>
-                            ref.invalidate(gbPromotionJournalProvider(owner)),
-                        child: const Text('Retry promotion history'),
                       ),
                     ),
                 ],
@@ -801,195 +770,5 @@ class _HistoryFilter extends StatelessWidget {
     onChanged: (next) {
       if (next != null && next != value) onChanged(next);
     },
-  );
-}
-
-class _ActivityOverview extends StatelessWidget {
-  const _ActivityOverview({
-    required this.owner,
-    required this.days,
-    required this.totals,
-    required this.loading,
-    required this.onPeriod,
-    required this.onRetry,
-  });
-  final GbWalletOwner owner;
-  final int days;
-  final GbActivityPeriodSummary? totals;
-  final bool loading;
-  final ValueChanged<int> onPeriod;
-  final VoidCallback onRetry;
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context), colors = context.masanawa;
-    return Container(
-      key: const ValueKey('activity-overview'),
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
-      decoration: BoxDecoration(
-        color: colors.surfaceCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.structuralBorder),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  'Overview',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                PopupMenuButton<int>(
-                  tooltip: 'Choose totals period',
-                  onSelected: onPeriod,
-                  itemBuilder: (_) => [
-                    for (final period in const [7, 30])
-                      PopupMenuItem(
-                        key: ValueKey('activity-period-$period'),
-                        value: period,
-                        child: Text('Last $period days'),
-                      ),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          'Last $days days',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: colors.brandStrong,
-                          ),
-                        ),
-                        const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (totals == null && loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: LinearProgressIndicator(
-                  semanticsLabel: 'Loading period totals',
-                ),
-              ),
-            if (totals == null && !loading)
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Period totals unavailable. No zero balance is assumed.',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: onRetry,
-                    child: const Text('Retry totals'),
-                  ),
-                ],
-              ),
-            if (totals != null) ...[
-              _OverviewAmounts(
-                label: 'Data · MB',
-                incoming:
-                    'Received: ${totals!.mb.received > 0 ? '+' : ''}${_groupActivity(totals!.mb.received)} MB',
-                outgoing:
-                    'Used: ${totals!.mb.spent > 0 ? '−' : ''}${_groupActivity(totals!.mb.spent)} MB',
-              ),
-              const Divider(height: 16),
-              _OverviewAmounts(
-                label: 'Naira · NGN',
-                incoming:
-                    'Received: ${totals!.ngn.received > 0 ? '+' : ''}${_ngnActivity(totals!.ngn.received)}',
-                outgoing:
-                    'Spent: ${totals!.ngn.spent > 0 ? '−' : ''}${_ngnActivity(totals!.ngn.spent)}',
-              ),
-              Theme(
-                data: theme.copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  key: PageStorageKey((
-                    'activity-balance-details',
-                    owner,
-                    days,
-                  )),
-                  tilePadding: EdgeInsets.zero,
-                  minTileHeight: 48,
-                  title: Text(
-                    'Analysis',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colors.brandStrong,
-                    ),
-                  ),
-                  childrenPadding: const EdgeInsets.only(bottom: 12),
-                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Totals cover all posted activity in this period, independently of history filters. MB and NGN stay separate.',
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'UTC ${totals!.fromAt.toIso8601String()} – ${totals!.toAt.toIso8601String()}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(_balanceStatus(totals!.reconciliation)),
-                    const SizedBox(height: 8),
-                    _balanceCheck(context, 'MB', totals!.reconciliation?.mb),
-                    const SizedBox(height: 10),
-                    _balanceCheck(context, 'NGN', totals!.reconciliation?.ngn),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'This checks internal posted balances, not external bank settlement or data delivery. Account and welcome-credit restrictions still apply.',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OverviewAmounts extends StatelessWidget {
-  const _OverviewAmounts({
-    required this.label,
-    required this.incoming,
-    required this.outgoing,
-  });
-  final String label, incoming, outgoing;
-  @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 12,
-    runSpacing: 5,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      Text(
-        label,
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: context.masanawa.textMuted),
-      ),
-      Text(
-        incoming,
-        textDirection: TextDirection.ltr,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      Text(
-        outgoing,
-        textDirection: TextDirection.ltr,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-    ],
   );
 }

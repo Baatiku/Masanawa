@@ -228,6 +228,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 5, 14, 7),
           child: Wrap(
+            alignment: WrapAlignment.center,
             spacing: 8,
             children: [
               for (final choice in const [

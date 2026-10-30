@@ -100,7 +100,7 @@ class _FilteredHistory implements CallHistoryTransport {
 }
 
 void main() {
-  testWidgets('filter changes fence stale totals and unknown usage never becomes a zero charge', (tester) async {
+  testWidgets('call history has no advanced filters or usage summaries', (tester) async {
     tester.view.physicalSize=const Size(320,900);tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
     final history=_FilteredHistory();
@@ -108,16 +108,13 @@ void main() {
       callHistoryTransportProvider.overrideWithValue(history),agentDirectoryProvider.overrideWith(_Directory.new)],
       child:MaterialApp(home:const MasanaOnlyCallsScreen())));
     await tester.pumpAndSettle();
-    expect(find.text('Settled charges unavailable'),findsOneWidget);
+    expect(find.text('Connected'),findsNothing);
+    expect(find.text('No confirmed connection'),findsNothing);
+    expect(find.text('Settled charges unavailable'),findsNothing);
     expect(find.text('Confirmed charges: 0 MB'),findsNothing);
-    await tester.tap(find.text('Connected'));await tester.pump(const Duration(milliseconds:400));
-    await tester.tap(find.text('No confirmed connection'));await tester.pumpAndSettle();
-    expect(history.requests.last,('not_connected','all'));
-    history.stale.complete(const CallHistoryPage(calls:[],summary:CallHistorySummary(
-      calls:99,verifiedConnectedMs:99000,chargedMb:99,unverifiedCalls:0,pendingUsageCalls:0)));
-    await tester.pumpAndSettle();
+    expect(history.requests.last,('all','all'));
     expect(find.text('99 matching calls'),findsNothing);
-    expect(find.text('1 matching call'),findsOneWidget);
+    expect(find.text('Amina'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
   testWidgets('history resolves the canonical picture when cached directory arrives', (tester) async {

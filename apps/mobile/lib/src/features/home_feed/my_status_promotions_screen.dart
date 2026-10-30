@@ -181,8 +181,8 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
             maxLines:3,overflow:TextOverflow.ellipsis),
           trailing:widget.canBoost&&widget.onCreatePromotion!=null?TextButton(onPressed:continueDraft,
             child:const Text('Continue')):null)),
-        SingleChildScrollView(scrollDirection:Axis.horizontal,
-          child:Row(children:[
+        Center(child:SingleChildScrollView(scrollDirection:Axis.horizontal,
+          child:Row(mainAxisSize:MainAxisSize.min,children:[
             for(final filter in const <(String,String)>[
               ('all','All'),('pending_review','In review'),('active','Active'),
               ('paused','Paused'),('completed','Completed'),
@@ -191,7 +191,7 @@ class _MyStatusPromotionsScreenState extends State<MyStatusPromotionsScreen>{
                 child:ChoiceChip(label:Text(filter.$2),
                   selected:campaignFilter==filter.$1,
                   onSelected:(_)=>setState(()=>campaignFilter=filter.$1))),
-          ])),
+          ]))),
         if(campaigns.isEmpty&&!loading)const ListTile(title:Text('No campaigns yet')),
         if(campaigns.isNotEmpty&&visibleCampaigns.isEmpty)
           const ListTile(title:Text('No campaigns in this status')),

@@ -499,10 +499,10 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
           Text('Quick amounts', style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          SingleChildScrollView(
+          Center(child: SingleChildScrollView(
             key: const ValueKey('send-quick-amounts'),
             scrollDirection: Axis.horizontal,
-            child: Row(children: [
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
               for (final entry in const <int, String>{
                 100: '100 MB', 500: '500 MB', 1000: '1 GB',
                 5000: '5 GB', 10000: '10 GB',
@@ -535,7 +535,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                       }),
               ),
             ]),
-          ),
+          )),
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey('send-custom-mb'),

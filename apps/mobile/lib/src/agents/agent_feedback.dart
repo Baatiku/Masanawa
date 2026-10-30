@@ -2,7 +2,7 @@ import 'dart:io';
 
 import '../core/network/api_client.dart';
 
-enum AgentRecovery { retry, signIn, reconnect }
+enum AgentRecovery { retry, signIn, reconnect, addMb, microphone }
 
 /// Local, allowlisted copy. Never renders vendor messages or configuration.
 class AgentFeedback {
@@ -14,10 +14,31 @@ class AgentFeedback {
     AgentRecovery.retry => 'Try again',
     AgentRecovery.signIn => 'Sign in',
     AgentRecovery.reconnect => 'Reconnect',
+    AgentRecovery.addMb => 'Add MB',
+    AgentRecovery.microphone => 'Microphone settings',
   };
 
   factory AgentFeedback.fromError(Object error, {bool conversation = false}) {
     if (error is ApiException) {
+      if (const {'gb.wallet.insufficient_mb', 'gb.call.insufficient_mb'}
+          .contains(error.code)) {
+        return const AgentFeedback(
+          'Not enough MB for this conversation. Add MB to continue.',
+          recovery: AgentRecovery.addMb,
+        );
+      }
+      if (error.code == 'gb.call.balance_unavailable' ||
+          error.code == 'gb.wallet.not_ready') {
+        return const AgentFeedback(
+          'Your MB balance could not be verified. Check your connection and retry.',
+        );
+      }
+      if (error.code == 'gb.call.account_restricted' ||
+          error.code == 'gb.wallet.account_frozen') {
+        return const AgentFeedback(
+          'This MB wallet is restricted. Contact support to continue.',
+        );
+      }
       if (error.statusCode == 401) {
         return const AgentFeedback(
           'Please sign in again to continue.',
@@ -26,6 +47,9 @@ class AgentFeedback {
       }
       if (error.code == 'NETWORK_UNREACHABLE') {
         return const AgentFeedback('Check your connection and try again.');
+      }
+      if (error.code == 'gb.call.unavailable') {
+        return const AgentFeedback('The voice service is unavailable right now. Please retry shortly.');
       }
       if (error.statusCode == 403 || error.statusCode == 404) {
         return const AgentFeedback('This agent isn’t available right now.');

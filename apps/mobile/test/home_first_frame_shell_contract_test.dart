@@ -149,7 +149,8 @@ void main(){
     await tester.tap(find.descendant(of:find.byType(NavigationBar),matching:find.text('Bayanan martaba')));
     await tester.pumpAndSettle();
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,4);
-    expect(find.bySemanticsLabel(RegExp('Edit your profile')),findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-edit-entry')),findsOneWidget);
+    expect(find.text('Edit profile'),findsOneWidget);
     expect(find.text('Settings'),findsNothing,reason:'Embedded profile must not add a second heading');
     await tester.tap(find.descendant(of:find.byType(NavigationBar),matching:find.text('Walati')));
     await tester.pumpAndSettle();

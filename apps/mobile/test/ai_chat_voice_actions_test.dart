@@ -30,6 +30,15 @@ class _Recorder extends VoiceNoteRecorder {
  @override Future<void> close() async {closed++;}
  @override void retain(){retained=true;}
 }
+class _FailedRecorder extends _Recorder {
+  int attempts=0;
+  @override Future<void> start({bool Function()? isOwnerCurrent}) async {
+    attempts++;
+    state=VoiceNoteState.failed;
+    error='Microphone permission was denied. Allow microphone access in settings.';
+    notifyListeners();
+  }
+}
 class _Chats extends AiChatController {
  Completer<void>? response;
  final sent=<ChatAttachment>[];
@@ -82,6 +91,30 @@ void main() {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_OfficialDirectory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
   expect(find.textContaining('AI simulation ·'),findsOneWidget);
+  expect(find.byKey(const ValueKey('masana-ai-chat-disclosure')),findsOneWidget);
+  expect(find.textContaining('I am an AI persona based on the public profile of Example Official'),findsOneWidget);
+  expect(tester.takeException(),isNull);
+ });
+ testWidgets('failed microphone start releases its recorder and displays centered retry guidance', (tester) async {
+  final recorder=_FailedRecorder();
+  await tester.pumpWidget(ProviderScope(overrides:[
+    aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),
+    sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),
+    voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder),
+  ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
+    home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsLabel('Record voice note'));
+  await tester.pumpAndSettle();
+  expect(find.text('Voice note unavailable'),findsOneWidget);
+  expect(find.textContaining('Microphone permission was denied'),findsOneWidget);
+  expect(find.text('Microphone settings'),findsOneWidget);
+  expect(recorder.cancelled,greaterThanOrEqualTo(1));
+  await tester.tap(find.text('Close'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsLabel('Record voice note'));
+  await tester.pumpAndSettle();
+  expect(recorder.attempts,2);
   expect(tester.takeException(),isNull);
  });
  testWidgets('received voice note uses the Masana portrait and a wide shallow player',(tester)async{
