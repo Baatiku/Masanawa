@@ -350,6 +350,10 @@ void main() {
           allowanceGb: 2, costMb: 2000, validityDays: 30,
           providerAmount: '1500.00', expiresAt: DateTime.utc(2099)),
       ]),
+      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
+        const GbWalletBalance(totalMb: 5000, availableMb: 5000,
+          purchasedAvailableMb: 5000, welcomeAvailableMb: 0,
+          reservedMb: 0, frozen: false)),
     ], child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen()))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '08031234567');
