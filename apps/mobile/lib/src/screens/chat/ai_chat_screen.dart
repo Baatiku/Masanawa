@@ -636,7 +636,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         context: context,
         builder: (dialogContext) => AlertDialog(
           icon: const Icon(Icons.mic_off_rounded),
-          title: const Text('Microphone unavailable', textAlign: TextAlign.center),
+          title: Text(ChatUiCopy.of(context, 'Microphone unavailable'), textAlign: TextAlign.center),
           content: Text(result.permanentlyDenied
               ? 'Microphone access is disabled. Enable it in your phone settings to make a call.'
               : 'Allow microphone access to make a voice call.',
@@ -644,12 +644,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Close')),
+              child: Text(ChatUiCopy.of(context, 'Close'))),
             if (result.permanentlyDenied) FilledButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
                 AppPermissions.openSettings();
-              }, child: const Text('Microphone settings')),
+              }, child: Text(ChatUiCopy.of(context, 'Microphone settings'))),
           ],
         ),
       );
@@ -1104,7 +1104,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: const Text('Photos not added'),
+            title: Text(ChatUiCopy.of(context, 'Photos not added')),
             content: SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1175,7 +1175,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 textAlign: TextAlign.center),
               TextButton.icon(
                 onPressed: () => ref.read(agentDirectoryProvider.notifier).refresh(),
-                icon: const Icon(Icons.refresh), label: const Text('Retry profile')),
+                icon: const Icon(Icons.refresh), label: Text(ChatUiCopy.of(context, 'Retry profile'))),
             ])),
           Expanded(child: ListView(children: [
             for (final message in messages) ListTile(
@@ -1284,11 +1284,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           leadingWidth: 40,
           titleSpacing: 0,
           leading: _showSearch
-              ? IconButton(tooltip: 'Close search', icon: const Icon(Icons.arrow_back),
+              ? IconButton(tooltip: ChatUiCopy.of(context, 'Close search'), icon: const Icon(Icons.arrow_back),
                   onPressed: () => setState(() { _showSearch=false; _search.clear(); }))
               : widget.embeddedInShell
               ? IconButton(
-                  tooltip: 'New chat',
+                  tooltip: ChatUiCopy.of(context, 'New chat'),
                   icon: const Icon(Icons.smart_toy_outlined),
                   onPressed:
                       widget.onOpenAgents ?? () => context.push('/masana'),
@@ -1369,17 +1369,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           actions: _showSearch ? const [] : [
             if (_selectedMessageIds.isNotEmpty) ...[
               IconButton(
-                tooltip: 'Copy selected',
+                tooltip: ChatUiCopy.of(context, 'Copy selected'),
                 icon: const Icon(Icons.copy_outlined),
                 onPressed: () => _copySelected(allMessages),
               ),
               IconButton(
-                tooltip: 'Delete selected',
+                tooltip: ChatUiCopy.of(context, 'Delete selected'),
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () => _deleteSelected(),
               ),
               IconButton(
-                tooltip: 'Clear selection',
+                tooltip: ChatUiCopy.of(context, 'Clear selection'),
                 icon: const Icon(Icons.close),
                 onPressed: () => setState(_selectedMessageIds.clear),
               ),
@@ -1435,21 +1435,21 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   child: Text(ChatUiCopy.of(context, 'Wallet'))),
                 PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
                 if (widget.embeddedInShell) ...const [
-                  PopupMenuItem(value: 'activity', child: Text('Activity')),
-                  PopupMenuItem(value: 'profile', child: Text('Profile')),
+                  PopupMenuItem(value: 'activity', child: Text(ChatUiCopy.of(context, 'Activity'))),
+                  PopupMenuItem(value: 'profile', child: Text(ChatUiCopy.of(context, 'Profile'))),
                   PopupMenuDivider(),
                 ],
-                const PopupMenuItem(value: 'new', child: Text('New context')),
-                const PopupMenuItem(value: 'rename', child: Text('Rename chat')),
-                const PopupMenuItem(value: 'pin', child: Text('Pin / unpin')),
-                const PopupMenuItem(value: 'archive', child: Text('Archive / unarchive')),
+                const PopupMenuItem(value: 'new', child: Text(ChatUiCopy.of(context, 'New context'))),
+                const PopupMenuItem(value: 'rename', child: Text(ChatUiCopy.of(context, 'Rename chat'))),
+                const PopupMenuItem(value: 'pin', child: Text(ChatUiCopy.of(context, 'Pin / unpin'))),
+                const PopupMenuItem(value: 'archive', child: Text(ChatUiCopy.of(context, 'Archive / unarchive'))),
                 if (!agent.supportAgent) ...const [
                   PopupMenuDivider(),
-                  PopupMenuItem(value: 'block', child: Text('Block')),
-                  PopupMenuItem(value: 'report', child: Text('Report')),
+                  PopupMenuItem(value: 'block', child: Text(ChatUiCopy.of(context, 'Block'))),
+                  PopupMenuItem(value: 'report', child: Text(ChatUiCopy.of(context, 'Report'))),
                 ],
                 const PopupMenuDivider(),
-                const PopupMenuItem(value: 'clear', child: Text('Clear chat')),
+                const PopupMenuItem(value: 'clear', child: Text(ChatUiCopy.of(context, 'Clear chat'))),
               ],
             ),
           ],
@@ -1457,8 +1457,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             preferredSize: const Size.fromHeight(40),
             child: SizedBox(height: 40, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               Text(searchMatches.isEmpty ? 'No matches' : '${_searchIndex + 1}/${searchMatches.length}'),
-              IconButton(tooltip:'Previous result',icon:const Icon(Icons.keyboard_arrow_up),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(-1,searchMatches)),
-              IconButton(tooltip:'Next result',icon:const Icon(Icons.keyboard_arrow_down),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(1,searchMatches)),
+              IconButton(tooltip: ChatUiCopy.of(context, 'Previous result'),icon:const Icon(Icons.keyboard_arrow_up),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(-1,searchMatches)),
+              IconButton(tooltip: ChatUiCopy.of(context, 'Next result'),icon:const Icon(Icons.keyboard_arrow_down),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(1,searchMatches)),
             ])),
           ) : null,
         ),
