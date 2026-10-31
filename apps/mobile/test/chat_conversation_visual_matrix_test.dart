@@ -55,16 +55,16 @@ class _RichVisualChats extends _VisualChats {
     'visual-agent': ChatThread(characterId: 'visual-agent', messages: [
       AiChatMessage(
         id: 'rich-table', isUser: false,
-        text: '### Kasuwanci / التجارة\\n'
-          '| Ƙasa | Bayani | نسبة |\\n'
-          '|---|---|---|\\n'
-          '| Najeriya | bayanan kasuwanci da gwaji | ٥٠٪ |\\n'
-          '| Ghana | Arabic حديث مع Hausa rubutu | ٢٥٪ |\\n'
-          '\\n[Read source](https://example.org/documentation/quite/a/long/link)\\n'
-          '\\n\\`\\`\\`dart\\n'
-          'final bilingual = "السلام عليكم, sannu da aiki";\\n'
-          'print(bilingual);\\n'
-          '\\`\\`\\`',
+        text: '### Kasuwanci / التجارة\n'
+          '| Ƙasa | Bayani | نسبة |\n'
+          '|---|---|---|\n'
+          '| Najeriya | bayanan kasuwanci da gwaji | ٥٠٪ |\n'
+          '| Ghana | Arabic حديث مع Hausa rubutu | ٢٥٪ |\n'
+          '\n[Read source](https://example.org/documentation/quite/a/long/link)\n'
+          '\n\`\`\`dart\n'
+          'final bilingual = "السلام عليكم, sannu da aiki";\n'
+          'print(bilingual);\n'
+          '\`\`\`',
         createdAt: DateTime(2026, 10, 30, 11),
         deliveryStatus: 'delivered',
       ),
