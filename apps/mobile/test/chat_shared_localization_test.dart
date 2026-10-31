@@ -96,9 +96,14 @@ void main() {
     await tester.pumpWidget(_host('ar', ChatEmojiPanel(
       controller: editor, onClose: () {},
     )));
-    await tester.pump();
+    // emoji_picker_flutter loads recent selections on a zero-delay timer.
+    // Drain that timer before disposing its subtree in the test harness.
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pumpAndSettle();
     expect(find.text('الرموز التعبيرية'), findsOneWidget);
     expect(find.byTooltip('العودة إلى لوحة المفاتيح'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 10));
     expect(tester.takeException(), isNull);
   });
 
