@@ -62,6 +62,8 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   const commentsMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0026_comment_conversations.sql",import.meta.url),"utf8");
   await pool.query(commentsMigration);
   await pool.query(commentsMigration); // forward-only and repeat-safe on historic rows
+  const newsMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0027_publisher_news.sql",import.meta.url),"utf8");
+  await pool.query(newsMigration);
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
