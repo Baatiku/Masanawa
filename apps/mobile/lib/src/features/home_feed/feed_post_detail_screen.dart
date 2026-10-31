@@ -8,6 +8,7 @@ import 'feed_api.dart';
 import 'feed_media_api.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'news_story_card.dart';
 import 'status_post_boost_action.dart';
 import 'status_post_social_proof.dart';
 import 'status_post_media.dart';
@@ -481,7 +482,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
             Row(children:[Expanded(child:StatusPostAuthorHeader(
               post:p,
               agent:widget.authorDirectory[p.authorMasanaId],
-              onProfile:p.isHuman
+              onProfile:p.isNews?null:p.isHuman
                 ? (p.authorHandle==null||widget.onHumanProfile==null?null:
                     ()=>widget.onHumanProfile!(p.authorHandle!))
                 : (widget.onMasanaProfile==null?null:
@@ -493,7 +494,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
                 onHidden:()=>setState((){generation++;denied=true;post=null;comments=[];loading=false;loadingMore=false;reacting=false;})),
             ]),
             const SizedBox(height:12),
-            StatusPostBody(accountKey:widget.accountKey,postId:p.id,
+            p.isNews?NewsStoryBody(story:p.news!):StatusPostBody(accountKey:widget.accountKey,postId:p.id,
               body:p.body,mode:StatusPostBodyMode.detail),
             StatusPostMedia(post:p,accountKey:widget.accountKey,
               mediaApi:widget.mediaApi,renderer:widget.inlineMediaRenderer,
@@ -501,7 +502,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
               audioPlaybackAvailable:widget.audioPlaybackAvailable),
             Padding(padding:const EdgeInsets.symmetric(vertical:8),
               child:StatusPostSocialProof(post:p)),
-            StatusPostBoostAction(post:p,enabled:widget.onBoostPost!=null,
+            StatusPostBoostAction(post:p,enabled:!p.isNews&&widget.onBoostPost!=null,
               onBoost:widget.onBoostPost),
             const Divider(height:12),
             StatusPostActionRow(post:p,pending:reacting||loading,
