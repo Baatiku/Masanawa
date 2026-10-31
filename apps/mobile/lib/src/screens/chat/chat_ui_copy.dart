@@ -15,6 +15,22 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "Show transcript": "Nuna rubutun saƙon murya",
+    "Hide transcript": "Ɓoye rubutun saƙon murya",
+    "Edit on this device": "Gyara a wannan na’ura",
+    "Hide on this device": "Ɓoye a wannan na’ura",
+    "Select": "Zaɓa",
+    "Save media": "Ajiye fayil",
+    "Share": "Raba",
+    "Forward": "Tura",
+    "Copy": "Kwafi",
+    "Reply": "Amsa",
+    "edited": "an gyara",
+    "Hidden on this device": "An ɓoye a wannan na’ura",
+    "Download failed · check connection and try again": "Sauke fayil ya gaza · duba haɗin intanet ka sake gwadawa",
+    "Next voice note": "Saƙon murya na gaba",
+    "Study · ask, answer, or speak naturally. Your learning progress is saved privately.": "Karatu · yi tambaya, ba da amsa, ko yin magana a zahiri. Ana adana ci gabanka a sirrance.",
+    "Offline · messages will send when your connection returns": "Babu intanet · za a aika saƙonni idan haɗin ya dawo",
     "New call": "Sabon kira",
     "Search Masana profiles": "Nemo bayanan Masana",
     "Clear Masana search": "Share binciken Masana",
