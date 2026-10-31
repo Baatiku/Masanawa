@@ -161,7 +161,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
               Icon(Icons.smart_toy_outlined, size: 52, color: u.brand),
               const SizedBox(height: 16),
               Text(
-                directory.error ?? ChatUiCopy.of(context, 'No Masana are available right now.'),
+                ChatUiCopy.of(context, directory.error ?? 'No Masana are available right now.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: u.textPrimary,
@@ -248,7 +248,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
         ),
         if (directory.error != null)
           MaterialBanner(
-            content: Text(directory.error!),
+            content: Text(ChatUiCopy.of(context, directory.error!)),
             actions: [
               TextButton(
                 onPressed: directory.loading

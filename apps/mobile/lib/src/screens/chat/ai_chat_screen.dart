@@ -1205,8 +1205,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         body: Column(children: [
           Padding(padding: const EdgeInsets.all(16),
             child: Column(children: [
-              Text(directory.error ?? ChatUiCopy.of(context,
-                'Masana profile unavailable. Saved history is visible; sending is disabled.'),
+              Text(directory.error == null
+                ? ChatUiCopy.of(context,
+                    'Masana profile unavailable. Saved history is visible; sending is disabled.')
+                : ChatUiCopy.of(context, directory.error!),
                 textAlign: TextAlign.center),
               TextButton.icon(
                 onPressed: () => ref.read(agentDirectoryProvider.notifier).refresh(),
@@ -2308,7 +2310,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             : feedback.recovery == AgentRecovery.microphone
                 ? Icons.mic_off_outlined : Icons.info_outline_rounded),
         title: Text(ChatUiCopy.of(context, 'Call could not start'), textAlign: TextAlign.center),
-        content: Text(feedback.message, textAlign: TextAlign.center),
+        content: Text(ChatUiCopy.of(context, feedback.message),
+          textAlign: TextAlign.center),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext),

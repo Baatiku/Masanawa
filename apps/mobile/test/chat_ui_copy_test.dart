@@ -123,6 +123,13 @@ void main() {
       'Tap to retry',
       'Playback speed {speed}×',
       '{percent} percent',
+      'Not enough MB for this conversation. Add MB to continue.',
+      'Your MB balance could not be verified. Check your connection and retry.',
+      'Please sign in again to continue.',
+      'Check your connection and try again.',
+      'The voice service is unavailable right now. Please retry shortly.',
+      'I couldn’t respond just now. Please try again.',
+      'Microphone access is needed to make a voice call.',
     ];
     for (final key in keys) {
       expect(ChatUiCopy.hasTranslation('ha', key), isTrue,

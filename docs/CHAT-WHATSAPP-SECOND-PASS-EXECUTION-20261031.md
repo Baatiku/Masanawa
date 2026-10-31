@@ -144,6 +144,9 @@ unmerged until those required checks are qualified.
 - The final source follow-up uses the app's localized, trusted presence states
   in the live chat subtitle, removes the groups glyph from the empty Masana
   picker, and localizes adjustable waveform percentage announcements in RTL.
+- Added safe Hausa/Arabic translations for all known allowlisted agent-network,
+  insufficient-MB, microphone, attachment, authentication and timeout feedback
+  shown by Chats; unknown dynamic service errors remain a separate live audit.
 
 These are source fixes, not proof of SP-111 complete runtime localization or
 SP-136 reference-pixel parity. Provider/native permission strings, device RTL
