@@ -11,7 +11,10 @@ void main() {
     // without claiming a framework Material locale that is unavailable.
     await tester.pumpWidget(Localizations(
       locale: Locale(language),
-      delegates: const [AppLocalizations.delegate],
+      delegates: const [
+        AppLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
       child: Builder(builder: (context) => Directionality(
         textDirection: language == 'ar' ? TextDirection.rtl : TextDirection.ltr,
         child: DefaultTextStyle(style: const TextStyle(), child: Column(children: [
