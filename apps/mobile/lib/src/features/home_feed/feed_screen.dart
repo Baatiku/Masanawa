@@ -14,6 +14,7 @@ import 'feed_media_api.dart';
 import 'status_post_media.dart';
 import 'status_post_author_header.dart';
 import 'status_post_body.dart';
+import 'news_story_card.dart';
 import 'status_post_boost_action.dart';
 import 'status_post_social_proof.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
@@ -39,6 +40,7 @@ class MasanaFeedScreen extends StatefulWidget {
     this.audioPlaybackAvailable = false,
     this.authorScoped = false,
     this.ownPostsOnly = false,
+    this.newsMode = false,
     this.mediaApi,
     this.inlineMediaRenderer,
     this.statusTips,
@@ -74,6 +76,7 @@ class MasanaFeedScreen extends StatefulWidget {
 
   /// A secondary owner-only public post route, never a new root/feed ledger.
   final bool ownPostsOnly;
+  final bool newsMode;
 
   /// Optional per-account signed media projection, never persisted to disk.
   final FeedMediaApi? mediaApi;
@@ -95,6 +98,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   final scrollController=ScrollController();
   Timer? freshnessTimer;
   FeedPage? newerPage;
+  String? newsPublisherFilter;
   String? sourceFilter;
   String? officialFilter;
   DateTimeRange? dateFilter;
@@ -181,6 +185,12 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   }
 
   Future<FeedPage> listCurrent([String? after]) {
+    if(widget.newsMode){
+     final api=widget.api;
+     if(api is! NewsFeedApi)throw StateError('News feed API unavailable');
+     return api.newsList(cursor:after,query:searchTerm.isEmpty?null:searchTerm,
+      publisher:newsPublisherFilter);
+    }
     if ((sourceFilter!=null||officialFilter!=null||dateFilter!=null)&&widget.api is FilteredFeedApi){
       return (widget.api as FilteredFeedApi).filteredPosts(mode:mode,
         query:searchTerm.isEmpty?null:searchTerm,cursor:after,
@@ -245,6 +255,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       searchController.clear();
       searchTerm = '';
       sourceFilter=null;
+      newsPublisherFilter=null;
       officialFilter=null;
       dateFilter=null;
       if (widget.enabled) refresh();
@@ -352,6 +363,35 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   }
 
   Future<void> showFilters() async {
+    if(widget.newsMode){
+      final api=widget.api;
+      if(api is! NewsFeedApi)return;
+      List<NewsPublisherChoice> sources;
+      try{sources=await api.newsPublishers();}
+      catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+       const SnackBar(content:Text('Could not load publishers.')));return;}
+      if(!mounted)return;
+      final choice=await showModalBottomSheet<String>(
+        context:context,isScrollControlled:true,showDragHandle:true,
+        builder:(sheet)=>SafeArea(child:ListView(
+         shrinkWrap:true,children:[
+          ListTile(title:Text(t('News sources','Majiyoyin labarai'),
+           style:Theme.of(sheet).textTheme.titleMedium)),
+          ListTile(leading:const Icon(Icons.public),title:Text(t('All publishers','Dukkan majiyoyi')),
+           trailing:newsPublisherFilter==null?const Icon(Icons.check):null,
+           onTap:()=>Navigator.pop(sheet,'')),
+          for(final source in sources)
+           ListTile(title:Text(source.name),trailing:newsPublisherFilter==source.id?const Icon(Icons.check):null,
+            onTap:()=>Navigator.pop(sheet,source.id)),
+         ])));
+      if(choice==null||!mounted)return;
+      final next=choice.isEmpty?null:choice;
+      if(newsPublisherFilter==next)return;
+      setState((){newsPublisherFilter=next;items=[];cursor=null;newerPage=null;});
+      if(scrollController.hasClients)scrollController.jumpTo(0);
+      await refresh();
+      return;
+    }
     if(widget.api is! FilteredFeedApi)return;
     String? draft=sourceFilter;
     String? draftAuthor=officialFilter;
@@ -805,14 +845,14 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       );
     return Column(
       children: [
-        if(!widget.authorScoped&&!widget.ownPostsOnly&&widget.api is FilteredFeedApi)
+        if(!widget.authorScoped&&!widget.ownPostsOnly&&(widget.newsMode?widget.api is NewsFeedApi:widget.api is FilteredFeedApi))
           Row(children:[const Spacer(),TextButton.icon(
             onPressed:showFilters,icon:const Icon(Icons.tune,size:18),
-            label:Text(sourceFilter==null&&officialFilter==null&&dateFilter==null?'Filters':
+            label:Text(widget.newsMode?(newsPublisherFilter==null?t('Sources','Majiyoyi'):t('Source selected','An zaɓi majiya')):sourceFilter==null&&officialFilter==null&&dateFilter==null?'Filters':
               'Filters · ${(sourceFilter==null?0:1)+(officialFilter==null?0:1)+(dateFilter==null?0:1)}')),
             const SizedBox(width:12)]),
         if(newerPage!=null)MaterialBanner(
-          content:Text(t('New official updates are available','Akwai sabbin labarai')),
+          content:Text(widget.newsMode?t('New headlines are available','Akwai sabbin kanun labarai'):t('New official updates are available','Akwai sabbin labarai')),
           actions:[TextButton(onPressed:(){setState(()=>newerPage=null);refresh();
             if(scrollController.hasClients){
               if(MediaQuery.of(context).disableAnimations){scrollController.jumpTo(0);}
@@ -823,7 +863,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         // The real Home shell already has its wordmark and expandable Search.
         // Embedded/standalone feeds may still need their own compact search.
         if (!widget.authorScoped && widget.searchExpanded == null &&
-            widget.api is SearchFeedApi)
+            (widget.newsMode||widget.api is SearchFeedApi))
           Align(
             alignment: AlignmentDirectional.centerEnd,
             child: IconButton(
@@ -837,7 +877,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           ),
         if (!widget.authorScoped &&
             !widget.ownPostsOnly &&
-            widget.api is SearchFeedApi &&
+            (widget.newsMode||widget.api is SearchFeedApi) &&
             (widget.searchExpanded?.value ?? localSearchExpanded))
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
@@ -921,6 +961,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                   'No Status posts match this search.',
                                   'Babu labarai masu dacewa da binciken.',
                                 )
+                              : widget.newsMode
+                              ?t('No licensed news available yet.','Babu labarai da aka amince da su tukuna.')
                               : widget.ownPostsOnly
                               ? t('No public posts yet', 'Babu labarana tukuna')
                               : t(
@@ -944,7 +986,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                     child: ListView.separated(
                     controller:scrollController,
                     key: PageStorageKey<String>(
-                      'status-feed-${widget.accountKey}-$mode-$searchTerm-$sourceFilter-$officialFilter-${dateFilter?.start}-${dateFilter?.end}',
+                      'status-feed-${widget.accountKey}-$mode-$searchTerm-$newsPublisherFilter-$sourceFilter-$officialFilter-${dateFilter?.start}-${dateFilter?.end}',
                     ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: items.length + (cursor == null ? 0 : 1),
@@ -985,7 +1027,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     Expanded(child: StatusPostAuthorHeader(
                                       post: post,
                                       agent: widget.authorDirectory[post.authorMasanaId],
-                                      onProfile: post.isHuman
+                                      onProfile: post.isNews?null:post.isHuman
                                           ? (post.authorHandle == null ||
                                                     widget.onHumanProfile == null
                                               ? null
@@ -1002,7 +1044,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                       api:widget.api is FeedSafetyApi?widget.api as FeedSafetyApi:null,
                                       isCurrent:()=>mounted&&widget.enabled,
                                       onHidden:()=>hideWithUndo(post)),
-                                    if (widget.statusTips != null && !post.isHuman)
+                                    if (widget.statusTips != null && !post.isHuman && !post.isNews && !widget.newsMode)
                                       IconButton(
                                         tooltip: t('Tip MB', 'Kyautar MB'),
                                         style: IconButton.styleFrom(
@@ -1019,7 +1061,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                               if (post.body.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-                                  child: StatusPostBody(
+                                  child: post.isNews?NewsStoryBody(story:post.news!):StatusPostBody(
                                     key: ValueKey('status-body-${widget.accountKey}-${post.id}'),
                                     accountKey: widget.accountKey,
                                     postId: post.id,
