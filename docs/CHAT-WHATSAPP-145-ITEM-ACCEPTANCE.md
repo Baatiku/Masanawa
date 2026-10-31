@@ -86,7 +86,7 @@ Status legend: **Source addressed; acceptance unverified** = implementation or p
 | SP-076 | P1 | Source addressed; acceptance unverified | Restrict conversion to supported still photos and preserve original non-JPEG semantics. |
 | SP-077 | P2 | Source addressed; acceptance unverified | Add understated icon tiles and a consistent sheet grid using original artwork. |
 | SP-078 | P1 | Requires device, screenshot or integration evidence | Test switching hardware keyboard/IME/emoji panel with text selection and large font. |
-| SP-079 | Excluded by AI-only transport policy | Do not add unsupported human-chat stickers; optionally enable original local decorative AI-supported content only if transport supports it. |
+| SP-079 | P2 | Excluded by AI-only transport policy | Do not add unsupported human-chat stickers; optionally enable original local decorative AI-supported content only if transport supports it. |
 | SP-080 | P2 | Source addressed; acceptance unverified | Localize placeholder, edit mode and send semantics without breaking Hausa orthography. |
 | SP-081 | P1 | Source addressed; acceptance unverified | Add provider-supported pause/resume while preserving file, clock and original request identity. |
 | SP-082 | P1 | Source addressed; acceptance unverified | Add accurate preview scrub/seek while guarding uninitialized playback. |
