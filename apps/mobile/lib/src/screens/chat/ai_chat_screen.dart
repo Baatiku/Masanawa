@@ -95,6 +95,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   final _scroll = ScrollController();
   final _imagePicker = ImagePicker();
   bool _showEmoji = false;
+  bool _showCafeSuggestions = true;
+  bool _showStudyHint = true;
   bool _hasText = false;
   List<ChatAttachment> _pendingAttachments = const [];
   AiChatMessage? _replyingTo;
@@ -497,6 +499,90 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       ),
     );
   }
+  /// Device-local review. No upload or AI turn starts until Send.
+  Future<void> _reviewPendingAttachments() async {
+    if (_pendingAttachments.isEmpty) return;
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return;
+    final ownerId = session.user.id;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    final draft = [..._pendingAttachments];
+    var caption = _input.text;
+    final result = await showModalBottomSheet<
+        ({List<ChatAttachment> files, String caption})>(
+      context: context, isScrollControlled: true, showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, refresh) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16,
+              MediaQuery.viewInsetsOf(sheetContext).bottom + 16),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * .65,
+              child: Column(children: [
+                ListTile(contentPadding: EdgeInsets.zero,
+                  title: const Text('Review attachments'),
+                  subtitle: const Text('8 files max · 8 MB each · 12 MB total'),
+                  trailing: IconButton(tooltip: 'Close review',
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(sheetContext).pop())),
+                Expanded(child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  itemCount: draft.length,
+                  onReorder: (from, to) => refresh(() {
+                    if (to > from) to--;
+                    final item = draft.removeAt(from);
+                    draft.insert(to, item);
+                  }),
+                  itemBuilder: (context, index) {
+                    final item = draft[index];
+                    return ListTile(key: ObjectKey(item),
+                      leading: item.kind == 'image'
+                          ? SizedBox(width: 48, height: 48,
+                              child: Image.file(File(item.path), fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    const Icon(Icons.broken_image_outlined)))
+                          : const Icon(Icons.audio_file_outlined),
+                      title: Text(item.name ?? item.label,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(item.sizeBytes == null ? item.kind
+                          : '${(item.sizeBytes! / 1024).ceil()} KB'),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(tooltip: 'Remove attachment',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => refresh(() => draft.removeAt(index))),
+                        ReorderableDragStartListener(index: index,
+                          child: const Icon(Icons.drag_handle_rounded)),
+                      ]));
+                  })),
+                TextFormField(initialValue: caption, maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Caption',
+                    hintText: 'Add a caption'),
+                  onChanged: (value) => caption = value),
+                const SizedBox(height: 10),
+                SizedBox(width: double.infinity, child: FilledButton(
+                  onPressed: () => Navigator.of(sheetContext).pop((
+                    files: List<ChatAttachment>.unmodifiable(draft),
+                    caption: caption)),
+                  child: const Text('Apply review'))),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    final active = ref.read(sessionProvider);
+    if (active is! SessionSignedIn || active.user.id != ownerId ||
+        ref.read(sessionProvider.notifier).authorizationEpoch != epoch) return;
+    setState(() {
+      _pendingAttachments = result.files;
+      _showEmoji = false;
+    });
+    ref.read(aiChatProvider.notifier).setDraftAttachments(
+      widget.characterId, result.files);
+    _input.text = result.caption;
+  }
+
   void _stageAttachments(List<ChatAttachment> attachments) {
     if (attachments.isEmpty || !mounted) return;
     final selection = selectChatDraftAttachments(
@@ -1372,10 +1458,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   ),
                 ),
               ),
-            if (widget.entryMode == AiChatEntryMode.cafe)
+            if (widget.entryMode == AiChatEntryMode.cafe && _showCafeSuggestions)
               _CafeSuggestionBar(
                 selectedKey: _cafeCategory,
                 onTap: _sendCafeSuggestion,
+                onDismiss: () => setState(() => _showCafeSuggestions = false),
               ),
             Expanded(
               child: CustomPaint(
@@ -1632,7 +1719,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   _stopInlineLiveVoice(outcome: 'completed'),
                 ),
               ),
-            if (widget.entryMode == AiChatEntryMode.study)
+            if (widget.entryMode == AiChatEntryMode.study && _showStudyHint)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.fromLTRB(12, 6, 12, 2),
@@ -1642,16 +1729,27 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: u.brand.withValues(alpha: .18)),
                 ),
-                child: Text(
-                  'Study · ask, answer, or speak naturally. Your learning progress is saved privately.',
-                  style: TextStyle(color: u.textMuted, fontSize: 12, height: 1.35),
-                ),
+                child: Row(children: [
+                  Expanded(child: Text(
+                    'Study · ask, answer, or speak naturally. Your learning progress is saved privately.',
+                    style: TextStyle(color: u.textMuted, fontSize: 12, height: 1.35))),
+                  IconButton(tooltip: 'Dismiss study hint',
+                    onPressed: () => setState(() => _showStudyHint = false),
+                    icon: const Icon(Icons.close_rounded, size: 18)),
+                ]),
               ),
             if (_pendingAttachments.isNotEmpty && _editingMessage == null)
-              _PendingAttachmentStrip(
-                attachments: _pendingAttachments,
-                onRemove: _removePendingAttachment,
-              ),
+              Column(mainAxisSize: MainAxisSize.min, children: [
+                Align(alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton.icon(
+                    key: const ValueKey('review-chat-attachments'),
+                    onPressed: _reviewPendingAttachments,
+                    icon: const Icon(Icons.preview_outlined, size: 18),
+                    label: Text('Review ${_pendingAttachments.length} attachments'))),
+                _PendingAttachmentStrip(
+                  attachments: _pendingAttachments,
+                  onRemove: _removePendingAttachment),
+              ]),
             if (_editingMessage != null)
               _ReplyComposerPreview(
                 message: _editingMessage!,
@@ -1919,11 +2017,6 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   }
 
   Future<void> _forwardMessage(AiChatMessage message) async {
-    if (message.allAttachments.any((item) => !File(item.path).existsSync())) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Download the original attachment before forwarding.')));
-      return;
-    }
     final owner = ref.read(sessionProvider);
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     if (owner is! SessionSignedIn) return;
@@ -1984,15 +2077,37 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         !identical(owner, ref.read(sessionProvider)) ||
         epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
     final ctl = ref.read(aiChatProvider.notifier);
-    try { if (message.allAttachments.isNotEmpty) {
-      await ctl.sendAttachments(
-        target.characterId,
-        message.allAttachments,
-        caption: message.text,
-      );
-    } else if (message.text.isNotEmpty) {
-      await ctl.sendText(target.characterId, message.text);
-    } } catch (_) {
+    try {
+      // Download private originals only after the user confirms forwarding.
+      // Fence account changes and never transmit a remote token as a file.
+      for (final item in message.allAttachments) {
+        if (item.path.startsWith('masanawa-remote|')) {
+          await ctl.downloadRemoteChatMedia(item.path);
+          if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+              epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+        }
+      }
+      var originals = message.allAttachments;
+      for (final current in ctl.threadOf(widget.characterId).messages) {
+        if (current.id == message.id) {
+          originals = current.allAttachments;
+          break;
+        }
+      }
+      if (originals.any((item) =>
+          item.path.startsWith('masanawa-remote|') ||
+          !File(item.path).existsSync())) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Original media unavailable. Download before forwarding.')));
+        return;
+      }
+      if (originals.isNotEmpty) {
+        await ctl.sendAttachments(target.characterId, originals,
+          caption: message.text);
+      } else if (message.text.isNotEmpty) {
+        await ctl.sendText(target.characterId, message.text);
+      }
+    } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Forward failed. Review the target chat before retrying.')));
       return;
@@ -3017,10 +3132,12 @@ class _CafeSuggestionBar extends StatelessWidget {
   const _CafeSuggestionBar({
     required this.selectedKey,
     required this.onTap,
+    required this.onDismiss,
   });
 
   final String? selectedKey;
   final ValueChanged<CafeSuggestion> onTap;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -3034,8 +3151,8 @@ class _CafeSuggestionBar extends StatelessWidget {
           bottom: BorderSide(color: u.structuralBorder),
         ),
       ),
-      child: Center(
-        child: SingleChildScrollView(
+      child: Row(children: [
+        Expanded(child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3053,7 +3170,9 @@ class _CafeSuggestionBar extends StatelessWidget {
             ],
           ),
         ),
-      ),
+        IconButton(tooltip: 'Dismiss suggestions', onPressed: onDismiss,
+          icon: const Icon(Icons.close_rounded, size: 18)),
+      ]),
     );
   }
 }
@@ -3709,7 +3828,7 @@ class _PersonaChatDisclosure extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({
+  _ChatBubble({
     required this.message,
     required this.grouped,
     required this.showMeta,
@@ -3753,9 +3872,11 @@ class _ChatBubble extends StatelessWidget {
   final ValueChanged<String>? onAgentAction;
   final ShellActionHandler? onShellAction;
 
+  final GlobalKey _bubbleAnchor = GlobalKey();
   Future<void> _showActions(BuildContext context) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final anchor = context.findRenderObject();
+    final anchor = _bubbleAnchor.currentContext?.findRenderObject() ??
+        context.findRenderObject();
     final rect = anchor is RenderBox
         ? Rect.fromPoints(
             anchor.localToGlobal(Offset.zero, ancestor: overlay),
@@ -3877,6 +3998,7 @@ class _ChatBubble extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Container(
+              key: _bubbleAnchor,
               margin: EdgeInsets.symmetric(vertical: grouped ? 1 : 4),
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               constraints: BoxConstraints(
@@ -4553,6 +4675,11 @@ class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
       button: true,
       label: 'Download $label securely',
       child: Column(mainAxisSize: MainAxisSize.min, children: [
+      if (widget.attachment.sizeBytes case final bytes? when bytes > 0)
+        Padding(padding: const EdgeInsets.only(bottom: 4),
+          child: Text('${kind.toUpperCase()} · ${(bytes / 1024).ceil()} KB',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: context.masanawa.textMuted, fontSize: 11))),
       OutlinedButton.icon(
         onPressed: _loading ? null : _download,
         icon: _loading
