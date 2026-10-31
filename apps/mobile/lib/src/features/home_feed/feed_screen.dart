@@ -534,6 +534,20 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     ));
   }
 
+  void showReactionBreakdown(FeedPost post){
+    showDialog<void>(context:context,builder:(ctx)=>AlertDialog(
+      title:Text(t('Masanawa reactions','Martanin Masanawa')),
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        for(final kind in FeedPost.reactionKinds)
+          if((post.effectiveReactionCounts[kind]??0)>0)
+            ListTile(dense:true,leading:Text(FeedPost.reactionEmoji[kind]??''),
+              title:Text(kind[0].toUpperCase()+kind.substring(1)),
+              trailing:Text('${post.effectiveReactionCounts[kind]}')),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close'))],
+    ));
+  }
+
   Future<void> openPost(FeedPost post) async {
     if (!widget.enabled || widget.accountKey.isEmpty) return;
     final feed = widget.api, account = widget.accountKey;
@@ -637,7 +651,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         final api=widget.api;
         if(api is! FeedSafetyApi||!mounted||account!=widget.accountKey||scope!=generation)return;
         try{
-          await api.hidePost(post.id,false,()=>mounted&&account==widget.accountKey&&scope==generation);
+          await (api as FeedSafetyApi).hidePost(post.id,false,()=>mounted&&account==widget.accountKey&&scope==generation);
           if(!mounted||account!=widget.accountKey||scope!=generation)return;
           setState(()=>locallyHiddenPosts.remove(post.id));
           await refresh();
@@ -988,14 +1002,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                   children: [
                                   StatusPostSocialProof(post: post,
                                     onComments:()=>openComments(post),
-                                    onReactions:()=>showDialog<void>(context:context,builder:(ctx)=>
-                                      AlertDialog(title:const Text('Reactions'),content:Column(
-                                        mainAxisSize:MainAxisSize.min,children:[
-                                          for(final kind in FeedPost.reactionKinds)
-                                            if((post.effectiveReactionCounts[kind]??0)>0)
-                                              Text('${FeedPost.reactionEmoji[kind]} ${kind[0].toUpperCase()+kind.substring(1)} · ${post.effectiveReactionCounts[kind]}'),
-                                        ]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),
-                                          child:const Text('Close'))])),
+                                    onReactions:()=>showReactionBreakdown(post)),
                                   StatusPostBoostAction(
                                     post: post,
                                     enabled: false,

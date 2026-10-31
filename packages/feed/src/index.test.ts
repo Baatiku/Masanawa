@@ -220,14 +220,19 @@ describe('SF-FB native feed filters and comment conversations',()=>{
  });
  it('requires reviewed staff capability for reporting queue and resolution',async()=>{
   const db={...mock(),listCommentReports:vi.fn(async()=>({items:[]})),
-   resolveCommentReport:vi.fn(async()=>({state:'dismissed'}))};
+   resolveCommentReport:vi.fn(async()=>({state:'dismissed'})),
+   moderateComment:vi.fn(async()=>({state:'hidden',revision:2}))};
   const s=new FeedService(db,async()=>true);
   await expect(s.commentReports(fan)).rejects.toMatchObject({status:403});
   await expect(s.commentReports({...fan,kind:'staff',permissions:[]})).rejects.toMatchObject({status:403});
   const editor={...fan,kind:'staff' as const,permissions:['content_editor']};
   await s.commentReports(editor);
   await s.resolveCommentReport(editor,commentId,'dismissed');
+  await s.moderateComment(editor,commentId,'hidden','Specific policy violation',1);
   expect(db.listCommentReports).toHaveBeenCalledWith('tenant');
   expect(db.resolveCommentReport).toHaveBeenCalledWith('tenant','fan',commentId,'dismissed');
+  expect(db.moderateComment).toHaveBeenCalledWith('tenant','fan',commentId,'hidden','Specific policy violation',1);
+  await expect(s.moderateComment(fan,commentId,'hidden','Policy issue',1)).rejects.toMatchObject({status:403});
+  await expect(s.moderateComment(editor,commentId,'visible','x',1)).rejects.toMatchObject({status:422});
  });
 });

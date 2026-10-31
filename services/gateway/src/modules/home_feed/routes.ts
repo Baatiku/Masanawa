@@ -62,7 +62,7 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
     [q.from,q.to].some(d=>d!==undefined&&(typeof d!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d))))
     return rep.code(422).send({code:'invalid_feed_filter'});
   const filters:Filters={};
-  if(q.source!==undefined)filters.source=q.source as Filters['source'];
+  if(q.source==='x'||q.source==='facebook')filters.source=q.source;
   if(q.from!==undefined)filters.from=q.from as string;
   if(q.to!==undefined)filters.to=q.to as string;
   const filtered=q.source!==undefined||q.from!==undefined||q.to!==undefined;

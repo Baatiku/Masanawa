@@ -1,5 +1,5 @@
 import {statusAuthorOwnership,officialSourceEligibility} from "./author_scope.js";
-import type {FeedFilters} from '@masanawa/feed';
+import type {FeedFilters,ReactionKind} from '@masanawa/feed';
 import type {Pool} from "pg";
 import {withTransaction} from '../transaction.js';
 /** PG18 tenant-scoped implementation. Composition injects the canonical Masana approved-revision check. */
@@ -30,7 +30,7 @@ function item(r:Row){
 function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:String(r.body),state:String(r.state) as "pending"|"visible"|"removed",
  createdAt:new Date(String(r.created_at)).toISOString(),parentId:r.parent_comment_id==null?null:String(r.parent_comment_id),
  revision:Number(r.revision??1),editedAt:r.edited_at==null?null:new Date(String(r.edited_at)).toISOString(),
- replyCount:Number(r.reply_count??0),viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction),
+ replyCount:Number(r.reply_count??0),viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as ReactionKind,
  reactionCounts:(r.reaction_counts??{}) as Record<string,number>,
  author:r.author && typeof r.author==="object" && !Array.isArray(r.author)
   ? r.author as {type:"human";id:string;handle:string;displayName:string} : null};}
@@ -233,7 +233,10 @@ export class PgHomeFeedRepository {
    }
   const rows=await client.query(`WITH inserted AS (
    INSERT INTO feed.comments(tenant_id,post_id,fan_id,body,state,idempotency_key,parent_comment_id)
-   SELECT $1,p.id,$2,$4,$5,$6,$7::uuid FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${this.access} AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM feed.comments parent WHERE parent.tenant_id=$1 AND parent.post_id=p.id AND parent.id=$7::uuid AND parent.state='visible' AND parent.parent_comment_id IS NULL))
+   SELECT $1,p.id,$2,$4,$5,$6,$7::uuid FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${this.access} AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM feed.comments parent WHERE parent.tenant_id=$1 AND parent.post_id=p.id AND parent.id=$7::uuid AND parent.state='visible' AND parent.parent_comment_id IS NULL
+     AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences block WHERE block.tenant_id=$1
+       AND block.blocked AND ((block.viewer_user_id=$2 AND block.subject_user_id=parent.fan_id)
+         OR (block.viewer_user_id=parent.fan_id AND block.subject_user_id=$2)))))
    ON CONFLICT(tenant_id,fan_id,idempotency_key) DO UPDATE
    SET idempotency_key=EXCLUDED.idempotency_key
    WHERE feed.comments.post_id=EXCLUDED.post_id AND feed.comments.body=EXCLUDED.body AND feed.comments.parent_comment_id IS NOT DISTINCT FROM EXCLUDED.parent_comment_id
@@ -267,7 +270,10 @@ export class PgHomeFeedRepository {
     c.state,c.created_at,c.parent_comment_id,c.revision,c.edited_at,
     (SELECT count(*)::int FROM feed.comments child WHERE child.tenant_id=c.tenant_id
       AND child.post_id=c.post_id AND child.parent_comment_id=c.id
-      AND (child.state='visible' OR (child.state='pending' AND child.fan_id=$3))) AS reply_count,
+      AND (child.state='visible' OR (child.state='pending' AND child.fan_id=$3))
+      AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences block WHERE block.tenant_id=child.tenant_id
+        AND block.blocked AND ((block.viewer_user_id=$3 AND block.subject_user_id=child.fan_id)
+          OR (block.viewer_user_id=child.fan_id AND block.subject_user_id=$3)))) AS reply_count,
     COALESCE((SELECT jsonb_object_agg(rr.reaction_kind,rr.n) FROM
       (SELECT reaction_kind,count(*)::int AS n FROM feed.comment_reactions r
        WHERE r.tenant_id=c.tenant_id AND r.comment_id=c.id GROUP BY reaction_kind) rr),'{}'::jsonb) AS reaction_counts,
@@ -279,6 +285,9 @@ export class PgHomeFeedRepository {
    LEFT JOIN talks.public_profiles person ON person.tenant_id=c.tenant_id
      AND person.user_id=actor.user_id
    WHERE c.tenant_id=$1 AND c.post_id=$2::uuid
+   AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences block WHERE block.tenant_id=c.tenant_id
+      AND block.blocked AND ((block.viewer_user_id=$3 AND block.subject_user_id=c.fan_id)
+        OR (block.viewer_user_id=c.fan_id AND block.subject_user_id=$3)))
    AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${this.commentAccess})
     AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3)
       OR (c.state='removed' AND EXISTS(SELECT 1 FROM feed.comments child
@@ -299,7 +308,10 @@ export class PgHomeFeedRepository {
    const eligible=`SELECT c.id FROM feed.comments c JOIN feed.posts p
       ON p.tenant_id=c.tenant_id AND p.id=c.post_id
       WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.state='visible'
-      AND p.state='published' AND ${this.access}`;
+      AND p.state='published' AND ${this.access}
+      AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences block WHERE block.tenant_id=c.tenant_id
+        AND block.blocked AND ((block.viewer_user_id=$2 AND block.subject_user_id=c.fan_id)
+          OR (block.viewer_user_id=c.fan_id AND block.subject_user_id=$2)))`;
    const result=kind===null
      ? await this.pool.query(`WITH eligible AS (${eligible}), deleted AS (
         DELETE FROM feed.comment_reactions r USING eligible e
@@ -365,7 +377,10 @@ export class PgHomeFeedRepository {
     const eligible=await client.query(`SELECT c.revision FROM feed.comments c
       JOIN feed.posts p ON p.tenant_id=c.tenant_id AND p.id=c.post_id
       WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.state='visible'
-      AND p.state='published' AND ${this.access}`,[tenant,fan,id]);
+      AND p.state='published' AND ${this.access}
+      AND NOT EXISTS(SELECT 1 FROM talks.safety_preferences block WHERE block.tenant_id=c.tenant_id
+        AND block.blocked AND ((block.viewer_user_id=$2 AND block.subject_user_id=c.fan_id)
+          OR (block.viewer_user_id=c.fan_id AND block.subject_user_id=$2)))`,[tenant,fan,id]);
     const revision=eligible.rows[0]?.revision;
     if(!revision)throw Object.assign(new Error('comment_not_found'),{status:404,code:'comment_not_found'});
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',

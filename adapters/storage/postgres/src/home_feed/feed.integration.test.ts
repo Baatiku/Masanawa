@@ -107,6 +107,13 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await expect(repo.moderateComment(t,'editor',reply.id,'visible','Restore after review',1))
     .rejects.toMatchObject({status:409});
   await repo.moderateComment(t,'editor',reply.id,'visible','Restore after review',2);
+  await pool.query(`INSERT INTO talks.safety_preferences
+    (tenant_id,viewer_user_id,subject_user_id,blocked,updated_at)
+    VALUES($1,'fan_two','fan_one',true,clock_timestamp())`,[t]);
+  expect(await repo.comments(t,id,'fan_two',null,30,'newest','roots')).toHaveLength(0);
+  await expect(repo.setCommentReaction(t,'fan_two',root.id,'like')).rejects.toMatchObject({status:404});
+  await pool.query(`DELETE FROM talks.safety_preferences WHERE tenant_id=$1
+    AND viewer_user_id='fan_two' AND subject_user_id='fan_one'`,[t]);
   await repo.removeComment(t,'fan_one',root.id);
   const tombstone=await repo.comments(t,id,'fan_two',null,30,'newest','roots');
   expect(tombstone[0]).toMatchObject({body:'Comment removed',state:'removed',replyCount:1});

@@ -149,7 +149,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
       final p=await widget.loadPost(widget.initialPost.id);
       final api=widget.engagementApi;
       final thread=api is CommentConversationApi
-        ? await api.threadPage(p.id,sort,scope:'roots')
+        ? await (api as CommentConversationApi).threadPage(p.id,sort,scope:'roots')
         : await widget.loadThread(p.id,sort);
       if(!mounted||ticket!=generation)return;
       setState((){post=p;comments=thread;replies.clear();expandedReplies.clear();
@@ -185,7 +185,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     try {
       final api=widget.engagementApi;
       final page=api is CommentConversationApi
-        ? await api.threadPage(p.id,expectedSort,before:cursor,scope:'roots')
+        ? await (api as CommentConversationApi).threadPage(p.id,expectedSort,before:cursor,scope:'roots')
         : await widget.loadMoreThread!(p.id,expectedSort,cursor);
       if(!mounted||ticket!=generation||sort!=expectedSort)return;
       setState(() {
@@ -229,7 +229,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     try{
       final api=widget.engagementApi;
       final page=api is CommentConversationApi
-        ? await api.threadPage(p.id,next,scope:'roots')
+        ? await (api as CommentConversationApi).threadPage(p.id,next,scope:'roots')
         : await widget.loadThread(p.id,next);
       if(!mounted||ticket!=generation)return;
       setState((){comments=page;loading=false;replies.clear();expandedReplies.clear();
@@ -277,7 +277,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     final ticket=generation,existing=replies[parent.id]??const <FeedComment>[];
     setState((){expandedReplies.add(parent.id);loadingReplies.add(parent.id);});
     try{
-      final page=await api.threadPage(post!.id,'oldest',scope:'replies',
+      final page=await (api as CommentConversationApi).threadPage(post!.id,'oldest',scope:'replies',
         parentId:parent.id,before:more&&existing.isNotEmpty?existing.last.id:null);
       if(!mounted||ticket!=generation)return;
       setState((){
@@ -328,10 +328,10 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     if(!mounted||ticket!=generation)return;
     setState(()=>writingComments.add(c.id));
     try{
-      if(action=='edit')await api.editComment(c.id,body!,c.revision);
-      else if(action=='delete')await api.removeComment(c.id);
-      else if(action.startsWith('report:'))await api.reportComment(c.id,action.substring(7));
-      else if(action.startsWith('react:'))await api.reactComment(c.id,
+      if(action=='edit')await (api as CommentConversationApi).editComment(c.id,body!,c.revision);
+      else if(action=='delete')await (api as CommentConversationApi).removeComment(c.id);
+      else if(action.startsWith('report:'))await (api as CommentConversationApi).reportComment(c.id,action.substring(7));
+      else if(action.startsWith('react:'))await (api as CommentConversationApi).reactComment(c.id,
         action.substring(6)==c.viewerReaction?null:action.substring(6));
       if(!mounted||ticket!=generation)return;
       if(action.startsWith('report:'))ScaffoldMessenger.of(context).showSnackBar(
