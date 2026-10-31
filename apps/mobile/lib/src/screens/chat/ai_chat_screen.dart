@@ -522,9 +522,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               height: MediaQuery.sizeOf(sheetContext).height * .65,
               child: Column(children: [
                 ListTile(contentPadding: EdgeInsets.zero,
-                  title: const Text('Review attachments'),
-                  subtitle: const Text('8 files max · 8 MB each · 12 MB total'),
-                  trailing: IconButton(tooltip: 'Close review',
+                  title: Text(ChatUiCopy.of(sheetContext, 'Review attachments')),
+                  subtitle: Text(ChatUiCopy.of(sheetContext, '8 files max · 8 MB each · 12 MB total')),
+                  trailing: IconButton(tooltip: ChatUiCopy.of(sheetContext, 'Close review'),
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => Navigator.of(sheetContext).pop())),
                 Expanded(child: ReorderableListView.builder(
@@ -549,7 +549,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                       subtitle: Text(item.sizeBytes == null ? item.kind
                           : '${(item.sizeBytes! / 1024).ceil()} KB'),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(tooltip: 'Remove attachment',
+                        IconButton(tooltip: ChatUiCopy.of(sheetContext, 'Remove attachment'),
                           icon: const Icon(Icons.close_rounded),
                           onPressed: () => refresh(() => draft.removeAt(index))),
                         ReorderableDragStartListener(index: index,
@@ -557,15 +557,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                       ]));
                   })),
                 TextFormField(initialValue: caption, maxLines: 2,
-                  decoration: const InputDecoration(labelText: 'Caption',
-                    hintText: 'Add a caption'),
+                  decoration: InputDecoration(labelText: ChatUiCopy.of(sheetContext, 'Caption'),
+                    hintText: ChatUiCopy.of(sheetContext, 'Add a caption')),
                   onChanged: (value) => caption = value),
                 const SizedBox(height: 10),
                 SizedBox(width: double.infinity, child: FilledButton(
                   onPressed: () => Navigator.of(sheetContext).pop((
                     files: List<ChatAttachment>.unmodifiable(draft),
                     caption: caption)),
-                  child: const Text('Apply review'))),
+                  child: Text(ChatUiCopy.of(sheetContext, 'Apply review')))),
               ]),
             ),
           ),
@@ -1737,7 +1737,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   Expanded(child: Text(
                     'Study · ask, answer, or speak naturally. Your learning progress is saved privately.',
                     style: TextStyle(color: u.textMuted, fontSize: 12, height: 1.35))),
-                  IconButton(tooltip: 'Dismiss study hint',
+                  IconButton(tooltip: ChatUiCopy.of(context, 'Dismiss study hint'),
                     onPressed: () => setState(() => _showStudyHint = false),
                     icon: const Icon(Icons.close_rounded, size: 18)),
                 ]),
@@ -1749,7 +1749,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     key: const ValueKey('review-chat-attachments'),
                     onPressed: _reviewPendingAttachments,
                     icon: const Icon(Icons.preview_outlined, size: 18),
-                    label: Text('Review ${_pendingAttachments.length} attachments'))),
+                    label: Text('${ChatUiCopy.of(context, 'Review attachments')} · ${_pendingAttachments.length}'))),
                 _PendingAttachmentStrip(
                   attachments: _pendingAttachments,
                   onRemove: _removePendingAttachment),
@@ -2038,13 +2038,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           return SafeArea(child: SizedBox(
             height: MediaQuery.sizeOf(sheetContext).height * .67,
             child: Column(children: [
-              const ListTile(title: Text('Forward to Masana'),
-                subtitle: Text('Choose an AI conversation')),
+              ListTile(title: Text(ChatUiCopy.of(sheetContext, 'Forward to Masana')),
+                subtitle: const Text('Choose an AI conversation')),
               Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
                   controller: search, autofocus: true,
                   decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search), hintText: 'Search Masana'),
+                    prefixIcon: Icon(Icons.search), hintText: ChatUiCopy.of(sheetContext, 'Search Masana')),
                   onChanged: (_) => refresh(() {}))),
               Expanded(child: ListView(children: [
               for (final entry in visible)
@@ -2054,7 +2054,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 subtitle: Text(entry.roleLabel),
                 onTap: () => Navigator.pop(sheetContext, entry),
               ),
-              if (visible.isEmpty) const ListTile(title: Text('No matching Masana')),
+              if (visible.isEmpty) ListTile(title: Text(ChatUiCopy.of(sheetContext, 'No matching Masana'))),
               ])),
             ]),
           ));
@@ -3174,7 +3174,7 @@ class _CafeSuggestionBar extends StatelessWidget {
             ],
           ),
         )),
-        IconButton(tooltip: 'Dismiss suggestions', onPressed: onDismiss,
+        IconButton(tooltip: ChatUiCopy.of(context, 'Dismiss suggestions'), onPressed: onDismiss,
           icon: const Icon(Icons.close_rounded, size: 18)),
       ]),
     );
@@ -3273,8 +3273,8 @@ class _Composer extends StatelessWidget {
             const SizedBox(width: 6),
             Semantics(
               button: true,
-              label: blocked ? 'App update required' : editing
-                  ? 'Save message edit' : hasText ? 'Send message' : 'Record voice note',
+              label: ChatUiCopy.of(context, blocked ? 'App update required' : editing
+                  ? 'Save message edit' : hasText ? 'Send message' : 'Record voice note'),
               child: VoiceNoteHoldRegion(
                 enabled:!blocked&&!editing&&!sending&&!hasText&&onHoldStart!=null,
                 onStart:onHoldStart??()async{},onPreview:onStopRecording??()async{},
@@ -3398,10 +3398,10 @@ class _Composer extends StatelessWidget {
                 enabled: !active && onSeekPreview != null,
                 onSeek: onSeekPreview ?? (_) {}))),
           if (active)
-            Text(isPaused ? 'Recording paused · resume or stop to review'
+            Text(ChatUiCopy.of(context, isPaused ? 'Recording paused · resume or stop to review'
                 : recordingLocked ? 'Recording locked · stop to review'
                 : holdActive ? 'Slide to cancel · up to lock'
-                : 'Recording voice note',
+                : 'Recording voice note'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: u.textMuted, fontSize: 11)),
           if (!active)
@@ -3982,7 +3982,7 @@ class _ChatBubble extends StatelessWidget {
         builder: (sheetContext) => SafeArea(child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Choose a reaction'),
+            Text(ChatUiCopy.of(sheetContext, 'Choose a reaction')),
             const SizedBox(height: 12),
             Wrap(spacing: 4, runSpacing: 4, children: [
               for (final choice in const ['👍','❤️','😂','😮','😢','🙏',
