@@ -1,0 +1,214 @@
+import 'package:flutter/widgets.dart';
+
+/// Small Chats-specific catalog for surfaces that can be presented even when
+/// the full app localization delegate has not been installed (widget previews,
+/// offline restoration). English remains the fallback for other app locales.
+/// All keys are literal English source copy, never server-provided text.
+class ChatUiCopy {
+  const ChatUiCopy._();
+
+  static String of(BuildContext context, String english) {
+    final locale = Localizations.maybeLocaleOf(context)?.languageCode;
+    if (locale == 'ha') return _ha[english] ?? english;
+    if (locale == 'ar') return _ar[english] ?? english;
+    return english;
+  }
+
+  static const _ha = <String, String>{
+    'Chats options': 'Zaɓuɓɓukan hira',
+    'Archived chats': 'Hirarrakin da aka adana',
+    'Wallet': 'Walati',
+    'Start conversation': 'Fara hira',
+    'Search conversations': 'Nemo hirarraki',
+    'Search archived conversations': 'Nemo hirarrakin da aka adana',
+    'Sign in to see your conversations.': 'Shiga don ganin hirarrakinka.',
+    'Find Masana': 'Nemo Masana',
+    'Clear chat search': 'Share binciken hira',
+    'No conversations yet': 'Babu hirarraki tukuna',
+    'No matches in saved conversations': 'Babu daidaito a hirarrakin da aka ajiye',
+    'No matching conversations': 'Babu hirarrakin da suka dace',
+    'Syncing conversations': 'Ana daidaita hirarraki',
+    'Loading more conversations': 'Ana ɗauko ƙarin hirarraki',
+    'Load more conversations': 'Ƙara hirarraki',
+    'Load more archived conversations': 'Ƙara hirarrakin da aka adana',
+    'Retry conversation sync': 'Sake daidaita hirarraki',
+    'Retry loading conversations': 'Sake ɗauko hirarraki',
+    'Retry account archives': 'Sake ɗauko hirarrakin asusu',
+    'Retry archived conversations': 'Sake ɗauko hirarrakin da aka adana',
+    'Rename': 'Sake suna',
+    'Rename conversation': 'Sake sunan hira',
+    'Conversation name': 'Sunan hira',
+    'Save': 'Ajiye',
+    'Cancel': 'Soke',
+    'Search this chat': 'Nemo a wannan hira',
+    'Search chat': 'Nemo a hira',
+    'Call': 'Kira',
+    'More': 'Ƙari',
+    'AI persona': 'Halayyar AI',
+    'AI simulation': 'Kwaikwayon AI',
+    'Message': 'Saƙo',
+    'Today': 'Yau',
+    'Yesterday': 'Jiya',
+    'Emoji': 'Alamar motsin rai',
+    'Keyboard': 'Madannai',
+    'Attach': 'Haɗa fayil',
+    'Camera': 'Kyamara',
+    'Expand draft': 'Faɗaɗa rubutun saƙo',
+    'Expanded draft': 'Rubutun saƙo mai faɗi',
+    'Compose a longer message': 'Rubuta saƙo mai tsawo',
+    'Apply': 'Aiwatar',
+    'Discard expanded edits': 'Watsar da gyare-gyaren rubutu',
+    'Pause recording': 'Dakatar da rikodi na ɗan lokaci',
+    'Resume recording': 'Ci gaba da rikodi',
+    'Cancel recording': 'Soke rikodi',
+    'Discard': 'Watsar',
+    'Stop & review': 'Tsaya ka duba',
+    'Play preview': 'Saurari samfuri',
+    'Pause preview': 'Dakatar da samfurin',
+    'Send voice note': 'Aika saƙon murya',
+    'Record again': 'Sake rikodi',
+    'Delete': 'Share',
+    'Delete chat?': 'A share hirar?',
+    'Delete on this device': 'Share a wannan na’ura',
+    'Archive conversation': 'Adana hira',
+    'Archive on this device': 'Adana a wannan na’ura',
+    'Pin conversation': 'Tsayar da hira a sama',
+    'Unpin conversation': 'Cire hirar daga sama',
+    'Pin on this device': 'Tsayar a wannan na’ura',
+    'Unpin on this device': 'Cire tsayawa a wannan na’ura',
+    'Archived chats keep their history. Account archives sync across your devices; local-only archives remain on this device.':
+        'Hirarrakin da aka adana suna riƙe da tarihinsu. Na asusu suna daidaituwa tsakanin na’urorinka; na wannan na’ura kawai suna nan.',
+    'No archived conversations': 'Babu hirarrakin da aka adana',
+    'No archived conversations match your search': 'Babu hirarrakin da suka dace da bincikenka',
+    'No archived chats': 'Babu hirarrakin da aka adana',
+    'No matching archived chats': 'Babu hirarrakin da suka dace',
+    'Unavailable Masana': 'Masana ba ya samuwa',
+    'Saved conversation': 'Hirar da aka ajiye',
+    'Unarchive on this device': 'Dawo da hira a wannan na’ura',
+    'Unarchive account conversation': 'Dawo da hirar asusu',
+    'Syncing archived conversations': 'Ana daidaita hirarrakin da aka adana',
+    'Loading older archives': 'Ana ɗauko tsofaffin hirarrakin da aka adana',
+    'Archived chats keep their history. Account archives sync when online; device-only archives stay local.':
+        'Hirarrakin da aka adana suna riƙe da tarihinsu. Na asusu suna daidaituwa idan akwai intanet; na wannan na’ura suna nan kawai.',
+    'Shorten search to 80 characters to include archives from other devices.':
+        'Rage binciken zuwa haruffa 80 don haɗa hirarrakin sauran na’urori.',
+    'Could not load account archives. Device-only archives are still shown.':
+        'Ba a iya ɗauko hirarrakin asusu da aka adana ba. Har yanzu ana nuna na wannan na’ura.',
+    'Could not load account archives. Saved conversations remain available.':
+        'Ba a iya ɗauko hirarrakin asusu da aka adana ba. Waɗanda aka ajiye suna nan.',
+    'Could not load more archives.': 'Ba a iya ɗauko ƙarin hirarraki ba.',
+    'Conversation sync unavailable. Saved conversations remain visible.':
+        'Ba a samun daidaita hirarraki yanzu. Waɗanda aka ajiye suna nan.',
+    'Could not load more conversations. Previous results are saved.':
+        'Ba a iya ɗauko ƙarin hirarraki ba. An riƙe sakamakon baya.',
+    'Offline searches only include saved conversations.':
+        'Bincike ba tare da intanet ba ya haɗa hirarrakin da aka ajiye kawai.',
+    'Shorten search to 80 characters to include conversations from your account.':
+        'Rage binciken zuwa haruffa 80 don haɗa hirarrakin asusunka.',
+    'Shorten search to 80 characters to include conversations stored on other devices.':
+        'Rage binciken zuwa haruffa 80 don haɗa hirarrakin sauran na’urori.',
+    'Shorten search to 80 characters to include account archives.':
+        'Rage binciken zuwa haruffa 80 don haɗa hirarrakin asusu da aka adana.',
+    'Server conversation controls are unavailable.':
+        'Ba a samun damar sarrafa hirarrakin uwar garke yanzu.',
+  };
+
+  static const _ar = <String, String>{
+    'Chats options': 'خيارات الدردشات',
+    'Archived chats': 'الدردشات المؤرشفة',
+    'Wallet': 'المحفظة',
+    'Start conversation': 'بدء محادثة',
+    'Search conversations': 'البحث في المحادثات',
+    'Search archived conversations': 'البحث في الدردشات المؤرشفة',
+    'Sign in to see your conversations.': 'سجّل الدخول لعرض محادثاتك.',
+    'Find Masana': 'البحث عن ماسانا',
+    'Clear chat search': 'مسح البحث في الدردشات',
+    'No conversations yet': 'لا توجد محادثات بعد',
+    'No matches in saved conversations': 'لا توجد نتائج في المحادثات المحفوظة',
+    'No matching conversations': 'لا توجد محادثات مطابقة',
+    'Syncing conversations': 'جارٍ مزامنة المحادثات',
+    'Loading more conversations': 'جارٍ تحميل المزيد من المحادثات',
+    'Load more conversations': 'تحميل المزيد من المحادثات',
+    'Load more archived conversations': 'تحميل المزيد من الدردشات المؤرشفة',
+    'Retry conversation sync': 'إعادة مزامنة المحادثات',
+    'Retry loading conversations': 'إعادة تحميل المحادثات',
+    'Retry account archives': 'إعادة تحميل أرشيف الحساب',
+    'Retry archived conversations': 'إعادة تحميل الدردشات المؤرشفة',
+    'Rename': 'إعادة التسمية',
+    'Rename conversation': 'إعادة تسمية المحادثة',
+    'Conversation name': 'اسم المحادثة',
+    'Save': 'حفظ',
+    'Cancel': 'إلغاء',
+    'Search this chat': 'البحث في هذه الدردشة',
+    'Search chat': 'البحث في الدردشة',
+    'Call': 'اتصال',
+    'More': 'المزيد',
+    'AI persona': 'شخصية ذكاء اصطناعي',
+    'AI simulation': 'محاكاة بالذكاء الاصطناعي',
+    'Message': 'رسالة',
+    'Today': 'اليوم',
+    'Yesterday': 'أمس',
+    'Emoji': 'رموز تعبيرية',
+    'Keyboard': 'لوحة المفاتيح',
+    'Attach': 'إرفاق',
+    'Camera': 'الكاميرا',
+    'Expand draft': 'توسيع المسودة',
+    'Expanded draft': 'مسودة موسعة',
+    'Compose a longer message': 'كتابة رسالة أطول',
+    'Apply': 'تطبيق',
+    'Discard expanded edits': 'تجاهل تعديلات المسودة الموسعة',
+    'Pause recording': 'إيقاف التسجيل مؤقتًا',
+    'Resume recording': 'استئناف التسجيل',
+    'Cancel recording': 'إلغاء التسجيل',
+    'Discard': 'تجاهل',
+    'Stop & review': 'إيقاف ومراجعة',
+    'Play preview': 'تشغيل المعاينة',
+    'Pause preview': 'إيقاف المعاينة مؤقتًا',
+    'Send voice note': 'إرسال رسالة صوتية',
+    'Record again': 'إعادة التسجيل',
+    'Delete': 'حذف',
+    'Delete chat?': 'هل تريد حذف الدردشة؟',
+    'Delete on this device': 'الحذف على هذا الجهاز',
+    'Archive conversation': 'أرشفة المحادثة',
+    'Archive on this device': 'الأرشفة على هذا الجهاز',
+    'Pin conversation': 'تثبيت المحادثة',
+    'Unpin conversation': 'إلغاء تثبيت المحادثة',
+    'Pin on this device': 'التثبيت على هذا الجهاز',
+    'Unpin on this device': 'إلغاء التثبيت على هذا الجهاز',
+    'Archived chats keep their history. Account archives sync across your devices; local-only archives remain on this device.':
+        'تحتفظ الدردشات المؤرشفة بسجلها. تتم مزامنة أرشيف الحساب عبر أجهزتك؛ أما الأرشيف المحلي فيبقى على هذا الجهاز.',
+    'No archived conversations': 'لا توجد دردشات مؤرشفة',
+    'No archived conversations match your search': 'لا توجد دردشات مؤرشفة تطابق البحث',
+    'No archived chats': 'لا توجد دردشات مؤرشفة',
+    'No matching archived chats': 'لا توجد دردشات مؤرشفة مطابقة',
+    'Unavailable Masana': 'ماسانا غير متاح',
+    'Saved conversation': 'محادثة محفوظة',
+    'Unarchive on this device': 'إلغاء الأرشفة على هذا الجهاز',
+    'Unarchive account conversation': 'إلغاء أرشفة محادثة الحساب',
+    'Syncing archived conversations': 'جارٍ مزامنة الدردشات المؤرشفة',
+    'Loading older archives': 'جارٍ تحميل الأرشيف الأقدم',
+    'Archived chats keep their history. Account archives sync when online; device-only archives stay local.':
+        'تحتفظ الدردشات المؤرشفة بسجلها. تتم مزامنة أرشيف الحساب عند الاتصال؛ ويبقى الأرشيف المحلي على هذا الجهاز.',
+    'Shorten search to 80 characters to include archives from other devices.':
+        'اختصر البحث إلى ٨٠ حرفًا ليشمل الأرشيف على الأجهزة الأخرى.',
+    'Could not load account archives. Device-only archives are still shown.':
+        'تعذّر تحميل أرشيف الحساب. لا يزال الأرشيف المحلي ظاهرًا.',
+    'Could not load account archives. Saved conversations remain available.':
+        'تعذّر تحميل أرشيف الحساب. لا تزال المحادثات المحفوظة متاحة.',
+    'Could not load more archives.': 'تعذّر تحميل المزيد من الأرشيف.',
+    'Conversation sync unavailable. Saved conversations remain visible.':
+        'مزامنة المحادثات غير متاحة. تظل المحادثات المحفوظة ظاهرة.',
+    'Could not load more conversations. Previous results are saved.':
+        'تعذّر تحميل المزيد من المحادثات. النتائج السابقة محفوظة.',
+    'Offline searches only include saved conversations.':
+        'يشمل البحث دون اتصال المحادثات المحفوظة فقط.',
+    'Shorten search to 80 characters to include conversations from your account.':
+        'اختصر البحث إلى ٨٠ حرفًا ليشمل محادثات حسابك.',
+    'Shorten search to 80 characters to include conversations stored on other devices.':
+        'اختصر البحث إلى ٨٠ حرفًا ليشمل المحادثات على الأجهزة الأخرى.',
+    'Shorten search to 80 characters to include account archives.':
+        'اختصر البحث إلى ٨٠ حرفًا ليشمل أرشيف الحساب.',
+    'Server conversation controls are unavailable.':
+        'عناصر التحكم في محادثات الخادم غير متاحة حاليًا.',
+  };
+}

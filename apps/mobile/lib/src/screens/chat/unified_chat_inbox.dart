@@ -15,6 +15,7 @@ import '../../state/ai_chat_state.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/session_state.dart';
 import '../../ui/components/conversation_search_field.dart';
+import 'chat_ui_copy.dart';
 
 final _serverSearch = FutureProvider.autoDispose
     .family<MasanaInboxPage, String>((ref, key) {
@@ -202,8 +203,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   @override
   Widget build(BuildContext context) {
     final signedIn = ref.watch(sessionProvider) is SessionSignedIn;
-    if (!signedIn)
-      return const Center(child: Text('Sign in to see your conversations.'));
+    if (!signedIn) {
+      return Center(child: Text(ChatUiCopy.of(context,
+          'Sign in to see your conversations.')));
+    }
     final session = ref.watch(sessionProvider) as SessionSignedIn;
     final serverKey = jsonEncode([
       session.user.id,
@@ -359,8 +362,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       children: [
         ConversationSearchField(
           controller: _search,
-          hintText: 'Search conversations',
-          clearTooltip: 'Clear chat search',
+          hintText: ChatUiCopy.of(context, 'Search conversations'),
+          clearTooltip: ChatUiCopy.of(context, 'Clear chat search'),
           onChanged: _changed,
           onClear: () {
             _search.clear();
@@ -368,9 +371,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
           },
         ),
         if (_query.length > 80)
-          const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text('Shorten search to 80 characters to include conversations '
-                'stored on other devices.', textAlign: TextAlign.center)),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(ChatUiCopy.of(context,
+                'Shorten search to 80 characters to include conversations stored on other devices.'),
+              textAlign: TextAlign.center)),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -385,29 +389,32 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                       children: [
                         Text(
                           _query.isEmpty
-                              ? 'No conversations yet'
+                              ? ChatUiCopy.of(context, 'No conversations yet')
                               : offline
-                              ? 'No matches in saved conversations'
-                              : 'No matching conversations',
+                              ? ChatUiCopy.of(context, 'No matches in saved conversations')
+                              : ChatUiCopy.of(context, 'No matching conversations'),
                         ),
                         if (offline && _query.isNotEmpty)
-                          const Text('Offline searches only include saved conversations.'),
+                          Text(ChatUiCopy.of(context,
+                              'Offline searches only include saved conversations.')),
                         TextButton(
                           onPressed: () => context.push('/masana'),
-                          child: const Text('Find Masana'),
+                          child: Text(ChatUiCopy.of(context, 'Find Masana')),
                         ),
                       ],
                     ),
                   ),
                 for (final row in rows) row.row,
                 if (server?.isLoading == true)
-                  const LinearProgressIndicator(minHeight: 2,
-                    semanticsLabel: 'Syncing conversations'),
+                  LinearProgressIndicator(minHeight: 2,
+                    semanticsLabel: ChatUiCopy.of(context, 'Syncing conversations')),
                 if (server?.hasError == true)
                   ListTile(
-                    title: const Text('Conversation sync unavailable. Saved conversations remain visible.', textAlign: TextAlign.center),
+                    title: Text(ChatUiCopy.of(context,
+                        'Conversation sync unavailable. Saved conversations remain visible.'),
+                      textAlign: TextAlign.center),
                     trailing: IconButton(
-                      tooltip: 'Retry conversation sync',
+                      tooltip: ChatUiCopy.of(context, 'Retry conversation sync'),
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
                       icon: const Icon(Icons.refresh),
                     ),
@@ -420,16 +427,18 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                       (_loadedMore && _additionalResultsKey == serverKey
                           ? _nextCursor : firstPage.nextCursor)!),
                     icon: const Icon(Icons.expand_more),
-                    label: const Text('Load more conversations'),
+                    label: Text(ChatUiCopy.of(context, 'Load more conversations')),
                   )),
                 if (firstPage != null && _loadingMore && _remoteQuery == _query)
-                  const LinearProgressIndicator(minHeight: 2,
-                    semanticsLabel: 'Loading more conversations'),
+                  LinearProgressIndicator(minHeight: 2,
+                    semanticsLabel: ChatUiCopy.of(context, 'Loading more conversations')),
                 if (firstPage != null && _pageError && _remoteQuery == _query)
                   ListTile(
-                    title: const Text('Could not load more conversations. Previous results are saved.', textAlign: TextAlign.center),
+                    title: Text(ChatUiCopy.of(context,
+                        'Could not load more conversations. Previous results are saved.'),
+                      textAlign: TextAlign.center),
                     trailing: IconButton(
-                      tooltip: 'Retry loading conversations',
+                      tooltip: ChatUiCopy.of(context, 'Retry loading conversations'),
                       onPressed: () {
                         final cursor = _loadedMore && _additionalResultsKey == serverKey
                             ? _nextCursor : firstPage.nextCursor;

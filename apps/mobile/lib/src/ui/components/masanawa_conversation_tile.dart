@@ -39,6 +39,9 @@ class MasanawaConversationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.masanawa;
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    // A two-line date plus an unread badge will not fit into the 48dp
+    // trailing touch area; put chronology below the preview in that case.
+    final timeBelowPreview = largeText || unread > 0;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       ListTile(
         minTileHeight: largeText ? 100 : 76,
@@ -57,7 +60,7 @@ class MasanawaConversationTile extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min, children: [
               preview,
-              if (largeText && time.isNotEmpty)
+              if (timeBelowPreview && time.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 3),
                   child: Text(time, maxLines: 2,
                     style: TextStyle(fontSize: 11.5,
@@ -73,7 +76,7 @@ class MasanawaConversationTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!largeText && time.isNotEmpty)
+                if (!timeBelowPreview && time.isNotEmpty)
                   Text(time, maxLines: 2, softWrap: true,
                     textAlign: TextAlign.end,
                     overflow: TextOverflow.fade,
@@ -84,7 +87,7 @@ class MasanawaConversationTile extends StatelessWidget {
                         ? FontWeight.w600 : FontWeight.w400)),
                 if (unread > 0 || (pinned && onAction == null))
                   Padding(padding: EdgeInsets.only(
-                    top: !largeText && time.isNotEmpty ? 3 : 0),
+                    top: !timeBelowPreview && time.isNotEmpty ? 3 : 0),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       if (pinned && onAction == null)
                         Padding(padding: const EdgeInsetsDirectional.only(end: 5),

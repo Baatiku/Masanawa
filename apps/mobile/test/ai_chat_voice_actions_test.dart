@@ -165,7 +165,9 @@ void main() {
   final recorder=_Recorder();
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),child:const AiChatScreen(characterId:'agent')))));
   await tester.pumpAndSettle();
-  expect(find.byTooltip('Camera'),findsOneWidget);
+  // Small screens keep camera in Attach so the text field stays usable at 2x.
+  expect(find.byTooltip('Camera'),findsNothing);
+  expect(find.byTooltip('Attach'),findsOneWidget);
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
   expect(find.byTooltip('Stop & review'),findsOneWidget);
   expect(find.byTooltip('Cancel recording'),findsOneWidget);

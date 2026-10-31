@@ -42,6 +42,14 @@ implemented separately; they are not duplicated in this PR.
 - Added revision-conflict gateway/repository tests and a widget scenario for
   rename → archive → server archived list → unarchive, including preserved
   authorized title and unread projection.
+- Additional UI repair and coverage: adaptive trailing chronology next to
+  unread badges without 48dp overflow, dialog-owned rename editing lifetime,
+  two-row voice controls at 320dp/2× text, compact-width attachment fallback
+  for Camera, a bounded 2–8-photo album with full viewer access, and an
+  English/Hausa/Arabic localization catalog wired to the Chats inbox,
+  archived route, conversation header and core composer controls. The catalog
+  includes locale widget regressions, but the remaining Chats surfaces have
+  **not** been exhaustively localized.
 
 These are **source-level implementation changes pending CI**, not proof of all
 145 item-level acceptance conditions or a physical WhatsApp-equivalent render.

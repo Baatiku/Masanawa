@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'unified_chat_inbox.dart';
+import 'chat_ui_copy.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -193,24 +194,25 @@ class ChatListScreen extends ConsumerWidget {
               leading: Icon(
                 pinned ? Icons.push_pin_outlined : Icons.push_pin,
               ),
-              title: Text(pinned ? 'Unpin ${remote ? 'conversation' : 'on this device'}'
-                  : 'Pin ${remote ? 'conversation' : 'on this device'}'),
+              title: Text(ChatUiCopy.of(context, pinned
+                  ? (remote ? 'Unpin conversation' : 'Unpin on this device')
+                  : (remote ? 'Pin conversation' : 'Pin on this device'))),
               onTap: () => Navigator.pop(sheetContext, 'pin'),
             ),
             ListTile(
               leading: const Icon(Icons.archive_outlined),
-              title: Text(remote ? 'Archive conversation'
-                  : 'Archive on this device'),
+              title: Text(ChatUiCopy.of(context, remote
+                  ? 'Archive conversation' : 'Archive on this device')),
               onTap: () => Navigator.pop(sheetContext, 'archive'),
             ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Rename'),
+              title: Text(ChatUiCopy.of(context, 'Rename')),
               onTap: () => Navigator.pop(sheetContext, 'rename'),
             ),
             if (local != null) ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete on this device'),
+              title: Text(ChatUiCopy.of(context, 'Delete on this device')),
               onTap: () => Navigator.pop(sheetContext, 'delete'),
             ),
           ],
@@ -236,18 +238,18 @@ class ChatListScreen extends ConsumerWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Delete chat?'),
+          title: Text(ChatUiCopy.of(context, 'Delete chat?')),
           content: const Text(
             'This removes the conversation and its local drafts from this device.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
+              child: Text(ChatUiCopy.of(context, 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
+              child: Text(ChatUiCopy.of(context, 'Delete')),
             ),
           ],
         ),
@@ -289,7 +291,8 @@ class ChatListScreen extends ConsumerWidget {
           ? access as MasanaInboxControlsAccess : null;
     if (field != 'pinned' && controls == null) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Server conversation controls are unavailable.')));
+        SnackBar(content: Text(ChatUiCopy.of(context,
+            'Server conversation controls are unavailable.'))));
       return;
     }
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
@@ -384,8 +387,8 @@ class ChatListScreen extends ConsumerWidget {
         unread: canonical?.unreadCount ?? thread.unread,
         onAction: onPin,
         actionLoading: saving,
-        actionTooltip: canonical == null ? null :
-            canonical.pinned ? 'Unpin conversation' : 'Pin conversation',
+        actionTooltip: canonical == null ? null : ChatUiCopy.of(context,
+            canonical.pinned ? 'Unpin conversation' : 'Pin conversation'),
         actionIcon: canonical == null ? null :
             canonical.pinned ? Icons.push_pin : Icons.push_pin_outlined,
         onLongPress: () => _threadActions(context, ref, thread.characterId,
@@ -402,14 +405,17 @@ class ChatListScreen extends ConsumerWidget {
         context,
         actions: [
           PopupMenuButton<String>(
-            tooltip: 'Chats options', icon: const Icon(Icons.more_vert),
+            tooltip: ChatUiCopy.of(context, 'Chats options'),
+            icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'archive') _showArchived(context);
               if (value == 'wallet') context.go('/home?tab=wallet');
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'archive', child: Text('Archived chats')),
-              PopupMenuItem(value: 'wallet', child: Text('Wallet')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'archive',
+                  child: Text(ChatUiCopy.of(context, 'Archived chats'))),
+              PopupMenuItem(value: 'wallet',
+                  child: Text(ChatUiCopy.of(context, 'Wallet'))),
             ],
           ),
         ],
@@ -428,7 +434,7 @@ class ChatListScreen extends ConsumerWidget {
           row.characterId, canonical: row, onUpdated: onUpdated),
       ),
       floatingActionButton: FloatingActionButton(
-        tooltip: 'Start conversation',
+        tooltip: ChatUiCopy.of(context, 'Start conversation'),
         backgroundColor: u.brand,
         foregroundColor: u.textPrimary,
         onPressed: () => context.push('/masana'),
@@ -468,22 +474,23 @@ class _RenameConversationDialogState extends State<_RenameConversationDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Rename conversation'),
+    title: Text(ChatUiCopy.of(context, 'Rename conversation')),
     content: TextField(
       controller: _editor,
       autofocus: true,
       maxLength: 80,
       textCapitalization: TextCapitalization.sentences,
-      decoration: const InputDecoration(hintText: 'Conversation name'),
+      decoration: InputDecoration(
+        hintText: ChatUiCopy.of(context, 'Conversation name')),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text(ChatUiCopy.of(context, 'Cancel')),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(context, _editor.text),
-        child: const Text('Save'),
+        child: Text(ChatUiCopy.of(context, 'Save')),
       ),
     ],
   );
@@ -662,21 +669,22 @@ class _ArchivedMasanaConversationsScreenState
       ..sort((a, b) => (b.lastActivityAt ?? DateTime.utc(1970))
           .compareTo(a.lastActivityAt ?? DateTime.utc(1970)));
     return Scaffold(
-      appBar: AppBar(title: const Text('Archived chats')),
+      appBar: AppBar(title: Text(ChatUiCopy.of(context, 'Archived chats'))),
       body: Column(children: [
         ConversationSearchField(
-          controller: _search, hintText: 'Search archived conversations',
+          controller: _search,
+          hintText: ChatUiCopy.of(context, 'Search archived conversations'),
           onChanged: _changed,
           onClear: () { _search.clear(); _changed(''); },
         ),
-        const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Text('Archived chats keep their history. Account archives '
-              'sync when online; device-only archives stay local.',
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Text(ChatUiCopy.of(context,
+              'Archived chats keep their history. Account archives sync when online; device-only archives stay local.'),
             textAlign: TextAlign.center)),
-        if (_query.length > 80) const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text('Shorten search to 80 characters to include '
-            'archives from other devices.')),
+        if (_query.length > 80) Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(ChatUiCopy.of(context,
+              'Shorten search to 80 characters to include archives from other devices.'))),
         Expanded(child: RefreshIndicator(
           onRefresh: () async {
             await ref.read(agentDirectoryProvider.notifier).refresh();
@@ -690,14 +698,14 @@ class _ArchivedMasanaConversationsScreenState
               if (archived.isEmpty && remoteOnly.isEmpty &&
                   server?.isLoading != true)
                 Padding(padding: const EdgeInsets.all(32),
-                  child: Center(child: Text(_query.isEmpty
-                    ? 'No archived chats' : 'No matching archived chats'))),
+                  child: Center(child: Text(ChatUiCopy.of(context, _query.isEmpty
+                    ? 'No archived chats' : 'No matching archived chats')))),
               for (final thread in archived)
                 Builder(builder: (context) {
                   final row = remoteById[thread.characterId];
                   final agent = directory.find(thread.characterId);
                   final name = row?.customTitle ?? thread.title ??
-                      agent?.displayName ?? 'Unavailable Masana';
+                      agent?.displayName ?? ChatUiCopy.of(context, 'Unavailable Masana');
                   return MasanawaConversationTile(
                     key: ValueKey('archived-${thread.characterId}'),
                     avatar: MasanaPortraitAvatar(agent: agent,
@@ -705,7 +713,8 @@ class _ArchivedMasanaConversationsScreenState
                     name: name,
                     preview: Text(thread.draft.trim().isNotEmpty
                       ? 'Draft: ${thread.draft.trim()}'
-                      : thread.lastMessage?.text ?? row?.lastMessage ?? 'Saved conversation',
+                      : thread.lastMessage?.text ?? row?.lastMessage ??
+                          ChatUiCopy.of(context, 'Saved conversation'),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                     time: row?.lastActivityAt != null
                         ? formatChatTime(row!.lastActivityAt!)
@@ -713,8 +722,9 @@ class _ArchivedMasanaConversationsScreenState
                           : formatChatTime(thread.lastMessageActivityAt),
                     pinned: row?.pinned ?? thread.pinned,
                     unread: row?.unreadCount ?? thread.unread,
-                    actionTooltip: row == null ? 'Unarchive on this device'
-                        : 'Unarchive account conversation',
+                    actionTooltip: ChatUiCopy.of(context,
+                        row == null ? 'Unarchive on this device'
+                            : 'Unarchive account conversation'),
                     actionIcon: Icons.unarchive_outlined,
                     actionLoading: _busy.contains(thread.characterId),
                     onAction: () {
@@ -744,7 +754,8 @@ class _ArchivedMasanaConversationsScreenState
                       ? '' : formatChatTime(row.lastActivityAt!),
                   pinned: row.pinned, unread: row.unreadCount,
                   actionIcon: Icons.unarchive_outlined,
-                  actionTooltip: 'Unarchive account conversation',
+                  actionTooltip: ChatUiCopy.of(context,
+                      'Unarchive account conversation'),
                   actionLoading: _busy.contains(row.characterId),
                   onAction: session is SessionSignedIn ?
                       () => unawaited(_unarchive(row, session, key)) : null,
@@ -752,12 +763,14 @@ class _ArchivedMasanaConversationsScreenState
                     '/chat/${Uri.encodeComponent(row.characterId)}'),
                 ),
               if (server?.isLoading == true)
-                const LinearProgressIndicator(minHeight: 2,
-                  semanticsLabel: 'Syncing archived conversations'),
+                LinearProgressIndicator(minHeight: 2,
+                  semanticsLabel: ChatUiCopy.of(context,
+                      'Syncing archived conversations')),
               if (server?.hasError == true)
-                ListTile(title: const Text('Could not load account archives. '
-                    'Device-only archives are still shown.'),
-                  trailing: IconButton(tooltip: 'Retry account archives',
+                ListTile(title: Text(ChatUiCopy.of(context,
+                    'Could not load account archives. Device-only archives are still shown.')),
+                  trailing: IconButton(tooltip: ChatUiCopy.of(context,
+                      'Retry account archives'),
                     icon: const Icon(Icons.refresh),
                     onPressed: () => ref.invalidate(_archivedServerPage(key)))),
               if (firstPage != null && !_loadingMore && !_pageError &&
@@ -765,16 +778,18 @@ class _ArchivedMasanaConversationsScreenState
                       ? _nextCursor : firstPage.nextCursor) != null)
                 Center(child: TextButton.icon(
                   icon: const Icon(Icons.expand_more),
-                  label: const Text('Load more archived conversations'),
+                  label: Text(ChatUiCopy.of(context,
+                      'Load more archived conversations')),
                   onPressed: session is SessionSignedIn ? () => _loadMore(
                     key, (_loadedMore && _pageKey == key
                         ? _nextCursor : firstPage.nextCursor)!, session) : null)),
-              if (_loadingMore) const LinearProgressIndicator(minHeight: 2,
-                  semanticsLabel: 'Loading older archives'),
+              if (_loadingMore) LinearProgressIndicator(minHeight: 2,
+                  semanticsLabel: ChatUiCopy.of(context, 'Loading older archives')),
               if (_pageError) ListTile(
-                title: const Text('Could not load more archives.'),
+                title: Text(ChatUiCopy.of(context, 'Could not load more archives.')),
                 trailing: IconButton(icon: const Icon(Icons.refresh),
-                  tooltip: 'Retry archived conversations',
+                  tooltip: ChatUiCopy.of(context,
+                      'Retry archived conversations'),
                   onPressed: session is SessionSignedIn ? () {
                     final cursor = _loadedMore && _pageKey == key
                         ? _nextCursor : firstPage?.nextCursor;

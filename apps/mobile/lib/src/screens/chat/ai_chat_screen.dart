@@ -56,6 +56,7 @@ import '../../voice/voice_reply_playback_preference.dart';
 import '../../voice/voice_note_sequence.dart';
 import '../../safety/twin_safety_state.dart';
 import 'masana_report_screen.dart';
+import 'chat_ui_copy.dart';
 import '../../theme/masanawa_theme.dart';
 
 /// One Character conversation. Voice is the primary action while text,
@@ -1227,7 +1228,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         ),
                       ),
                       Text(
-                        '${agent.publicOfficialSimulation ? 'AI simulation' : 'AI persona'} · $workingLabel',
+                        '${ChatUiCopy.of(context, agent.publicOfficialSimulation ? 'AI simulation' : 'AI persona')} · $workingLabel',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(
@@ -1262,17 +1263,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             ] else ...[
             if (MediaQuery.sizeOf(context).width >= 430)
               IconButton(
-                tooltip: 'Search this chat',
+                tooltip: ChatUiCopy.of(context, 'Search this chat'),
                 icon: const Icon(Icons.search),
                 onPressed: () => setState(() { _showSearch = true; _searchIndex = 0; }),
               ),
             IconButton(
-              tooltip: 'Wallet',
+              tooltip: ChatUiCopy.of(context, 'Wallet'),
               icon: const Icon(Icons.account_balance_wallet_outlined),
               onPressed: () => context.push('/wallet'),
             ),
             IconButton(
-              tooltip: 'Call',
+              tooltip: ChatUiCopy.of(context, 'Call'),
               icon: const Icon(Icons.call_outlined),
               onPressed: updateRequired || !liveVoiceEnabled
                   ? null
@@ -1280,7 +1281,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             ),
             ],
             if (_selectedMessageIds.isEmpty) PopupMenuButton<String>(
-              tooltip: 'More',
+              tooltip: ChatUiCopy.of(context, 'More'),
               onSelected: (value) async {
                 final ctl = ref.read(aiChatProvider.notifier);
                 if (value == 'voice-autoplay') {
@@ -1305,8 +1306,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 if (value == 'report') await _reportAgent(agent);
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'search', child: Text('Search chat')),
-                const PopupMenuItem(value: 'wallet', child: Text('Wallet')),
+                PopupMenuItem(value: 'search',
+                  child: Text(ChatUiCopy.of(context, 'Search chat'))),
+                PopupMenuItem(value: 'wallet',
+                  child: Text(ChatUiCopy.of(context, 'Wallet'))),
                 PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
                 if (widget.embeddedInShell) ...const [
                   PopupMenuItem(value: 'activity', child: Text('Activity')),
@@ -3188,6 +3191,33 @@ class _Composer extends StatelessWidget {
     final durationMs = active
         ? recorder!.elapsed.inMilliseconds
         : recorder!.note?.durationMs ?? recorder!.elapsed.inMilliseconds;
+    final controls = <Widget>[
+      if (active) IconButton(
+        tooltip: ChatUiCopy.of(context,
+            isPaused ? 'Resume recording' : 'Pause recording'),
+        onPressed: () => unawaited(isPaused
+            ? recorder!.resume() : recorder!.pause()),
+        icon: Icon(isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded)),
+      IconButton(
+        tooltip: ChatUiCopy.of(context,
+            active ? 'Cancel recording' : 'Discard'),
+        onPressed: onCancelRecording,
+        icon: Icon(Icons.delete_outline, color: u.emergency, size: 22)),
+      IconButton.filledTonal(
+        tooltip: ChatUiCopy.of(context, active ? 'Stop & review'
+            : previewPlaying ? 'Pause preview' : 'Play preview'),
+        onPressed: active ? onStopRecording : onTogglePreview,
+        icon: Icon(active ? Icons.stop_rounded :
+            previewPlaying ? Icons.pause_rounded
+                : Icons.play_arrow_rounded, size: 22)),
+      const SizedBox(width: 3),
+      Semantics(container: true, button: true,
+        label: ChatUiCopy.of(context, 'Send voice note'),
+        child: ExcludeSemantics(child: IconButton.filled(
+          tooltip: ChatUiCopy.of(context, 'Send voice note'),
+          onPressed: sending || active ? null : onSendVoiceNote,
+          icon: const Icon(Icons.send_rounded, size: 22)))),
+    ];
     return SafeArea(
       top: false,
       child: Container(
@@ -3216,30 +3246,11 @@ class _Composer extends StatelessWidget {
               progress: active ? 1 : previewProgress,
               enabled: !active && onSeekPreview != null,
               onSeek: onSeekPreview ?? (_) {}))),
-            if (narrowLargeText) const Spacer(),
-            if (active) IconButton(
-              tooltip: isPaused ? 'Resume recording' : 'Pause recording',
-              onPressed: () => unawaited(isPaused
-                  ? recorder!.resume() : recorder!.pause()),
-              icon: Icon(isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded)),
-            IconButton(
-              tooltip: active ? 'Cancel recording' : 'Discard',
-              onPressed: onCancelRecording,
-              icon: Icon(Icons.delete_outline, color: u.emergency, size: 22)),
-            IconButton.filledTonal(
-              tooltip: active ? 'Stop & review'
-                  : previewPlaying ? 'Pause preview' : 'Play preview',
-              onPressed: active ? onStopRecording : onTogglePreview,
-              icon: Icon(active ? Icons.stop_rounded :
-                  previewPlaying ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded, size: 22)),
-            const SizedBox(width: 3),
-            Semantics(container: true, button: true, label: 'Send voice note',
-              child: ExcludeSemantics(child: IconButton.filled(
-                tooltip: 'Send voice note',
-                onPressed: sending || active ? null : onSendVoiceNote,
-                icon: const Icon(Icons.send_rounded, size: 22)))),
+            if (!narrowLargeText) ...controls,
           ]),
+          if (narrowLargeText) Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: controls),
           if (narrowLargeText)
             Padding(padding: const EdgeInsets.symmetric(vertical: 4),
               child: SizedBox(height: 30, child: _VoiceWaveform(
@@ -3255,11 +3266,11 @@ class _Composer extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: u.textMuted, fontSize: 11)),
           if (!active)
-            Center(child: Tooltip(message: 'Record again',
+            Center(child: Tooltip(message: ChatUiCopy.of(context, 'Record again'),
               child: TextButton.icon(
                 onPressed: onReRecord,
                 icon: const Icon(Icons.replay_rounded, size: 16),
-                label: const Text('Record again')))),
+                label: Text(ChatUiCopy.of(context, 'Record again'))))),
         ]),
       ),
     );
@@ -3271,7 +3282,8 @@ class _Composer extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _ComposerIcon(tooltip: emojiSelected ? 'Keyboard' : 'Emoji',
+        _ComposerIcon(tooltip: ChatUiCopy.of(context,
+            emojiSelected ? 'Keyboard' : 'Emoji'),
           icon: emojiSelected ? Icons.keyboard_rounded : Icons.emoji_emotions_outlined,
           onPressed: onEmojiToggle),
 
@@ -3284,30 +3296,34 @@ class _Composer extends StatelessWidget {
             maxLines: 5,
             keyboardType: TextInputType.multiline,
             textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              hintText: 'Message',
+            decoration: InputDecoration(
+              hintText: ChatUiCopy.of(context, 'Message'),
               filled: false,
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
               disabledBorder: InputBorder.none,
               isDense: true,
-              contentPadding: EdgeInsets.fromLTRB(4, 15, 4, 14),
+              contentPadding: const EdgeInsets.fromLTRB(4, 15, 4, 14),
             ),
           ),
         ),
         if (longDraft)
-          _ComposerIcon(tooltip: 'Expand draft',
+          _ComposerIcon(tooltip: ChatUiCopy.of(context, 'Expand draft'),
             icon: Icons.open_in_full_rounded,
             onPressed: () => unawaited(_openExpandedDraft(context))),
         if (!editing) _ComposerIcon(
-          tooltip: 'Attach',
+          tooltip: ChatUiCopy.of(context, 'Attach'),
           icon: Icons.attach_file,
           onPressed: onAttach,
         ),
-        if (!hasText && !editing)
+        // Camera remains one tap away in Attach on compact handsets. Keep
+        // the text input wide enough for Hausa/Arabic and 200% text scaling.
+        if (!hasText && !editing &&
+            MediaQuery.sizeOf(context).width >= 380 &&
+            MediaQuery.textScalerOf(context).scale(1) <= 1.3)
           _ComposerIcon(
-            tooltip: 'Camera',
+            tooltip: ChatUiCopy.of(context, 'Camera'),
             icon: Icons.camera_alt_outlined,
             onPressed: onCamera,
           ),
@@ -3325,22 +3341,24 @@ class _Composer extends StatelessWidget {
             bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
           child: SizedBox(height: MediaQuery.sizeOf(sheetContext).height * .72,
             child: Column(children: [
-              ListTile(title: const Text('Expanded draft'),
-                leading: IconButton(tooltip: 'Discard expanded edits',
+              ListTile(title: Text(ChatUiCopy.of(sheetContext, 'Expanded draft')),
+                leading: IconButton(tooltip: ChatUiCopy.of(sheetContext,
+                    'Discard expanded edits'),
                   onPressed: () => Navigator.pop(sheetContext),
                   icon: const Icon(Icons.close)),
                 trailing: TextButton(onPressed: () =>
                     Navigator.pop(sheetContext, expanded.text),
-                  child: const Text('Apply'))),
+                  child: Text(ChatUiCopy.of(sheetContext, 'Apply')))),
               Expanded(child: Padding(padding: const EdgeInsets.all(16),
                 child: TextField(controller: expanded, autofocus: true,
                   keyboardType: TextInputType.multiline,
                   textCapitalization: TextCapitalization.sentences,
                   minLines: null, maxLines: null, expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  decoration: const InputDecoration(
-                    hintText: 'Compose a longer message',
-                    border: OutlineInputBorder())))),
+                  decoration: InputDecoration(
+                    hintText: ChatUiCopy.of(sheetContext,
+                        'Compose a longer message'),
+                    border: const OutlineInputBorder())))),
             ]),
           ),
         )),
@@ -4115,7 +4133,8 @@ class _DateSeparator extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: u.structuralBorder),
           ),
-          child: Text(label, style: TextStyle(color: u.textMuted, fontSize: 11)),
+          child: Text(ChatUiCopy.of(context, label),
+              style: TextStyle(color: u.textMuted, fontSize: 11)),
         ),
       ),
     );
@@ -4304,6 +4323,54 @@ class _AttachmentGallery extends StatelessWidget {
         caption: caption,
       );
     }
+    if (imageAttachments.length == attachments.length) {
+      // Show a bounded album rather than a potentially tall 8-photo wrap.
+      // The last cell opens the full ordered viewer, including hidden photos.
+      return LayoutBuilder(builder: (context, constraints) {
+        final width = math.min(300.0, constraints.maxWidth.isFinite
+            ? constraints.maxWidth : MediaQuery.sizeOf(context).width * .76);
+        final gap = 3.0;
+        final half = (width - gap) / 2;
+        final height = math.min(240.0, width * .82);
+        Widget photo(int index, double tileHeight) => _AlbumPhotoTile(
+          path: imagePaths[index], paths: imagePaths, index: index,
+          caption: caption, height: tileHeight,
+          remaining: imagePaths.length > 4 && index == 3
+              ? imagePaths.length - 4 : 0,
+        );
+        if (imagePaths.length == 2) {
+          return SizedBox(width: width, child: Row(children: [
+            Expanded(child: photo(0, height * .72)),
+            SizedBox(width: gap),
+            Expanded(child: photo(1, height * .72)),
+          ]));
+        }
+        if (imagePaths.length == 3) {
+          return SizedBox(width: width, height: height, child: Row(children: [
+            SizedBox(width: half, child: photo(0, height)),
+            SizedBox(width: gap),
+            Expanded(child: Column(children: [
+              photo(1, (height - gap) / 2),
+              SizedBox(height: gap),
+              photo(2, (height - gap) / 2),
+            ])),
+          ]));
+        }
+        return SizedBox(width: width, height: height, child: Column(children: [
+          Row(children: [
+            Expanded(child: photo(0, (height - gap) / 2)),
+            SizedBox(width: gap),
+            Expanded(child: photo(1, (height - gap) / 2)),
+          ]),
+          SizedBox(height: gap),
+          Row(children: [
+            Expanded(child: photo(2, (height - gap) / 2)),
+            SizedBox(width: gap),
+            Expanded(child: photo(3, (height - gap) / 2)),
+          ]),
+        ]));
+      });
+    }
     return LayoutBuilder(builder: (context, constraints) {
       final width = math.min(300.0, constraints.maxWidth.isFinite
           ? constraints.maxWidth : MediaQuery.sizeOf(context).width * .76);
@@ -4330,6 +4397,45 @@ class _AttachmentGallery extends StatelessWidget {
       ));
     });
   }
+}
+
+class _AlbumPhotoTile extends StatelessWidget {
+  const _AlbumPhotoTile({required this.path, required this.paths,
+    required this.index, required this.caption, required this.height,
+    required this.remaining});
+  final String path;
+  final List<String> paths;
+  final int index;
+  final String caption;
+  final double height;
+  final int remaining;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Open photo ${index + 1} of ${paths.length}',
+    child: GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => _ImageGalleryViewer(
+          paths: paths, initialIndex: index, caption: caption),
+      )),
+      child: ClipRRect(borderRadius: BorderRadius.circular(7),
+        child: SizedBox(height: height, width: double.infinity,
+          child: Stack(fit: StackFit.expand, children: [
+            Image.file(File(path), fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => ColoredBox(
+                color: Colors.black12,
+                child: const Center(child: Icon(Icons.broken_image_outlined)))),
+            if (remaining > 0) ColoredBox(
+              color: Colors.black.withValues(alpha: .58),
+              child: Center(child: Text('+$remaining', style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700,
+                fontSize: 27)))),
+          ])),
+      ),
+    ),
+  );
 }
 
 class _AttachmentView extends StatelessWidget {
