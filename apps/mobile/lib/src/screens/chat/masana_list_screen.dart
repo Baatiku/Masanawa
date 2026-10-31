@@ -353,9 +353,6 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                             context.push(masanaLiveVoiceRoute(agent.characterId));
                             return;
                           }
-                          ref
-                              .read(aiChatProvider.notifier)
-                              .seedGreeting(agent.characterId, agent.greeting);
                           context.push('/chat/${agent.characterId}');
                         },
                       );

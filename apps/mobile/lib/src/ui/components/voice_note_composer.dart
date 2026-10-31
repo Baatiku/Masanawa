@@ -128,14 +128,15 @@ class _VoiceNoteComposerState extends State<VoiceNoteComposer> {
       child: AnimatedBuilder(animation: widget.recorder, builder: (context, _) {
         final recorder = widget.recorder;
         final recording = recorder.state == VoiceNoteState.recording;
+        final paused = recorder.state == VoiceNoteState.paused;
         final ready = recorder.state == VoiceNoteState.ready;
         final busy = _sending || _previewLoading || recorder.state == VoiceNoteState.starting || recorder.state == VoiceNoteState.stopping;
         final seconds = recorder.elapsed.inSeconds;
         final message = _error ?? recorder.error;
         return Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.mic, size: 36, color: recording ? colors.emergency : colors.brandStrong),
+          Icon(Icons.mic, size: 36, color: recording || paused ? colors.emergency : colors.brandStrong),
           const SizedBox(height: 12),
-          Text(recording ? 'Recording voice note' : ready ? 'Voice note ready' : busy ? 'Starting recording…' : 'Voice note',
+          Text(paused ? 'Recording paused' : recording ? 'Recording voice note' : ready ? 'Voice note ready' : busy ? 'Starting recording…' : 'Voice note',
             textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Text('${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
@@ -146,15 +147,22 @@ class _VoiceNoteComposerState extends State<VoiceNoteComposer> {
           const SizedBox(height: 16),
           Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 8, children: [
             TextButton(onPressed: _sending ? null : _cancel, child: const Text('Cancel')),
-            if (recording) OutlinedButton(onPressed: busy ? null : () => unawaited(recorder.stop()), child: const Text('Stop')),
+            if (recording || paused) OutlinedButton(
+              onPressed: busy ? null : () => unawaited(recorder.stop()),
+              child: const Text('Stop & review')),
+            if (recording || paused) OutlinedButton.icon(
+              onPressed: busy ? null : () => unawaited(
+                paused ? recorder.resume() : recorder.pause()),
+              icon: Icon(paused ? Icons.play_arrow : Icons.pause),
+              label: Text(paused ? 'Resume' : 'Pause')),
             if (ready) OutlinedButton.icon(
               onPressed: busy ? null : _togglePreview,
               icon: Icon(_previewPlaying ? Icons.pause : Icons.play_arrow),
               label: Text(_previewPlaying ? 'Pause preview' : 'Play voice note'),
             ),
-            if (recording || ready) FilledButton.icon(
+            if (ready) FilledButton.icon(
               onPressed: busy ? null : _send, icon: const Icon(Icons.send), label: const Text('Send voice note')),
-            if (!recording && !ready && !busy && widget.isOwnerCurrent())
+            if (!recording && !paused && !ready && !busy && widget.isOwnerCurrent())
               FilledButton(onPressed: () => recorder.start(isOwnerCurrent: widget.isOwnerCurrent), child: const Text('Record again')),
             if (recorder.error?.contains('permission') == true)
               TextButton(onPressed: AppPermissions.openSettings, child: const Text('Microphone settings')),

@@ -49,6 +49,10 @@ describe("C10 PostgreSQL 18 private Masana inbox integration", () => {
           await query(await readFile(root + migration, "utf8"));
         }
       }
+      // A new optional per-fan preference migration is forward-only, never
+      // a mutation of the immutable agent turn journal.
+      await query(await readFile(root +
+        "packages/masana/migrations/0016_fan_chat_controls.sql", "utf8"));
       const slug = randomUUID().replace(/-/g, "").slice(0, 16);
       const tenant = "tenant_c10_test_" + slug;
       const fan = "fan_c10_" + slug;
@@ -119,6 +123,19 @@ describe("C10 PostgreSQL 18 private Masana inbox integration", () => {
       expect((await inbox.list(scope))[0]?.pinned).toBe(true);
       expect(await inbox.markRead(scope,character)).toBe(2);
       expect((await inbox.list(scope))[0]?.unreadCount).toBe(0);
+      expect(await inbox.setArchived(scope,character,true,2)).toBe(3);
+      expect(await inbox.list(scope)).toEqual([]);
+      expect((await inbox.list(scope,"",undefined,true))[0]?.archived).toBe(true);
+      expect(await inbox.setTitle(scope,character,"Study history",3)).toBe(4);
+      expect((await inbox.list(scope,"",undefined,true))[0]?.customTitle)
+        .toBe("Study history");
+      expect(await inbox.setArchived(scope,character,false,3)).toBeNull();
+      expect(await inbox.setArchived(scope,character,false,4)).toBe(5);
+      expect((await inbox.list(scope))[0]?.customTitle).toBe("Study history");
+      expect(await inbox.setArchived({...scope,fanUserId:"another_fan"},
+        character,true,0)).toBeNull();
+      expect(await inbox.setTitle({...scope,fanUserId:"another_fan"},
+        character,"Not your chat",0)).toBeNull();
       await query(`UPDATE masana.character_revisions SET state='retired'
         WHERE tenant_id=$1 AND character_id=$2 AND revision=1`,[tenant,character]);
       expect(await inbox.list(scope)).toEqual([]);

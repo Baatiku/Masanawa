@@ -123,6 +123,22 @@ describe("C10 tenant-private canonical chat inbox", () => {
     expect(sql).toContain("clock_timestamp()");
     expect(sql).toContain("EXISTS");
   });
+  it("archival and custom title never mutate canonical turns or accept stale CAS",async()=>{
+    const {inbox,query}=repository([{revision:"3"}]);
+    expect(await inbox.setArchived(scope,character,true,2)).toBe(3);
+    expect(String(query.mock.calls[0]?.[0])).toContain("SET archived=$4");
+    expect((query.mock.calls[0] as unknown as [string,unknown[]])[1])
+      .toEqual(["tenant-a","fan-a",character,true,2]);
+    query.mockClear();
+    expect(await inbox.setTitle(scope,character,"My Masana",2)).toBe(3);
+    expect(String(query.mock.calls[0]?.[0])).toContain("SET custom_title=$4");
+    await expect(inbox.setTitle(scope,character,"bad\nname",2)).rejects.toThrow();
+    await expect(inbox.setArchived(scope,"user_other",true,2)).rejects.toThrow();
+    query.mockClear();
+    await inbox.list(scope,"",undefined,true);
+    expect(String(query.mock.calls[0]?.[0]))
+      .toContain("COALESCE(p.archived,false)=true");
+  });
   it("caps returned unread count and never rounds unsafe bigint revisions",async()=>{
     const {inbox}=repository([{
       character_id:character,display_name:"Teacher",profession:"Lecturer",

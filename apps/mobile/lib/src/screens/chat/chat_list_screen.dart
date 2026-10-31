@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'unified_chat_inbox.dart';
 
 import 'package:flutter/material.dart';
@@ -6,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../chat/chat_format.dart';
 import '../../chat/message_parts.dart';
+import '../../features/masana_chat/inbox_search.dart';
 import '../../core/startup_metrics.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/ai_chat_state.dart';
@@ -14,6 +18,18 @@ import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../../ui/components/masanawa_conversation_tile.dart';
+import '../../ui/components/conversation_search_field.dart';
+
+final _archivedServerPage = FutureProvider.autoDispose
+    .family<MasanaInboxPage, String>((ref, key) {
+  final access = ref.watch(masanaInboxSearchProvider);
+  if (access is! MasanaInboxControlsAccess) {
+    throw StateError('Server archive search is not available');
+  }
+  final parts = jsonDecode(key) as List<dynamic>;
+  return access.archivedPage(
+    bearer: parts[1] as String, query: parts[2] as String);
+});
 
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
@@ -29,8 +45,15 @@ class ChatListScreen extends ConsumerWidget {
     }
     final last = thread.lastMessage;
     if (last == null) return '';
+    if (last.deleted) return 'Message hidden on this device';
+    if (last.deliveryStatus == 'failed') return 'Failed · tap to review';
+    if (last.deliveryStatus == 'queued') return 'Queued · waiting for connection';
+    if (last.deliveryStatus == 'stopped') return 'Stopped';
     if (last.parts.isNotEmpty) {
-      final part = last.parts.last;
+      final part = last.parts.firstWhere(
+        (item) => (item.body?.trim().isNotEmpty ?? false) ||
+            (item.title?.trim().isNotEmpty ?? false) || item.file != null,
+        orElse: () => last.parts.last);
       return part.file?.name ??
           part.title ??
           part.body ??
@@ -40,7 +63,7 @@ class ChatListScreen extends ConsumerWidget {
       final label = last.attachment!.label;
       return last.text.isEmpty ? label : '$label · ${last.text}';
     }
-    return last.text.isEmpty ? '…' : last.text;
+    return last.text.trim().isEmpty ? 'Message' : last.text.trim();
   }
 
   Widget _buildSubtitle(MasanawaColors u, ChatThread thread) {
@@ -49,22 +72,25 @@ class ChatListScreen extends ConsumerWidget {
         thread.draftVoice != null ||
         thread.draftAttachments.isNotEmpty;
     if (isDraft) {
-      return Text(
-        _snippet(thread),
+      final value = _snippet(thread);
+      return Text.rich(
+        TextSpan(children: [
+          TextSpan(text: 'Draft', style: TextStyle(
+            color: u.brandStrong, fontWeight: FontWeight.w600)),
+          TextSpan(text: value.startsWith('Draft: ')
+              ? ' · ${value.substring(7)}' : ' · $value',
+              style: TextStyle(color: u.textMuted)),
+        ]),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: u.brandStrong,
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
-        ),
+        style: const TextStyle(fontSize: 14),
       );
     }
     final last = thread.lastMessage;
     Widget? tick;
     if (last != null && last.isUser) {
       tick = switch (last.deliveryStatus) {
-        'pending' => Icon(
+        'pending' || 'sending' || 'uploading' || 'processing' => Icon(
           Icons.access_time_rounded,
           size: 13,
           color: u.textMuted,
@@ -76,6 +102,9 @@ class ChatListScreen extends ConsumerWidget {
           color: u.textMuted,
         ),
         'read' => Icon(Icons.done_all_rounded, size: 14, color: u.tickRead),
+        'queued' => Icon(Icons.cloud_off_outlined, size: 14, color: u.warning),
+        'failed' => Icon(Icons.error_outline, size: 14, color: u.emergency),
+        'stopped' => Icon(Icons.stop_circle_outlined, size: 14, color: u.textMuted),
         _ => null, // Never imply delivery without an authoritative state.
       };
     }
@@ -142,8 +171,18 @@ class ChatListScreen extends ConsumerWidget {
   Future<void> _threadActions(
     BuildContext context,
     WidgetRef ref,
-    ChatThread thread,
-  ) async {
+    String characterId, {
+    ChatThread? local,
+    MasanaInboxSearchItem? canonical,
+    VoidCallback? onPin,
+    ValueChanged<MasanaInboxSearchItem?>? onUpdated,
+  }) async {
+    final ownerAtOpen = ref.read(sessionProvider);
+    final epochAtOpen = ref.read(sessionProvider.notifier).authorizationEpoch;
+    bool stillAuthorized() => identical(ownerAtOpen, ref.read(sessionProvider)) &&
+        epochAtOpen == ref.read(sessionProvider.notifier).authorizationEpoch;
+    final pinned = canonical?.pinned ?? local?.pinned ?? false;
+    final remote = canonical != null;
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -152,14 +191,16 @@ class ChatListScreen extends ConsumerWidget {
           children: [
             ListTile(
               leading: Icon(
-                thread.pinned ? Icons.push_pin_outlined : Icons.push_pin,
+                pinned ? Icons.push_pin_outlined : Icons.push_pin,
               ),
-              title: Text(thread.pinned ? 'Unpin' : 'Pin'),
+              title: Text(pinned ? 'Unpin ${remote ? 'conversation' : 'on this device'}'
+                  : 'Pin ${remote ? 'conversation' : 'on this device'}'),
               onTap: () => Navigator.pop(sheetContext, 'pin'),
             ),
             ListTile(
               leading: const Icon(Icons.archive_outlined),
-              title: const Text('Archive'),
+              title: Text(remote ? 'Archive conversation'
+                  : 'Archive on this device'),
               onTap: () => Navigator.pop(sheetContext, 'archive'),
             ),
             ListTile(
@@ -167,19 +208,30 @@ class ChatListScreen extends ConsumerWidget {
               title: const Text('Rename'),
               onTap: () => Navigator.pop(sheetContext, 'rename'),
             ),
-            ListTile(
+            if (local != null) ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete chat'),
+              title: const Text('Delete on this device'),
               onTap: () => Navigator.pop(sheetContext, 'delete'),
             ),
           ],
         ),
       ),
     );
-    if (action == null || !context.mounted) return;
+    if (action == null || !context.mounted || !stillAuthorized()) return;
     final ctl = ref.read(aiChatProvider.notifier);
-    if (action == 'pin') ctl.togglePin(thread.characterId);
-    if (action == 'archive') ctl.toggleArchive(thread.characterId);
+    if (action == 'pin') {
+      if (canonical != null) {
+        if (onPin != null) onPin();
+        else await _setCanonicalPreference(context, ref, canonical,
+          field: 'pinned', value: !canonical.pinned, onUpdated: onUpdated);
+      } else if (local != null) { ctl.togglePin(characterId); }
+    }
+    if (action == 'archive') {
+      if (canonical != null) {
+        await _setCanonicalPreference(context, ref, canonical,
+          field: 'archived', value: true, onUpdated: onUpdated);
+      } else if (local != null) { ctl.toggleArchive(characterId); }
+    }
     if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -200,16 +252,22 @@ class ChatListScreen extends ConsumerWidget {
           ],
         ),
       );
-      if (confirmed == true) ctl.clearThread(thread.characterId);
+      if (confirmed == true && local != null && context.mounted &&
+          stillAuthorized()) {
+        ctl.clearThread(characterId);
+      }
     }
     if (action == 'rename') {
       if (!context.mounted) return;
-      final editor = TextEditingController(text: thread.title ?? '');
+      final editor = TextEditingController(
+        text: canonical?.customTitle ?? local?.title ?? '');
       final value = await showDialog<String>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Rename conversation'),
-          content: TextField(controller: editor, autofocus: true),
+          content: TextField(controller: editor, autofocus: true,
+            maxLength: 80, textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(hintText: 'Conversation name')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -223,66 +281,84 @@ class ChatListScreen extends ConsumerWidget {
         ),
       );
       editor.dispose();
-      if (value != null) ctl.renameThread(thread.characterId, value);
+      if (value != null && context.mounted && stillAuthorized()) {
+        final normalized = value.trim();
+        if (canonical != null) {
+          await _setCanonicalPreference(context, ref, canonical,
+            field: 'title', value: normalized.isEmpty ? null : normalized,
+            onUpdated: onUpdated);
+        } else if (local != null) {
+          ctl.renameThread(characterId, normalized);
+        }
+      }
     }
   }
 
-  Future<void> _showArchived(
-    BuildContext context,
-    WidgetRef ref,
-    AgentDirectoryState directory,
-  ) async {
-    final archived =
-        ref
-            .read(aiChatProvider)
-            .threads
-            .values
-            .where((thread) => thread.archived)
-            .where((thread) => directory.find(thread.characterId) != null)
-            .toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: archived.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('No archived chats')),
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                itemCount: archived.length,
-                itemBuilder: (_, index) {
-                  final thread = archived[index];
-                  final agent = directory.find(thread.characterId)!;
-                  return MasanawaConversationTile(
-                    key: ValueKey('archived-${thread.characterId}'),
-                    avatar: MasanaPortraitAvatar(agent: agent, size: 52),
-                    name: thread.title?.trim().isNotEmpty == true
-                        ? thread.title! : agent.displayName,
-                    preview: Text(_snippet(thread), maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    time: formatChatTime(thread.lastMessageActivityAt),
-                    pinned: thread.pinned,
-                    unread: thread.unread,
-                    actionTooltip: 'Unarchive',
-                    actionIcon: Icons.unarchive_outlined,
-                    onAction: () {
-                      ref.read(aiChatProvider.notifier)
-                          .toggleArchive(thread.characterId);
-                      Navigator.pop(sheetContext);
-                    },
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      context.push('/chat/${thread.characterId}');
-                    },
-                  );
-                },
-              ),
-      ),
-    );
+  Future<void> _setCanonicalPreference(BuildContext context, WidgetRef ref,
+      MasanaInboxSearchItem row, {required String field,
+      required Object? value,
+      ValueChanged<MasanaInboxSearchItem?>? onUpdated}) async {
+    final owner = ref.read(sessionProvider);
+    if (owner is! SessionSignedIn) return;
+    final access = ref.read(masanaInboxSearchProvider);
+    final controls = access is MasanaInboxControlsAccess ? access : null;
+    if (field != 'pinned' && controls == null) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Server conversation controls are unavailable.')));
+      return;
+    }
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    try {
+      final int receipt;
+      switch (field) {
+        case 'pinned':
+          receipt = await access.setPinned(bearer: owner.tokens.accessToken,
+            characterId: row.characterId, pinned: value as bool,
+            expectedRevision: row.revision);
+          break;
+        case 'archived':
+          receipt = await controls!.setArchived(bearer: owner.tokens.accessToken,
+            characterId: row.characterId, archived: value as bool,
+            expectedRevision: row.revision);
+          break;
+        case 'title':
+          receipt = await controls!.setTitle(bearer: owner.tokens.accessToken,
+            characterId: row.characterId, title: value as String?,
+            expectedRevision: row.revision);
+          break;
+        default:
+          return;
+      }
+      if (!identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      if (receipt <= row.revision) throw const FormatException('Stale preference receipt');
+      ref.read(aiChatProvider.notifier).applyCanonicalControls(row.characterId,
+        pinned: field == 'pinned' ? value as bool : row.pinned,
+        archived: field == 'archived' ? value as bool : row.archived,
+        title: field == 'title' ? value as String? : row.customTitle,
+        setTitle: field == 'title' || row.customTitle != null);
+      final confirmed = switch (field) {
+        'pinned' => row.withPin(value as bool, receipt),
+        'archived' => row.withControls(archived: value as bool,
+          revision: receipt),
+        'title' => row.withControls(customTitle: value as String?,
+          changeTitle: true, revision: receipt),
+        _ => row,
+      };
+      onUpdated?.call(confirmed);
+    } catch (_) {
+      if (!identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      onUpdated?.call(null);
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save conversation preference. '
+          'It may have changed elsewhere; refresh and retry.')));
+    }
   }
+
+  Future<void> _showArchived(BuildContext context) => Navigator.of(context)
+      .push(MaterialPageRoute<void>(
+        builder: (_) => const _ArchivedMasanaConversationsScreen()));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -294,30 +370,62 @@ class ChatListScreen extends ConsumerWidget {
     final accountKey = session is SessionSignedIn
         ? session.user.id
         : 'signed-out';
-
+    Widget buildThreadRow(ChatThread thread, MasanaInboxSearchItem? canonical,
+        VoidCallback? onPin, bool saving,
+        ValueChanged<MasanaInboxSearchItem?> onUpdated) {
+      final agent = directory.find(thread.characterId);
+      final last = thread.lastMessage;
+      final serverNewer = canonical?.lastActivityAt != null &&
+          canonical!.lastActivityAt!.isAfter(thread.lastMessageActivityAt);
+      final localDraft = thread.draft.trim().isNotEmpty ||
+          thread.draftVoice != null || thread.draftAttachments.isNotEmpty;
+      return MasanawaConversationTile(
+        key: ValueKey('local-${thread.characterId}'),
+        avatar: MasanaPortraitAvatar(
+          agent: agent, characterId: thread.characterId,
+          displayName: canonical?.customTitle ?? thread.title ??
+            agent?.displayName ?? 'Masana', size: 52),
+        name: canonical?.customTitle ?? thread.title ??
+            agent?.displayName ?? 'Unavailable Masana',
+        preview: serverNewer && !localDraft && canonical!.lastMessage.isNotEmpty
+          ? Text(canonical.lastMessage, maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: u.textMuted, fontSize: 14))
+          : _buildSubtitle(u, thread),
+        time: canonical?.lastActivityAt != null
+            ? formatChatTime(canonical!.lastActivityAt!)
+            : last == null ? '' : formatChatTime(thread.lastMessageActivityAt),
+        pinned: canonical?.pinned ?? thread.pinned,
+        unread: canonical?.unreadCount ?? thread.unread,
+        onAction: onPin,
+        actionLoading: saving,
+        actionTooltip: canonical == null ? null :
+            canonical.pinned ? 'Unpin conversation' : 'Pin conversation',
+        actionIcon: canonical == null ? null :
+            canonical.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+        onLongPress: () => _threadActions(context, ref, thread.characterId,
+          local: thread, canonical: canonical,
+          onPin: onPin, onUpdated: onUpdated),
+        onTap: () => context.push(
+            '/chat/${Uri.encodeComponent(thread.characterId)}'),
+      );
+    }
 
     return Scaffold(
       backgroundColor: u.surfaceBg,
       appBar: masanawaMainHeader(
         context,
         actions: [
-          if (chat.threads.values.any((t) => t.archived))
-            IconButton(
-              tooltip: 'Archived chats',
-              icon: const Icon(Icons.archive_outlined),
-              onPressed: () => _showArchived(context, ref, directory),
-            ),
-          IconButton(
-            tooltip: 'Wallet',
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-            onPressed: () {
-              context.go('/home?tab=wallet');
+          PopupMenuButton<String>(
+            tooltip: 'Chats options', icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'archive') _showArchived(context);
+              if (value == 'wallet') context.go('/home?tab=wallet');
             },
-          ),
-          IconButton(
-            tooltip: 'New chat',
-            icon: const Icon(Icons.groups_outlined),
-            onPressed: () => context.push('/masana'),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'archive', child: Text('Archived chats')),
+              PopupMenuItem(value: 'wallet', child: Text('Wallet')),
+            ],
           ),
         ],
       ),
@@ -325,25 +433,14 @@ class ChatListScreen extends ConsumerWidget {
         key: ValueKey(accountKey),
         masanaThreads: session is SessionSignedIn
             ? chat.threads.values
-                  .where((t) => directory.find(t.characterId) != null && !t.archived)
+                  .where((t) => !t.archived)
                   .toList()
             : const [],
-        masanaRow: (thread) {
-          final agent = directory.find(thread.characterId)!;
-          final last = thread.lastMessage;
-          return MasanawaConversationTile(
-            key: ValueKey('local-${thread.characterId}'),
-            avatar: MasanaPortraitAvatar(agent: agent, size: 52),
-            name: thread.title?.trim().isNotEmpty == true
-                ? thread.title! : agent.displayName,
-            preview: _buildSubtitle(u, thread),
-            time: last == null ? '' : formatChatTime(last.createdAt),
-            pinned: thread.pinned,
-            unread: thread.unread,
-            onLongPress: () => _threadActions(context, ref, thread),
-            onTap: () => context.push('/chat/${thread.characterId}'),
-          );
-        },
+        masanaRow: (thread) => buildThreadRow(
+          thread, null, null, false, (_) {}),
+        canonicalRow: buildThreadRow,
+        serverActions: (row, onUpdated) => _threadActions(context, ref,
+          row.characterId, canonical: row, onUpdated: onUpdated),
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Start conversation',
@@ -352,6 +449,306 @@ class ChatListScreen extends ConsumerWidget {
         onPressed: () => context.push('/masana'),
         child: const Icon(Icons.chat_outlined),
       ),
+    );
+  }
+}
+
+class _ArchivedMasanaConversationsScreen extends ConsumerStatefulWidget {
+  const _ArchivedMasanaConversationsScreen();
+  @override
+  ConsumerState<_ArchivedMasanaConversationsScreen> createState() =>
+      _ArchivedMasanaConversationsScreenState();
+}
+
+class _ArchivedMasanaConversationsScreenState
+    extends ConsumerState<_ArchivedMasanaConversationsScreen> {
+  final _search = TextEditingController();
+  String _query = '', _remoteQuery = '';
+  Timer? _debounce;
+  ProviderSubscription<SessionState>? _sessionSubscription;
+  final _additional = <MasanaInboxSearchItem>[];
+  final _seenCursors = <String>{};
+  final _busy = <String>{};
+  final _unarchiveReceipts = <String, int>{};
+  String? _pageKey, _nextCursor;
+  bool _loadedMore = false, _loadingMore = false, _pageError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sessionSubscription = ref.listenManual(sessionProvider, (before, after) {
+      if (identical(before, after)) return;
+      _debounce?.cancel();
+      _search.clear();
+      if (mounted) setState(() {
+        _query = _remoteQuery = '';
+        _busy.clear();
+        _unarchiveReceipts.clear();
+        _resetPages();
+      });
+    });
+  }
+
+  void _resetPages() {
+    _additional.clear();
+    _seenCursors.clear();
+    _pageKey = _nextCursor = null;
+    _loadedMore = _loadingMore = _pageError = false;
+  }
+
+  void _changed(String text) {
+    _debounce?.cancel();
+    setState(() { _query = text.trim().toLowerCase(); _resetPages(); });
+    if (_query.isEmpty) {
+      setState(() => _remoteQuery = '');
+    } else if (_query.length <= 80) {
+      _debounce = Timer(const Duration(milliseconds: 350), () {
+        if (mounted) setState(() => _remoteQuery = _query);
+      });
+    }
+  }
+
+  Future<void> _loadMore(String key, String cursor, SessionSignedIn owner) async {
+    if (_loadingMore || _seenCursors.contains(cursor)) return;
+    final access = ref.read(masanaInboxSearchProvider);
+    if (access is! MasanaInboxControlsAccess) return;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    setState(() { _loadingMore = true; _pageError = false; });
+    try {
+      final page = await access.archivedPage(
+        bearer: owner.tokens.accessToken, query: _remoteQuery,
+        cursor: cursor);
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
+          _remoteQuery != _query || !ref.read(aiChatProvider).online ||
+          key != jsonEncode([owner.user.id, owner.tokens.accessToken,
+            _remoteQuery, epoch])) return;
+      setState(() {
+        _pageKey = key;
+        _loadedMore = true;
+        _loadingMore = false;
+        _seenCursors.add(cursor);
+        _additional.addAll(page.items);
+        _nextCursor = page.items.isEmpty || page.nextCursor == cursor ||
+                (page.nextCursor != null && _seenCursors.contains(page.nextCursor))
+            ? null : page.nextCursor;
+      });
+    } catch (_) {
+      if (mounted && identical(owner, ref.read(sessionProvider)) &&
+          epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+        setState(() { _loadingMore = false; _pageError = true; });
+      }
+    }
+  }
+
+  Future<void> _unarchive(MasanaInboxSearchItem row,
+      SessionSignedIn owner, String key) async {
+    if (_busy.contains(row.characterId)) return;
+    final access = ref.read(masanaInboxSearchProvider);
+    if (access is! MasanaInboxControlsAccess) return;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    setState(() => _busy.add(row.characterId));
+    try {
+      final receipt = await access.setArchived(
+        bearer: owner.tokens.accessToken, characterId: row.characterId,
+        archived: false, expectedRevision: row.revision);
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      if (receipt <= row.revision) throw const FormatException('Stale archive receipt');
+      ref.read(aiChatProvider.notifier).applyCanonicalControls(row.characterId,
+        pinned: row.pinned, archived: false, title: row.customTitle,
+        setTitle: row.customTitle != null);
+      setState(() {
+        _unarchiveReceipts[row.characterId] = receipt;
+        _additional.removeWhere((item) => item.characterId == row.characterId);
+        _busy.remove(row.characterId);
+      });
+      ref.invalidate(_archivedServerPage(key));
+    } catch (_) {
+      if (mounted && identical(owner, ref.read(sessionProvider)) &&
+          epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+        setState(() => _busy.remove(row.characterId));
+        ref.invalidate(_archivedServerPage(key));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not unarchive. The conversation may have '
+              'changed elsewhere; reload and retry.')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _sessionSubscription?.close();
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final directory = ref.watch(agentDirectoryProvider);
+    final state = ref.watch(aiChatProvider);
+    final session = ref.watch(sessionProvider);
+    final online = state.online && session is SessionSignedIn &&
+        _remoteQuery == _query && _query.length <= 80;
+    final key = session is SessionSignedIn ? jsonEncode([
+      session.user.id, session.tokens.accessToken, _remoteQuery,
+      ref.read(sessionProvider.notifier).authorizationEpoch]) : '';
+    final server = online ? ref.watch(_archivedServerPage(key)) : null;
+    final firstPage = server?.valueOrNull;
+    final remoteById = <String, MasanaInboxSearchItem>{};
+    for (final item in [
+      ...?firstPage?.items,
+      if (firstPage != null && _pageKey == key) ..._additional,
+    ]) {
+      if ((_unarchiveReceipts[item.characterId] ?? -1) > item.revision) {
+        continue;
+      }
+      final old = remoteById[item.characterId];
+      if (old == null || old.revision < item.revision) {
+        remoteById[item.characterId] = item;
+      }
+    }
+    final archived = state.threads.values
+        .where((thread) => thread.archived)
+        .where((thread) {
+          final name = directory.find(thread.characterId)?.displayName ?? '';
+          return '$name ${thread.title ?? ''} ${thread.characterId}'
+              .toLowerCase().contains(_query);
+        }).toList()
+      ..sort((a, b) {
+        final byTime = b.lastMessageActivityAt.compareTo(a.lastMessageActivityAt);
+        return byTime != 0 ? byTime : a.characterId.compareTo(b.characterId);
+      });
+    final remoteOnly = remoteById.values.where((row) =>
+        row.archived && !archived.any((thread) =>
+          thread.characterId == row.characterId)).toList()
+      ..sort((a, b) => (b.lastActivityAt ?? DateTime.utc(1970))
+          .compareTo(a.lastActivityAt ?? DateTime.utc(1970)));
+    return Scaffold(
+      appBar: AppBar(title: const Text('Archived chats')),
+      body: Column(children: [
+        ConversationSearchField(
+          controller: _search, hintText: 'Search archived conversations',
+          onChanged: _changed,
+          onClear: () { _search.clear(); _changed(''); },
+        ),
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Text('Archived chats keep their history. Account archives '
+              'sync when online; device-only archives stay local.',
+            textAlign: TextAlign.center)),
+        if (_query.length > 80) const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text('Shorten search to 80 characters to include '
+            'archives from other devices.')),
+        Expanded(child: RefreshIndicator(
+          onRefresh: () async {
+            await ref.read(agentDirectoryProvider.notifier).refresh();
+            if (!mounted || !online) return;
+            setState(_resetPages);
+            ref.invalidate(_archivedServerPage(key));
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              if (archived.isEmpty && remoteOnly.isEmpty &&
+                  server?.isLoading != true)
+                Padding(padding: const EdgeInsets.all(32),
+                  child: Center(child: Text(_query.isEmpty
+                    ? 'No archived chats' : 'No matching archived chats'))),
+              for (final thread in archived)
+                Builder(builder: (context) {
+                  final row = remoteById[thread.characterId];
+                  final agent = directory.find(thread.characterId);
+                  final name = row?.customTitle ?? thread.title ??
+                      agent?.displayName ?? 'Unavailable Masana';
+                  return MasanawaConversationTile(
+                    key: ValueKey('archived-${thread.characterId}'),
+                    avatar: MasanaPortraitAvatar(agent: agent,
+                      characterId: thread.characterId, displayName: name, size: 52),
+                    name: name,
+                    preview: Text(thread.draft.trim().isNotEmpty
+                      ? 'Draft: ${thread.draft.trim()}'
+                      : thread.lastMessage?.text ?? row?.lastMessage ?? 'Saved conversation',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    time: row?.lastActivityAt != null
+                        ? formatChatTime(row!.lastActivityAt!)
+                        : thread.lastMessage == null ? ''
+                          : formatChatTime(thread.lastMessageActivityAt),
+                    pinned: row?.pinned ?? thread.pinned,
+                    unread: row?.unreadCount ?? thread.unread,
+                    actionTooltip: row == null ? 'Unarchive on this device'
+                        : 'Unarchive account conversation',
+                    actionIcon: Icons.unarchive_outlined,
+                    actionLoading: _busy.contains(thread.characterId),
+                    onAction: () {
+                      if (row != null && session is SessionSignedIn) {
+                        unawaited(_unarchive(row, session, key));
+                      } else {
+                        ref.read(aiChatProvider.notifier)
+                            .toggleArchive(thread.characterId);
+                      }
+                    },
+                    onTap: () => context.push(
+                      '/chat/${Uri.encodeComponent(thread.characterId)}'),
+                  );
+                }),
+              for (final row in remoteOnly)
+                MasanawaConversationTile(
+                  key: ValueKey('archived-remote-${row.characterId}'),
+                  avatar: MasanaPortraitAvatar(
+                    agent: directory.find(row.characterId),
+                    characterId: row.characterId,
+                    displayName: row.customTitle ?? row.displayName, size: 52),
+                  name: row.customTitle ?? row.displayName,
+                  preview: Text(row.lastMessage.isEmpty
+                      ? row.profession : row.lastMessage,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  time: row.lastActivityAt == null
+                      ? '' : formatChatTime(row.lastActivityAt!),
+                  pinned: row.pinned, unread: row.unreadCount,
+                  actionIcon: Icons.unarchive_outlined,
+                  actionTooltip: 'Unarchive account conversation',
+                  actionLoading: _busy.contains(row.characterId),
+                  onAction: session is SessionSignedIn ?
+                      () => unawaited(_unarchive(row, session, key)) : null,
+                  onTap: () => context.push(
+                    '/chat/${Uri.encodeComponent(row.characterId)}'),
+                ),
+              if (server?.isLoading == true)
+                const LinearProgressIndicator(minHeight: 2,
+                  semanticsLabel: 'Syncing archived conversations'),
+              if (server?.hasError == true)
+                ListTile(title: const Text('Could not load account archives. '
+                    'Device-only archives are still shown.'),
+                  trailing: IconButton(tooltip: 'Retry account archives',
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () => ref.invalidate(_archivedServerPage(key)))),
+              if (firstPage != null && !_loadingMore && !_pageError &&
+                  (_loadedMore && _pageKey == key
+                      ? _nextCursor : firstPage.nextCursor) != null)
+                Center(child: TextButton.icon(
+                  icon: const Icon(Icons.expand_more),
+                  label: const Text('Load more archived conversations'),
+                  onPressed: session is SessionSignedIn ? () => _loadMore(
+                    key, (_loadedMore && _pageKey == key
+                        ? _nextCursor : firstPage.nextCursor)!, session) : null)),
+              if (_loadingMore) const LinearProgressIndicator(minHeight: 2,
+                  semanticsLabel: 'Loading older archives'),
+              if (_pageError) ListTile(
+                title: const Text('Could not load more archives.'),
+                trailing: IconButton(icon: const Icon(Icons.refresh),
+                  tooltip: 'Retry archived conversations',
+                  onPressed: session is SessionSignedIn ? () {
+                    final cursor = _loadedMore && _pageKey == key
+                        ? _nextCursor : firstPage?.nextCursor;
+                    if (cursor != null) _loadMore(key, cursor, session);
+                  } : null)),
+              const SizedBox(height: 88),
+            ],
+          ),
+        )),
+      ]),
     );
   }
 }

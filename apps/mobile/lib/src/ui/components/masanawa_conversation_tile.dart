@@ -19,6 +19,7 @@ class MasanawaConversationTile extends StatelessWidget {
     this.onAction,
     this.actionIcon,
     this.actionTooltip,
+    this.actionLoading = false,
   });
 
   final Widget avatar;
@@ -32,28 +33,21 @@ class MasanawaConversationTile extends StatelessWidget {
   final VoidCallback? onAction;
   final IconData? actionIcon;
   final String? actionTooltip;
+  final bool actionLoading;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.masanawa;
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(
-          color: colors.structuralBorder.withValues(alpha: .55), width: .5)),
-      ),
-      child: ListTile(
-        minTileHeight: largeText ? 88 : 76,
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      ListTile(
+        minTileHeight: largeText ? 100 : 76,
         minVerticalPadding: 10,
         contentPadding: const EdgeInsetsDirectional.fromSTEB(16, 0, 12, 0),
         horizontalTitleGap: 12,
         leading: avatar,
         title: Row(children: [
-          if (pinned) ...[
-            Icon(Icons.push_pin, size: 14, color: colors.brandStrong),
-            const SizedBox(width: 5),
-          ],
-          Expanded(child: Text(name, maxLines: 1,
+          Expanded(child: Text(name, maxLines: largeText ? 2 : 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: colors.textPrimary, fontSize: 16.5,
               fontWeight: FontWeight.w600))),
@@ -63,14 +57,14 @@ class MasanawaConversationTile extends StatelessWidget {
           child: preview,
         ),
         trailing: SizedBox(
-          width: largeText ? 64 : 76,
+          width: largeText ? 87 : 90,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               if (time.isNotEmpty)
-                Text(time, maxLines: 1, overflow: TextOverflow.ellipsis,
+                Text(time, maxLines: 2, softWrap: true,
                   textAlign: TextAlign.end,
                   style: TextStyle(color: unread > 0
                     ? colors.brandStrong : colors.textMuted,
@@ -78,16 +72,12 @@ class MasanawaConversationTile extends StatelessWidget {
                     fontWeight: unread > 0
                       ? FontWeight.w600 : FontWeight.w400)),
               const SizedBox(height: 3),
-              if (onAction != null)
-                SizedBox(height: 28, width: 36, child: IconButton(
-                  tooltip: actionTooltip,
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(actionIcon ?? Icons.more_horiz,
-                    size: 19, color: colors.textMuted),
-                  onPressed: onAction,
-                ))
-              else if (unread > 0)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+              if (pinned && onAction == null)
+                Padding(padding: const EdgeInsetsDirectional.only(end: 5),
+                  child: Icon(Icons.push_pin, size: 14,
+                    color: colors.brandStrong)),
+              if (unread > 0)
                 Container(
                   constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                   alignment: Alignment.center,
@@ -97,14 +87,27 @@ class MasanawaConversationTile extends StatelessWidget {
                   child: Text(unread > 99 ? '99+' : '$unread',
                     style: const TextStyle(color: Colors.white,
                       fontSize: 11, fontWeight: FontWeight.w700)),
-                )
-
+                ),
+              if (onAction != null)
+                SizedBox(height: 48, width: 48, child: actionLoading
+                  ? const Center(child: SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+                  : IconButton(
+                  tooltip: actionTooltip,
+                  icon: Icon(actionIcon ?? Icons.more_horiz,
+                    size: 19, color: colors.textMuted),
+                  onPressed: onAction,
+                ))
+              ]),
             ],
           ),
         ),
         onTap: onTap,
         onLongPress: onLongPress,
       ),
+      Divider(height: .5, thickness: .5, indent: 80,
+        color: colors.structuralBorder.withValues(alpha: .55)),
+      ],
     );
   }
 }
