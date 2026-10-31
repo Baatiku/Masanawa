@@ -8,6 +8,15 @@ import 'package:masanawa/src/ui/components/masanawa_conversation_tile.dart';
 /// the capture workflow publishes PNGs for reviewer/reference comparison.
 const captureChatGoldens = bool.fromEnvironment('CHAT_CAPTURE_GOLDENS');
 
+class _FallbackMaterialDelegate extends LocalizationsDelegate<MaterialLocalizations> {
+  const _FallbackMaterialDelegate();
+  @override bool isSupported(Locale locale) => true;
+  @override Future<MaterialLocalizations> load(Locale locale) async =>
+      const DefaultMaterialLocalizations();
+  @override bool shouldReload(covariant _FallbackMaterialDelegate old) => false;
+}
+
+
 class _ChatVisualCase {
   const _ChatVisualCase(this.id, this.width, this.brightness,
       this.textScale, this.direction, {this.height = 740, this.locale = 'en'});
@@ -51,6 +60,7 @@ void main() {
         builder: (context, child) => Localizations.override(
           context: context,
           locale: Locale(sample.locale),
+          delegates: const [_FallbackMaterialDelegate()],
           child: child ?? const SizedBox.shrink(),
         ),
         home: MediaQuery(

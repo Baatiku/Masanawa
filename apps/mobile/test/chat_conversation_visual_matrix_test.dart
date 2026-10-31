@@ -14,6 +14,15 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 
 const captureChatGoldens = bool.fromEnvironment('CHAT_CAPTURE_GOLDENS');
 
+class _FallbackMaterialDelegate extends LocalizationsDelegate<MaterialLocalizations> {
+  const _FallbackMaterialDelegate();
+  @override bool isSupported(Locale locale) => true;
+  @override Future<MaterialLocalizations> load(Locale locale) async =>
+      const DefaultMaterialLocalizations();
+  @override bool shouldReload(covariant _FallbackMaterialDelegate old) => false;
+}
+
+
 class _VisualChats extends AiChatController {
   @override
   AiChatState build() => AiChatState(threads: {
@@ -97,6 +106,7 @@ void main() {
         builder: (context, child) => Localizations.override(
           context: context,
           locale: Locale(locale),
+          delegates: const [_FallbackMaterialDelegate()],
           child: child ?? const SizedBox.shrink(),
         ),
         home: MediaQuery(
