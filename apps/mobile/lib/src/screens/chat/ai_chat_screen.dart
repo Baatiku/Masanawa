@@ -5303,7 +5303,8 @@ class _VoiceBubbleState extends ConsumerState<_VoiceBubble> {
 
   @override
   void dispose() {
-    _rememberVoicePosition(_position);
+    // ConsumerState.ref is unavailable during unmount. Playback cursors are
+    // already captured by the position stream and explicit pause/seek actions.
     _playRequest++;
     if (identical(_activeVoiceBubble, this)) {
       _sequenceScope?.onStop();
@@ -5388,7 +5389,7 @@ class _VoiceBubbleState extends ConsumerState<_VoiceBubble> {
       setState(() => _position = value);
       if (_playing && value > Duration.zero &&
           value.inSeconds != _lastRememberedSecond &&
-          value.inSeconds % 3 == 0) {
+          value.inSeconds >= 0) {
         _lastRememberedSecond = value.inSeconds;
         _rememberVoicePosition(value);
       }
