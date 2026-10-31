@@ -2989,8 +2989,8 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if(widget.agent.publicOfficialSimulation) const Padding(
-                  padding:EdgeInsets.only(top:7),
+                if(widget.agent.publicOfficialSimulation) Padding(
+                  padding:const EdgeInsets.only(top:7),
                   child:Text(ChatUiCopy.of(context, 'AI simulation · Not the official or their office'),textAlign:TextAlign.center)),
                 const SizedBox(height: 7),
                 Semantics(
