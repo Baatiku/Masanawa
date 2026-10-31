@@ -54,6 +54,12 @@ class AccountBoundFeedApi extends DioFeedApi {
   Future<void> removeSaved(SavedStatusItem item) =>
       _checked(() => super.removeSaved(item));
   @override
+  Future<FeedPage> newsList({String? cursor,String? query,String? publisher}) =>
+    _checked(()=>super.newsList(cursor:cursor,query:query,publisher:publisher));
+  @override
+  Future<List<NewsPublisherChoice>> newsPublishers() =>
+    _checked(()=>super.newsPublishers());
+  @override
   Future<FeedPage> list({required String mode, String? cursor}) =>
       _checked(() => super.list(mode: mode, cursor: cursor));
   @override
@@ -546,17 +552,18 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
       body: KeyedSubtree(
       key: ValueKey('status-account-$account'),
       child: MasanaFeedScreen(
+        newsMode:true,
         api: feed,
         ownerName: session.user.name,
-        promotions:promotions,
-        statusTips:statusTips,
+        promotions:null,
+        statusTips:null,
         accountKey: account,
         authorDirectory: authorDirectory,
         searchExpanded: _searchExpanded,
         mediaApi: inlineMedia,
         onOpenMedia: openMedia,
-        onMasanaProfile: (id) => unawaited(openMasanaProfile(id)),
-        onHumanProfile: openHumanProfile,
+        onMasanaProfile:null,
+        onHumanProfile:null,
         wrapAccountRoute: accountRouteGuard,
         audioPlaybackAvailable: true,
       ),
