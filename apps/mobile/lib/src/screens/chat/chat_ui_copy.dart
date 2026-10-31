@@ -15,6 +15,39 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "New call": "Sabon kira",
+    "Search Masana profiles": "Nemo bayanan Masana",
+    "Clear Masana search": "Share binciken Masana",
+    "Review attachments": "Duba fayilolin da aka zaɓa",
+    "8 files max · 8 MB each · 12 MB total": "Fayiloli 8 kacal · MB 8 ga kowanne · MB 12 gaba ɗaya",
+    "Close review": "Rufe dubawa",
+    "Remove attachment": "Cire fayil",
+    "Caption": "Bayanan hoto",
+    "Add a caption": "Ƙara bayanin hoto",
+    "Apply review": "Aiwatar da zaɓin",
+    "Dismiss suggestions": "Rufe shawarwari",
+    "Dismiss study hint": "Rufe bayanin karatu",
+    "Set double-tap reaction": "Zaɓi alamar amsa ta taɓawa sau biyu",
+    "App update required": "Ana buƙatar sabunta manhaja",
+    "Save message edit": "Ajiye gyaran saƙo",
+    "Send message": "Aika saƙo",
+    "Record voice note": "Yi rikodin saƙon murya",
+    "Recording paused · resume or stop to review": "An dakatar da rikodi · ci gaba ko tsaya ka duba",
+    "Recording locked · stop to review": "An kulle rikodi · tsaya ka duba",
+    "Slide to cancel · up to lock": "Ja don sokewa · ɗaga don kullewa",
+    "Recording voice note": "Ana rikodin saƙon murya",
+    "Choose photos": "Zaɓi hotuna",
+    "Gallery": "Hotuna",
+    "Audio": "Sauti",
+    "8 photos maximum": "Hotuna 8 kacal",
+    "Please review the file limits before selecting.": "Duba iyakar fayiloli kafin ka zaɓa.",
+    "Not now": "Ba yanzu ba",
+    "Continue": "Ci gaba",
+    "Choose a reaction": "Zaɓi alamar amsa",
+    "Forward to Masana": "Tura wa Masana",
+    "No matching Masana": "Babu Masana da suka dace",
+    "Search Masana": "Nemo Masana",
+    "Review before sending": "Duba kafin aikawa",
     'Chats options': 'Zaɓuɓɓukan hira',
     'Archived chats': 'Hirarrakin da aka adana',
     'Wallet': 'Walati',
@@ -118,6 +151,7 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+
     'Chats options': 'خيارات الدردشات',
     'Archived chats': 'الدردشات المؤرشفة',
     'Wallet': 'المحفظة',
