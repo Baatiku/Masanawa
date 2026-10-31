@@ -57,6 +57,9 @@ verified device behavior.
   six reactions and the full picker action, with a phone-width widget
   regression (SP-056–057, 115). The runtime screenshot/assistive-technology
   edge-position matrix is still open.
+- Privacy regression: unknown cached local threads stay out of active inbox
+  discovery/search until the current directory or server inbox authorizes the
+  identity. Archived device-only recovery labels remain separate.
 
 These are **source-level implementation changes pending CI**, not proof of all
 145 item-level acceptance conditions or a physical WhatsApp-equivalent render.

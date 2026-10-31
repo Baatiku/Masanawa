@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:masanawa/l10n/app_localizations.dart';
 import 'package:masanawa/src/screens/chat/chat_ui_copy.dart';
 
 void main() {
@@ -7,7 +8,8 @@ void main() {
       String expected, String expectedArchive) async {
     await tester.pumpWidget(MaterialApp(
       locale: Locale(language),
-      supportedLocales: const [Locale('en'), Locale('ha'), Locale('ar')],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(builder: (context) => Directionality(
         textDirection: language == 'ar' ? TextDirection.rtl : TextDirection.ltr,
         child: Column(children: [

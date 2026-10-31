@@ -283,6 +283,11 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         if (canonical?.archived == true || t.archived ||
             !localIds.add(t.characterId)) continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
+        // A cached thread without a current directory identity must not be
+        // rediscovered by local search alone. The signed-in server inbox may
+        // explicitly authorize that character even if directory hydration
+        // is late; otherwise fail closed rather than exposing stale content.
+        if (agent == null && canonical == null) continue;
         if (_query.isNotEmpty &&
             !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${_messageSearchText(t.messages)}'
                 .toLowerCase()
