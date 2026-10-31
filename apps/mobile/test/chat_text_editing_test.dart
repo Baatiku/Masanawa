@@ -11,4 +11,15 @@ void main(){
  test('unfocused or stale selection safely appends',(){expect(editChatText(const TextEditingValue(text:'Hi'),insert:'😀').text,'Hi😀');expect(editChatText(const TextEditingValue(text:'Hi',selection:TextSelection.collapsed(offset:99)),insert:'😀').text,'Hi😀');});
  test('empty backspace does not throw',(){expect(editChatText(const TextEditingValue(),backspace:true).text,'');});
  test('large emoji rendering excludes ordinary text and code',(){for(final text in ['😀','👨‍👩‍👧‍👦 🇳🇬','👍🏿❤️','1️⃣']){expect(isEmojiOnlyChatText(text),true);}for(final text in ['','hello 😀','123','```','😀😀😀😀😀😀😀']){expect(isEmojiOnlyChatText(text),false);}});
+
+ test('grapheme-aware emoji sizing respects complex clusters',(){
+   expect(emojiOnlyChatGraphemeCount('👨‍👩‍👧‍👦'),1);
+   expect(emojiOnlyChatGraphemeCount('👍🏿 🇳🇬'),2);
+   expect(emojiOnlyChatGraphemeCount('hello 👋'),0);
+   expect(emojiOnlyChatFontSize(1), greaterThan(emojiOnlyChatFontSize(2)));
+   expect(emojiOnlyChatFontSize(2), greaterThan(emojiOnlyChatFontSize(4)));
+   expect(emojiOnlyChatFontSize(4), greaterThan(emojiOnlyChatFontSize(6)));
+   expect(emojiOnlyChatFontSize(7),15);
+ });
+
 }

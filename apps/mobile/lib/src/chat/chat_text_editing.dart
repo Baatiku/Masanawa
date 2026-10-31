@@ -30,6 +30,23 @@ TextEditingValue editChatText(
   );
 }
 
+/// A single joined family, flag or skin-tone sequence is one visible emoji.
+int emojiOnlyChatGraphemeCount(String text) =>
+    isEmojiOnlyChatText(text)
+        ? text.replaceAll(RegExp(r'\\s'), '').characters.length
+        : 0;
+
+/// Staged font-size tokens before runtime scaling/width constraints apply.
+double emojiOnlyChatFontSize(int count) => switch (count) {
+  1 => 44.0,
+  2 => 40.0,
+  3 => 36.0,
+  4 => 32.0,
+  5 => 29.0,
+  6 => 27.0,
+  _ => 15.0,
+};
+
 bool isEmojiOnlyChatText(String text) {
   final clusters = text.replaceAll(RegExp(r'\s'), '').characters.toList();
   if (clusters.isEmpty || clusters.length > 6) return false;

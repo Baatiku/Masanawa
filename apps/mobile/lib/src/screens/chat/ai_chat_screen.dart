@@ -4425,9 +4425,21 @@ class _RichMessageText extends StatelessWidget {
         style: TextStyle(color: u.textPrimary, fontSize: 15, height: 1.4),
         children: spans));
     }
-    if (isEmojiOnlyChatText(text)) {
-      return SelectableText(text, style: const TextStyle(fontSize: 38, height: 1.3,
-        fontFamilyFallback: ['Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji']));
+    final emojiCount = emojiOnlyChatGraphemeCount(text);
+    if (emojiCount > 0) {
+      // Keep joined emoji sequences intact, scale by grapheme count and bound
+      // 2× accessibility text inside a 320dp chat bubble.
+      final effectiveWidth = math.min(430.0,
+          MediaQuery.sizeOf(context).width * .86) - 18;
+      final scale = MediaQuery.textScalerOf(context).scale(1.0);
+      final desired = emojiOnlyChatFontSize(emojiCount);
+      final widthSafe = effectiveWidth /
+          (emojiCount * 1.22 * math.max(scale, 0.1));
+      return SelectableText(text, style: TextStyle(
+        fontSize: math.max(15, math.min(desired, widthSafe)),
+        height: 1.3,
+        fontFamilyFallback: const ['Noto Color Emoji',
+          'Apple Color Emoji', 'Segoe UI Emoji']));
     }
     if (!RegExp(r'(^|\n)\s*(#{1,6} |[-*] |\d+\. |> |\|)|\*\*|\[.+?\]\(|```')
         .hasMatch(text)) {
