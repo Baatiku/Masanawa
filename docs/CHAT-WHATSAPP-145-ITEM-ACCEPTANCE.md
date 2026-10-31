@@ -36,14 +36,14 @@ Status legend: **Source addressed; acceptance unverified** = implementation or p
 | SP-028 | P1 | Source addressed; acceptance unverified | Remove synthetic message insertion; show persona introduction only as a UI disclosure. |
 | SP-029 | P2 | Source addressed; acceptance unverified | Offer compact search access without displacing Call/Wallet or full-width title; measure target reference. |
 | SP-030 | P1 | Source addressed; acceptance unverified | Ensure every persona has a concise but visible AI identity cue without implying a human last-seen. |
-| SP-031 | P2 | Open: additional source work | Add explicit screen-reader name/action and an appropriately sized tap zone. |
-| SP-032 | P2 | Open: additional source work | Switch to a selection-specific action bar with a clear cancel affordance. |
+| SP-031 | P2 | Source addressed; acceptance unverified | Add explicit screen-reader name/action and an appropriately sized tap zone. |
+| SP-032 | P2 | Source addressed; acceptance unverified | Switch to a selection-specific action bar with a clear cancel affordance. |
 | SP-033 | P1 | Source addressed; acceptance unverified | Retain a compact non-message AI disclosure from the profile/header while avoiding intrusive repeated banners. |
 | SP-034 | P1 | Open: additional source work | Compress auxiliary modes into lightweight, dismissible prompt affordances where supported. |
 | SP-035 | P1 | Requires device, screenshot or integration evidence | Restore by visible message ID and fractional offset; stabilize when images/voice resolve. |
 | SP-036 | P1 | Requires device, screenshot or integration evidence | Add scroll-anchor tests during streaming, rapid send, input focus, media appearance and orientation changes. |
 | SP-037 | P2 | Source addressed; acceptance unverified | Use AlignmentDirectional.centerEnd and PositionedDirectional. |
-| SP-038 | P2 | Open: additional source work | Use accessible "N new messages" label and scale counter display appropriately. |
+| SP-038 | P2 | Source addressed; acceptance unverified | Use accessible "N new messages" label and scale counter display appropriately. |
 | SP-039 | P2 | Requires device, screenshot or integration evidence | Build an original subtle, adaptive wallpaper pattern with visual golden matrix. |
 | SP-040 | P1 | Requires device, screenshot or integration evidence | Add a meaningful "new replies" marker and test preserving reading position. |
 | SP-041 | P1 | Source addressed; acceptance unverified | Create original directional clipped/painted nip on first bubble of a group; avoid third-party asset reuse. |
@@ -65,7 +65,7 @@ Status legend: **Source addressed; acceptance unverified** = implementation or p
 | SP-057 | P1 | Source addressed; acceptance unverified | Open the existing emoji picker in reaction-selection mode after +. |
 | SP-058 | P2 | Open: additional source work | Add configurable double-tap reaction if it does not conflict with media zoom or text selection. |
 | SP-059 | P1 | Source addressed; acceptance unverified | Make it an accessible, actionable reaction chip with remove/change behavior. |
-| SP-060 | P1 | Open: additional source work | Keep single user-owned reaction intentionally for AI chats or adopt a local reaction state with clear replacement semantics. |
+| SP-060 | P1 | Source addressed; acceptance unverified | Keep single user-owned reaction intentionally for AI chats or adopt a local reaction state with clear replacement semantics. |
 | SP-061 | P1 | Source addressed; acceptance unverified | Offer safe confirmation for irreversible deletion, with short undo where local-only. |
 | SP-062 | P1 | Source addressed; acceptance unverified | Add a single destructive confirmation and one transactional undo path. |
 | SP-063 | P1 | Source addressed; acceptance unverified | Either synchronize edits with server history or clearly label edit as a device-local annotation. |
@@ -106,7 +106,7 @@ Status legend: **Source addressed; acceptance unverified** = implementation or p
 | SP-098 | P1 | Source addressed; acceptance unverified | Keep error/retry in the tile, with stale-account fencing and clear explanation. |
 | SP-099 | P1 | Source addressed; acceptance unverified | Expose the remote-media download prerequisite and a clear share failure/success path. |
 | SP-100 | P1 | Source addressed; acceptance unverified | Provide explicit cancel/error/partial-save feedback, without leaking private URLs or paths. |
-| SP-101 | P2 | Open: additional source work | Keep video sending disabled but render an intentional historic unavailable-media card. |
+| SP-101 | P2 | Source addressed; acceptance unverified | Keep video sending disabled but render an intentional historic unavailable-media card. |
 | SP-102 | P1 | Requires device, screenshot or integration evidence | Use named retry/find-original states and test cache cleanup, bad media URI, backup restore. |
 | SP-103 | P2 | Source addressed; acceptance unverified | Wrap long filenames predictably and use an explicit open/export action only when supported. |
 | SP-104 | P0 | Source addressed; acceptance unverified | Normalize all server timestamps to local time before calendar-day and clock formatting; test UTC-to-Lagos midnight crossover. |
@@ -117,7 +117,7 @@ Status legend: **Source addressed; acceptance unverified** = implementation or p
 | SP-109 | P1 | Source addressed; acceptance unverified | Show search count, next/previous, highlighted phrase spans and no-match state. |
 | SP-110 | P1 | Requires device, screenshot or integration evidence | Align keyboard focus, clear, result count, case folding and escape/back behavior. |
 | SP-111 | P0 | Partial localization; full coverage open | Move every Chats visible/semantics/error/tooltip string to localization with Hausa orthography and RTL tests. |
-| SP-112 | P1 | Open: additional source work | Use consistent original empty-state geometry: blank inbox, no matches, offline, server unavailable. |
+| SP-112 | P1 | Source addressed; acceptance unverified | Use consistent original empty-state geometry: blank inbox, no matches, offline, server unavailable. |
 | SP-113 | P2 | Open: additional source work | Clarify the picker's people/agent discovery purpose and adapt scoped search hints. |
 | SP-114 | P0 | Source addressed; acceptance unverified | Give a minimum 48×48dp interactive hit box while retaining compact artwork. |
 | SP-115 | P1 | Source addressed; acceptance unverified | Give each reaction a 44–48dp hit target, semantic action and selected/unselected state. |
@@ -131,7 +131,7 @@ Status legend: **Source addressed; acceptance unverified** = implementation or p
 | SP-123 | P2 | Requires device, screenshot or integration evidence | Audit paired screenshot pixel positions and contrast in the chosen WhatsApp version. |
 | SP-124 | P1 | Requires device, screenshot or integration evidence | Test swipe-to-reply against code selection, media swipes, RTL and screen readers. |
 | SP-125 | P2 | Requires device, screenshot or integration evidence | Qualify actual header/action menus at 320dp 200% before final sizes. |
-| SP-126 | P1 | Open: additional source work | Disclose realistic local privacy guarantees and evaluate device storage encryption/backups as a separate security audit. |
+| SP-126 | P1 | Source addressed; acceptance unverified | Disclose realistic local privacy guarantees and evaluate device storage encryption/backups as a separate security audit. |
 | SP-127 | P1 | Source addressed; acceptance unverified | Specify archived unread-badge behavior and make it consistent across navigation. |
 | SP-128 | P1 | Source addressed; acceptance unverified | Preview cost/permissions where required and preserve canonical send transaction handling. |
 | SP-129 | P1 | Requires device, screenshot or integration evidence | Separate queued, uploading, inferring and ready states without inventing a delivered receipt. |

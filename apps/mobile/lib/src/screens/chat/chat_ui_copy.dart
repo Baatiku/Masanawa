@@ -27,6 +27,10 @@ class ChatUiCopy {
     'No conversations yet': 'Babu hirarraki tukuna',
     'No matches in saved conversations': 'Babu daidaito a hirarrakin da aka ajiye',
     'No matching conversations': 'Babu hirarrakin da suka dace',
+    'Choose a Masana to start an AI conversation.':
+        'Zaɓi Masana don fara hira da AI.',
+    'Try another name or search term.':
+        'Gwada wani suna ko kalmar bincike.',
     'Syncing conversations': 'Ana daidaita hirarraki',
     'Loading more conversations': 'Ana ɗauko ƙarin hirarraki',
     'Load more conversations': 'Ƙara hirarraki',
@@ -126,6 +130,10 @@ class ChatUiCopy {
     'No conversations yet': 'لا توجد محادثات بعد',
     'No matches in saved conversations': 'لا توجد نتائج في المحادثات المحفوظة',
     'No matching conversations': 'لا توجد محادثات مطابقة',
+    'Choose a Masana to start an AI conversation.':
+        'اختر ماسانا لبدء محادثة مع الذكاء الاصطناعي.',
+    'Try another name or search term.':
+        'جرّب اسمًا أو عبارة بحث أخرى.',
     'Syncing conversations': 'جارٍ مزامنة المحادثات',
     'Loading more conversations': 'جارٍ تحميل المزيد من المحادثات',
     'Load more conversations': 'تحميل المزيد من المحادثات',

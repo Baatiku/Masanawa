@@ -240,7 +240,8 @@ class ChatListScreen extends ConsumerWidget {
         builder: (dialogContext) => AlertDialog(
           title: Text(ChatUiCopy.of(context, 'Delete chat?')),
           content: const Text(
-            'This removes the conversation and its local drafts from this device.',
+            'This removes the conversation and its local drafts from this device. '
+            'It does not erase server history or guarantee deletion from device backups.',
           ),
           actions: [
             TextButton(

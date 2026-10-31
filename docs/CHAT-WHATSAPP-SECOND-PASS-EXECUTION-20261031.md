@@ -60,6 +60,11 @@ verified device behavior.
 - Privacy regression: unknown cached local threads stay out of active inbox
   discovery/search until the current directory or server inbox authorizes the
   identity. Archived device-only recovery labels remain separate.
+- Profile header now exposes an explicit 48dp AI-profile action, new-reply
+  badges announce the true count, historic video is rendered as an intentional
+  unavailable-media card, the inbox separates blank/search/offline empty
+  states, and local-delete confirmation explicitly disclaims server and
+  backup deletion (SP-031, 038, 101, 112, 126).
 
 These are **source-level implementation changes pending CI**, not proof of all
 145 item-level acceptance conditions or a physical WhatsApp-equivalent render.

@@ -397,16 +397,32 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     padding: const EdgeInsets.all(32),
                     child: Column(
                       children: [
+                        Icon(_query.isEmpty ? Icons.smart_toy_outlined
+                            : offline ? Icons.wifi_off_rounded : Icons.search_off,
+                          color: context.masanawa.textMuted, size: 42),
+                        const SizedBox(height: 12),
                         Text(
                           _query.isEmpty
                               ? ChatUiCopy.of(context, 'No conversations yet')
                               : offline
                               ? ChatUiCopy.of(context, 'No matches in saved conversations')
                               : ChatUiCopy.of(context, 'No matching conversations'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: context.masanawa.textPrimary,
+                            fontSize: 16, fontWeight: FontWeight.w600),
                         ),
+                        const SizedBox(height: 6),
+                        if (!offline || _query.isEmpty)
+                          Text(ChatUiCopy.of(context, _query.isEmpty
+                              ? 'Choose a Masana to start an AI conversation.'
+                              : 'Try another name or search term.'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: context.masanawa.textMuted)),
                         if (offline && _query.isNotEmpty)
                           Text(ChatUiCopy.of(context,
-                              'Offline searches only include saved conversations.')),
+                              'Offline searches only include saved conversations.'),
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
                         TextButton(
                           onPressed: () => context.push('/masana'),
                           child: Text(ChatUiCopy.of(context, 'Find Masana')),

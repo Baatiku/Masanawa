@@ -1189,7 +1189,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   controller: _search,
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: 'Search this chat',
+                    hintText: ChatUiCopy.of(context, 'Search this chat'),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
@@ -1205,8 +1205,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     });
                   },
                 )
-              : InkWell(
+              : Semantics(
+            button: true, excludeSemantics: true,
+            label: 'Open ${agent.displayName} AI profile',
             onTap: () => _openMasanaProfile(agent),
+            child: InkWell(
+            onTap: () => _openMasanaProfile(agent),
+            child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1241,6 +1246,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   ),
                 ),
               ],
+            )),
             ),
           ),
           actions: _showSearch ? const [] : [
@@ -1577,7 +1583,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     children: [
                       FloatingActionButton.small(
                         heroTag: 'chat-bottom',
-                        tooltip: 'Jump to latest messages',
+                        tooltip: _newBelow > 0
+                            ? 'Jump to $_newBelow new messages'
+                            : 'Jump to latest messages',
                         backgroundColor: u.surfaceCard,
                         foregroundColor: u.textMuted,
                         elevation: 3,
@@ -1591,7 +1599,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         PositionedDirectional(
                           top: -4,
                           end: -4,
-                          child: Container(
+                          child: Semantics(liveRegion: true,
+                            label: '$_newBelow new messages',
+                            child: ExcludeSemantics(child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
                               color: u.brand,
@@ -1608,7 +1618,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                 ),
                               ),
                             ),
-                          ),
+                          ))),
                         ),
                     ],
                   ),
@@ -4465,7 +4475,22 @@ class _AttachmentView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (attachment.kind == 'video') return const Text('Retired video attachment');
+    if (attachment.kind == 'video') {
+      final u = context.masanawa;
+      return Semantics(label: 'Historic video attachment unavailable',
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: u.surfaceMuted,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: u.structuralBorder)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.videocam_off_outlined, color: u.textMuted),
+            const SizedBox(width: 8),
+            Flexible(child: Text('Historic video · preview unavailable',
+              style: TextStyle(color: u.textMuted, fontSize: 12))),
+          ])));
+    }
     if (attachment.path.startsWith('masanawa-remote|')) {
       return _RemoteChatMediaTile(attachment: attachment);
     }
