@@ -67,6 +67,17 @@ class _TextChats extends _Chats {
     createdAt:DateTime.now(),deliveryStatus:'delivered'),
  ])});
 }
+class _UnreadChats extends _Chats {
+ @override AiChatState build()=>AiChatState(threads:{
+  'agent':ChatThread(characterId:'agent',unread:1,messages:[
+    AiChatMessage(id:'unread-user',isUser:true,text:'Hello',
+      createdAt:DateTime(2026,10,31,8),deliveryStatus:'delivered'),
+    AiChatMessage(id:'unread-agent',isUser:false,text:'New message',
+      createdAt:DateTime(2026,10,31,8,1),deliveryStatus:'delivered'),
+  ]),
+ });
+}
+
 class _Directory extends AgentDirectoryController {
  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(characterId:'agent',characterVersionId:'v1',displayName:'Amina',roleLabel:'AI',about:'',presence:AgentPresence.available,supportAgent:true)]);
  @override Future<void> refresh() async {}
@@ -92,6 +103,22 @@ class _Wallet extends WalletController {
  @override Future<void> refresh() async {}
 }
 void main() {
+ testWidgets('incoming unread boundary appears before the first new AI reply',
+     (tester) async {
+   await tester.pumpWidget(ProviderScope(overrides:[
+     aiChatProvider.overrideWith(_UnreadChats.new),
+     agentDirectoryProvider.overrideWith(_Directory.new),
+     sessionProvider.overrideWith(_Session.new),
+     walletProvider.overrideWith(_Wallet.new),
+   ], child: MaterialApp(
+     theme: buildMasanawaTheme(brightness: Brightness.light),
+     home: const AiChatScreen(characterId: 'agent'))));
+   await tester.pumpAndSettle();
+   expect(find.text('New replies'), findsOneWidget);
+   expect(tester.takeException(), isNull);
+ });
+
+
  setUp(()=>SharedPreferences.setMockInitialValues({}));
  testWidgets('reaction menu exposes separate 44dp choices at phone width', (tester) async {
   tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;
