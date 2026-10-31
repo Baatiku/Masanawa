@@ -66,8 +66,9 @@ class AccountBoundFeedApi extends DioFeedApi {
   );
   @override
   Future<FeedPage> filteredPosts({required String mode,String? query,String? cursor,
-    String? source,DateTime? from,DateTime? to}) => _checked(() => super.filteredPosts(
-      mode:mode,query:query,cursor:cursor,source:source,from:from,to:to));
+    String? source,String? authorMasanaId,DateTime? from,DateTime? to}) => _checked(() => super.filteredPosts(
+      mode:mode,query:query,cursor:cursor,source:source,
+      authorMasanaId:authorMasanaId,from:from,to:to));
   @override
   Future<void> like(String id, bool enabled) =>
       _checked(() => super.like(id, enabled));
