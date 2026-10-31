@@ -99,8 +99,10 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
               ),
               Text(
                 directory.loading && directory.agents.isEmpty
-                    ? 'Loading…'
-                    : '${directory.agents.length} Masana${directory.loading ? ' · refreshing…' : ''}',
+                    ? ChatUiCopy.of(context, 'Loading…')
+                    : ChatUiCopy.format(context, directory.loading
+                        ? '{count} Masana · refreshing…' : '{count} Masana',
+                        {'count': directory.agents.length}),
                 style: TextStyle(color: u.textMuted, fontSize: 12.5),
               ),
             ],
@@ -145,8 +147,8 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
   ) {
     final u = context.masanawa;
     if (directory.loading && directory.agents.isEmpty) {
-      return const MasanawaListSkeleton(
-        semanticLabel: 'Loading Masana contacts',
+      return MasanawaListSkeleton(
+        semanticLabel: ChatUiCopy.of(context, 'Loading Masana contacts'),
       );
     }
     if (directory.agents.isEmpty) {
@@ -159,7 +161,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
               Icon(Icons.groups_outlined, size: 52, color: u.brand),
               const SizedBox(height: 16),
               Text(
-                directory.error ?? 'No Masana are available right now.',
+                directory.error ?? ChatUiCopy.of(context, 'No Masana are available right now.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: u.textPrimary,
@@ -168,10 +170,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                directory.error == null
+              Text(ChatUiCopy.of(context, directory.error == null
                     ? 'Please check back soon.'
-                    : 'Your conversations are still here.',
+                    : 'Your conversations are still here.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: u.textMuted, height: 1.4),
               ),
@@ -185,14 +186,13 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                   }
                 },
                 icon: const Icon(Icons.refresh),
-                label: Text(
+                label: Text(ChatUiCopy.of(context,
                   directory.error == null
                       ? 'Refresh'
                       : AgentFeedback(
                           directory.error!,
                           recovery: directory.recovery,
-                        ).actionLabel,
-                ),
+                        ).actionLabel)),
               ),
             ],
           ),
@@ -239,7 +239,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                 ('recent', 'Recent'),
               ])
                 ChoiceChip(
-                  label: Text(choice.$2),
+                  label: Text(ChatUiCopy.of(context, choice.$2)),
                   selected: _filter == choice.$1,
                   onSelected: (_) => setState(() => _filter = choice.$1),
                 ),
@@ -270,10 +270,11 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                         const SizedBox(height: 12),
                         Text(
                           _filter == 'following'
-                              ? 'No followed Masana yet. Open a profile to follow one.'
+                              ? ChatUiCopy.of(context, 'No followed Masana yet. Open a profile to follow one.')
                               : _filter == 'recent'
-                              ? 'No conversations yet. Start a chat with a Masana.'
-                              : 'No matching Masana contacts for "$_query"',
+                              ? ChatUiCopy.of(context, 'No conversations yet. Start a chat with a Masana.')
+                              : ChatUiCopy.format(context, 'No matching Masana contacts for "{query}"',
+                                  {'query': _query}),
                           textAlign: TextAlign.center,
                           style: TextStyle(color: u.textPrimary, fontSize: 16),
                         ),
@@ -333,9 +334,9 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                           ],
                         ),
                         trailing: Tooltip(
-                          message: agent.countryName ?? 'Country not specified',
+                          message: agent.countryName ?? ChatUiCopy.of(context, 'Country not specified'),
                           child: Semantics(
-                            label: agent.countryName ?? 'Country not specified',
+                            label: agent.countryName ?? ChatUiCopy.of(context, 'Country not specified'),
                             child: agent.countryFlag == null
                                 ? Icon(
                                     Icons.public_outlined,

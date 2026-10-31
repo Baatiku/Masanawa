@@ -326,7 +326,9 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
           ),
           name: result.customTitle ?? result.displayName,
           preview: Text(
-            result.lastMessage.isEmpty ? result.profession : result.lastMessage,
+            result.lastMessage.isEmpty
+                ? ChatUiCopy.of(context, 'Saved conversation')
+                : result.lastMessage,
             maxLines: 1, overflow: TextOverflow.ellipsis,
             style: TextStyle(color: context.masanawa.textMuted, fontSize: 14),
           ),
@@ -335,8 +337,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
           unread: result.unreadCount,
           pinned: result.pinned,
           actionLoading: _savingPins.contains(result.characterId),
-          actionTooltip: result.pinned
-              ? 'Unpin server conversation' : 'Pin server conversation',
+          actionTooltip: ChatUiCopy.of(context, result.pinned
+              ? 'Unpin server conversation' : 'Pin server conversation'),
           actionIcon: result.pinned
               ? Icons.push_pin : Icons.push_pin_outlined,
           onAction: () => unawaited(_pinServer(result, session, serverKey)),

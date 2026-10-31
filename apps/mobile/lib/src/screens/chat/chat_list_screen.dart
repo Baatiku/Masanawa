@@ -35,21 +35,21 @@ final _archivedServerPage = FutureProvider.autoDispose
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
 
-  String _snippet(ChatThread thread) {
-    if (thread.draft.trim().isNotEmpty) return 'Draft: ${thread.draft.trim()}';
-    if (thread.draftVoice != null) return 'Draft: voice note';
+  String _snippet(BuildContext context, ChatThread thread) {
+    if (thread.draft.trim().isNotEmpty) return thread.draft.trim();
+    if (thread.draftVoice != null) return ChatUiCopy.of(context, 'Voice note');
     if (thread.draftAttachments.isNotEmpty) {
       final count = thread.draftAttachments.length;
       return count == 1
-          ? 'Draft: ${thread.draftAttachments.first.label}'
-          : 'Draft: $count attachments';
+          ? ChatUiCopy.of(context, thread.draftAttachments.first.label)
+          : ChatUiCopy.format(context, '{count} attachments', {'count': count});
     }
     final last = thread.lastMessage;
     if (last == null) return '';
-    if (last.deleted) return 'Message hidden on this device';
-    if (last.deliveryStatus == 'failed') return 'Failed · tap to review';
-    if (last.deliveryStatus == 'queued') return 'Queued · waiting for connection';
-    if (last.deliveryStatus == 'stopped') return 'Stopped';
+    if (last.deleted) return ChatUiCopy.of(context, 'Message hidden on this device');
+    if (last.deliveryStatus == 'failed') return ChatUiCopy.of(context, 'Failed · tap to review');
+    if (last.deliveryStatus == 'queued') return ChatUiCopy.of(context, 'Queued · waiting for connection');
+    if (last.deliveryStatus == 'stopped') return ChatUiCopy.of(context, 'Stopped');
     if (last.parts.isNotEmpty) {
       final part = last.parts.firstWhere(
         (item) => (item.body?.trim().isNotEmpty ?? false) ||
@@ -58,28 +58,28 @@ class ChatListScreen extends ConsumerWidget {
       return part.file?.name ??
           part.title ??
           part.body ??
-          _partLabel(part.kind);
+          _partLabel(context, part.kind);
     }
     if (last.attachment != null) {
       final label = last.attachment!.label;
-      return last.text.isEmpty ? label : '$label · ${last.text}';
+      return last.text.isEmpty ? ChatUiCopy.of(context, label)
+          : '${ChatUiCopy.of(context, label)} · ${last.text}';
     }
-    return last.text.trim().isEmpty ? 'Message' : last.text.trim();
+    return last.text.trim().isEmpty ? ChatUiCopy.of(context, 'Message') : last.text.trim();
   }
 
-  Widget _buildSubtitle(MasanawaColors u, ChatThread thread) {
+  Widget _buildSubtitle(BuildContext context, MasanawaColors u, ChatThread thread) {
     final isDraft =
         thread.draft.trim().isNotEmpty ||
         thread.draftVoice != null ||
         thread.draftAttachments.isNotEmpty;
     if (isDraft) {
-      final value = _snippet(thread);
+      final value = _snippet(context, thread);
       return Text.rich(
         TextSpan(children: [
-          TextSpan(text: 'Draft', style: TextStyle(
+          TextSpan(text: ChatUiCopy.of(context, 'Draft'), style: TextStyle(
             color: u.brandStrong, fontWeight: FontWeight.w600)),
-          TextSpan(text: value.startsWith('Draft: ')
-              ? ' · ${value.substring(7)}' : ' · $value',
+          TextSpan(text: ' · $value',
               style: TextStyle(color: u.textMuted)),
         ]),
         maxLines: 1,
@@ -147,7 +147,7 @@ class ChatListScreen extends ConsumerWidget {
         if (attachIcon != null) ...[attachIcon, const SizedBox(width: 3)],
         Expanded(
           child: Text(
-            _snippet(thread),
+            _snippet(context, thread),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: u.textMuted, fontSize: 14),
@@ -157,7 +157,8 @@ class ChatListScreen extends ConsumerWidget {
     );
   }
 
-  String _partLabel(AgentMessagePartKind kind) => switch (kind) {
+  String _partLabel(BuildContext context, AgentMessagePartKind kind) =>
+      ChatUiCopy.of(context, switch (kind) {
     AgentMessagePartKind.audio => 'Voice response',
     AgentMessagePartKind.image => 'Image',
     AgentMessagePartKind.file => 'File',
@@ -167,7 +168,7 @@ class ChatListScreen extends ConsumerWidget {
     AgentMessagePartKind.operation => 'Action update',
     AgentMessagePartKind.callResult => 'Call result',
     AgentMessagePartKind.status => 'Status update',
-  };
+  });
 
   Future<void> _threadActions(
     BuildContext context,
@@ -239,10 +240,8 @@ class ChatListScreen extends ConsumerWidget {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(ChatUiCopy.of(context, 'Delete chat?')),
-          content: const Text(
-            'This removes the conversation and its local drafts from this device. '
-            'It does not erase server history or guarantee deletion from device backups.',
-          ),
+          content: Text(ChatUiCopy.of(context,
+            'This removes the conversation and its local drafts from this device. It does not erase server history or guarantee deletion from device backups.')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -379,7 +378,7 @@ class ChatListScreen extends ConsumerWidget {
           ? Text(canonical.lastMessage, maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: u.textMuted, fontSize: 14))
-          : _buildSubtitle(u, thread),
+          : _buildSubtitle(context, u, thread),
         time: canonical?.lastActivityAt != null
             ? formatChatTime(canonical!.lastActivityAt!)
             : last == null ? '' : formatChatTime(thread.lastMessageActivityAt),
@@ -711,7 +710,8 @@ class _ArchivedMasanaConversationsScreenState
                       characterId: thread.characterId, displayName: name, size: 52),
                     name: name,
                     preview: Text(thread.draft.trim().isNotEmpty
-                      ? 'Draft: ${thread.draft.trim()}'
+                      ? ChatUiCopy.format(context, 'Draft: {text}',
+                          {'text': thread.draft.trim()})
                       : thread.lastMessage?.text ?? row?.lastMessage ??
                           ChatUiCopy.of(context, 'Saved conversation'),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -747,7 +747,8 @@ class _ArchivedMasanaConversationsScreenState
                     displayName: row.customTitle ?? row.displayName, size: 52),
                   name: row.customTitle ?? row.displayName,
                   preview: Text(row.lastMessage.isEmpty
-                      ? row.profession : row.lastMessage,
+                      ? ChatUiCopy.of(context, 'Saved conversation')
+                      : row.lastMessage,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                   time: row.lastActivityAt == null
                       ? '' : formatChatTime(row.lastActivityAt!),

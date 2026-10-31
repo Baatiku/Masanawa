@@ -127,3 +127,23 @@ multi-account, cross-device and true reference-pixel results are **not accepted*
 without their corresponding measured evidence. Draft PR #612 must stay
 unmerged until those required checks are qualified.
 
+## Further localization and accessibility source pass
+
+- Expanded Hausa/Arabic source-owned Chats copy with complete-sentence
+  interpolation for names, counts, permission/media failures, unread messages,
+  paid-call reservation and uncertain settlement. Translation happens before
+  interpolation so phrases retain their natural word order.
+- Localized inbox drafts, media/work previews, Masana discovery states,
+  live-voice indicators, upload progress, gallery/voice semantics and the
+  original server-backed conversation controls.
+- Local delete confirmations now accurately state that server history and
+  backups remain. Server-only inbox and archive rows display an honest saved
+  conversation preview instead of a profession description.
+- Enlarged pending-attachment removal controls to 44dp and gave voice speed
+  controls explicit semantic labels, with interpolated-copy/widget contracts.
+
+These are source fixes, not proof of SP-111 complete runtime localization or
+SP-136 reference-pixel parity. Provider/native permission strings, device RTL
+behavior, media/Bluetooth lifecycle and cross-device state still need actual
+integration/handset evidence. The PR remains draft and unmerged.
+

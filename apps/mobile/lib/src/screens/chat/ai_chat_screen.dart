@@ -512,11 +512,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           ctl.setDraft(widget.characterId, text);
           ctl.setDraftAttachments(widget.characterId, attachments);
           setState(() => _pendingAttachments = attachments);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text(
-              'Could not keep the selected files for sending. Choose the files again or retry.',
-            )),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+            ChatUiCopy.of(context, 'Could not keep the selected files for sending. Choose the files again or retry.'),
+          )));
         }),
       );
       return;
@@ -634,13 +632,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         .read(aiChatProvider.notifier)
         .setDraftAttachments(widget.characterId, selection.attachments);
     if (selection.rejectedCount > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Some files were not added. Maximum 8 files, 8 MB each and 12 MB combined.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+        ChatUiCopy.of(context, 'Some files were not added. Maximum 8 files, 8 MB each and 12 MB combined.'),
+      )));
     }
   }
 
@@ -655,7 +649,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
 
   void _pickerFailed(String what) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${ChatUiCopy.of(context, 'Could not open')} $what. ${ChatUiCopy.of(context, 'Check file access and try again.')}')),
+      SnackBar(content: Text(ChatUiCopy.format(context,
+        'Could not open {source}. Check file access and try again.',
+        {'source': ChatUiCopy.of(context, what)}))),
     );
   }
 
@@ -672,9 +668,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         builder: (dialogContext) => AlertDialog(
           icon: const Icon(Icons.mic_off_rounded),
           title: Text(ChatUiCopy.of(context, 'Microphone unavailable'), textAlign: TextAlign.center),
-          content: Text(result.permanentlyDenied
+          content: Text(ChatUiCopy.of(context, result.permanentlyDenied
               ? 'Microphone access is disabled. Enable it in your phone settings to make a call.'
-              : 'Allow microphone access to make a voice call.',
+              : 'Allow microphone access to make a voice call.'),
             textAlign: TextAlign.center),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
@@ -693,11 +689,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          result.permanentlyDenied
-              ? '$label permission is disabled in system settings.'
-              : '$label permission is needed for this action.',
-        ),
+        content: Text(ChatUiCopy.format(context, result.permanentlyDenied
+              ? '{permission} permission is disabled in system settings.'
+              : '{permission} permission is needed for this action.',
+            {'permission': ChatUiCopy.of(context, label)})),
         action: result.permanentlyDenied
             ? SnackBarAction(
                 label: ChatUiCopy.of(context, 'Settings'),
@@ -1088,13 +1083,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         final asset=selected[index];
         final original=await asset.file;
         if(original==null||!await original.exists()){
-          rejected.add('Photo ${index + 1}: original unavailable');
+          rejected.add(ChatUiCopy.format(context, 'Photo {index}: original unavailable',
+            {'index': index + 1}));
           continue;
         }
         File file=original;
         var size=await file.length();
         if(size==0){
-          rejected.add('Photo ${index + 1}: empty file');
+          rejected.add(ChatUiCopy.format(context, 'Photo {index}: empty file',
+            {'index': index + 1}));
           continue;
         }
         var name=asset.title??'Photo';
@@ -1125,7 +1122,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           }
         }
         if(size>8*1024*1024){
-          rejected.add('Photo ${index + 1}: exceeds 8 MB');
+          rejected.add(ChatUiCopy.format(context, 'Photo {index}: exceeds 8 MB',
+            {'index': index + 1}));
           continue;
         }
         attachments.add(ChatAttachment(
@@ -1205,8 +1203,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         body: Column(children: [
           Padding(padding: const EdgeInsets.all(16),
             child: Column(children: [
-              Text(directory.error ?? 'Masana profile unavailable. '
-                'Saved history is visible; sending is disabled.',
+              Text(directory.error ?? ChatUiCopy.of(context,
+                'Masana profile unavailable. Saved history is visible; sending is disabled.'),
                 textAlign: TextAlign.center),
               TextButton.icon(
                 onPressed: () => ref.read(agentDirectoryProvider.notifier).refresh(),
@@ -1232,9 +1230,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         : hasVisibleAgentOutput
         ? 'Replying…'
         : lastUser?.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio') == true
-        ? 'Processing voice note…'
+        ? ChatUiCopy.of(context, 'Processing voice note…')
         : lastUser?.allAttachments.isNotEmpty == true
-        ? 'Uploading attachment…'
+        ? ChatUiCopy.of(context, 'Uploading attachment…')
         : 'Waiting for reply…';
 
     if (!_initialEntryHandled) {
@@ -1330,6 +1328,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 )
               : IconButton(
                   icon: const Icon(Icons.arrow_back),
+                  tooltip: ChatUiCopy.of(context, 'Back'),
                   onPressed: () => context.canPop()
                       ? context.pop()
                       : context.go('/home?tab=chats'),
@@ -1359,7 +1358,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 )
               : Semantics(
             button: true, excludeSemantics: true,
-            label: 'Open ${agent.displayName} AI profile',
+            label: ChatUiCopy.format(context, 'Open {name} AI profile',
+              {'name': agent.displayName}),
             onTap: () => _openMasanaProfile(agent),
             child: InkWell(
             onTap: () => _openMasanaProfile(agent),
@@ -1502,8 +1502,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             if (updateRequired)
               MaterialBanner(
                 content: Text(
-                  'This Masanawa service now requires app version '
-                  '${shellConfig!.minimumAppVersion} or newer.',
+                  ChatUiCopy.format(context,
+                    'This Masanawa service now requires app version {version} or newer.',
+                    {'version': shellConfig!.minimumAppVersion}),
                 ),
                 actions: const [SizedBox.shrink()],
               ),
@@ -1746,8 +1747,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                       FloatingActionButton.small(
                         heroTag: 'chat-bottom',
                         tooltip: _newBelow > 0
-                            ? 'Jump to $_newBelow new messages'
-                            : 'Jump to latest messages',
+                            ? ChatUiCopy.format(context, 'Jump to {count} new messages',
+                                {'count': _newBelow})
+                            : ChatUiCopy.of(context, 'Jump to latest messages'),
                         backgroundColor: u.surfaceCard,
                         foregroundColor: u.textMuted,
                         elevation: 3,
@@ -1762,7 +1764,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                           top: -4,
                           end: -4,
                           child: Semantics(liveRegion: true,
-                            label: '$_newBelow new messages',
+                            label: ChatUiCopy.format(context, '{count} new messages',
+                              {'count': _newBelow}),
                             child: ExcludeSemantics(child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -1985,7 +1988,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(originals.length == 1
-            ? 'Hide message?' : 'Hide ${originals.length} messages?'),
+            ? ChatUiCopy.of(context, 'Hide message?')
+            : ChatUiCopy.format(context, 'Hide {count} messages?',
+                {'count': originals.length})),
         content: Text(ChatUiCopy.of(context, 'This hides messages on this device only. Server history is not deleted.')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
@@ -2065,7 +2070,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             : 'masanawa-file';
         final bytes = await File(item.path).readAsBytes();
         final output = await FilePicker.saveFile(
-          dialogTitle: 'Save from Masanawa',
+          dialogTitle: ChatUiCopy.of(context, 'Save from Masanawa'),
           fileName: item.name ?? fallbackName,
           bytes: bytes,
           mimeType:
@@ -2323,7 +2328,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         icon: Icon(permission ? Icons.mic_off_rounded :
           shortage ? Icons.account_balance_wallet_outlined : Icons.info_outline_rounded),
         title: Text(ChatUiCopy.of(context, 'Voice note unavailable'), textAlign: TextAlign.center),
-        content: Text(reason, textAlign: TextAlign.center),
+        content: Text(ChatUiCopy.of(context, reason), textAlign: TextAlign.center),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext),
@@ -2357,12 +2362,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('${ChatUiCopy.of(context, 'Voice with')} ${agent.displayName}'),
-        content: Text(
-          'Reserve up to ${review.budgetMb} MB for this call. '
-          'Only server-confirmed connected seconds are charged at 1 MB '
-          'per started second. Ringing and setup do not cost MB. '
-          'Unused reserved MB is released.',
-        ),
+        content: Text(ChatUiCopy.format(context,
+          'Reserve up to {mb} MB for this call. Only server-confirmed connected seconds are charged at 1 MB per started second. Ringing and setup do not cost MB. Unused reserved MB is released.',
+          {'mb': review.budgetMb})),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -2414,12 +2416,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       }
     } catch (_) {
       if (mounted && sameOwner()) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-            'Call settlement is unconfirmed. Your original call is saved '
-            'for safe readback before another call.',
-          ),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          ChatUiCopy.of(context, 'Call settlement is unconfirmed. Your original call is saved for safe readback before another call.'),
+        )));
       }
     }
     if (mounted && sameOwner()) {
@@ -2782,9 +2781,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('${ChatUiCopy.of(context, 'Clear chat with')} ${agent.displayName}?'),
-        content: const Text(
-          'All messages in this conversation will be removed.',
-        ),
+        content: Text(ChatUiCopy.of(context,
+          'This removes local messages and drafts from this device only. Server history and backups are not erased.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -2996,7 +2994,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                 Semantics(
                   liveRegion: true,
                   child: Text(
-                    _error ?? _label(state),
+                    ChatUiCopy.of(context, _error ?? _label(state)),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: _error == null ? u.textMuted : u.emergency,
@@ -3179,7 +3177,7 @@ class _InlineVoicePanel extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.bottomLeft,
                   child: Text(
-                    '$agentName · $_status',
+                    '$agentName · ${ChatUiCopy.of(context, _status)}',
                     style: TextStyle(
                       color: u.textMuted,
                       fontSize: 13,
@@ -3734,24 +3732,18 @@ class _PendingAttachmentStrip extends StatelessWidget {
                         ),
                       ),
               ),
-              Positioned(
-                top: -4,
-                right: -4,
+              PositionedDirectional(
+                top: 0,
+                end: 0,
                 child: Material(
                   color: u.surfaceCard,
                   shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => onRemove(index),
-                    child: Padding(
-                      padding: const EdgeInsets.all(3),
-                      child: Icon(
-                        Icons.close,
-                        size: 15,
-                        color: u.textPrimary,
-                      ),
-                    ),
-                  ),
+                  child: IconButton(
+                    tooltip: ChatUiCopy.of(context, 'Remove attachment'),
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                    padding: EdgeInsets.zero,
+                    icon: Icon(Icons.close, size: 16, color: u.textPrimary),
+                    onPressed: () => onRemove(index)),
                 ),
               ),
             ],
@@ -3816,7 +3808,7 @@ class _ReplyComposerPreview extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      senderName,
+                      ChatUiCopy.of(context, senderName),
                       style: TextStyle(
                         color: u.brand,
                         fontSize: 12,
@@ -3986,7 +3978,8 @@ class _ChatBubble extends StatelessWidget {
           child: Wrap(spacing: 4, runSpacing: 4, children: [
             for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
               Semantics(button: true, excludeSemantics: true,
-                label: 'React with $emoji',
+                label: ChatUiCopy.format(context, 'React with {emoji}',
+                  {'emoji': emoji}),
                 onTap: () => Navigator.of(context).pop('react:$emoji'),
                 child: InkWell(borderRadius: BorderRadius.circular(22),
                   onTap: () => Navigator.of(context).pop('react:$emoji'),
@@ -4087,10 +4080,10 @@ class _ChatBubble extends StatelessWidget {
     return Align(
       alignment: failure != null ? Alignment.center : isUser ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
       child: Semantics(container: true,
-        label: '${isUser ? 'You' : agent.displayName}, '
+        label: '${isUser ? ChatUiCopy.of(context, 'You') : agent.displayName}, '
             '${formatClock(message.createdAt)}, '
-            '${message.deleted ? 'hidden on this device' : message.text}, '
-            '${message.deliveryStatus}${message.reaction == null ? '' : ', reaction ${message.reaction}'}',
+            '${message.deleted ? ChatUiCopy.of(context, 'hidden on this device') : message.text}, '
+            '${ChatUiCopy.of(context, message.deliveryStatus)}${message.reaction == null ? '' : ', ${ChatUiCopy.format(context, 'reaction {emoji}', {'emoji': message.reaction!})}'}',
         child: GestureDetector(
         onLongPress: () => _showActions(context),
         onDoubleTap: () => onReact(quickReaction),
@@ -4181,8 +4174,9 @@ class _ChatBubble extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         message.deliveryStatus == 'processing'
-                            ? 'Processing attachments…'
-                            : 'Uploading ${(progress * 100).round()}%',
+                            ? ChatUiCopy.of(context, 'Processing attachments…')
+                            : ChatUiCopy.format(context, 'Uploading {percent}%',
+                                {'percent': (progress * 100).round()}),
                         style: TextStyle(color: u.textMuted, fontSize: 10.5),
                       ),
                     ],
@@ -4671,7 +4665,8 @@ class _AlbumPhotoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: 'Open photo ${index + 1} of ${paths.length}',
+    label: ChatUiCopy.format(context, 'Open photo {index} of {total}',
+      {'index': index + 1, 'total': paths.length}),
     child: GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
         fullscreenDialog: true,
@@ -4717,7 +4712,7 @@ class _AttachmentView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (attachment.kind == 'video') {
       final u = context.masanawa;
-      return Semantics(label: 'Historic video attachment unavailable',
+      return Semantics(label: ChatUiCopy.of(context, 'Historic video attachment unavailable'),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 280),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -4789,9 +4784,11 @@ class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
         (kind == 'voice' || kind == 'audio' ? 'Voice note' :
          kind == 'image' ? 'Photo' :
          kind == 'video' ? 'Video' : 'Document');
+    final localizedLabel = ChatUiCopy.of(context, label);
     return Semantics(
       button: true,
-      label: '${ChatUiCopy.of(context, 'Download securely')} $label',
+      label: ChatUiCopy.format(context, 'Download {item} securely',
+        {'item': localizedLabel}),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
       if (widget.attachment.sizeBytes case final bytes? when bytes > 0)
         Padding(padding: const EdgeInsets.only(bottom: 4),
@@ -4805,7 +4802,8 @@ class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
                 child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.download_for_offline_outlined),
         label: Text(_loading ? ChatUiCopy.of(context, 'Downloading...') :
-            _downloadFailed ? '${ChatUiCopy.of(context, 'Retry')} $label' : label,
+            _downloadFailed ? ChatUiCopy.format(context, 'Retry {item}',
+              {'item': localizedLabel}) : localizedLabel,
           maxLines: 2, overflow: TextOverflow.ellipsis),
       ),
       if (_downloadFailed) Text(
@@ -4916,7 +4914,7 @@ class _ImageGalleryViewerState extends State<_ImageGalleryViewer> {
       final bytes = await File(path).readAsBytes();
       final filename = path.split(Platform.pathSeparator).last;
       final output = await FilePicker.saveFile(
-        dialogTitle: 'Save photo from Masanawa',
+        dialogTitle: ChatUiCopy.of(context, 'Save photo from Masanawa'),
         fileName: filename.isEmpty ? 'masanawa-photo.jpg' : filename,
         bytes: bytes, mimeType: lookupMimeType(path) ?? 'image/jpeg');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -4961,11 +4959,11 @@ class _ImageGalleryViewerState extends State<_ImageGalleryViewer> {
                     child: Image.file(
                       File(widget.paths[index]),
                       fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => const Padding(
-                        padding: EdgeInsets.all(24),
+                      errorBuilder: (_, _, _) => Padding(
+                        padding: const EdgeInsets.all(24),
                         child: Text(
-                          'Photo no longer available on this device.',
-                          style: TextStyle(color: Colors.white),
+                          ChatUiCopy.of(context, 'Photo no longer available on this device.'),
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                     ),
@@ -5642,28 +5640,28 @@ class _VoiceBubbleState extends ConsumerState<_VoiceBubble> {
                 Row(
                   children: [
                     Text(
-                      _broken ? 'Tap to retry' : remaining,
+                      _broken ? ChatUiCopy.of(context, 'Tap to retry') : remaining,
                       style: TextStyle(color: u.textMuted, fontSize: 11.5,
                         fontFeatures: const [FontFeature.tabularFigures()]),
                     ),
                     const Spacer(),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(8),
+                    Semantics(
+                      button: true,
+                      label: ChatUiCopy.format(context, 'Playback speed {speed}×',
+                        {'speed': _sharedVoiceSpeed.toStringAsFixed(_sharedVoiceSpeed == 1 ? 0 : 1)}),
                       onTap: _cycleSpeed,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
+                      child: ExcludeSemantics(child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: _cycleSpeed,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 48, minHeight: 44),
+                          child: Center(child: Text(
+                            '${_sharedVoiceSpeed.toStringAsFixed(_sharedVoiceSpeed == 1 ? 0 : 1)}×',
+                            style: TextStyle(color: u.textMuted,
+                              fontSize: 11.5, fontWeight: FontWeight.w600),
+                          )),
                         ),
-                        child: Text(
-                          '${_sharedVoiceSpeed.toStringAsFixed(_sharedVoiceSpeed == 1 ? 0 : 1)}×',
-                          style: TextStyle(
-                            color: u.textMuted,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                      )),
                     ),
                   ],
                 ),

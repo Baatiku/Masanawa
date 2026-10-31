@@ -67,4 +67,66 @@ void main() {
     expect(checked, greaterThan(100));
   });
 
+  testWidgets('Dynamic Chats sentences respect Hausa and Arabic word order', (tester) async {
+    Future<String> render(String language, String template,
+        Map<String, Object> values) async {
+      var result = '';
+      await tester.pumpWidget(Localizations(
+        locale: Locale(language),
+        delegates: const [AppLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
+        child: Builder(builder: (context) {
+          result = ChatUiCopy.format(context, template, values);
+          return Directionality(
+            textDirection: language == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+            child: Text(result),
+          );
+        }),
+      ));
+      await tester.pumpAndSettle();
+      return result;
+    }
+
+    expect(await render('ha', 'Jump to {count} new messages', {'count': 3}),
+      'Tsallaka zuwa sabbin saƙonni 3');
+    expect(await render('ar', 'Open photo {index} of {total}',
+      {'index': 2, 'total': 8}), 'فتح الصورة 2 من 8');
+    expect(await render('ha', 'Hide {count} messages?', {'count': 2}),
+      'A ɓoye saƙonni 2?');
+    expect(await render('ar', 'This Masanawa service now requires app version {version} or newer.',
+      {'version': '2.1'}), 'تتطلب خدمة ماساناوا هذه الإصدار 2.1 من التطبيق أو أحدث.');
+    expect(await render('en', 'Open {name} AI profile', {'name': 'Yusuf'}),
+      'Open Yusuf AI profile');
+  });
+
+  test('Sensitive and dynamic copy is translated in Hausa and Arabic', () {
+    const keys = [
+      'Could not keep the selected files for sending. Choose the files again or retry.',
+      'Microphone access is disabled. Enable it in your phone settings to make a call.',
+      'Hide {count} messages?',
+      'Jump to {count} new messages',
+      'Open {name} AI profile',
+      'Reserve up to {mb} MB for this call. Only server-confirmed connected seconds are charged at 1 MB per started second. Ringing and setup do not cost MB. Unused reserved MB is released.',
+      'Call settlement is unconfirmed. Your original call is saved for safe readback before another call.',
+      'This removes local messages and drafts from this device only. Server history and backups are not erased.',
+      'This removes the conversation and its local drafts from this device. It does not erase server history or guarantee deletion from device backups.',
+      'Photo {index}: exceeds 8 MB',
+      'No matching Masana contacts for "{query}"',
+      '{count} Masana · refreshing…',
+      'Uploading {percent}%',
+      'Unpin server conversation',
+      'Draft: {text}',
+      'Voice note',
+      'Historic video attachment unavailable',
+      'Photo no longer available on this device.',
+      'Tap to retry',
+      'Playback speed {speed}×',
+    ];
+    for (final key in keys) {
+      expect(ChatUiCopy.hasTranslation('ha', key), isTrue,
+          reason: 'Missing Hausa for $key');
+      expect(ChatUiCopy.hasTranslation('ar', key), isTrue,
+          reason: 'Missing Arabic for $key');
+    }
+  });
+
 }
