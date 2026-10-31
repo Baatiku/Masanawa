@@ -707,7 +707,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       if (!current()) return;
       await SharePlus.instance.share(ShareParams(text:
         '${currentPost.displayAuthor}\n\n${currentPost.body}'
-        '${currentPost.source==null?'':'\n\nOriginal: ${currentPost.source!.url}'}'));
+        '${currentPost.isNews?'\n\nOriginal: ${currentPost.news!.original}':currentPost.source==null?'':'\n\nOriginal: ${currentPost.source!.url}'}'));
     } catch (_) {
       if (!current()) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -990,7 +990,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                     ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: items.length + (cursor == null ? 0 : 1),
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    separatorBuilder: (_, _) => SizedBox(height: widget.newsMode?12:8),
                     itemBuilder: (ctx, i) {
                       if (i == items.length)
                         return Center(
@@ -1009,11 +1009,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                         child:Card(
                         key: ValueKey(post.id),
                         color: context.masanawa.surfaceCard,
-                        margin: EdgeInsets.symmetric(horizontal: MediaQuery.sizeOf(context).width >= 600 ? 16 : 0),
-                        elevation: 0,
+                        margin: EdgeInsets.symmetric(horizontal: widget.newsMode?10:MediaQuery.sizeOf(context).width >= 600 ? 16 : 0),
+                        elevation: widget.newsMode?1.5:0,
                         shadowColor: Theme.of(context).colorScheme.shadow.withValues(alpha:0.17),
                         surfaceTintColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(MediaQuery.sizeOf(context).width >= 600 ? 10 : 0)),
+                        shape: RoundedRectangleBorder(borderRadius:BorderRadius.circular(widget.newsMode?16:MediaQuery.sizeOf(context).width >= 600 ? 10 : 0)),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => openPost(post),
