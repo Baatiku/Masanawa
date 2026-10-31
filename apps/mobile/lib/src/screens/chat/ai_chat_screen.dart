@@ -97,6 +97,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   bool _showEmoji = false;
   bool _showCafeSuggestions = true;
   bool _showStudyHint = true;
+  String _quickReaction = '❤️';
   bool _hasText = false;
   List<ChatAttachment> _pendingAttachments = const [];
   AiChatMessage? _replyingTo;
@@ -246,6 +247,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         _inlineVoiceSession?.endReason=CallEndReason.accountChanged;
         _modalVoiceSession?.endReason=CallEndReason.accountChanged;
         _pendingVoiceAutoplay = null;
+        _quickReaction = '❤️';
         // A same-ID logout/relogin is still a new microphone authorization.
         // Release the old recorder and reconcile any live admission once.
         unawaited(_cancelInlineRecording());
@@ -1594,7 +1596,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                     }
                                   }),
                                   onReply: () => setState(() => _replyingTo = message),
-                                  onReact: (emoji) => ref
+                                  quickReaction: _quickReaction,
+                                   onQuickReactionChosen: (emoji) => setState(() => _quickReaction = emoji),
+                                   onReact: (emoji) => ref
                                       .read(aiChatProvider.notifier)
                                       .reactToMessage(widget.characterId, message.id,
                                         message.reaction == emoji ? null : emoji),
@@ -3250,14 +3254,20 @@ class _Composer extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
-                decoration: BoxDecoration(
-                  color: u.surfaceCard,
-                  borderRadius: BorderRadius.circular(26),
-                  border: Border.all(color: u.structuralBorder),
+              child: ListenableBuilder(
+                listenable: focusNode,
+                builder: (context, _) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 130),
+                  constraints: const BoxConstraints(minHeight: 48),
+                  decoration: BoxDecoration(
+                    color: u.surfaceMuted,
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: focusNode.hasFocus
+                        ? u.brand.withValues(alpha: .55)
+                        : u.structuralBorder.withValues(alpha: .7)),
+                  ),
+                  child: _buildTextBar(context, u),
                 ),
-                child: _buildTextBar(context, u),
               ),
             ),
             const SizedBox(width: 6),
@@ -3827,6 +3837,17 @@ class _PersonaChatDisclosure extends StatelessWidget {
   }
 }
 
+class _ChatBubbleTokens {
+  const _ChatBubbleTokens._();
+  static const groupedGap = 1.0;
+  static const regularGap = 4.0;
+  static const insetX = 9.0;
+  static const insetY = 6.0;
+  static const maxWidth = 430.0;
+  static const screenFraction = .86;
+  static const radius = 13.0;
+  static const firstCorner = 4.0;
+}
 class _ChatBubble extends StatelessWidget {
   _ChatBubble({
     required this.message,
@@ -3839,6 +3860,8 @@ class _ChatBubble extends StatelessWidget {
     required this.onSelect,
     required this.onReply,
     required this.onReact,
+    required this.quickReaction,
+    required this.onQuickReactionChosen,
     required this.onJumpToReply,
     required this.onDelete,
     required this.onCopy,
@@ -3861,6 +3884,8 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback onSelect;
   final VoidCallback onReply;
   final ValueChanged<String> onReact;
+  final String quickReaction;
+  final ValueChanged<String> onQuickReactionChosen;
   final VoidCallback onJumpToReply;
   final VoidCallback onDelete;
   final VoidCallback onCopy;
@@ -3914,6 +3939,8 @@ class _ChatBubble extends StatelessWidget {
         ),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'reply', child: Text('Reply')),
+         const PopupMenuItem(value: 'quick-reaction',
+           child: Text('Set double-tap reaction')),
         const PopupMenuItem(value: 'copy', child: Text('Copy')),
         if (onEdit != null)
           const PopupMenuItem(value: 'edit', child: Text('Edit on this device')),
@@ -3948,7 +3975,7 @@ class _ChatBubble extends StatelessWidget {
     if (action == 'select') onSelect();
     if (action == 'edit') onEdit?.call();
     if (action == 'delete') onDelete();
-    if (action == 'more-reactions') {
+    if (action == 'more-reactions' || action == 'quick-reaction') {
       if (!context.mounted) return;
       final emoji = await showModalBottomSheet<String>(
         context: context, showDragHandle: true,
@@ -3967,7 +3994,13 @@ class _ChatBubble extends StatelessWidget {
           ]),
         )),
       );
-      if (emoji != null) onReact(emoji);
+      if (emoji != null) {
+         if (action == 'quick-reaction') {
+           onQuickReactionChosen(emoji);
+         } else {
+           onReact(emoji);
+         }
+       }
     }
     if (action.startsWith('react:')) onReact(action.substring(6));
     if (action.startsWith('agent:')) {
@@ -3993,24 +4026,30 @@ class _ChatBubble extends StatelessWidget {
             '${message.deliveryStatus}${message.reaction == null ? '' : ', reaction ${message.reaction}'}',
         child: GestureDetector(
         onLongPress: () => _showActions(context),
-        onDoubleTap: () => onReact('❤️'),
+        onDoubleTap: () => onReact(quickReaction),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Container(
               key: _bubbleAnchor,
-              margin: EdgeInsets.symmetric(vertical: grouped ? 1 : 4),
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              margin: EdgeInsets.symmetric(vertical: grouped
+                  ? _ChatBubbleTokens.groupedGap : _ChatBubbleTokens.regularGap),
+              padding: const EdgeInsets.symmetric(
+                horizontal: _ChatBubbleTokens.insetX,
+                vertical: _ChatBubbleTokens.insetY),
               constraints: BoxConstraints(
-                maxWidth: math.min(430.0, MediaQuery.sizeOf(context).width * .86),
+                maxWidth: math.min(_ChatBubbleTokens.maxWidth,
+                  MediaQuery.sizeOf(context).width * _ChatBubbleTokens.screenFraction),
               ),
               decoration: BoxDecoration(
                 color: failure != null ? u.surfaceMuted
                     : isUser ? u.bubbleOut : u.surfaceCard,
                 borderRadius: failure != null ? BorderRadius.circular(12)
                     : BorderRadiusDirectional.only(
-                        topStart: Radius.circular(isUser || grouped ? 13 : 4),
-                        topEnd: Radius.circular(!isUser || grouped ? 13 : 4),
+                        topStart: Radius.circular(isUser || grouped
+                            ? _ChatBubbleTokens.radius : _ChatBubbleTokens.firstCorner),
+                        topEnd: Radius.circular(!isUser || grouped
+                            ? _ChatBubbleTokens.radius : _ChatBubbleTokens.firstCorner),
                         bottomStart: const Radius.circular(13),
                         bottomEnd: const Radius.circular(13),
                       ),
