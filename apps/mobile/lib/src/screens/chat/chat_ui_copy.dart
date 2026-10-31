@@ -7,6 +7,15 @@ import 'package:flutter/widgets.dart';
 class ChatUiCopy {
   const ChatUiCopy._();
 
+  /// Contract used by the Chats widget tests: every localized direct call
+  /// must have actual Hausa and Arabic copy, not an English fallback.
+  static bool hasTranslation(String languageCode, String english) =>
+      switch (languageCode) {
+        'ha' => _ha.containsKey(english),
+        'ar' => _ar.containsKey(english),
+        _ => true,
+      };
+
   static String of(BuildContext context, String english) {
     final locale = Localizations.maybeLocaleOf(context)?.languageCode;
     if (locale == 'ha') return _ha[english] ?? english;
