@@ -424,6 +424,7 @@ export class PgHomeFeedRepository {
     const previous=state==='hidden'?'visible':'hidden';
     const result=await client.query(`UPDATE feed.comments c SET state=$4,revision=revision+1
       WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.revision=$6 AND c.state=$7
+      AND length(trim($2::text))>0 AND length($5::text) BETWEEN 5 AND 500
       AND EXISTS(SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id
         AND p.state='published' AND ${this.access})
       RETURNING c.id::text,c.revision,c.state`,[tenant,reviewer,id,state,reason,revision,previous]);
