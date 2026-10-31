@@ -96,6 +96,8 @@ void main() {
       {'version': '2.1'}), 'تتطلب خدمة ماساناوا هذه الإصدار 2.1 من التطبيق أو أحدث.');
     expect(await render('en', 'Open {name} AI profile', {'name': 'Yusuf'}),
       'Open Yusuf AI profile');
+    expect(await render('ha', '{percent} percent', {'percent': 65}),
+      'Kashi 65 cikin ɗari');
   });
 
   test('Sensitive and dynamic copy is translated in Hausa and Arabic', () {
@@ -120,6 +122,7 @@ void main() {
       'Photo no longer available on this device.',
       'Tap to retry',
       'Playback speed {speed}×',
+      '{percent} percent',
     ];
     for (final key in keys) {
       expect(ChatUiCopy.hasTranslation('ha', key), isTrue,

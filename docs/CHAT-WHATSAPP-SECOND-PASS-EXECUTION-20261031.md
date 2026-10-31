@@ -141,6 +141,9 @@ unmerged until those required checks are qualified.
   conversation preview instead of a profession description.
 - Enlarged pending-attachment removal controls to 44dp and gave voice speed
   controls explicit semantic labels, with interpolated-copy/widget contracts.
+- The final source follow-up uses the app's localized, trusted presence states
+  in the live chat subtitle, removes the groups glyph from the empty Masana
+  picker, and localizes adjustable waveform percentage announcements in RTL.
 
 These are source fixes, not proof of SP-111 complete runtime localization or
 SP-136 reference-pixel parity. Provider/native permission strings, device RTL

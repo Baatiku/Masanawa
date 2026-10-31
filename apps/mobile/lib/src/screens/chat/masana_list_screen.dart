@@ -158,7 +158,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.groups_outlined, size: 52, color: u.brand),
+              Icon(Icons.smart_toy_outlined, size: 52, color: u.brand),
               const SizedBox(height: 16),
               Text(
                 directory.error ?? ChatUiCopy.of(context, 'No Masana are available right now.'),

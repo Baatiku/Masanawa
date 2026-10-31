@@ -22,7 +22,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
 
 import '../../agents/agent_directory.dart';
+import '../../agents/agent_presence_labels.dart';
 import '../../agents/agent_feedback.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import '../../chat/chat_format.dart';
 import '../../chat/chat_emoji_panel.dart';
@@ -1225,8 +1227,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         !m.isUser && m.deliveryStatus == 'streaming' && m.text.trim().isNotEmpty);
     // A submitted voice note does not prove the agent is recording, and a
     // locally queued text is not proof that inference/typing has started.
+    final localizedStrings = Localizations.of<AppLocalizations>(
+      context, AppLocalizations);
     final workingLabel = !sending
-        ? agent.presenceLabel
+        ? (localizedStrings == null
+            ? agent.presenceLabel
+            : localizedAgentPresence(localizedStrings, agent))
         : hasVisibleAgentOutput
         ? 'Replying…'
         : lastUser?.allAttachments.any((a) => a.kind == 'voice' || a.kind == 'audio') == true
@@ -1385,7 +1391,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         ),
                       ),
                       Text(
-                        '${ChatUiCopy.of(context, agent.publicOfficialSimulation ? 'AI simulation' : 'AI persona')} · $workingLabel',
+                        '${ChatUiCopy.of(context, agent.publicOfficialSimulation ? 'AI simulation' : 'AI persona')} · ${ChatUiCopy.of(context, workingLabel)}',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(
@@ -4832,7 +4838,8 @@ class _ImageAttachment extends StatelessWidget {
     final file = File(path);
     final singleImage = galleryPaths.length <= 1;
     final photoWidth = math.min(280.0, MediaQuery.sizeOf(context).width * .7);
-    return Semantics(button: true, label: 'Open photo', child: GestureDetector(
+    return Semantics(button: true,
+      label: ChatUiCopy.of(context, 'Open photo'), child: GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           fullscreenDialog: true,
@@ -5119,22 +5126,24 @@ class _VoiceWaveform extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = context.masanawa;
+    String spokenPercent(double value) => ChatUiCopy.format(context,
+      '{percent} percent', {'percent': (value * 100).round()});
     if(values.isEmpty)return SizedBox(height:28,child:Slider(
       value:progress.clamp(0.0,1.0).toDouble(),onChanged:enabled?onSeek:null,
-      semanticFormatterCallback:(value)=>'${(value*100).round()} percent',
+      semanticFormatterCallback:spokenPercent,
     ));
     final bars = values;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final rtl = Directionality.of(context) == TextDirection.rtl;
-        return Semantics(label: 'Voice playback position',
-          value: '${(progress * 100).round()} percent',
+        return Semantics(label: ChatUiCopy.of(context, 'Voice playback position'),
+          value: spokenPercent(progress),
           increasedValue: enabled
-              ? '${((progress + .05).clamp(0.0, 1.0) * 100).round()} percent'
+              ? spokenPercent((progress + .05).clamp(0.0, 1.0).toDouble())
               : null,
           decreasedValue: enabled
-              ? '${((progress - .05).clamp(0.0, 1.0) * 100).round()} percent'
+              ? spokenPercent((progress - .05).clamp(0.0, 1.0).toDouble())
               : null,
           onIncrease: enabled ? () => onSeek((progress + .05).clamp(0.0, 1.0).toDouble()) : null,
           onDecrease: enabled ? () => onSeek((progress - .05).clamp(0.0, 1.0).toDouble()) : null,
@@ -5146,7 +5155,7 @@ class _VoiceWaveform extends StatelessWidget {
           child: SizedBox(
             height: 28,
             child: Stack(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
