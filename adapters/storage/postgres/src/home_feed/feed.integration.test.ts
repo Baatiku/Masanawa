@@ -67,6 +67,39 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
+ it('news Home exposes only approved original publisher articles and revokes visibility on suspension',async()=>{
+  const t='tenant_news';
+  const pool=isolated.pool;
+  await pool.query(`INSERT INTO feed.news_publishers
+    (tenant_id,publisher_id,display_name,feed_url,rights_basis,reviewed_by,rights_until,state)
+    VALUES($1,'bbc','BBC News','https://feeds.bbci.co.uk/news/rss.xml',
+     'Verified editorial RSS syndication licence for test','news_editor',
+     clock_timestamp()+interval '1 day','approved')`,[t]);
+  const created=await pool.query(`INSERT INTO feed.posts
+    (tenant_id,author_type,author_masana_id,kind,body,published_by,idempotency_key)
+    VALUES($1,'publisher',NULL,'text','Headline\\n\\nA short source summary','news:bbc','test-news-001')
+    RETURNING id`,[t]);
+  const postId=String(created.rows[0]?.id);
+  await pool.query(`INSERT INTO feed.news_articles
+   (tenant_id,publisher_id,post_id,source_url,headline,summary,original_published_at,content_hash)
+   VALUES($1,'bbc',$2,'https://www.bbc.com/news/articles/test-news-001',
+    'Headline','A short source summary',clock_timestamp(),'abc123')`,[t,postId]);
+  const service=new FeedService(repo,async()=>true);
+  const result=await service.newsList(t,null);
+  expect(result.items).toHaveLength(1);
+  expect(result.items[0]).toMatchObject({id:postId,
+    author:{type:'publisher',id:'bbc',displayName:'BBC News'},
+    news:{id:'bbc',name:'BBC News',title:'Headline',verified:true}});
+  expect((await repo.newsPublishers(t)).map(x=>x.id)).toEqual(['bbc']);
+  expect((await service.detail(t,null,postId)).id).toBe(postId);
+  await pool.query(`UPDATE feed.news_publishers SET state='suspended'
+   WHERE tenant_id=$1 AND publisher_id='bbc'`,[t]);
+  expect((await service.newsList(t,null)).items).toEqual([]);
+  expect(await repo.newsPublishers(t)).toEqual([]);
+  await expect(service.detail(t,null,postId)).rejects.toMatchObject({status:404});
+  expect((await pool.query(`SELECT count(*)::int AS n FROM feed.news_articles WHERE tenant_id=$1`,[t])).rows[0]?.n).toBe(1);
+ });
+
  it('SF-FB PG18 preserves native threaded reactions, CAS edits, reports, and removed parent tombstones',async()=>{
   const pool=isolated.pool,t='tenant_conversations';
   await pool.query("INSERT INTO identity.characters VALUES($1,'masana_one','active')",[t]);
