@@ -389,7 +389,7 @@ class ChatListScreen extends ConsumerWidget {
             agent?.displayName ?? 'Masana', size: 52),
         name: canonical?.customTitle ?? thread.title ??
             agent?.displayName ?? 'Unavailable Masana',
-        preview: serverNewer && !localDraft && canonical!.lastMessage.isNotEmpty
+        preview: serverNewer && !localDraft && canonical.lastMessage.isNotEmpty
           ? Text(canonical.lastMessage, maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: u.textMuted, fontSize: 14))

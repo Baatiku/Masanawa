@@ -57,7 +57,6 @@ import '../../voice/voice_note_sequence.dart';
 import '../../safety/twin_safety_state.dart';
 import 'masana_report_screen.dart';
 import '../../theme/masanawa_theme.dart';
-import '../../ui/components/masanawa_list_skeleton.dart';
 
 /// One Character conversation. Voice is the primary action while text,
 /// attachments and structured work results remain in the same timeline.
