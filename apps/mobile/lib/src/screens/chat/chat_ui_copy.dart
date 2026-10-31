@@ -15,6 +15,21 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "remaining saves cancelled": "an soke sauran ajiyewa",
+    "failed": "sun gaza",
+    "files saved": "an ajiye fayiloli",
+    "Resume audio": "Ci gaba da sauti",
+    "Clear chat with": "Share hirar da",
+    "Voice with": "Kiran murya tare da",
+    "Masana report submitted.": "An aika rahoton Masana.",
+    "Your session changed. Sign in again to report.": "Zaman asusunka ya canza. Sake shiga don kai rahoto.",
+    "They will no longer be available to you until you unblock them.": "Ba za ka sake samun wannan Masana ba sai ka cire toshewar.",
+    "Forwarding starts a new AI turn. A successful Masana reply may use 1 MB from your eligible balance.": "Turawa zai fara sabuwar hira da AI. Amsar Masana da ta yi nasara na iya cin MB 1 daga ragowar da ya dace.",
+    "Forward to": "Tura wa",
+    "This hides messages on this device only. Server history is not deleted.": "Wannan zai ɓoye saƙonni a wannan na’ura kawai. Ba a share tarihin uwar garke ba.",
+    "selected": "an zaɓa",
+    "Check file access and try again.": "Duba izinin shiga fayil ka sake gwadawa.",
+    "Could not open": "Ba a iya buɗe",
     "Close photo viewer": "Rufe kallon hoto",
     "Copy code": "Kwafi lamba",
     "Cancel reply": "Soke amsa",
@@ -221,6 +236,21 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+    "remaining saves cancelled": "تم إلغاء عمليات الحفظ المتبقية",
+    "failed": "فشل",
+    "files saved": "ملفات محفوظة",
+    "Resume audio": "استئناف الصوت",
+    "Clear chat with": "مسح الدردشة مع",
+    "Voice with": "مكالمة صوتية مع",
+    "Masana report submitted.": "تم إرسال البلاغ عن ماسانا.",
+    "Your session changed. Sign in again to report.": "تغيّرت جلستك. سجّل الدخول مجددًا لتقديم البلاغ.",
+    "They will no longer be available to you until you unblock them.": "لن تتمكن من الوصول إلى هذه الشخصية حتى ترفع الحظر عنها.",
+    "Forwarding starts a new AI turn. A successful Masana reply may use 1 MB from your eligible balance.": "تبدأ إعادة التوجيه دورًا جديدًا مع الذكاء الاصطناعي. قد تستهلك استجابة ماسانا الناجحة ١ ميغابايت من الرصيد المؤهل.",
+    "Forward to": "إعادة التوجيه إلى",
+    "This hides messages on this device only. Server history is not deleted.": "سيخفي ذلك الرسائل على هذا الجهاز فقط. لن يُحذف السجل على الخادم.",
+    "selected": "محددة",
+    "Check file access and try again.": "تحقق من إذن الوصول إلى الملف وحاول مجددًا.",
+    "Could not open": "تعذّر فتح",
     "Close photo viewer": "إغلاق عارض الصور",
     "Copy code": "نسخ الرمز",
     "Cancel reply": "إلغاء الرد",
