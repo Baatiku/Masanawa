@@ -70,16 +70,21 @@ class _VisualWallet extends WalletController {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
   const cases = [
-    ('conversation_320_light', 320.0, Brightness.light, 1.0, TextDirection.ltr),
-    ('conversation_390_dark', 390.0, Brightness.dark, 1.0, TextDirection.ltr),
-    ('conversation_320_large_type', 320.0, Brightness.light, 2.0, TextDirection.ltr),
-    ('conversation_360_rtl', 360.0, Brightness.light, 1.0, TextDirection.rtl),
-    ('conversation_320_rtl_large_type', 320.0, Brightness.dark, 2.0, TextDirection.rtl),
+    ('conversation_320_light', 320.0, 760.0, Brightness.light, 1.0, TextDirection.ltr, 'en'),
+    ('conversation_390_dark', 390.0, 760.0, Brightness.dark, 1.0, TextDirection.ltr, 'en'),
+    ('conversation_320_large_type', 320.0, 760.0, Brightness.light, 2.0, TextDirection.ltr, 'en'),
+    ('conversation_360_rtl', 360.0, 760.0, Brightness.light, 1.0, TextDirection.rtl, 'en'),
+    ('conversation_320_rtl_large_type', 320.0, 760.0, Brightness.dark, 2.0, TextDirection.rtl, 'en'),
+    ('conversation_430_light', 430.0, 760.0, Brightness.light, 1.0, TextDirection.ltr, 'en'),
+    ('conversation_430_dark', 430.0, 760.0, Brightness.dark, 1.0, TextDirection.ltr, 'en'),
+    ('conversation_360_hausa', 360.0, 760.0, Brightness.light, 1.0, TextDirection.ltr, 'ha'),
+    ('conversation_360_arabic', 360.0, 760.0, Brightness.light, 1.0, TextDirection.rtl, 'ar'),
+    ('conversation_landscape_640', 640.0, 360.0, Brightness.light, 1.0, TextDirection.ltr, 'en'),
   ];
-  for (final (name, width, brightness, scale, direction) in cases) {
+  for (final (name, width, height, brightness, scale, direction, locale) in cases) {
     testWidgets('Conversation viewport $name is stable', (tester) async {
       tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = Size(width, 760);
+      tester.view.physicalSize = Size(width, height);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(ProviderScope(overrides: [
@@ -89,8 +94,13 @@ void main() {
         walletProvider.overrideWith(_VisualWallet.new),
       ], child: MaterialApp(
         theme: buildMasanawaTheme(brightness: brightness),
+        builder: (context, child) => Localizations.override(
+          context: context,
+          locale: Locale(locale),
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: MediaQuery(
-          data: MediaQueryData(size: Size(width, 760),
+          data: MediaQueryData(size: Size(width, height),
               textScaler: TextScaler.linear(scale)),
           child: Directionality(
             textDirection: direction,

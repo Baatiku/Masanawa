@@ -10,9 +10,11 @@ const captureChatGoldens = bool.fromEnvironment('CHAT_CAPTURE_GOLDENS');
 
 class _ChatVisualCase {
   const _ChatVisualCase(this.id, this.width, this.brightness,
-      this.textScale, this.direction);
+      this.textScale, this.direction, {this.height = 740, this.locale = 'en'});
   final String id;
   final double width;
+  final double height;
+  final String locale;
   final Brightness brightness;
   final double textScale;
   final TextDirection direction;
@@ -27,13 +29,18 @@ void main() {
     _ChatVisualCase('phone_390_large_type', 390, Brightness.dark, 2, TextDirection.ltr),
     _ChatVisualCase('phone_360_rtl', 360, Brightness.light, 1, TextDirection.rtl),
     _ChatVisualCase('phone_320_rtl_large_type', 320, Brightness.dark, 2, TextDirection.rtl),
+    _ChatVisualCase('phone_430_light', 430, Brightness.light, 1, TextDirection.ltr),
+    _ChatVisualCase('phone_430_dark', 430, Brightness.dark, 1, TextDirection.ltr),
+    _ChatVisualCase('phone_360_hausa', 360, Brightness.light, 1, TextDirection.ltr, locale: 'ha'),
+    _ChatVisualCase('phone_360_arabic', 360, Brightness.light, 1, TextDirection.rtl, locale: 'ar'),
+    _ChatVisualCase('landscape_640', 640, Brightness.light, 1, TextDirection.ltr, height: 360),
   ];
 
   for (final sample in cases) {
     testWidgets('Chats visual matrix ${sample.id} has no layout error',
         (tester) async {
       tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = Size(sample.width, 740);
+      tester.view.physicalSize = Size(sample.width, sample.height);
       addTearDown(() {
         tester.view.resetDevicePixelRatio();
         tester.view.resetPhysicalSize();
@@ -41,9 +48,14 @@ void main() {
 
       await tester.pumpWidget(MaterialApp(
         theme: buildMasanawaTheme(brightness: sample.brightness),
+        builder: (context, child) => Localizations.override(
+          context: context,
+          locale: Locale(sample.locale),
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: MediaQuery(
           data: MediaQueryData(
-            size: Size(sample.width, 740),
+            size: Size(sample.width, sample.height),
             textScaler: TextScaler.linear(sample.textScale),
           ),
           child: Directionality(
