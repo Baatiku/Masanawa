@@ -8,18 +8,14 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/providers.dart';
 import '../../core/startup_metrics.dart';
 import '../../features/home_feed/feed_api.dart';
-import '../../features/home_feed/status_tip_flow.dart';
 import '../../features/home_feed/feed_media_api.dart';
 import '../../features/home_feed/feed_media_screen.dart';
 import '../../features/home_feed/feed_screen.dart';
 import '../../features/home_feed/feed_post_detail_screen.dart';
 import '../../features/home_feed/saved_status_library_screen.dart';
-import '../../features/home_feed/status_promotion_api.dart';
 import '../../core/status_audio_focus.dart';
 import '../../state/session_state.dart';
 import '../../state/agent_directory_state.dart';
-import '../profile/masana_profile_screen.dart';
-import '../profile/person_profile_screen.dart';
 import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_main_header.dart';
 
@@ -418,66 +414,6 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
         return null;
       }
     }
-
-    Future<void> openMasanaProfile(String characterId) async {
-      if (currentAccount() != account) return;
-      var agent = ref.read(agentDirectoryProvider).find(characterId);
-      if (agent == null) {
-        await ref.read(agentDirectoryProvider.notifier).refresh();
-        if (!context.mounted || currentAccount() != account) return;
-        agent = ref.read(agentDirectoryProvider).find(characterId);
-      }
-      final profileAgent = agent;
-      if (profileAgent == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This Masana profile is currently unavailable.'),
-          ),
-        );
-        return;
-      }
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => Consumer(
-            builder: (context, ref, _) {
-              final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account || !identical(active.tokens,credentials)) {
-                return _closedPrivateView('Home update');
-              }
-              return MasanaProfileScreen(agent: profileAgent);
-            },
-          ),
-        ),
-      );
-    }
-
-    void openHumanProfile(String handle) {
-      if (currentAccount() != account) return;
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => Consumer(
-            builder: (context, ref, _) {
-              final active = ref.watch(sessionProvider);
-              if (active is! SessionSignedIn || active.user.id != account || !identical(active.tokens,credentials)) {
-                return _closedPrivateView('Home update');
-              }
-              return PersonProfileScreen(handle: handle);
-            },
-          ),
-        ),
-      );
-    }
-
-    final statusTips=StatusTipFlow(
-      dio:api.dio,accountId:account,
-      accessToken:api.accessToken??'',
-      currentAccountId:currentAccount,
-      store:SecureStatusTipStore(account),
-    );
-    final promotions=StatusPromotionApi(dio:api.dio,ownerAccount:account,
-      currentAccount:currentAccount,
-      accessToken:()async=>api.accessToken,
-      journal:SecureStatusPromotionJournal(account));
 
     // Only the current signed-in account may obtain an original-media grant.
     final inlineMedia = AccountBoundFeedMediaApi(
