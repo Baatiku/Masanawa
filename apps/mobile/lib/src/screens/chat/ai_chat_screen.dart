@@ -293,7 +293,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           (item) => !item.isUser && !item.deleted).toList();
         if (latestReplies.isNotEmpty) {
           final start = latestReplies.length - thread.unread;
-          _initialUnreadMarkerId = latestReplies[start.clamp(0, latestReplies.length - 1)].id;
+          _initialUnreadMarkerId = latestReplies[start.clamp(0, latestReplies.length - 1).toInt()].id;
         }
       }
       if (draft.isNotEmpty && _input.text.isEmpty) {
@@ -323,7 +323,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           if (anchorKey != null) {
             Scrollable.ensureVisible(anchorKey,
               duration: Duration.zero,
-              alignment: thread.scrollAnchorFraction.clamp(0.0, 1.0));
+              alignment: thread.scrollAnchorFraction.clamp(0.0, 1.0).toDouble());
           }
         });
       }
