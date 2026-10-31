@@ -940,6 +940,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             alignment: WrapAlignment.center,
             children: [
               _AttachOption(
+                subtitle: 'Take photo',
                 icon: Icons.camera_alt_rounded,
                 gradient: const LinearGradient(
                   colors: [MasanawaFeatureColors.instagramPink, MasanawaFeatureColors.instagramRed],
@@ -951,6 +952,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 },
               ),
               _AttachOption(
+                subtitle: 'Up to 8 photos',
                 icon: Icons.photo_library_rounded,
                 gradient: const LinearGradient(
                   colors: [MasanawaFeatureColors.instagramViolet, MasanawaFeatureColors.instagramBlue],
@@ -962,6 +964,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 },
               ),
               _AttachOption(
+                subtitle: 'Choose audio',
                 icon: Icons.headphones_rounded,
                 gradient: const LinearGradient(
                   colors: [MasanawaFeatureColors.warmCoral, MasanawaFeatureColors.warmPeach],
@@ -3039,12 +3042,14 @@ class _AttachOption extends StatelessWidget {
     required this.icon,
     required this.gradient,
     required this.label,
+    required this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
   final Gradient gradient;
   final String label;
+  final String subtitle;
   final VoidCallback onTap;
 
   @override
@@ -3066,7 +3071,7 @@ class _AttachOption extends StatelessWidget {
                   u.brand.withValues(alpha: .16),
                   u.brand.withValues(alpha: .07),
                 ]),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(icon, color: u.brandStrong, size: 25),
             ),
@@ -3079,6 +3084,9 @@ class _AttachOption extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 2),
+            Text(subtitle, style: TextStyle(color: u.textMuted,
+              fontSize: 10.5), textAlign: TextAlign.center),
           ],
         ),
       ),
