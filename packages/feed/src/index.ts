@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 
 export type PostKind = "text"|"image"|"audio";
 export type FeedMode = "for_you"|"following"|"mine";
@@ -91,8 +92,12 @@ export class FeedService {
     search.length<2||Buffer.byteLength(search,"utf8")>80))throw new FeedError(422,"invalid_search");
    validateFilters(filters);
    const scoped=filters!==undefined&&Object.values(filters).some(x=>x!==undefined);
-   const scope=scoped?JSON.stringify({mode,authorMasanaId:authorMasanaId??null,
-     search:search??null,source:filters?.source??null,from:filters?.from??null,to:filters?.to??null}):'';
+   // A cursor must not be usable on another account/tenant or query scope;
+   // hash the context so IDs and private search text are not encoded in it.
+   const scope=scoped?createHash('sha256').update(JSON.stringify({tenant,viewer,mode,
+     authorMasanaId:authorMasanaId??null,search:search??null,
+     source:filters?.source??null,from:filters?.from??null,to:filters?.to??null}))
+     .digest('hex'):'';
    const after=cursor?(scoped?filteredCursor(cursor,scope):
      search===undefined?decodeCursor(cursor):searchCursor(cursor,search,mode)):null;
   // Filter at the underlying SQL cursor query, not after pagination.

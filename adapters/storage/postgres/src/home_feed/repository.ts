@@ -400,7 +400,8 @@ export class PgHomeFeedRepository {
   }
   async listCommentReports(tenant:string){
    const rows=await this.pool.query(`SELECT r.id::text,r.comment_id::text,r.reason,r.state,
-      r.created_at,r.content_revision,c.revision<>r.content_revision AS content_changed
+      r.created_at,r.content_revision,c.revision<>r.content_revision AS content_changed,
+      c.post_id::text,c.state AS comment_state,c.body AS comment_body,c.edited_at
       FROM feed.comment_reports r JOIN feed.comments c ON c.tenant_id=r.tenant_id
        AND c.id=r.comment_id WHERE r.tenant_id=$1 AND r.state='open'
       ORDER BY r.created_at,r.id LIMIT 50`,[tenant]);

@@ -187,6 +187,8 @@ describe('SF-FB native feed filters and comment conversations',()=>{
   await service.list('tenant','fan','for_you',first.nextCursor!,undefined,'river',filters);
   await expect(service.list('tenant','fan','for_you',first.nextCursor!,undefined,'river',
    {...filters,source:'x'})).rejects.toMatchObject({code:'invalid_cursor'});
+  await expect(service.list('tenant','other_fan','for_you',first.nextCursor!,undefined,'river',filters))
+   .rejects.toMatchObject({code:'invalid_cursor'});
   await expect(service.list('tenant','fan','for_you',undefined,undefined,undefined,
    {from:'2026-02-30'})).rejects.toMatchObject({code:'invalid_feed_date'});
   await expect(service.list('tenant','fan','for_you',undefined,undefined,undefined,

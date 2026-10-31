@@ -67,12 +67,13 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
  afterAll(async()=>{await isolated?.close();});
  it('SF-FB PG18 preserves native threaded reactions, CAS edits, reports, and removed parent tombstones',async()=>{
   const pool=isolated.pool,t='tenant_conversations';
-  await pool.query(`INSERT INTO identity.characters VALUES($1,'masana_one','active');
-    INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES($1,'masana_one','platform');
-    INSERT INTO masana.character_revisions VALUES($1,'masana_one','approved','{"displayName":"Teacher"}'::jsonb);
-    INSERT INTO identity.users(tenant_id,user_id,state) VALUES($1,'fan_one','active'),($1,'fan_two','active');
-    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
-      VALUES($1,'fan_one','comment_one','Comment One'),($1,'fan_two','comment_two','Comment Two');`,[t]);
+  await pool.query("INSERT INTO identity.characters VALUES($1,'masana_one','active')",[t]);
+  await pool.query("INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES($1,'masana_one','platform')",[t]);
+  await pool.query(`INSERT INTO masana.character_revisions VALUES
+    ($1,'masana_one','approved','{"displayName":"Teacher"}'::jsonb)`,[t]);
+  await pool.query("INSERT INTO identity.users(tenant_id,user_id,state) VALUES($1,'fan_one','active'),($1,'fan_two','active')",[t]);
+  await pool.query(`INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+    VALUES($1,'fan_one','comment_one','Comment One'),($1,'fan_two','comment_two','Comment Two')`,[t]);
   const created=await pool.query(`INSERT INTO feed.posts(tenant_id,author_masana_id,kind,body,idempotency_key,published_by,
     source_provenance,published_at) VALUES($1,'masana_one','text','Official approved discussion',
     'conversation-post-001','masana_one',
@@ -127,6 +128,11 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
     {source:'facebook',from:'2026-10-15',to:'2026-10-15'})).items).toHaveLength(1);
   expect((await s.list(t,'fan_two','for_you',undefined,undefined,undefined,
     {source:'x'})).items).toHaveLength(0);
+  for(let n=0;n<7;n++){
+    await repo.comment(t,'fan_one',id,`A distinct discussion ${n}`,`conversation-rate-${n}`,false);
+  }
+  await expect(repo.comment(t,'fan_one',id,'Burst exceeds limit','conversation-rate-too-many',false))
+    .rejects.toMatchObject({status:429,code:'comment_rate_limited'});
  });
  it("ST0/ST4 pages microsecond ties through service cursors on real PG18",async()=>{
   const pool=isolated.pool;

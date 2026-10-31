@@ -147,10 +147,15 @@ void main(){
    expect(order,'oldest');
    await tester.tap(find.text('Reply'));
    await tester.pumpAndSettle();
+   expect(find.text('Replying to comment'),findsOneWidget);
    await tester.enterText(find.byType(TextField),'Follow-up question');
+   await tester.pump();
+   expect(tester.widget<IconButton>(find.ancestor(
+     of:find.byTooltip('Send'),matching:find.byType(IconButton)).first)
+     .onPressed,isNotNull);
    await tester.tap(find.byTooltip('Send'));
    await tester.pumpAndSettle();
-   expect(reply,root.id);expect(key,startsWith('c22-'));
+   expect(key,startsWith('c22-'));expect(reply,root.id);
    expect(find.text('Publish'),findsNothing);
  });
  testWidgets('C22 does not show old account content when switching',(tester)async{

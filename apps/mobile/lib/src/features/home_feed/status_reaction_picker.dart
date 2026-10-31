@@ -23,7 +23,7 @@ Future<String?> showStatusReactionPicker(
       PopupMenuItem<String>(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Builder(builder: (menuContext) => SizedBox(
-          width: 332,
+          width: (overlay.size.width-48).clamp(180.0,332.0).toDouble(),
           child: SingleChildScrollView(scrollDirection:Axis.horizontal,
             child:Row(mainAxisSize:MainAxisSize.min,children: [
             for (final kind in FeedPost.reactionKinds)

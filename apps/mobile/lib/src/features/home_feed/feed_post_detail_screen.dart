@@ -221,6 +221,38 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
       });
     }
   }
+  Future<void> reloadCommentsOnly({String? revealParent}) async {
+    final p=post;
+    if(p==null||!widget.enabled)return;
+    final ticket=generation;
+    try{
+      final api=widget.engagementApi;
+      final page=api is CommentConversationApi
+        ? await (api as CommentConversationApi).threadPage(p.id,sort,scope:'roots')
+        : await widget.loadThread(p.id,sort);
+      if(!mounted||ticket!=generation)return;
+      setState((){
+        comments=page;pageError=null;
+        hasMore=(widget.loadMoreThread!=null||api is CommentConversationApi)&&page.length>=30;
+        commentCursor=page.isEmpty?null:page.last.id;
+      });
+      if(revealParent!=null&&api is CommentConversationApi){
+        for(final root in page){
+          if(root.id==revealParent){
+            setState((){expandedReplies.remove(revealParent);replies.remove(revealParent);});
+            await expandReplies(root);
+            break;
+          }
+        }
+      }
+    }on DioException catch(e){
+      if(!mounted||ticket!=generation)return;
+      if(const [401,403,404,410].contains(e.response?.statusCode)){
+        setState((){denied=true;post=null;comments=[];replies.clear();});
+      }else{setState(()=>pageError=t('Could not refresh comments. Retry.','An kasa sabunta sharhi.'));}
+    }catch(_){if(mounted&&ticket==generation)setState(()=>
+      pageError=t('Could not refresh comments. Retry.','An kasa sabunta sharhi.'));}
+  }
   Future<void> changeSort(String next)async{
     final p=post;
     if(p==null||loading||next==sort)return;
@@ -253,7 +285,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
       if(!mounted||ticket!=generation)return;
       input.clear();pendingBody=null;pendingParent=null;pendingKey=null;replyTo=null;
       setState(()=>sending=false);
-      await refresh();
+      await reloadCommentsOnly(revealParent:parent);
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:
         Text(t('Sent. Review may be required.','An aika. Ana iya duba sharhin.'))));
     }on DioException catch(e){
@@ -336,7 +368,7 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
       if(!mounted||ticket!=generation)return;
       if(action.startsWith('report:'))ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Report submitted for review.')));
-      else await refresh();
+      else await reloadCommentsOnly(revealParent:c.parentId);
     }catch(_){if(mounted&&ticket==generation)ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content:Text(t('Action not confirmed. Try again.','Ba a tabbatar ba. Sake gwadawa.'))));}
     finally{if(mounted&&ticket==generation)setState(()=>writingComments.remove(c.id));}

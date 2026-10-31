@@ -132,10 +132,13 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
   if(!o.service.reportComment)return rep.code(503).send({code:'comment_reports_unavailable'});
   return o.service.reportComment(member(actor),str(object(req.params).id),str(object(req.body).reason));
  }));
- app.get('/v1/admin/feed/comment-reports',async(req,rep)=>run(req,rep,async({actor})=>{
+ app.get('/v1/admin/feed/comment-reports',async(req,rep)=>{
+  rep.header('Cache-Control','private, no-store');
+  return run(req,rep,async({actor})=>{
   if(!o.service.commentReports)return rep.code(503).send({code:'comment_reports_unavailable'});
   return o.service.commentReports(member(actor));
- }));
+  });
+ });
  app.put('/v1/admin/feed/comment-reports/:id',async(req,rep)=>run(req,rep,async({actor})=>{
   const state=object(req.body).state;
   if(state!=='reviewed'&&state!=='dismissed')return rep.code(422).send({code:'invalid_report_resolution'});

@@ -336,12 +336,13 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
 
   Future<void> checkNewUpdates() async {
     if(!mounted||!widget.enabled||loading||items.isEmpty||
-       fetchingMore||newerPage!=null)return;
+       fetchingMore||newerPage!=null||ModalRoute.of(context)?.isCurrent==false)return;
     final ticket=generation,firstId=items.first.id;
     try{
       final page=await listCurrent();
       if(!mounted||ticket!=generation||items.isEmpty||items.first.id!=firstId)return;
-      if(page.items.any((p)=>p.id==firstId)&&page.items.first.id!=firstId){
+      if(page.items.isNotEmpty&&page.items.first.id!=firstId&&
+         page.items.first.publishedAt.isAfter(items.first.publishedAt)){
         setState(()=>newerPage=page);
       }
     }catch(_){/* Freshness checks are optional, never replace visible content. */}
@@ -365,7 +366,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             ListTile(leading:const Icon(Icons.date_range_outlined),
               title:Text(range==null?'Any date':'${MaterialLocalizations.of(ctx).formatMediumDate(range!.start)} – ${MaterialLocalizations.of(ctx).formatMediumDate(range!.end)}'),
               onTap:() async {
-                final picked=await showDateRangePicker(context:ctx,firstDate:DateTime(2020),
+                final picked=await showDateRangePicker(context:ctx,firstDate:DateTime(2004),
                   lastDate:DateTime.now(),initialDateRange:range);
                 if(picked!=null)update(()=>range=picked);
               }),
@@ -777,8 +778,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         if(newerPage!=null)MaterialBanner(
           content:Text(t('New official updates are available','Akwai sabbin labarai')),
           actions:[TextButton(onPressed:(){setState(()=>newerPage=null);refresh();
-            if(scrollController.hasClients)scrollController.animateTo(0,
-              duration:const Duration(milliseconds:220),curve:Curves.easeOut);},
+            if(scrollController.hasClients){
+              if(MediaQuery.of(context).disableAnimations){scrollController.jumpTo(0);}
+              else{scrollController.animateTo(0,
+                duration:const Duration(milliseconds:220),curve:Curves.easeOut);}
+            }},
             child:Text(t('Show updates','Nuna sabbi')))]),
         // The real Home shell already has its wordmark and expandable Search.
         // Embedded/standalone feeds may still need their own compact search.
