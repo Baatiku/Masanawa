@@ -11,7 +11,7 @@ export interface Post {source?:{platform:'x'|'facebook';url:string;originalPubli
  verifiedViewCount?:number;promotionDeliveredViews?:number;promotionActive?:boolean;destinationUrl?:string|null;shareEarnEligible?:boolean;boostEligible?:boolean;
  viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>;
  news?:{id:string;name:string;title:string;summary:string;url:string;verified:boolean;logoUrl?:string|null};
- author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}|{type:"publisher";id:string;displayName:string}
+ author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}|{type:"publisher";id:string;displayName:string}}
 export interface Comment {id:string;postId:string;body:string;state:"pending"|"visible"|"removed";createdAt:string;parentId?:string|null;
  author?:{type:"human";id:string;handle:string;displayName:string}|null;
  revision?:number;editedAt?:string|null;replyCount?:number;viewerReaction?:ReactionKind|null;
