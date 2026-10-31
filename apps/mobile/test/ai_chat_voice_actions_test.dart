@@ -61,6 +61,23 @@ class _VoiceChats extends _Chats {
    attachment:const ChatAttachment(kind:'voice',path:'/private/agent.m4a',durationMs:95000,sizeBytes:42,waveform:[.2,.6,.4,.8,.3])),
  ])});
 }
+class _TextChats extends _Chats {
+ @override AiChatState build()=>AiChatState(threads:{'agent':ChatThread(characterId:'agent',messages:[
+  AiChatMessage(id:'reaction-target',isUser:true,text:'A message to react to',
+    createdAt:DateTime.now(),deliveryStatus:'delivered'),
+ ])});
+}
+class _UnreadChats extends _Chats {
+ @override AiChatState build()=>AiChatState(threads:{
+  'agent':ChatThread(characterId:'agent',unread:1,messages:[
+    AiChatMessage(id:'unread-user',isUser:true,text:'Hello',
+      createdAt:DateTime(2026,10,31,8),deliveryStatus:'delivered'),
+    AiChatMessage(id:'unread-agent',isUser:false,text:'New message',
+      createdAt:DateTime(2026,10,31,8,1),deliveryStatus:'delivered'),
+  ]),
+ });
+}
+
 class _Directory extends AgentDirectoryController {
  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(characterId:'agent',characterVersionId:'v1',displayName:'Amina',roleLabel:'AI',about:'',presence:AgentPresence.available,supportAgent:true)]);
  @override Future<void> refresh() async {}
@@ -86,7 +103,47 @@ class _Wallet extends WalletController {
  @override Future<void> refresh() async {}
 }
 void main() {
+ testWidgets('incoming unread boundary appears before the first new AI reply',
+     (tester) async {
+   await tester.pumpWidget(ProviderScope(overrides:[
+     aiChatProvider.overrideWith(_UnreadChats.new),
+     agentDirectoryProvider.overrideWith(_Directory.new),
+     sessionProvider.overrideWith(_Session.new),
+     walletProvider.overrideWith(_Wallet.new),
+   ], child: MaterialApp(
+     theme: buildMasanawaTheme(brightness: Brightness.light),
+     home: const AiChatScreen(characterId: 'agent'))));
+   await tester.pumpAndSettle();
+   expect(find.text('New replies'), findsOneWidget);
+   expect(tester.takeException(), isNull);
+ });
+
+
  setUp(()=>SharedPreferences.setMockInitialValues({}));
+ testWidgets('reaction menu exposes separate 44dp choices at phone width', (tester) async {
+  tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;
+  addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(ProviderScope(overrides:[
+    aiChatProvider.overrideWith(_TextChats.new),
+    agentDirectoryProvider.overrideWith(_Directory.new),
+    sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),
+  ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
+    home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  // Text selection owns long-press gestures over text. Invoke the painted
+  // bubble action to exercise the reaction menu's independent touch targets.
+  final bubbleGestures=tester.widgetList<GestureDetector>(find.ancestor(
+    of:find.text('A message to react to'),matching:find.byType(GestureDetector)));
+  bubbleGestures.firstWhere((gesture)=>gesture.onLongPress!=null).onLongPress!();
+  await tester.pumpAndSettle();
+  expect(find.text('Reply'),findsOneWidget);
+  final like=find.bySemanticsLabel('React with 👍');
+  expect(like, findsOneWidget);
+  expect(tester.getSize(like).width, greaterThanOrEqualTo(44));
+  expect(tester.getSize(like).height, greaterThanOrEqualTo(44));
+  expect(find.bySemanticsLabel('More reactions'), findsOneWidget);
+  expect(tester.takeException(),isNull);
+ });
  testWidgets('direct official chat visibly identifies the AI simulation', (tester) async {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_OfficialDirectory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
@@ -139,6 +196,7 @@ void main() {
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
   expect(find.text('Recording voice note'),findsOneWidget);
   expect(callPermissionRequests,0);
+  await tester.tap(find.byTooltip('Stop & review'));await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsLabel('Send voice note'));await tester.pumpAndSettle();
   expect(chats.sent,hasLength(1));expect(chats.sent.single.kind,'voice');expect(recorder.retained,true);
   expect(find.text('Recording voice note'),findsNothing);
@@ -164,7 +222,9 @@ void main() {
   final recorder=_Recorder();
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:MediaQuery(data:const MediaQueryData(textScaler:TextScaler.linear(2)),child:const AiChatScreen(characterId:'agent')))));
   await tester.pumpAndSettle();
-  expect(find.byTooltip('Camera'),findsOneWidget);
+  // Small screens keep camera in Attach so the text field stays usable at 2x.
+  expect(find.byTooltip('Camera'),findsNothing);
+  expect(find.byTooltip('Attach'),findsOneWidget);
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
   expect(find.byTooltip('Stop & review'),findsOneWidget);
   expect(find.byTooltip('Cancel recording'),findsOneWidget);
@@ -180,6 +240,7 @@ void main() {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(()=>chats),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('Stop & review'));await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsLabel('Send voice note'));await tester.pump();await tester.pump();
   expect(chats.sent,hasLength(1));
   expect(find.text('Recording voice note'),findsNothing);

@@ -150,6 +150,63 @@ class FakeInbox implements MasanaInboxSearchAccess {
   }
 }
 
+class FakeControlsInbox extends FakeInbox implements MasanaInboxControlsAccess {
+  final controls = <String>[];
+  final remoteArchived = <MasanaInboxSearchItem>[];
+
+  @override
+  Future<MasanaInboxPage> searchPage({required String bearer,
+      required String query, String? cursor, int limit = 15}) async {
+    final page = await super.searchPage(
+      bearer: bearer, query: query, cursor: cursor, limit: limit);
+    return MasanaInboxPage(
+      items: page.items.where((item) => !item.archived).toList(),
+      nextCursor: page.nextCursor);
+  }
+
+  @override
+  Future<MasanaInboxPage> archivedPage({required String bearer,
+      String query = '', String? cursor, int limit = 15}) async {
+    calls.add('archived:$bearer:$query:$cursor');
+    return MasanaInboxPage(items: remoteArchived.where((row) =>
+      row.archived && ('${row.displayName} ${row.customTitle ?? ''}'
+        .toLowerCase().contains(query.toLowerCase()))).toList(),
+      nextCursor: null);
+  }
+
+  @override
+  Future<int> setArchived({required String bearer, required String characterId,
+      required bool archived, required int expectedRevision}) async {
+    controls.add('archive:$bearer:$characterId:$archived:$expectedRevision');
+    final row = responses['']!.firstWhere((item) =>
+      item.characterId == characterId);
+    final updated = row.withControls(archived: archived,
+      revision: expectedRevision + 1);
+    responses[''] = [
+      for (final item in responses['']!)
+        if (item.characterId == characterId) updated else item,
+    ];
+    remoteArchived.removeWhere((item) => item.characterId == characterId);
+    if (archived) remoteArchived.add(updated);
+    return updated.revision;
+  }
+
+  @override
+  Future<int> setTitle({required String bearer, required String characterId,
+      required String? title, required int expectedRevision}) async {
+    controls.add('title:$bearer:$characterId:$title:$expectedRevision');
+    final row = responses['']!.firstWhere((item) =>
+      item.characterId == characterId);
+    final updated = row.withControls(customTitle: title,
+      changeTitle: true, revision: expectedRevision + 1);
+    responses[''] = [
+      for (final item in responses['']!)
+        if (item.characterId == characterId) updated else item,
+    ];
+    return updated.revision;
+  }
+}
+
 void main() {
   Future<ProviderContainer> mount(WidgetTester tester, FakeInbox inbox,
       {bool narrowRtl = false}) async {
@@ -188,10 +245,10 @@ void main() {
     );
   }
 
-  testWidgets('no startup fetch; server search, pin, read and open', (tester) async {
+  testWidgets('canonical startup fetch, server search, pin, read and open', (tester) async {
     final inbox = FakeInbox();
     await mount(tester, inbox);
-    expect(inbox.calls, isEmpty);
+    expect(inbox.calls, contains('old-fan-token:'));
     expect(find.text('Local history'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Astronomy');
     await tester.pump(const Duration(milliseconds: 380));
@@ -207,6 +264,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(inbox.reads.single, contains('old-fan-token:'));
     expect(find.textContaining('Opened character_'), findsOneWidget);
+  });
+
+  testWidgets('authorized local row rename and archive round-trip preserve draft',
+      (tester) async {
+    const id = 'character_00000000-0000-0000-0000-000000000001';
+    final inbox = FakeControlsInbox()..responses[''] = [
+      const MasanaInboxSearchItem(characterId: id,
+        displayName: 'Gwana', profession: 'Teacher',
+        lastMessage: 'Conversation preview', pinned: true,
+        unreadCount: 8, revision: 2, customTitle: 'Account title'),
+    ];
+    await mount(tester, inbox);
+    expect(find.text('Account title'), findsOneWidget);
+    expect(find.text('8'), findsOneWidget);
+
+    await tester.longPress(find.text('Account title'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Edited title');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(inbox.controls, contains('title:old-fan-token:$id:Edited title:2'));
+    expect(find.text('Edited title'), findsOneWidget);
+
+    await tester.longPress(find.text('Edited title'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive conversation'));
+    await tester.pumpAndSettle();
+    expect(inbox.controls.any((action) => action.contains('archive:') &&
+        action.contains(':true:3')), isTrue);
+    expect(find.text('Edited title'), findsNothing);
+
+    await tester.tap(find.byTooltip('Chats options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archived chats'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edited title'), findsOneWidget);
+    await tester.tap(find.byTooltip('Unarchive account conversation'));
+    await tester.pumpAndSettle();
+    expect(inbox.controls.any((action) => action.contains(':false:4')), isTrue);
+  });
+
+  testWidgets('remote-only inbox displays unread and pin together on first open',
+      (tester) async {
+    final inbox = FakeInbox()..responses[''] = [
+      const MasanaInboxSearchItem(
+        characterId: 'character_00000000-0000-0000-0000-000000000099',
+        displayName: 'Astronomy Masana', profession: 'Scientist',
+        lastMessage: 'Stars are bright', pinned: true,
+        unreadCount: 12, revision: 4),
+    ];
+    await mount(tester, inbox);
+    expect(inbox.calls, contains('old-fan-token:'));
+    expect(find.text('Astronomy Masana'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.byTooltip('Unpin server conversation'), findsOneWidget);
   });
 
   testWidgets('out-of-order server search cannot replace later query', (tester) async {
@@ -233,7 +347,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 380));
     await tester.pump();
     expect(find.text('Astronomy Masana'), findsOneWidget);
-    expect(inbox.calls, ['old-fan-token:astronomy']);
+    expect(inbox.calls, containsAll(['old-fan-token:', 'old-fan-token:astronomy']));
     (container.read(sessionProvider.notifier) as TestSession)
         .sameUserReauthentication();
     await tester.pumpAndSettle();
@@ -244,7 +358,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'astronomy');
     await tester.pump(const Duration(milliseconds: 380));
     await tester.pump();
-    expect(inbox.calls, hasLength(2));
+    expect(inbox.calls.where((call) => call.endsWith(':astronomy')), hasLength(2));
     expect(find.text('Astronomy Masana'), findsOneWidget);
     expect(find.byType(ChoiceChip), findsNothing);
     expect(tester.takeException(), isNull);
@@ -340,6 +454,7 @@ void main() {
     final container = await mount(tester, inbox);
     (container.read(aiChatProvider.notifier) as TestChats).goOffline();
     await tester.pump();
+    inbox.calls.clear();
     await tester.enterText(find.byType(TextField), 'history');
     await tester.pump(const Duration(milliseconds: 380));
     expect(find.text('Local history'), findsOneWidget);
@@ -365,7 +480,7 @@ void main() {
     expect(find.text('Astronomy Masana'), findsNothing);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
     expect(inbox.calls, contains('old-fan-token:astronomy'));
-    expect(inbox.calls.any((c) => c.startsWith('new-fan-token:')), isFalse);
+    expect(inbox.calls.any((c) => c == 'new-fan-token:astronomy'), isFalse);
   });
 
   testWidgets('server unavailable preserves saved conversation and retry', (tester) async {
@@ -375,8 +490,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 380));
     await tester.pump();
     expect(find.text('Local history'), findsOneWidget);
-    expect(find.textContaining('Server search unavailable'), findsOneWidget);
-    expect(find.byTooltip('Retry server search'), findsOneWidget);
+    expect(find.textContaining('Conversation sync unavailable'), findsOneWidget);
+    expect(find.byTooltip('Retry conversation sync'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('paged search keeps one list, old rows on retry and stable scroll', (tester) async {

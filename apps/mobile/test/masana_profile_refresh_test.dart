@@ -178,7 +178,7 @@ void main() {
       apiClientProvider.overrideWithValue(client()),
     ], child: const MaterialApp(home: MasanaListScreen())));
     await tester.pumpAndSettle();
-    expect(find.text('Search Masana'), findsOneWidget);
+    expect(find.text('Search Masana profiles'), findsOneWidget);
     expect(find.text('Create Masana'), findsNothing);
     expect(find.text('Humans'), findsNothing);
     expect(find.byType(FloatingActionButton), findsNothing);

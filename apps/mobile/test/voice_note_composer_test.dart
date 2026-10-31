@@ -31,7 +31,7 @@ void main() {
       isOwnerCurrent:()=>true,onSend:(note) async {sent.add(note);return true;}))));
   await tester.pumpAndSettle();
   expect(find.text('Play voice note'),findsNothing);
-  await tester.tap(find.text('Stop'));
+  await tester.tap(find.text('Stop & review'));
   await tester.pumpAndSettle();
   expect(find.text('Play voice note'),findsOneWidget);
   await tester.tap(find.text('Play voice note'));
@@ -51,7 +51,7 @@ void main() {
     home:Scaffold(body:VoiceNoteComposer(recorder:recorder,previewPlayer:player,
       isOwnerCurrent:()=>true,onSend:(_) async {sent=true;return true;}))));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Stop'));await tester.pumpAndSettle();
+  await tester.tap(find.text('Stop & review'));await tester.pumpAndSettle();
   await tester.tap(find.text('Play voice note'));await tester.pumpAndSettle();
   expect(find.textContaining('recording could not be played'),findsOneWidget);
   expect(sent,false);
@@ -64,6 +64,7 @@ void main() {
    await tester.pumpWidget(MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:Builder(builder:(context)=>MediaQuery(data:MediaQuery.of(context).copyWith(textScaler:TextScaler.linear(scale)),child:Scaffold(body:VoiceNoteComposer(recorder:recorder,isOwnerCurrent:()=>true,onSend:(note) async {sent.add(note);return true;}))))));
    await tester.pumpAndSettle();
    expect(find.text('Recording voice note'),findsOneWidget);
+  await tester.tap(find.text('Stop & review'));await tester.pumpAndSettle();
    await tester.tap(find.text('Send voice note'));await tester.pumpAndSettle();
    expect(sent,hasLength(1));expect(sent.single.kind,'voice');expect(sent.single.path,endsWith('.m4a'));
    expect(tester.takeException(),isNull);
@@ -78,7 +79,9 @@ void main() {
  testWidgets('changed account cannot submit audio recorded by previous account', (tester) async {
   final recorder=_Recorder();var current=true;var sent=false;
   await tester.pumpWidget(MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:Scaffold(body:VoiceNoteComposer(recorder:recorder,isOwnerCurrent:()=>current,onSend:(_) async {sent=true;return true;}))));
-  await tester.pumpAndSettle();current=false;
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Stop & review'));await tester.pumpAndSettle();
+  current=false;
   await tester.tap(find.text('Send voice note'));await tester.pumpAndSettle();
   expect(sent,false);expect(recorder.cancelled,true);
  });

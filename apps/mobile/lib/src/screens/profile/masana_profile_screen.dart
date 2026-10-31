@@ -132,8 +132,6 @@ class _MasanaProfileScreenState extends ConsumerState<MasanaProfileScreen> {
   void _openChat({String? starter}) {
     if (!_sameAccount) return;
     final id = widget.agent.characterId;
-    final current = ref.read(agentDirectoryProvider).find(id) ?? widget.agent;
-    ref.read(aiChatProvider.notifier).seedGreeting(id, current.greeting);
     if (starter != null) {
       ref.read(aiChatProvider.notifier).setDraft(id, starter);
     }

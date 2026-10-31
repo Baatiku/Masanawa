@@ -15,6 +15,8 @@ class MasanaInboxSearchItem {
     required this.unreadCount,
     required this.revision,
     this.lastActivityAt,
+    this.archived = false,
+    this.customTitle,
   });
 
   final String characterId;
@@ -24,6 +26,8 @@ class MasanaInboxSearchItem {
   final bool pinned;
   final int unreadCount;
   final int revision;
+  final bool archived;
+  final String? customTitle;
   /// Server-reported message activity, not pin/edit activity. Older servers
   /// may omit it; the UI then uses stable identity ordering.
   final DateTime? lastActivityAt;
@@ -36,9 +40,14 @@ class MasanaInboxSearchItem {
     final unread = data['unreadCount'];
     final revision = data['revision'];
     final rawActivity = data['lastActivityAt'];
+    final rawArchived = data['archived'];
+    final rawTitle = data['customTitle'];
     if (id is! String || !id.startsWith('character_') ||
         name is! String || name.trim().isEmpty ||
         profession is! String || pinned is! bool ||
+        (rawArchived != null && rawArchived is! bool) ||
+        (rawTitle != null && (rawTitle is! String ||
+          rawTitle.isEmpty || rawTitle.length > 80)) ||
         unread is! int || unread < 0 || revision is! int || revision < 0) {
       throw const FormatException('Invalid authorized inbox row');
     }
@@ -55,6 +64,8 @@ class MasanaInboxSearchItem {
       unreadCount: unread,
       revision: revision,
       lastActivityAt: activity,
+      archived: rawArchived == true,
+      customTitle: rawTitle is String ? rawTitle : null,
     );
   }
 
@@ -68,6 +79,19 @@ class MasanaInboxSearchItem {
         unreadCount: unreadCount,
         revision: version,
         lastActivityAt: lastActivityAt,
+        archived: archived,
+        customTitle: customTitle,
+      );
+
+  MasanaInboxSearchItem withControls({bool? archived,
+      String? customTitle, bool changeTitle = false, required int revision}) =>
+      MasanaInboxSearchItem(
+        characterId: characterId, displayName: displayName,
+        profession: profession, lastMessage: lastMessage,
+        pinned: pinned, unreadCount: unreadCount, revision: revision,
+        lastActivityAt: lastActivityAt,
+        archived: archived ?? this.archived,
+        customTitle: changeTitle ? customTitle : this.customTitle,
       );
 }
 
@@ -102,9 +126,25 @@ abstract class MasanaInboxSearchAccess {
   });
 }
 
+/// New server-owned preferences; old injected search fakes remain compatible.
+abstract class MasanaInboxControlsAccess {
+  Future<MasanaInboxPage> archivedPage({
+    required String bearer, String query = '', String? cursor, int limit = 15,
+  });
+  Future<int> setArchived({
+    required String bearer, required String characterId,
+    required bool archived, required int expectedRevision,
+  });
+  Future<int> setTitle({
+    required String bearer, required String characterId,
+    required String? title, required int expectedRevision,
+  });
+}
+
 /// This deliberately does not share ApiClient's mutable refresh interceptor.
 /// AF08 must qualify session rotation before such requests can be retried.
-class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
+class DioMasanaInboxSearch implements MasanaInboxSearchAccess,
+    MasanaInboxControlsAccess {
   DioMasanaInboxSearch(Dio authenticatedClient)
       : _dio = Dio(authenticatedClient.options.copyWith(
           baseUrl: authenticatedClient.options.baseUrl.isEmpty
@@ -138,9 +178,20 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
     required String query,
     String? cursor,
     int limit = 15,
+  }) => _page(bearer: bearer, query: query, cursor: cursor, limit: limit);
+
+  @override
+  Future<MasanaInboxPage> archivedPage({
+    required String bearer, String query = '', String? cursor, int limit = 15,
+  }) => _page(bearer: bearer, query: query, cursor: cursor,
+      limit: limit, archived: true);
+
+  Future<MasanaInboxPage> _page({
+    required String bearer, required String query,
+    String? cursor, int limit = 15, bool archived = false,
   }) async {
     final term = query.trim();
-    if (term.isEmpty || term.length > 80 || limit < 1 || limit > 30 ||
+    if (term.length > 80 || limit < 1 || limit > 30 ||
         (cursor != null && (cursor.isEmpty || cursor.length > 1024 ||
             !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(cursor)))) {
       throw const FormatException('Invalid search query');
@@ -148,6 +199,7 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
     final response = await _dio.get<Map<String, dynamic>>(
       '/v1/chats',
       queryParameters: {'q': term, 'limit': limit,
+        if (archived) 'archived': 'true',
         if (cursor != null) 'cursor': cursor},
       options: _options(bearer),
     );
@@ -183,6 +235,45 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
       throw const FormatException('Invalid pin receipt');
     }
     return revision;
+  }
+
+  Future<int> _setControl({required String bearer,
+      required String characterId, required String field,
+      required Object? value, required int expectedRevision}) async {
+    if (!RegExp(r'^character_[0-9a-f-]{36}$', caseSensitive: false)
+        .hasMatch(characterId) || expectedRevision < 0 ||
+        expectedRevision >= 9007199254740991) {
+      throw const FormatException('Invalid conversation preference');
+    }
+    final result = await _dio.patch<Map<String, dynamic>>(
+      '/v1/chats/${Uri.encodeComponent(characterId)}',
+      data: {field: value, 'expectedRevision': expectedRevision},
+      options: _options(bearer),
+    );
+    final revision = result.data?['revision'];
+    if (revision is! int || revision <= expectedRevision) {
+      throw const FormatException('Invalid conversation preference receipt');
+    }
+    return revision;
+  }
+
+  @override
+  Future<int> setArchived({required String bearer,
+      required String characterId, required bool archived,
+      required int expectedRevision}) => _setControl(
+    bearer: bearer, characterId: characterId, field: 'archived',
+    value: archived, expectedRevision: expectedRevision);
+
+  @override
+  Future<int> setTitle({required String bearer,
+      required String characterId, required String? title,
+      required int expectedRevision}) {
+    if (title != null && (title.isEmpty || title.length > 80 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(title))) {
+      throw const FormatException('Invalid conversation title');
+    }
+    return _setControl(bearer: bearer, characterId: characterId,
+      field: 'title', value: title, expectedRevision: expectedRevision);
   }
 
   @override

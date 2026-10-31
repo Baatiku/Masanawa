@@ -26,6 +26,7 @@ import '../chat/shell_action_coordinator.dart';
 import '../chat/shell_action_journal.dart';
 import '../chat/shell_document.dart';
 import '../chat/shell_secure_storage.dart';
+import '../features/masana_chat/inbox_search.dart';
 import 'session_state.dart';
 import 'agent_directory_state.dart';
 
@@ -324,7 +325,8 @@ class AiChatMessage {
     isUser: json['isUser'] as bool? ?? false,
     text: json['text'] as String? ?? '',
     createdAt:
-        DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
     attachment: json['attachment'] == null
         ? null
         : ChatAttachment.fromJson(
@@ -390,6 +392,8 @@ class ChatThread {
     this.pinned = false,
     this.archived = false,
     this.scrollOffset = 0,
+    this.scrollAnchorMessageId,
+    this.scrollAnchorFraction = 0,
     this.draftAttachments = const [],
     this.draftVoice,
   }) : updatedAt = updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -405,6 +409,8 @@ class ChatThread {
   final bool pinned;
   final bool archived;
   final double scrollOffset;
+  final String? scrollAnchorMessageId;
+  final double scrollAnchorFraction;
   final List<ChatAttachment> draftAttachments;
   final ChatAttachment? draftVoice;
 
@@ -429,9 +435,12 @@ class ChatThread {
     String? agentRunId,
     String? draft,
     String? title,
+    bool clearTitle = false,
     bool? pinned,
     bool? archived,
     double? scrollOffset,
+    String? scrollAnchorMessageId,
+    double? scrollAnchorFraction,
     List<ChatAttachment>? draftAttachments,
     ChatAttachment? draftVoice,
     bool clearDraftVoice = false,
@@ -443,10 +452,12 @@ class ChatThread {
     characterSessionId: characterSessionId ?? this.characterSessionId,
     agentRunId: agentRunId ?? this.agentRunId,
     draft: draft ?? this.draft,
-    title: title ?? this.title,
+    title: clearTitle ? null : (title ?? this.title),
     pinned: pinned ?? this.pinned,
     archived: archived ?? this.archived,
     scrollOffset: scrollOffset ?? this.scrollOffset,
+    scrollAnchorMessageId: scrollAnchorMessageId ?? this.scrollAnchorMessageId,
+    scrollAnchorFraction: scrollAnchorFraction ?? this.scrollAnchorFraction,
     draftAttachments: draftAttachments ?? this.draftAttachments,
     draftVoice: clearDraftVoice ? null : (draftVoice ?? this.draftVoice),
   );
@@ -463,6 +474,8 @@ class ChatThread {
     if (pinned) 'pinned': true,
     if (archived) 'archived': true,
     if (scrollOffset > 0) 'scrollOffset': scrollOffset,
+    if (scrollAnchorMessageId != null) 'scrollAnchorMessageId': scrollAnchorMessageId,
+    if (scrollAnchorMessageId != null) 'scrollAnchorFraction': scrollAnchorFraction,
     if (draftAttachments.isNotEmpty)
       'draftAttachments': [for (final item in draftAttachments) item.toJson()],
     if (draftVoice != null) 'draftVoice': draftVoice!.toJson(),
@@ -486,6 +499,9 @@ class ChatThread {
       pinned: json['pinned'] as bool? ?? false,
       archived: json['archived'] as bool? ?? false,
       scrollOffset: (json['scrollOffset'] as num?)?.toDouble() ?? 0,
+      scrollAnchorMessageId: json['scrollAnchorMessageId'] as String?,
+      scrollAnchorFraction: ((json['scrollAnchorFraction'] as num?)?.toDouble() ?? 0)
+          .clamp(0.0, 1.0).toDouble(),
       draftAttachments: [
         for (final raw in (json['draftAttachments'] as List? ?? const []))
           if (raw is Map) ChatAttachment.fromJson(raw.cast<String, dynamic>()),
@@ -526,7 +542,8 @@ class AiChatState {
     return list;
   }
 
-  int get totalUnread => threads.values.fold(0, (sum, t) => sum + t.unread);
+  int get totalUnread => threads.values.where((t) => !t.archived)
+      .fold(0, (sum, t) => sum + t.unread);
 
   AiChatState copyWith({
     Map<String, ChatThread>? threads,
@@ -603,8 +620,47 @@ DownloadedChatMediaCleanup planDownloadedChatMediaCleanup(
   return DownloadedChatMediaCleanup(state.copyWith(threads: threads), paths);
 }
 
+/// Ephemeral per-authorization voice-note resume cursors. No media URI, audio
+/// content, or position is written to disk; a new account/auth epoch clears it.
+class VoicePlaybackResumeMemory {
+  String? _owner;
+  int _epoch = 0;
+  final Map<String, Duration> _positions = {};
+
+  void scopeTo(String? owner, int authorizationEpoch) {
+    if (owner == _owner && authorizationEpoch == _epoch) return;
+    _positions.clear();
+    _owner = owner;
+    _epoch = authorizationEpoch;
+  }
+
+  Duration positionFor(String messageKey) =>
+      _owner == null ? Duration.zero :
+      (_positions[messageKey] ?? Duration.zero);
+
+  void remember(String messageKey, Duration position) {
+    if (_owner == null || messageKey.isEmpty) return;
+    if (position <= Duration.zero) {
+      _positions.remove(messageKey);
+      return;
+    }
+    if (_positions.length >= 128 && !_positions.containsKey(messageKey)) {
+      _positions.remove(_positions.keys.first);
+    }
+    _positions.remove(messageKey);
+    _positions[messageKey] = position;
+  }
+
+  void clear() {
+    _positions.clear();
+    _owner = null;
+    _epoch = 0;
+  }
+}
+
 class AiChatController extends Notifier<AiChatState> {
   int _seq = 0;
+  final VoicePlaybackResumeMemory _voiceResume = VoicePlaybackResumeMemory();
   bool _disposed = false;
   final Map<String, AgentSessionBinding> _bindings = {};
   int _connectionGeneration = 0;
@@ -620,6 +676,7 @@ class AiChatController extends Notifier<AiChatState> {
   int _sessionAuthorizationEpoch = 0;
   Future<Directory?>? _documentsDirectoryFuture;
   Future<void> _previousCacheSave = Future<void>.value();
+  Timer? _draftSaveDebounce;
 
   @override
   AiChatState build() {
@@ -628,6 +685,7 @@ class AiChatController extends Notifier<AiChatState> {
     _cacheOwnerId =
         initialSession is SessionSignedIn ? initialSession.user.id : null;
     final initialOwner = _cacheOwnerId;
+    _voiceResume.scopeTo(initialOwner, _sessionAuthorizationEpoch);
     if (initialOwner != null && initialOwner.isNotEmpty) {
       // Local conversation state is useful immediately. Hydrate it before
       // starting another platform-channel dependency on slower devices.
@@ -639,7 +697,9 @@ class AiChatController extends Notifier<AiChatState> {
       scheduleMicrotask(_startConnectivityMonitoring);
     }
     ref.onDispose(() {
+      _voiceResume.clear();
       _disposed = true;
+      _draftSaveDebounce?.cancel();
       _connectivitySub?.cancel();
       for (final subscription in _eventSubscriptions.values) {
         unawaited(subscription.cancel());
@@ -651,6 +711,7 @@ class AiChatController extends Notifier<AiChatState> {
       final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
       final replaced = epoch != _sessionAuthorizationEpoch;
       _sessionAuthorizationEpoch = epoch;
+      _voiceResume.scopeTo(nextOwner, epoch);
       if (nextOwner == _cacheOwnerId) {
         if (replaced && nextOwner != null) {
           // Re-login fences old callbacks without erasing this account's data
@@ -723,8 +784,23 @@ class AiChatController extends Notifier<AiChatState> {
       openThreadId: characterId,
     );
     _save();
+    unawaited(_acknowledgeCanonicalRead(characterId));
     unawaited(_flushQueuedMessages());
     unawaited(syncFromServer(characterId));
+  }
+
+  Future<void> _acknowledgeCanonicalRead(String characterId) async {
+    if (!RegExp(r'^character_[0-9a-f-]{36}$', caseSensitive: false)
+        .hasMatch(characterId) || !state.online) return;
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    try {
+      await ref.read(masanaInboxSearchProvider).markRead(
+        bearer: session.tokens.accessToken, characterId: characterId);
+    } catch (_) { return; }
+    if (_disposed || _cacheOwnerId != session.user.id ||
+        epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
   }
 
   void closeThread() => state = state.copyWith(clearOpen: true);
@@ -808,6 +884,34 @@ class AiChatController extends Notifier<AiChatState> {
     } catch (_) {
       // A cached conversation remains usable while the canonical service is unavailable.
     }
+  }
+
+  /// Read older canonical turns using the existing owner-authorized cursor.
+  Future<int?> loadOlderHistory(String characterId) async {
+    final transport = _shellTransport;
+    final owner = _cacheOwnerId;
+    final ownerGeneration = _cacheGeneration;
+    final connection = _connectionGeneration;
+    final threadGeneration = _threadGenerations[characterId] ?? 0;
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (transport == null || owner == null || await _offlineNow()) return null;
+    final canonical = threadOf(characterId).messages
+        .where((m) => m.requestId != null && m.requestId!.isNotEmpty).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    if (canonical.isEmpty) return 0;
+    try {
+      final page = await transport.loadHistory(characterId, limit: 100,
+          before: canonical.first.createdAt.toUtc().toIso8601String());
+      if (_disposed || owner != _cacheOwnerId ||
+          ownerGeneration != _cacheGeneration ||
+          connection != _connectionGeneration ||
+          threadGeneration != (_threadGenerations[characterId] ?? 0) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) {
+        return null;
+      }
+      if (page.isNotEmpty) _mergeServerHistory(characterId, page);
+      return page.length;
+    } catch (_) { return null; }
   }
 
   Future<ChatAttachment> _cacheOneRemoteMedia(
@@ -1028,7 +1132,8 @@ class AiChatController extends Notifier<AiChatState> {
       final restored = AiChatMessage(
         id: existing?.id ?? 'server-${item.key}',
         isUser: item.direction == 'user',
-        text: item.text,
+        text: existing?.deleted == true ? ''
+            : existing?.editedAt != null ? existing!.text : item.text,
         createdAt: item.createdAt,
         attachment: existing?.attachment,
         attachments: existing?.attachments ?? const [],
@@ -1038,7 +1143,7 @@ class AiChatController extends Notifier<AiChatState> {
         reaction: existing?.reaction,
         editedAt: existing?.editedAt,
         deleted: existing?.deleted ?? false,
-        deliveryStatus: 'delivered',
+        deliveryStatus: existing?.deleted == true ? 'deleted' : 'delivered',
         requestId: item.requestId,
       );
       byKey[item.key] = restored;
@@ -2375,30 +2480,6 @@ class AiChatController extends Notifier<AiChatState> {
     await _save();
   }
 
-  void seedGreeting(String characterId, String? greeting) {
-    final text = greeting?.trim() ?? '';
-    if (text.isEmpty) return;
-    final thread = threadOf(characterId);
-    if (thread.messages.isNotEmpty) return;
-    state = state.copyWith(
-      threads: {
-        ...state.threads,
-        characterId: thread.copyWith(
-          messages: [
-            AiChatMessage(
-              id: _newId(),
-              isUser: false,
-              text: text,
-              createdAt: DateTime.now(),
-            ),
-          ],
-          updatedAt: DateTime.now(),
-        ),
-      },
-    );
-    _save();
-  }
-
   void injectScenario(
     String characterId, {
     required AgentMessagePart part,
@@ -2408,6 +2489,29 @@ class AiChatController extends Notifier<AiChatState> {
       throw StateError('Scenario injection is debug-only');
     }
     unawaited(_appendAi(characterId, text, parts: [part]));
+  }
+
+  /// Resume positions are local to the current signed-in authorization.
+  Duration rememberedVoicePosition(String messageKey) =>
+      _voiceResume.positionFor(messageKey);
+
+  void rememberVoicePosition(String messageKey, Duration position) =>
+      _voiceResume.remember(messageKey, position);
+
+  void setScrollViewportAnchor(String characterId, double offset,
+      {String? messageId, double fraction = 0}) {
+    final thread = threadOf(characterId);
+    final safe = offset.isFinite && offset > 0 ? offset : 0.0;
+    final relative = fraction.isFinite ? fraction.clamp(0.0, 1.0).toDouble() : 0.0;
+    if ((thread.scrollOffset - safe).abs() < 12 &&
+        thread.scrollAnchorMessageId == messageId &&
+        (thread.scrollAnchorFraction - relative).abs() < .03) return;
+    state = state.copyWith(threads: {
+      ...state.threads,
+      characterId: thread.copyWith(scrollOffset: safe,
+          scrollAnchorMessageId: messageId, scrollAnchorFraction: relative),
+    });
+    _save();
   }
 
   void setScrollOffset(String characterId, double offset) {
@@ -2455,10 +2559,14 @@ class AiChatController extends Notifier<AiChatState> {
 
   void setDraft(String characterId, String value) {
     final thread = threadOf(characterId);
+    if (thread.draft == value) return;
     state = state.copyWith(
       threads: {...state.threads, characterId: thread.copyWith(draft: value)},
     );
-    _save();
+    _draftSaveDebounce?.cancel();
+    _draftSaveDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!_disposed) unawaited(_save());
+    });
   }
 
   void reactToMessage(String characterId, String messageId, String? emoji) {
@@ -2489,6 +2597,21 @@ class AiChatController extends Notifier<AiChatState> {
     );
   }
 
+  void restoreDeletedMessages(String characterId, List<AiChatMessage> originals) {
+    final byId = {for (final message in originals) message.id: message};
+    final thread = threadOf(characterId);
+    state = state.copyWith(threads: {
+      ...state.threads,
+      characterId: thread.copyWith(messages: [
+        for (final message in thread.messages)
+          if (message.deleted && byId.containsKey(message.id))
+            byId[message.id]!
+          else message,
+      ]),
+    });
+    unawaited(_save());
+  }
+
   void renameThread(String characterId, String title) {
     final thread = threadOf(characterId);
     state = state.copyWith(
@@ -2514,6 +2637,24 @@ class AiChatController extends Notifier<AiChatState> {
       threads: {...state.threads, characterId: thread.copyWith(archived: !thread.archived)},
     );
     _save();
+  }
+
+  /// Server-owned preferences are applied idempotently without touching local
+  /// drafts, message edits, voice notes, or the immutable conversation cache.
+  void applyCanonicalControls(String characterId, {
+    required bool pinned, required bool archived, String? title,
+    bool setTitle = false,
+  }) {
+    final current = state.threads[characterId];
+    if (current == null || (current.pinned == pinned &&
+        current.archived == archived &&
+        (!setTitle || current.title == title))) return;
+    state = state.copyWith(threads: {
+      ...state.threads,
+      characterId: current.copyWith(pinned: pinned, archived: archived,
+        title: title, clearTitle: setTitle && title == null),
+    });
+    unawaited(_save());
   }
 
   void stopGeneration(String characterId) {
@@ -2822,6 +2963,7 @@ class AiChatController extends Notifier<AiChatState> {
     String? nextOwner,
     int generation,
   ) async {
+    _draftSaveDebounce?.cancel();
     _connectionGeneration++;
     final safeDrafts=<String,String>{
       for(final entry in state.threads.entries)

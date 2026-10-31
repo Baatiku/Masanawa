@@ -74,17 +74,15 @@ void main() {
     expect(thread.messages.first.text, 'hello there');
   });
 
-  test('server-configured greeting is seeded once', () async {
+  test('a new thread does not fabricate a Masana reply', () async {
     final container = _container();
     addTearDown(container.dispose);
     final notifier = container.read(aiChatProvider.notifier);
     await Future<void>.delayed(Duration.zero);
 
-    notifier.seedGreeting('character-1', 'Hello from the configured agent');
-    notifier.seedGreeting('character-1', 'This should not replace it');
+    notifier.openThread('character-1');
     final thread = container.read(aiChatProvider).threads['character-1']!;
-    expect(thread.messages, hasLength(1));
-    expect(thread.messages.single.text, 'Hello from the configured agent');
+    expect(thread.messages, isEmpty);
   });
 
   test('runtime failure gives an honest local status reply', () async {
