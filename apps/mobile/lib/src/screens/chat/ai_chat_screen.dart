@@ -1045,13 +1045,20 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       var active = ref.read(sessionProvider);
       if (active is! SessionSignedIn || active.user.id != ownerId) return;
       final attachments = <ChatAttachment>[];
+      final rejected = <String>[];
       for (var index=0;index<selected.length && index<8;index++) {
         final asset=selected[index];
         final original=await asset.file;
-        if(original==null||!await original.exists())continue;
+        if(original==null||!await original.exists()){
+          rejected.add('Photo ${index + 1}: original unavailable');
+          continue;
+        }
         File file=original;
         var size=await file.length();
-        if(size==0)continue;
+        if(size==0){
+          rejected.add('Photo ${index + 1}: empty file');
+          continue;
+        }
         var name=asset.title??'Photo';
         // The old gallery picker resized 1600px photos at quality 85.
         // Restore that low-data behavior after switching gallery UIs, while
@@ -1079,7 +1086,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             // Compression is an optimization; preserve usable original media.
           }
         }
-        if(size>8*1024*1024)continue;
+        if(size>8*1024*1024){
+          rejected.add('Photo ${index + 1}: exceeds 8 MB');
+          continue;
+        }
         attachments.add(ChatAttachment(
           kind:'image',path:file.path,name:name,sizeBytes:size));
       }
@@ -1087,10 +1097,26 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       final currentSession = ref.read(sessionProvider);
       if (currentSession is! SessionSignedIn || currentSession.user.id != ownerId) return;
       _stageAttachments(attachments);
-      if (attachments.length < selected.length) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Some photos exceeded 8 MB or could not be opened.'),
-        ));
+      if (rejected.isNotEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Photos not added'),
+            content: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final reason in rejected)
+                  Padding(padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Text(reason)),
+              ],
+            )),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('OK')),
+            ],
+          ),
+        );
       }
     } catch (_) {
       if (mounted) _pickerFailed('Photos');
