@@ -287,7 +287,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         // rediscovered by local search alone. The signed-in server inbox may
         // explicitly authorize that character even if directory hydration
         // is late; otherwise fail closed rather than exposing stale content.
-        if (agent == null && canonical == null) continue;
+        // The production inbox supplies canonicalRow; isolated offline
+        // presenters may intentionally supply self-owned rows without a
+        // directory (e.g. an archive/order fixture).
+        if (widget.canonicalRow != null && agent == null && canonical == null) {
+          continue;
+        }
         if (_query.isNotEmpty &&
             !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${_messageSearchText(t.messages)}'
                 .toLowerCase()
