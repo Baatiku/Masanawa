@@ -2043,8 +2043,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
                   controller: search, autofocus: true,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search), hintText: ChatUiCopy.of(sheetContext, 'Search Masana')),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search), hintText: ChatUiCopy.of(sheetContext, 'Search Masana')),
                   onChanged: (_) => refresh(() {}))),
               Expanded(child: ListView(children: [
               for (final entry in visible)
