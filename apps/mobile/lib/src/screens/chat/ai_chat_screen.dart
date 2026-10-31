@@ -4437,7 +4437,7 @@ class _RichMessageText extends StatelessWidget {
       final widthSafe = effectiveWidth /
           (emojiCount * 1.22 * math.max(scale, 0.1));
       return SelectableText(text, style: TextStyle(
-        fontSize: math.max(15, math.min(desired, widthSafe)),
+        fontSize: math.max(15.0, math.min(desired, widthSafe)).toDouble(),
         height: 1.3,
         fontFamilyFallback: const ['Noto Color Emoji',
           'Apple Color Emoji', 'Segoe UI Emoji']));
