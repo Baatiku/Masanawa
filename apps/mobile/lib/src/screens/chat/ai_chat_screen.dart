@@ -285,14 +285,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = ref.read(aiChatProvider.notifier);
+      final unreadBeforeOpen = controller.threadOf(widget.characterId).unread;
       controller.openThread(widget.characterId);
       final thread = controller.threadOf(widget.characterId);
       final draft = thread.draft;
-      if (_initialUnreadMarkerId == null && thread.unread > 0) {
+      if (_initialUnreadMarkerId == null && unreadBeforeOpen > 0) {
         final latestReplies = thread.messages.where(
           (item) => !item.isUser && !item.deleted).toList();
         if (latestReplies.isNotEmpty) {
-          final start = latestReplies.length - thread.unread;
+          final start = latestReplies.length - unreadBeforeOpen;
           _initialUnreadMarkerId = latestReplies[start.clamp(0, latestReplies.length - 1).toInt()].id;
         }
       }
