@@ -15,6 +15,21 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "Pin changed elsewhere or is unavailable. Reloaded the latest state.": "An canza tsayawar hira a wata na’ura ko ba ta samuwa. An ɗauko sabon yanayi.",
+    "Clear filters": "Share matatun bincike",
+    "Retry": "Sake gwadawa",
+    "Refresh": "Sabunta",
+    "Search all Masanawa": "Nemo a duk Masanawa",
+    "Back": "Koma baya",
+    "Could not unarchive. The conversation may have changed elsewhere; reload and retry.": "Ba a iya dawo da hira daga ajiyar ba. Wataƙila an canza ta; sake ɗauko ka gwada.",
+    "Could not save conversation preference. It may have changed elsewhere; refresh and retry.": "Ba a iya ajiye saitin hira ba. Wataƙila an canza shi a wata na’ura; sabunta ka sake gwadawa.",
+    "seconds": "daƙiƙu",
+    "minutes": "mintuna",
+    "Connected call duration": "Tsawon lokacin kiran da aka haɗa",
+    "Forward request sent to": "An aika buƙatar turawa zuwa",
+    "Undo": "Mayar",
+    "hidden on this device": "an ɓoye a wannan na’ura",
+    "Could not save automatic playback preference. Automatic speech is off.": "Ba a iya ajiye saitin magana ta atomatik ba. An kashe karatun murya.",
     "remaining saves cancelled": "an soke sauran ajiyewa",
     "failed": "sun gaza",
     "files saved": "an ajiye fayiloli",
@@ -236,6 +251,21 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+    "Pin changed elsewhere or is unavailable. Reloaded the latest state.": "تغيّر التثبيت على جهاز آخر أو لم يعد متاحًا. تم تحديث الحالة.",
+    "Clear filters": "مسح عوامل التصفية",
+    "Retry": "إعادة المحاولة",
+    "Refresh": "تحديث",
+    "Search all Masanawa": "البحث في كل ماسانا",
+    "Back": "رجوع",
+    "Could not unarchive. The conversation may have changed elsewhere; reload and retry.": "تعذّر إلغاء أرشفة المحادثة. ربما تغيّرت في مكان آخر؛ أعد التحميل وحاول مجددًا.",
+    "Could not save conversation preference. It may have changed elsewhere; refresh and retry.": "تعذّر حفظ تفضيل المحادثة. ربما تغيّر على جهاز آخر؛ حدّث وحاول مجددًا.",
+    "seconds": "ثوانٍ",
+    "minutes": "دقائق",
+    "Connected call duration": "مدة المكالمة المتصلة",
+    "Forward request sent to": "أُرسل طلب إعادة التوجيه إلى",
+    "Undo": "تراجع",
+    "hidden on this device": "مخفية على هذا الجهاز",
+    "Could not save automatic playback preference. Automatic speech is off.": "تعذّر حفظ تفضيل التشغيل التلقائي. تم إيقاف النطق التلقائي.",
     "remaining saves cancelled": "تم إلغاء عمليات الحفظ المتبقية",
     "failed": "فشل",
     "files saved": "ملفات محفوظة",

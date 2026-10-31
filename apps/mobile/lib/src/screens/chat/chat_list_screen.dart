@@ -340,8 +340,7 @@ class ChatListScreen extends ConsumerWidget {
           epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
       onUpdated?.call(null);
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save conversation preference. '
-          'It may have changed elsewhere; refresh and retry.')));
+        SnackBar(content: Text(ChatUiCopy.of(context, 'Could not save conversation preference. It may have changed elsewhere; refresh and retry.'))));
     }
   }
 
@@ -613,9 +612,8 @@ class _ArchivedMasanaConversationsScreenState
           epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
         setState(() => _busy.remove(row.characterId));
         ref.invalidate(_archivedServerPage(key));
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not unarchive. The conversation may have '
-              'changed elsewhere; reload and retry.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ChatUiCopy.of(context, 'Could not unarchive. The conversation may have changed elsewhere; reload and retry.'))));
       }
     }
   }

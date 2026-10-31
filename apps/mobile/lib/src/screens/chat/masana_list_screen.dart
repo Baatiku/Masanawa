@@ -74,7 +74,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            tooltip: 'Back',
+            tooltip: ChatUiCopy.of(context, 'Back'),
             onPressed: () {
               if (widget.callPicker) {
                 Navigator.of(context).pop();
@@ -107,12 +107,12 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
           ),
           actions: [
             IconButton(
-              tooltip: 'Search all Masanawa',
+              tooltip: ChatUiCopy.of(context, 'Search all Masanawa'),
               icon: const Icon(Icons.manage_search_outlined),
               onPressed: () => context.push('/search'),
             ),
             IconButton(
-                tooltip: 'Refresh',
+                tooltip: ChatUiCopy.of(context, 'Refresh'),
                 icon: const Icon(Icons.refresh),
                 onPressed: () =>
                     ref.read(agentDirectoryProvider.notifier).refresh(),
@@ -254,7 +254,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                 onPressed: directory.loading
                     ? null
                     : () => ref.read(agentDirectoryProvider.notifier).refresh(),
-                child: const Text('Retry'),
+                child: Text(ChatUiCopy.of(context, 'Retry')),
               ),
             ],
           ),
@@ -284,7 +284,7 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                             _query = '';
                             _filter = 'all';
                           }),
-                          child: const Text('Clear filters'),
+                          child: Text(ChatUiCopy.of(context, 'Clear filters')),
                         ),
                       ],
                     ),

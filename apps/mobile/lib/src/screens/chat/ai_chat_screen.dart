@@ -1178,8 +1178,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             ])),
           Expanded(child: ListView(children: [
             for (final message in messages) ListTile(
-              title: Text(message.deleted ? 'Hidden on this device' : message.text),
-              subtitle: Text('${message.isUser ? 'You' : 'AI persona'} · '
+              title: Text(message.deleted ? ChatUiCopy.of(context, 'Hidden on this device') : message.text),
+              subtitle: Text('${ChatUiCopy.of(context, message.isUser ? 'You' : 'AI persona')} · '
                 '${formatChatTime(message.createdAt)}')),
           ])),
         ]),
@@ -1411,7 +1411,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     final enabled=ref.read(voiceReplyAutoplayProvider).asData?.value??false;
                     await ref.read(voiceReplyAutoplayProvider.notifier).setEnabled(!enabled);
                   } catch (_) {
-                    if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Could not save automatic playback preference. Automatic speech is off.')));
+                    if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Could not save automatic playback preference. Automatic speech is off.'))));
                   }
                 }
                 if (!context.mounted) return;
@@ -1959,8 +1959,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     }
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('${originals.length} hidden on this device'),
-      action: SnackBarAction(label: 'Undo', onPressed: () {
+      content: Text('${originals.length} ${ChatUiCopy.of(context, 'hidden on this device')}'),
+      action: SnackBarAction(label: ChatUiCopy.of(context, 'Undo'), onPressed: () {
         ref.read(aiChatProvider.notifier)
             .restoreDeletedMessages(widget.characterId, originals);
       }),
@@ -2138,7 +2138,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Forward request sent to ${target.displayName}')),
+        SnackBar(content: Text('${ChatUiCopy.of(context, 'Forward request sent to')} ${target.displayName}')),
       );
     }
   }
@@ -2965,7 +2965,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                 if (_connected) ...[
                   const SizedBox(height:12),
                   Text('${_elapsed.elapsed.inMinutes.toString().padLeft(2,'0')}:${(_elapsed.elapsed.inSeconds%60).toString().padLeft(2,'0')}',
-                    semanticsLabel:'Connected call duration ${_elapsed.elapsed.inMinutes} minutes ${_elapsed.elapsed.inSeconds % 60} seconds',
+                    semanticsLabel:'${ChatUiCopy.of(context, 'Connected call duration')} ${_elapsed.elapsed.inMinutes} ${ChatUiCopy.of(context, 'minutes')} ${_elapsed.elapsed.inSeconds % 60} ${ChatUiCopy.of(context, 'seconds')}',
                     style: TextStyle(color:u.textPrimary, fontSize:20,
                       fontWeight:FontWeight.w600, letterSpacing:1)),
                 ],

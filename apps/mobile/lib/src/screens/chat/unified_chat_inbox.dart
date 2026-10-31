@@ -140,8 +140,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       if (mounted && identical(owner, ref.read(sessionProvider)) &&
           epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
         ref.invalidate(_serverSearch(serverKey));
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Pin changed elsewhere or is unavailable. Reloaded the latest state.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ChatUiCopy.of(context, 'Pin changed elsewhere or is unavailable. Reloaded the latest state.'))));
       }
     } finally {
       if (mounted && identical(owner, ref.read(sessionProvider)) &&
