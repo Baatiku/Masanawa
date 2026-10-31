@@ -188,7 +188,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     if(widget.newsMode){
      final api=widget.api;
      if(api is! NewsFeedApi)throw StateError('News feed API unavailable');
-     return api.newsList(cursor:after,query:searchTerm.isEmpty?null:searchTerm,
+     return (api as NewsFeedApi).newsList(cursor:after,query:searchTerm.isEmpty?null:searchTerm,
       publisher:newsPublisherFilter);
     }
     if ((sourceFilter!=null||officialFilter!=null||dateFilter!=null)&&widget.api is FilteredFeedApi){
@@ -367,7 +367,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       final api=widget.api;
       if(api is! NewsFeedApi)return;
       List<NewsPublisherChoice> sources;
-      try{sources=await api.newsPublishers();}
+      try{sources=await (api as NewsFeedApi).newsPublishers();}
       catch(_){if(mounted)ScaffoldMessenger.of(context).showSnackBar(
        const SnackBar(content:Text('Could not load publishers.')));return;}
       if(!mounted)return;
