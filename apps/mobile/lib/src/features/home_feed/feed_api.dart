@@ -337,7 +337,7 @@ abstract class SearchFeedApi {
 /// Optional transport extension: combinations are applied by SQL *before* pagination.
 abstract class FilteredFeedApi {
   Future<FeedPage> filteredPosts({required String mode,String? query,String? cursor,
-    String? source,DateTime? from,DateTime? to});
+    String? source,String? authorMasanaId,DateTime? from,DateTime? to});
 }
 
 abstract class CommentConversationApi {
@@ -429,10 +429,11 @@ class DioFeedApi
 
   @override
   Future<FeedPage> filteredPosts({required String mode,String? query,String? cursor,
-    String? source,DateTime? from,DateTime? to}) async {
+    String? source,String? authorMasanaId,DateTime? from,DateTime? to}) async {
     final r=await _dio.get<Map<String,dynamic>>('/v1/feed',
       queryParameters:{'mode':mode,if(query!=null)'search':query,
         if(cursor!=null)'cursor':cursor,if(source!=null)'source':source,
+        if(authorMasanaId!=null)'authorMasanaId':authorMasanaId,
         if(from!=null)'from':'${from.year.toString().padLeft(4,'0')}-${from.month.toString().padLeft(2,'0')}-${from.day.toString().padLeft(2,'0')}',
         if(to!=null)'to':'${to.year.toString().padLeft(4,'0')}-${to.month.toString().padLeft(2,'0')}-${to.day.toString().padLeft(2,'0')}'},
       options:await _options());

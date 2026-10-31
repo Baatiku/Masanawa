@@ -95,8 +95,8 @@ class FilterStubFeed extends SearchStubFeed implements FilteredFeedApi {
   FilterStubFeed():super('Unfiltered official post');
   final filterCalls=<String>[];
   @override Future<FeedPage> filteredPosts({required String mode,String? query,
-    String? cursor,String? source,DateTime? from,DateTime? to})async{
-    filterCalls.add('$mode:$source:${query??'-'}:${cursor??'-'}');
+    String? cursor,String? source,String? authorMasanaId,DateTime? from,DateTime? to})async{
+    filterCalls.add('$mode:$source:${query??'-'}:${cursor??'-'}:${authorMasanaId??'-'}');
     return FeedPage([update('Approved $source update')],null);
   }
 }
@@ -152,10 +152,26 @@ void main() {
       await tester.tap(find.text('Facebook'));
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
-      expect(api.filterCalls.last,'for_you:facebook:-:-');
+      expect(api.filterCalls.last,'for_you:facebook:-:-:-');
       expect(find.text('Approved facebook update'),findsOneWidget);
       expect(find.text('For You'),findsNothing);
       expect(find.text('Following'),findsNothing);
+    });
+  testWidgets('Status official filter uses server-side author scope',
+    (tester)async{
+      final api=FilterStubFeed();
+      await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
+        api:api,accountKey:'fan_current'))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Filters'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All officials'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('masana_one').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(api.filterCalls.last,'for_you:null:-:-:masana_one');
     });
   testWidgets('Status tip requires an explicit reviewed confirmation and shows receipt',
       (tester) async {

@@ -96,6 +96,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   Timer? freshnessTimer;
   FeedPage? newerPage;
   String? sourceFilter;
+  String? officialFilter;
   DateTimeRange? dateFilter;
   String searchTerm = '';
   String mode = 'for_you';
@@ -180,10 +181,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   }
 
   Future<FeedPage> listCurrent([String? after]) {
-    if ((sourceFilter!=null||dateFilter!=null)&&widget.api is FilteredFeedApi){
+    if ((sourceFilter!=null||officialFilter!=null||dateFilter!=null)&&widget.api is FilteredFeedApi){
       return (widget.api as FilteredFeedApi).filteredPosts(mode:mode,
         query:searchTerm.isEmpty?null:searchTerm,cursor:after,
-        source:sourceFilter,from:dateFilter?.start,to:dateFilter?.end);
+        source:sourceFilter,authorMasanaId:officialFilter,
+        from:dateFilter?.start,to:dateFilter?.end);
     }
     if (searchTerm.isNotEmpty && widget.api is SearchFeedApi) {
       return (widget.api as SearchFeedApi).searchPosts(
@@ -243,6 +245,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       searchController.clear();
       searchTerm = '';
       sourceFilter=null;
+      officialFilter=null;
       dateFilter=null;
       if (widget.enabled) refresh();
       if (widget.enabled) checkPromotions();
@@ -351,13 +354,46 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   Future<void> showFilters() async {
     if(widget.api is! FilteredFeedApi)return;
     String? draft=sourceFilter;
+    String? draftAuthor=officialFilter;
     DateTimeRange? range=dateFilter;
+    // Use canonical approved directory IDs and already-authorized post IDs,
+    // never identity guessed from arbitrary search text.
+    final officials=<String,String>{
+      for(final entry in widget.authorDirectory.entries)
+        entry.key:entry.value.displayName,
+      for(final post in items)
+        if(!post.isHuman&&post.authorMasanaId.isNotEmpty)
+          post.authorMasanaId:post.displayAuthor,
+    };
+    if(draftAuthor!=null&&!officials.containsKey(draftAuthor)){
+      officials[draftAuthor]=draftAuthor;
+    }
+    final officialChoices=officials.entries.toList()
+      ..sort((a,b)=>a.value.toLowerCase().compareTo(b.value.toLowerCase()));
     final apply=await showModalBottomSheet<bool>(context:context,isScrollControlled:true,
       showDragHandle:true,builder:(sheet)=>StatefulBuilder(builder:(ctx,update)=>
         SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(20,8,20,24),
           child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(t('Filter Status','Tace labarai'),style:Theme.of(ctx).textTheme.titleLarge),
             const SizedBox(height:12),
+            if(officialChoices.isNotEmpty)...[
+              DropdownButtonFormField<String>(
+                initialValue:draftAuthor??'',
+                isExpanded:true,
+                decoration:InputDecoration(
+                  labelText:t('Official','Jami’in hukuma'),
+                  isDense:true,
+                ),
+                items:[
+                  DropdownMenuItem(value:'',child:Text(t('All officials','Duk jami’ai'))),
+                  for(final entry in officialChoices)
+                    DropdownMenuItem(value:entry.key,
+                      child:Text(entry.value,maxLines:1,overflow:TextOverflow.ellipsis)),
+                ],
+                onChanged:(value)=>update(()=>draftAuthor=value==''?null:value),
+              ),
+              const SizedBox(height:12),
+            ],
             Wrap(spacing:8,children:[
               for(final entry in const <String?,String>{null:'All sources','x':'X','facebook':'Facebook'}.entries)
                 ChoiceChip(label:Text(entry.value),selected:draft==entry.key,
@@ -375,8 +411,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                 child:Text(t('Apply','Aiwatar')))]),
           ])))));
     if(apply!=true||!mounted)return;
-    if(sourceFilter==draft&&dateFilter?.start==range?.start&&dateFilter?.end==range?.end)return;
-    setState((){sourceFilter=draft;dateFilter=range;items=[];cursor=null;newerPage=null;});
+    if(sourceFilter==draft&&officialFilter==draftAuthor&&dateFilter?.start==range?.start&&dateFilter?.end==range?.end)return;
+    setState((){sourceFilter=draft;officialFilter=draftAuthor;dateFilter=range;items=[];cursor=null;newerPage=null;});
     if(scrollController.hasClients)scrollController.jumpTo(0);
     await refresh();
   }
@@ -772,8 +808,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         if(!widget.authorScoped&&!widget.ownPostsOnly&&widget.api is FilteredFeedApi)
           Row(children:[const Spacer(),TextButton.icon(
             onPressed:showFilters,icon:const Icon(Icons.tune,size:18),
-            label:Text(sourceFilter==null&&dateFilter==null?'Filters':
-              'Filters · ${(sourceFilter==null?0:1)+(dateFilter==null?0:1)}')),
+            label:Text(sourceFilter==null&&officialFilter==null&&dateFilter==null?'Filters':
+              'Filters · ${(sourceFilter==null?0:1)+(officialFilter==null?0:1)+(dateFilter==null?0:1)}')),
             const SizedBox(width:12)]),
         if(newerPage!=null)MaterialBanner(
           content:Text(t('New official updates are available','Akwai sabbin labarai')),
@@ -908,7 +944,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                     child: ListView.separated(
                     controller:scrollController,
                     key: PageStorageKey<String>(
-                      'status-feed-${widget.accountKey}-$mode-$searchTerm-$sourceFilter-${dateFilter?.start}-${dateFilter?.end}',
+                      'status-feed-${widget.accountKey}-$mode-$searchTerm-$sourceFilter-$officialFilter-${dateFilter?.start}-${dateFilter?.end}',
                     ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: items.length + (cursor == null ? 0 : 1),
