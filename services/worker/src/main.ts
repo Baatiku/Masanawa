@@ -1,3 +1,4 @@
+import {createNewsFeedPoller} from './jobs/home_feed/news_import.js';
 import {createConfiguredStatusObjectStore} from "@masanawa/providers";
 import {createCreatorMediaCleanup} from "./jobs/creator/media_deletions.js";
 import { pathToFileURL } from "node:url";
@@ -116,6 +117,7 @@ export async function startWorkerService(
   const appFactory = options.appFactory ?? createWorkerApp;
   let creatorMediaCleanup: ReturnType<typeof createJobScheduler> | undefined;
   let feedPublisher: ReturnType<typeof createJobScheduler> | undefined;
+  let newsImporter: ReturnType<typeof createJobScheduler> | undefined;
   let financialNotices: ReturnType<typeof createJobScheduler> | undefined;
   let p2pExpiry: ReturnType<typeof createJobScheduler> | undefined;
   let p2pAudit: ReturnType<typeof createJobScheduler> | undefined;
@@ -163,6 +165,13 @@ export async function startWorkerService(
         onError:()=>process.stderr.write(JSON.stringify({event:"creator_media.retry",reason:"batch_failed"})+"\n"),
       });
     }
+    const newsPoller=createNewsFeedPoller(database.pool);
+    newsImporter=createJobScheduler({
+      runOnce:newsPoller.runOnce,
+      enabled:()=>!drain.isDraining()&&env.MASANAWA_NEWS_INGEST_ENABLED==='true',
+      intervalMs:5*60_000,
+      onError:()=>process.stderr.write(JSON.stringify({event:'news_ingest.retry',reason:'feed_unavailable'})+'\n'),
+    });
     // Durable scheduled posts use the canonical feed editorial CAS and audit.
     // Polling needs no new queue or manual feature enablement.
     const feed = createScheduledFeedRuntime({
@@ -301,6 +310,7 @@ export async function startWorkerService(
       databaseJobs: () => createDurableJobHealth(database.pool!).read(),
       jobsHealth: () => [
         schedulerHealth("scheduled_feed", feedPublisher),
+        schedulerHealth("news_ingest", newsImporter),
         schedulerHealth("creator_media_cleanup", creatorMediaCleanup),
         schedulerHealth("msnw_obligations", msnwObligationRecovery),
         schedulerHealth("msnw_merchant_settlement", msnwMerchantSettlements),
@@ -334,6 +344,7 @@ export async function startWorkerService(
       // shared PostgreSQL pool shuts down; do not abandon in-flight claims.
       onAfterClose: async () => {
         await feedPublisher?.stop();
+      await newsImporter?.stop();
     await creatorMediaCleanup?.stop();
         await msnwObligationRecovery?.stop();
         await msnwMerchantSettlements?.stop();
@@ -350,6 +361,7 @@ export async function startWorkerService(
       },
     });
     feedPublisher?.start();
+    newsImporter?.start();
     creatorMediaCleanup?.start();
     msnwObligationRecovery?.start();
     msnwMerchantSettlements?.start();

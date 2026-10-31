@@ -5,6 +5,7 @@ import '../../agents/agent_directory.dart';
 import '../../agents/masana_portrait_avatar.dart';
 import 'feed_api.dart';
 import 'official_post_source_link.dart';
+import 'news_story_card.dart';
 
 /// A post's display name is not authority to choose a portrait. Only a
 /// matching, account-scoped directory identity supplies an approved photo.
@@ -22,6 +23,7 @@ class StatusPostAuthorHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if(post.isNews)return NewsPublisherHeader(story:post.news!,publishedAt:post.publishedAt);
     final canonical = !post.isHuman &&
             agent?.characterId == post.authorMasanaId
         ? agent

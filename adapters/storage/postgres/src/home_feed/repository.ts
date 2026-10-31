@@ -6,16 +6,21 @@ import {withTransaction} from '../transaction.js';
 type Row=Record<string,unknown>;
 type Cursor={at:string;id:string}|null;
 function item(r:Row){
- const human=r.author_type==='human';
+ const human=r.author_type==='human',publisher=r.author_type==='publisher';
  const authorMasanaId=r.author_masana_id==null?'':String(r.author_masana_id);
- const authorName=String(r.author_name??(human?'Member':authorMasanaId));
+ const authorName=String(r.author_name??(human?'Member':publisher?'News':authorMasanaId));
  const author=human?{
   type:'human' as const,id:String(r.author_user_id),
   displayName:authorName,handle:String(r.author_handle??''),
   avatarUrl:r.author_avatar==null?null:String(r.author_avatar),
- }:{type:'masana' as const,id:authorMasanaId,displayName:authorName};
+ }:publisher?{type:'publisher' as const,id:String(r.news_publisher_id??''),displayName:authorName}
+ :{type:'masana' as const,id:authorMasanaId,displayName:authorName};
  return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
-  ...(r.source_provenance?{source:r.source_provenance as {platform:'x'|'facebook';url:string;originalPublishedAt:string;revision:number}}:{}),
+  ...(!publisher&&r.source_provenance?{source:r.source_provenance as {platform:'x'|'facebook';url:string;originalPublishedAt:string;revision:number}}:{}),
+  ...(publisher&&r.news_info?{news:r.news_info as {
+    id:string;name:string;title:string;summary:string;url:string;
+    verified:boolean;logoUrl?:string|null;
+   }}:{}),
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   verifiedViewCount:Number(r.verified_view_count??0),
@@ -36,7 +41,11 @@ function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:St
   ? r.author as {type:"human";id:string;handle:string;displayName:string} : null};}
 // Approval alone survives character deactivation/ownership transfer. Recheck
 // the canonical identity on every fan-facing read and insert.
-const eligibleAuthor=`((p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.character_revisions m
+const eligibleAuthor=`((p.author_type='publisher' AND EXISTS(
+ SELECT 1 FROM feed.news_articles n JOIN feed.news_publishers pub ON pub.tenant_id=n.tenant_id
+ AND pub.publisher_id=n.publisher_id WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id
+ AND pub.state='approved' AND pub.rights_until>statement_timestamp()))
+ OR (p.author_type='masana' AND EXISTS (SELECT 1 FROM masana.character_revisions m
  JOIN identity.characters a ON a.tenant_id=m.tenant_id AND a.character_id=m.character_id
  JOIN identity.character_ownership o ON o.tenant_id=a.tenant_id AND o.character_id=a.character_id
  WHERE m.tenant_id=p.tenant_id AND m.character_id=p.author_masana_id
@@ -65,8 +74,21 @@ const projection=`p.*,
  to_char(p.published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published_at_exact,
  CASE WHEN p.author_type='human'
   THEN (SELECT hp.display_name FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id)
+  WHEN p.author_type='publisher' THEN
+   (SELECT pub.display_name FROM feed.news_articles n JOIN feed.news_publishers pub
+    ON pub.tenant_id=n.tenant_id AND pub.publisher_id=n.publisher_id
+    WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id)
   ELSE (SELECT r.profile->>'displayName' FROM masana.character_revisions r WHERE r.tenant_id=p.tenant_id AND r.character_id=p.author_masana_id AND r.state='approved' LIMIT 1)
  END AS author_name,
+ (SELECT jsonb_build_object('id',pub.publisher_id,'name',pub.display_name,
+   'title',n.headline,'summary',n.summary,'url',n.source_url,'verified',true,
+   'logoUrl',CASE WHEN pub.logo_licensed THEN pub.logo_url ELSE NULL END)
+    FROM feed.news_articles n JOIN feed.news_publishers pub
+    ON pub.tenant_id=n.tenant_id AND pub.publisher_id=n.publisher_id
+    WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id AND pub.state='approved'
+      AND pub.rights_until>statement_timestamp()) AS news_info,
+ (SELECT n.publisher_id FROM feed.news_articles n WHERE n.tenant_id=p.tenant_id
+  AND n.post_id=p.id) AS news_publisher_id,
  (SELECT hp.handle FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id) AS author_handle,
  (SELECT hp.avatar_url FROM talks.public_profiles hp WHERE hp.tenant_id=p.tenant_id AND hp.user_id=p.author_user_id) AS author_avatar, (SELECT count(*)::int FROM feed.likes l WHERE l.tenant_id=p.tenant_id AND l.post_id=p.id AND l.reaction_kind='like') AS like_count,
  COALESCE((SELECT jsonb_object_agg(rc.reaction_kind,rc.n) FROM (SELECT l.reaction_kind,count(*)::int AS n
@@ -98,7 +120,7 @@ const resolvedCommentAuthor=`CASE WHEN person.user_id IS NOT NULL
 export class PgHomeFeedRepository {
  // Production enables the new schema policy; false supports pre-migration fixture stores.
  constructor(private readonly pool:Pool,private readonly enforceOfficialSources=false,private readonly enforceViewerSafety=false){}
- private get access(){const author=this.enforceOfficialSources?`(${eligibleAuthor} AND ${officialSourceEligibility})`:eligibleAuthor;
+ private get access(){const author=this.enforceOfficialSources?`(${eligibleAuthor} AND (p.author_type='publisher' OR ${officialSourceEligibility}))`:eligibleAuthor;
   return this.enforceViewerSafety?`(${author} AND NOT EXISTS(SELECT 1 FROM feed.hidden_posts h WHERE h.tenant_id=p.tenant_id AND h.post_id=p.id AND h.fan_id=$2))`:author;}
  private get commentAccess(){return this.access.replace(/\$2\b/g,"$3");}
   async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true,filters?:FeedFilters) {
@@ -129,9 +151,28 @@ export class PgHomeFeedRepository {
      ...(filtered?[filters?.source??null,filters?.from??null,filters?.to??null]:[])]);
   return rows.rows.map(item);
  }
+ async listNews(tenant:string,viewer:string|null,before:Cursor,limit:number,publisher?:string,search?:string){
+  const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p
+    WHERE p.tenant_id=$1 AND p.state='published' AND p.author_type='publisher' AND ${this.access}
+    AND ($3::timestamptz IS NULL OR (p.published_at,p.id)<($3::timestamptz,$4::uuid))
+    AND ($6::text IS NULL OR EXISTS(SELECT 1 FROM feed.news_articles n
+      WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id AND n.publisher_id=$6))
+    AND ($7::text IS NULL OR EXISTS(SELECT 1 FROM feed.news_articles n
+      WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id
+      AND (n.headline ILIKE '%'||$7||'%' OR n.summary ILIKE '%'||$7||'%')))
+    ORDER BY p.published_at DESC,p.id DESC LIMIT $5`,
+    [tenant,viewer,before?.at??null,before?.id??null,limit,publisher??null,search??null]);
+  return rows.rows.map(item);
+ }
+ async newsPublishers(tenant:string){
+  const rows=await this.pool.query(`SELECT publisher_id AS id,display_name AS name
+    FROM feed.news_publishers WHERE tenant_id=$1 AND state='approved'
+    AND rights_until>statement_timestamp() ORDER BY display_name`,[tenant]);
+  return rows.rows as {id:string;name:string}[];
+ }
  async find(tenant:string,viewer:string|null,id:string,masanaOnly=true){
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${this.access}
-   AND (NOT $4::boolean OR p.author_type='masana')`,[tenant,viewer,id,masanaOnly]);
+   AND (NOT $4::boolean OR p.author_type IN ('masana','publisher'))`,[tenant,viewer,id,masanaOnly]);
   return rows.rows[0]?item(rows.rows[0]):null;
  }
  async publish(tenant:string,publisher:string,v:{authorMasanaId:string;kind:string;body:string;media:readonly string[];transcript:string|null;idempotencyKey:string}){

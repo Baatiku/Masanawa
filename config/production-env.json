@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "variables": [
     {
+      "name": "BILLSTACK_SECRET_KEY",
+      "owner": "gateway/gb-wallet",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Existing Railway Billstack merchant secret; fallback when MASANAWA_BILLSTACK_SECRET_KEY is absent. Never expose to mobile. Funding remains gated by verified applicant and settlement ports."
+    },
+    {
       "name": "CREDENTIAL_ENCRYPTION_KEY",
       "owner": "security/bootstrap",
       "classification": "secret",
@@ -275,11 +282,18 @@
       "description": "Production configuration for MASANAWA_BILLING_REDIRECT_URL."
     },
     {
-      "name": "BILLSTACK_SECRET_KEY",
+      "name": "MASANAWA_BILLSTACK_BANK_ID",
       "owner": "gateway/gb-wallet",
-      "classification": "secret",
+      "classification": "public",
       "requiredIn": [],
-      "description": "Existing Railway Billstack merchant secret; fallback when MASANAWA_BILLSTACK_SECRET_KEY is absent. Never expose to mobile. Funding remains gated by verified applicant and settlement ports."
+      "description": "Optional bank for new Billstack reserved-account requests: 9PSB (default) or PALMPAY. Existing assigned accounts retain their provider-confirmed bank."
+    },
+    {
+      "name": "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Owner-authorized live mode: a valid signed Billstack reserved-account notification credits its exact amount to the matched NGN ledger. This does not claim independent provider finality or reversal qualification; retain operational reconciliation."
     },
     {
       "name": "MASANAWA_BILLSTACK_SECRET_KEY",
@@ -287,13 +301,6 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Private Billstack reserved-collection merchant signing/creation authority. Deposit credit remains gated by independent settlement and reversal verification; never a mobile setting."
-    },
-    {
-      "name": "MASANAWA_BILLSTACK_BANK_ID",
-      "owner": "gateway/gb-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional bank for new Billstack reserved-account requests: 9PSB (default) or PALMPAY. Existing assigned accounts retain their provider-confirmed bank."
     },
     {
       "name": "MASANAWA_BOOTSTRAP_PLATFORM_AGENTS",
@@ -324,6 +331,20 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Push delivery service account credential."
+    },
+    {
+      "name": "MASANAWA_FLUTTERWAVE_DIRECT_ENABLED",
+      "owner": "gateway/flutterwave",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit owner-authorized Railway direct Flutterwave IPv4 mode; bypasses previously configured external relay without modifying its saved credentials. Requires current outbound IPv4 whitelist."
+    },
+    {
+      "name": "MASANAWA_FLUTTERWAVE_OBSERVE_OUTBOUND",
+      "owner": "gateway/flutterwave",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in read-only IPv4 and Mobile Data catalogue startup observations using existing Railway-held credentials; never submits a payment or logs secrets/customer details."
     },
     {
       "name": "MASANAWA_FLUTTERWAVE_RELAY_TOKEN",
@@ -380,13 +401,6 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Optional 32-byte-or-longer private signing authority for immutable purchased-MB Send review tokens. Provision only when the production atomic recipient ledger and recipient eligibility reader are verified; never reveal to clients."
-    },
-    {
-      "name": "MASANAWA_MB_CALLS_ENABLED",
-      "owner": "gateway/gb-calls",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Disabled by default. Enables protected one-to-one Masana MB call admission, relay grant and finish routes only when the private review authority, call journal, live voice credentials and public HTTPS relay origin are configured. Enable after mobile cutover and accounting verification."
     },
     {
       "name": "MASANAWA_GEMINI_API_KEY",
@@ -452,6 +466,20 @@
       "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MASANAWA_MB_CALLS_ENABLED",
+      "owner": "gateway/gb-calls",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Disabled by default. Enables protected one-to-one Masana MB call admission, relay grant and finish routes only when the private review authority, call journal, live voice credentials and public HTTPS relay origin are configured. Enable after mobile cutover and accounting verification."
+    },
+    {
+      "name": "MASANAWA_MB_REPLIES_ENABLED",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in new 1 MB reply reservations and atomic durable-delivery settlement. Does not convert or charge historical turns. Enable only with migrated trusted ledger and reconciliation."
+    },
+    {
       "name": "MASANAWA_MOBILE_MIN_VERSION",
       "owner": "gateway",
       "classification": "public",
@@ -480,11 +508,74 @@
       "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MASANAWA_NEWS_INGEST_ENABLED",
+      "owner": "worker/home-feed",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Enable reviewed and licensed publisher RSS metadata ingestion only after migration 0027, an approved unexpired tenant publisher registry and provider/feed qualification. This never authorizes unlicensed BBC or other copyrighted content."
+    },
+    {
+      "name": "MASANAWA_NGN_EXCHANGE_ENABLED",
+      "owner": "gateway/ngn-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Enable only after new separate NGN ledger migration, signed review/atomic purchased-MB exchange, approved quantity rates, fulfillment cost/margin/fees and limits are qualified. Does not enable deposits."
+    },
+    {
+      "name": "MASANAWA_NGN_EXCHANGE_QUALIFICATION",
+      "owner": "gateway/gb-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Server/operator-only JSON: rateVersion, reference, expiresAt, fulfillmentKoboPerGb, fixedFeeKobo, feeBps, minimumMarginBps, maximumGb=2000. New exchanges require current evidence and nonnegative qualified margin for every supported custom quantity; no inferred provider costs."
+    },
+    {
+      "name": "MASANAWA_NGN_FUNDING_VERIFIED",
+      "owner": "gateway/ngn-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Independent qualification gate for Billstack new NGN deposits and account allocation. Requires authenticated provider final-state/receiving account/amount evidence, verified webhook contract, cutoff/deduplication/reversal and operational reconciliation. Never infer verification from possession of a key."
+    },
+    {
       "name": "MASANAWA_NOWPAYMENTS_RELAY_TOKEN",
       "owner": "gateway/crypto",
       "classification": "secret",
       "requiredIn": [],
       "description": "Production configuration for MASANAWA_NOWPAYMENTS_RELAY_TOKEN."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_FACEBOOK_BEARER",
+      "owner": "gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only Meta bearer with approved Page read access for reviewed official sources."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_FACEBOOK_VERSION",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Pinned supported Meta Graph API version for the original official Page importer, for example v26.0; validate provider support before enabling."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_PORTRAIT_CACHE_DIR",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional dedicated directory for normalized public official portrait/emblem cache files. Production defaults to the public-portrait-cache subdirectory on the existing persistent volume; never expose arbitrary volume files."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_SOCIAL_IMPORT_ENABLED",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in original official social-post importer. Default off; reviewed sources, API access, provenance and compliance qualification required."
+    },
+    {
+      "name": "MASANAWA_OFFICIAL_X_BEARER",
+      "owner": "gateway",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only X API read bearer for reviewed public-official account posts. Never exposed to mobile or logs."
     },
     {
       "name": "MASANAWA_OPS_HOST",
@@ -611,6 +702,34 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Bounded graceful shutdown timeout."
+    },
+    {
+      "name": "MASANAWA_STATUS_ATTRIBUTION_SECRET",
+      "owner": "gateway/home-feed",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "At least 32 bytes of operator-configured entropy for tenant/account-scoped qualified-view digests; keep outside source and never log."
+    },
+    {
+      "name": "MASANAWA_STATUS_PROMOTIONS_ENABLED",
+      "owner": "gateway/home-feed",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Requires trusted paid-view proof, abuse review, backed half-MB settlement/data redemption, media removal, legal review and qualified PostgreSQL before live payment or commission."
+    },
+    {
+      "name": "MASANAWA_STATUS_PUBLIC_BASE_URL",
+      "owner": "gateway/home-feed",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "HTTPS origin serving the canonical Status public landing and optional opaque referral URL."
+    },
+    {
+      "name": "MASANAWA_STATUS_TIPS_ENABLED",
+      "owner": "gateway/status-wallet",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Default off. Mount signed and account-bound Status MB tip review/confirm/readback only after forward-only tip receipts, trusted platform Masana source, real PG accounting and client recovery are qualified. Does not imply live activation, new cash movement, or welcome MB spend."
     },
     {
       "name": "MASANAWA_TALK_AI_AGENT_NAME",
@@ -1091,6 +1210,13 @@
       "description": "Deployment-host compatibility listen port."
     },
     {
+      "name": "RAILWAY_GIT_COMMIT_SHA",
+      "owner": "runtime/diagnostics",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Railway-provided deployed Git SHA; only a validated 40-character hexadecimal value may appear in sanitized MB call relay diagnostics."
+    },
+    {
       "name": "RAILWAY_PUBLIC_DOMAIN",
       "owner": "runtime",
       "classification": "public",
@@ -1131,125 +1257,6 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
-    },
-    {
-      "name": "MASANAWA_NGN_EXCHANGE_ENABLED",
-      "owner": "gateway/ngn-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Default off. Enable only after new separate NGN ledger migration, signed review/atomic purchased-MB exchange, approved quantity rates, fulfillment cost/margin/fees and limits are qualified. Does not enable deposits."
-    },
-    {
-      "name": "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED",
-      "owner": "gateway/gb-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Owner-authorized live mode: a valid signed Billstack reserved-account notification credits its exact amount to the matched NGN ledger. This does not claim independent provider finality or reversal qualification; retain operational reconciliation."
-    },
-    {
-      "name": "MASANAWA_NGN_FUNDING_VERIFIED",
-      "owner": "gateway/ngn-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Default off. Independent qualification gate for Billstack new NGN deposits and account allocation. Requires authenticated provider final-state/receiving account/amount evidence, verified webhook contract, cutoff/deduplication/reversal and operational reconciliation. Never infer verification from possession of a key."
-    },
-    {
-      "name": "MASANAWA_STATUS_TIPS_ENABLED",
-      "owner": "gateway/status-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Default off. Mount signed and account-bound Status MB tip review/confirm/readback only after forward-only tip receipts, trusted platform Masana source, real PG accounting and client recovery are qualified. Does not imply live activation, new cash movement, or welcome MB spend."
-    },
-    {
-      "name": "MASANAWA_STATUS_PROMOTIONS_ENABLED",
-      "owner": "gateway/home-feed",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Default off. Requires trusted paid-view proof, abuse review, backed half-MB settlement/data redemption, media removal, legal review and qualified PostgreSQL before live payment or commission."
-    },
-    {
-      "name": "MASANAWA_STATUS_ATTRIBUTION_SECRET",
-      "owner": "gateway/home-feed",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "At least 32 bytes of operator-configured entropy for tenant/account-scoped qualified-view digests; keep outside source and never log."
-    },
-    {
-      "name": "MASANAWA_STATUS_PUBLIC_BASE_URL",
-      "owner": "gateway/home-feed",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "HTTPS origin serving the canonical Status public landing and optional opaque referral URL."
-    },
-    {
-      "name": "MASANAWA_MB_REPLIES_ENABLED",
-      "owner": "gateway/gb-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Opt-in new 1 MB reply reservations and atomic durable-delivery settlement. Does not convert or charge historical turns. Enable only with migrated trusted ledger and reconciliation."
-    },
-    {
-      "name": "MASANAWA_NGN_EXCHANGE_QUALIFICATION",
-      "owner": "gateway/gb-wallet",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Server/operator-only JSON: rateVersion, reference, expiresAt, fulfillmentKoboPerGb, fixedFeeKobo, feeBps, minimumMarginBps, maximumGb=2000. New exchanges require current evidence and nonnegative qualified margin for every supported custom quantity; no inferred provider costs."
-    },
-    {
-      "name": "RAILWAY_GIT_COMMIT_SHA",
-      "owner": "runtime/diagnostics",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Railway-provided deployed Git SHA; only a validated 40-character hexadecimal value may appear in sanitized MB call relay diagnostics."
-    },
-    {
-      "name": "MASANAWA_FLUTTERWAVE_DIRECT_ENABLED",
-      "owner": "gateway/flutterwave",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Explicit owner-authorized Railway direct Flutterwave IPv4 mode; bypasses previously configured external relay without modifying its saved credentials. Requires current outbound IPv4 whitelist."
-    },
-    {
-      "name": "MASANAWA_FLUTTERWAVE_OBSERVE_OUTBOUND",
-      "owner": "gateway/flutterwave",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Opt-in read-only IPv4 and Mobile Data catalogue startup observations using existing Railway-held credentials; never submits a payment or logs secrets/customer details."
-    },
-    {
-      "name": "MASANAWA_OFFICIAL_SOCIAL_IMPORT_ENABLED",
-      "owner": "gateway",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Opt-in original official social-post importer. Default off; reviewed sources, API access, provenance and compliance qualification required."
-    },
-    {
-      "name": "MASANAWA_OFFICIAL_X_BEARER",
-      "owner": "gateway",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Server-only X API read bearer for reviewed public-official account posts. Never exposed to mobile or logs."
-    },
-    {
-      "name": "MASANAWA_OFFICIAL_FACEBOOK_BEARER",
-      "owner": "gateway",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Server-only Meta bearer with approved Page read access for reviewed official sources."
-    },
-    {
-      "name": "MASANAWA_OFFICIAL_FACEBOOK_VERSION",
-      "owner": "gateway",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Pinned supported Meta Graph API version for the original official Page importer, for example v26.0; validate provider support before enabling."
-    },
-    {
-      "name": "MASANAWA_OFFICIAL_PORTRAIT_CACHE_DIR",
-      "owner": "gateway",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional dedicated directory for normalized public official portrait/emblem cache files. Production defaults to the public-portrait-cache subdirectory on the existing persistent volume; never expose arbitrary volume files."
     }
   ]
 }

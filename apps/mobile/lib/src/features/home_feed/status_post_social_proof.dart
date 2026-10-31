@@ -55,7 +55,7 @@ class StatusPostSocialProof extends StatelessWidget {
             padding:EdgeInsets.zero,minimumSize:const Size(48,36)),
             child:Text('${compactCount(post.commentCount)} ${ha ? 'sharhi' : post.commentCount == 1 ? 'comment' : 'comments'}',
               style: style)),
-        Row(mainAxisSize: MainAxisSize.min, children: [
+        if(!post.isNews)Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.visibility_outlined, size: 15,
             color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),

@@ -23,6 +23,30 @@ class OfficialPostSource {
   }
 }
 
+/// Newsroom attribution is not a Masana identity or platform endorsement.
+class NewsPublisher {
+ const NewsPublisher({required this.id,required this.name,required this.title,
+  required this.summary,required this.original,required this.verified,this.logoUrl});
+ final String id,name,title,summary;
+ final Uri original;
+ final bool verified;
+ final Uri? logoUrl;
+ static NewsPublisher? parse(Object? raw){
+  if(raw is! Map)return null;
+  final id=raw['id'],name=raw['name'],title=raw['title'],
+    summary=raw['summary'],url=raw['url'];
+  if(id is! String||!RegExp(r'^[a-z][a-z0-9-]{1,39}$').hasMatch(id)||
+    name is! String||name.isEmpty||title is! String||summary is! String||url is! String)return null;
+  final original=Uri.tryParse(url);
+  if(original==null||original.scheme!='https'||original.host.isEmpty||
+    original.userInfo.isNotEmpty||original.hasPort)return null;
+  final logo=raw['logoUrl'] is String?Uri.tryParse(raw['logoUrl'] as String):null;
+  return NewsPublisher(id:id,name:name,title:title,summary:summary,original:original,
+   verified:raw['verified']==true,
+   logoUrl:logo!=null&&logo.scheme=='https'&&logo.userInfo.isEmpty&&!logo.hasPort?logo:null);
+ }
+}
+
 class FeedPost {
   const FeedPost({
     required this.id,
@@ -30,6 +54,7 @@ class FeedPost {
     required this.kind,
     this.authorName,
     this.source,
+    this.news,
     this.authorType = 'masana',
     this.authorId,
     this.authorHandle,
@@ -49,6 +74,8 @@ class FeedPost {
     this.boostEligible = false,
   });
   final OfficialPostSource? source;
+  final NewsPublisher? news;
+  bool get isNews => news!=null && authorType=='publisher';
   final String id, authorMasanaId, kind, body, authorType;
   final String? authorName, authorId, authorHandle;
   final List<String> mediaIds;
@@ -110,7 +137,7 @@ class FeedPost {
         ? Map<String, dynamic>.from(raw)
         : <String, dynamic>{};
     final type = author['type'] ?? json['authorType'] ?? 'masana';
-    if (type != 'masana' && type != 'human')
+    if (type != 'masana' && type != 'human' && type != 'publisher')
       throw const FormatException('Invalid Status author type');
     final legacy = json['authorMasanaId'];
     final typed = author['id'] ?? json['authorId'];
@@ -134,6 +161,7 @@ class FeedPost {
     return FeedPost(
       id: json['id'] as String,
       source: OfficialPostSource.parse(json['source']),
+      news: NewsPublisher.parse(json['news']),
       authorMasanaId: type == 'masana' ? id : '',
       authorType: type as String,
       authorId: id,
@@ -179,6 +207,7 @@ class FeedPost {
     return FeedPost(
       id: id,
       source: source,
+      news: news,
       authorMasanaId: authorMasanaId,
       kind: this.kind,
       authorName: authorName,
@@ -209,6 +238,7 @@ class FeedPost {
     return FeedPost(
       id: result.id,
       source: result.source,
+      news: result.news,
       authorMasanaId: result.authorMasanaId,
       kind: result.kind,
       authorName: result.authorName,
@@ -314,6 +344,14 @@ abstract class FeedApi {
   Future<List<FeedComment>> comments(String postId);
 }
 
+abstract class NewsFeedApi {
+ Future<FeedPage> newsList({String? cursor,String? query,String? publisher});
+ Future<List<NewsPublisherChoice>> newsPublishers();
+}
+class NewsPublisherChoice {
+ const NewsPublisherChoice(this.id,this.name);
+ final String id,name;
+}
 abstract class FeedSafetyApi {
   Future<void> hidePost(String postId, bool hidden, bool Function() isCurrent);
   Future<String> reportPost(String postId, String reason, bool Function() isCurrent);
@@ -351,7 +389,7 @@ abstract class CommentConversationApi {
 
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
 class DioFeedApi
-    implements FeedApi, SearchFeedApi, FilteredFeedApi, ReactionFeedApi,
+    implements FeedApi, SearchFeedApi, FilteredFeedApi, NewsFeedApi, ReactionFeedApi,
       CommentConversationApi, SavedStatusLibraryApi, FeedSafetyApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
@@ -399,6 +437,19 @@ class DioFeedApi
     return id;
   }
 
+  @override
+  Future<FeedPage> newsList({String? cursor,String? query,String? publisher}) async {
+   final data=await _dio.get<Map<String,dynamic>>('/v1/news',
+    queryParameters:{if(cursor!=null)'cursor':cursor,if(query!=null)'search':query,
+      if(publisher!=null)'publisher':publisher},options:await _options(authRequired:true));
+   return FeedPage.fromJson(data.data??const {});
+  }
+  @override
+  Future<List<NewsPublisherChoice>> newsPublishers() async {
+   final data=await _dio.get<List<dynamic>>('/v1/news/publishers',options:await _options(authRequired:true));
+   return [for(final raw in data.data??const [])if(raw is Map&&raw['id'] is String&&raw['name'] is String)
+    NewsPublisherChoice(raw['id'] as String,raw['name'] as String)];
+  }
   @override
   Future<FeedPage> list({required String mode, String? cursor}) async {
     final result = await _dio.get<Map<String, dynamic>>(

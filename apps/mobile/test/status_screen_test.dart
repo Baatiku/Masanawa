@@ -39,12 +39,22 @@ class _Session extends SessionController {
   }
 }
 
-class _Feed implements FeedApi, SearchFeedApi, ReactionFeedApi {
+class _Feed implements FeedApi, SearchFeedApi, ReactionFeedApi, NewsFeedApi {
   String message = 'A verified Masana update';
   String? selectedReaction;
   Completer<FeedPage>? pending;
   bool fail = false;
   int requests = 0;
+  @override
+  Future<FeedPage> newsList({String? cursor,String? query,String? publisher}) async {
+    requests++;
+    if(pending!=null)return pending!.future;
+    if(fail)throw StateError('offline');
+    return FeedPage([_post(query==null?message:'Result for $query')],null);
+  }
+  @override
+  Future<List<NewsPublisherChoice>> newsPublishers() async =>
+    [const NewsPublisherChoice('bbc','BBC News')];
   @override
   Future<FeedPage> list({required String mode, String? cursor}) async {
     requests++;
@@ -64,7 +74,9 @@ class _Feed implements FeedApi, SearchFeedApi, ReactionFeedApi {
   @override Future<List<FeedComment>> comments(String id) async => const [];
 }
 FeedPost _post(String body, {String kind = 'text'}) => FeedPost(
-  id: 'post-0001', authorMasanaId: 'masana-1', kind: kind,
+  id: 'post-0001', authorMasanaId: '',authorType:'publisher',authorId:'bbc',authorName:'BBC News',
+  news:NewsPublisher(id:'bbc',name:'BBC News',title:body,summary:'A short verified news summary.',
+   original:Uri.parse('https://www.bbc.com/news/articles/example'),verified:true),kind: kind,
   body: body, mediaIds: kind == 'text' ? const [] : const ['media-1'],
   publishedAt: DateTime.utc(2026, 10, 13), likeCount: 0,
   commentCount: 0, liked: false, saved: false,
@@ -97,7 +109,7 @@ void main() {
     expect(find.text('Comment'), findsOneWidget);
     expect(find.text('Share'), findsOneWidget);
     expect(find.text('Save'), findsNothing);
-    expect(find.byTooltip('Tip MB'), findsOneWidget);
+    expect(find.byTooltip('Tip MB'), findsNothing);
     await tester.longPress(find.text('Like'));
     await tester.pumpAndSettle();
     for (final reaction in const ['Like','Love','Care','Haha','Wow','Sad','Angry']) {
@@ -125,11 +137,11 @@ void main() {
       expect(button, findsOneWidget);
       expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
     }
-    expect(find.byTooltip('Tip MB'), findsOneWidget);
+    expect(find.byTooltip('Tip MB'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('real mounted Home tab displays the same Masana feed without Talk publishing', (tester) async {
+  testWidgets('real mounted Home tab displays only publisher news without Talk publishing', (tester) async {
     final feed = _Feed();
     await _mount(tester, feed, shell: true);
     expect(find.text('A verified Masana update'), findsOneWidget);
@@ -147,7 +159,7 @@ void main() {
     expect(find.text('Explore'), findsNothing);
     expect(find.text('Live Talks'), findsNothing);
     expect(find.text('Create Talk'), findsNothing);
-    // Home is still the same single Status feed: no former two-tab bar.
+    // Home is a single publisher news feed: no former two-tab bar.
     expect(find.text('Videos'), findsNothing);
     expect(find.text('Updates'), findsNothing);
     expect(find.text('Create Status'), findsNothing);
