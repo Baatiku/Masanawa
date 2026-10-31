@@ -3845,14 +3845,12 @@ class _PersonaChatDisclosure extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Semantics(
-        label: 'AI persona disclosure',
+        label: ChatUiCopy.of(context, 'AI persona disclosure'),
         child: Text(
-          publicOfficial
-              ? 'I am an AI persona based on the public profile of $name. '
-                  'I am not the real person or their official representative. '
-                  'Contact the administrator for enquiries.'
-              : 'I am an AI persona called $name, not a real person. '
-                  'Contact the administrator for enquiries.',
+          ChatUiCopy.of(context, publicOfficial
+              ? 'I am an AI persona based on the public profile of {name}. I am not the real person or their official representative. Contact the administrator for enquiries.'
+              : 'I am an AI persona called {name}, not a real person. Contact the administrator for enquiries.'
+          ).replaceAll('{name}', name),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             fontSize: 11, color: colors.textMuted, height: 1.45),
