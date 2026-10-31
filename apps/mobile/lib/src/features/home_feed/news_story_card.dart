@@ -30,7 +30,7 @@ class NewsPublisherHeader extends StatelessWidget {
      if(story.verified)...[
       const SizedBox(width:4),
       const Tooltip(message:'Publisher source verified by Masanawa, not an endorsement',
-       child:Icon(Icons.verified_rounded,size:18,color:Color(0xFF1685D9))),
+       child:Icon(Icons.verified_rounded,size:18,color:Theme.of(context).colorScheme.tertiary)),
      ],
     ]),
     Text(time,style:Theme.of(context).textTheme.labelSmall),
