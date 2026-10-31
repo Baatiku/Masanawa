@@ -91,19 +91,15 @@ void main() {
   });
 
   testWidgets('emoji header and return action use Arabic, not English', (tester) async {
-    final editor = TextEditingController();
-    addTearDown(editor.dispose);
-    await tester.pumpWidget(_host('ar', ChatEmojiPanel(
-      controller: editor, onClose: () {},
+    var returned = false;
+    await tester.pumpWidget(_host('ar', ChatEmojiPanelHeader(
+      onClose: () => returned = true,
     )));
-    // emoji_picker_flutter loads recent selections on a zero-delay timer.
-    // Drain that timer before disposing its subtree in the test harness.
-    await tester.pump(const Duration(milliseconds: 10));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('الرموز التعبيرية'), findsOneWidget);
     expect(find.byTooltip('العودة إلى لوحة المفاتيح'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 10));
+    await tester.tap(find.byTooltip('العودة إلى لوحة المفاتيح'));
+    expect(returned, isTrue);
     expect(tester.takeException(), isNull);
   });
 

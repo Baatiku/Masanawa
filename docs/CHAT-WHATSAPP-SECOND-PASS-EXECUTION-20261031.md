@@ -168,6 +168,12 @@ integration/handset evidence. The PR remains draft and unmerged.
   and document form errors. These test assertions are source-level evidence;
   framework fonts, accessibility services, actual media permissions and signed
   remote downloads still need separately qualified runtime evidence.
+- Hosted Mobile Build exposed a test-only lifecycle constraint in
+  `emoji_picker_flutter`: its recents timer and ongoing frames cannot be
+  reliably settled by a standalone Flutter widget test. The lightweight
+  translated header was separated from the unchanged picker and is verified
+  directly, including keyboard-return activation; full picker behavior remains
+  covered by higher-level UI/device testing rather than a false idle assertion.
 
 The complete 145-row audit remains unaccepted; this batch does not close the
 SP-111 or SP-136 merge gates. Do not publish an APK or merge PR #612 merely
