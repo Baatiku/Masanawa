@@ -5,6 +5,9 @@ while preserving Masana-only AI conversations and the five app roots.
 The audit contains 145 individually numbered findings (SP-001–SP-145), not
 148. Three additional historical Chats/Calls refinements had already been
 implemented separately; they are not duplicated in this PR.
+The [145-row acceptance register](CHAT-WHATSAPP-145-ITEM-ACCEPTANCE.md)
+tracks each remaining acceptance condition without treating source work as
+verified device behavior.
 
 ## Connected source changes in this branch
 
@@ -50,6 +53,10 @@ implemented separately; they are not duplicated in this PR.
   archived route, conversation header and core composer controls. The catalog
   includes locale widget regressions, but the remaining Chats surfaces have
   **not** been exhaustively localized.
+- The long-press reaction menu now reserves independent 44dp touch areas for
+  six reactions and the full picker action, with a phone-width widget
+  regression (SP-056–057, 115). The runtime screenshot/assistive-technology
+  edge-position matrix is still open.
 
 These are **source-level implementation changes pending CI**, not proof of all
 145 item-level acceptance conditions or a physical WhatsApp-equivalent render.

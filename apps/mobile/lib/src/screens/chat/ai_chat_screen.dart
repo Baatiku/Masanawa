@@ -3759,19 +3759,23 @@ class _ChatBubble extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 300),
       items: [
         PopupMenuItem<String>(
-          value: 'react:❤️', height: 48,
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
-                Semantics(button: true, label: 'React with $emoji', child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
+          height: 106,
+          child: Wrap(spacing: 4, runSpacing: 4, children: [
+            for (final emoji in const ['👍', '❤️', '😂', '😮', '😢', '🙏'])
+              Semantics(button: true, label: 'React with $emoji',
+                child: InkWell(borderRadius: BorderRadius.circular(22),
                   onTap: () => Navigator.of(context).pop('react:$emoji'),
-                  child: Padding(padding: const EdgeInsets.all(4),
-                    child: Text(emoji, style: const TextStyle(fontSize: 20)))),
-                ),
-              TextButton(onPressed: () => Navigator.of(context).pop('more-reactions'),
-                child: const Text('+')),
-            ]),
+                  child: SizedBox(width: 44, height: 44,
+                    child: Center(child: Text(emoji,
+                      style: const TextStyle(fontSize: 22))))),
+              ),
+            Semantics(button: true, label: 'More reactions',
+              child: InkWell(borderRadius: BorderRadius.circular(22),
+                onTap: () => Navigator.of(context).pop('more-reactions'),
+                child: const SizedBox(width: 44, height: 44,
+                  child: Center(child: Icon(Icons.add_rounded)))),
+            ),
+          ]),
         ),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'reply', child: Text('Reply')),

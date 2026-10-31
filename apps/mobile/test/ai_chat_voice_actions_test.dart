@@ -61,6 +61,12 @@ class _VoiceChats extends _Chats {
    attachment:const ChatAttachment(kind:'voice',path:'/private/agent.m4a',durationMs:95000,sizeBytes:42,waveform:[.2,.6,.4,.8,.3])),
  ])});
 }
+class _TextChats extends _Chats {
+ @override AiChatState build()=>AiChatState(threads:{'agent':ChatThread(characterId:'agent',messages:[
+  AiChatMessage(id:'reaction-target',isUser:true,text:'A message to react to',
+    createdAt:DateTime.now(),deliveryStatus:'delivered'),
+ ])});
+}
 class _Directory extends AgentDirectoryController {
  @override AgentDirectoryState build()=>const AgentDirectoryState(loading:false,agents:[AgentDirectoryEntry(characterId:'agent',characterVersionId:'v1',displayName:'Amina',roleLabel:'AI',about:'',presence:AgentPresence.available,supportAgent:true)]);
  @override Future<void> refresh() async {}
@@ -87,6 +93,25 @@ class _Wallet extends WalletController {
 }
 void main() {
  setUp(()=>SharedPreferences.setMockInitialValues({}));
+ testWidgets('reaction menu exposes separate 44dp choices at phone width', (tester) async {
+  tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;
+  addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(ProviderScope(overrides:[
+    aiChatProvider.overrideWith(_TextChats.new),
+    agentDirectoryProvider.overrideWith(_Directory.new),
+    sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),
+  ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
+    home:const AiChatScreen(characterId:'agent'))));
+  await tester.pumpAndSettle();
+  await tester.longPress(find.text('A message to react to'));
+  await tester.pumpAndSettle();
+  final like=find.bySemanticsLabel('React with 👍');
+  expect(like, findsOneWidget);
+  expect(tester.getSize(like).width, greaterThanOrEqualTo(44));
+  expect(tester.getSize(like).height, greaterThanOrEqualTo(44));
+  expect(find.bySemanticsLabel('More reactions'), findsOneWidget);
+  expect(tester.takeException(),isNull);
+ });
  testWidgets('direct official chat visibly identifies the AI simulation', (tester) async {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(_Chats.new),agentDirectoryProvider.overrideWith(_OfficialDirectory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
