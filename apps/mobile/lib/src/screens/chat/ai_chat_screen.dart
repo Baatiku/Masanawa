@@ -1483,7 +1483,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     vertical: 7,
                   ),
                   child: Text(
-                    'Offline · messages will send when your connection returns',
+                    ChatUiCopy.of(context, 'Offline · messages will send when your connection returns'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: u.textPrimary, fontSize: 12),
                   ),
@@ -1764,7 +1764,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 ),
                 child: Row(children: [
                   Expanded(child: Text(
-                    'Study · ask, answer, or speak naturally. Your learning progress is saved privately.',
+                    ChatUiCopy.of(context, 'Study · ask, answer, or speak naturally. Your learning progress is saved privately.'),
                     style: TextStyle(color: u.textMuted, fontSize: 12, height: 1.35))),
                   IconButton(tooltip: ChatUiCopy.of(context, 'Dismiss study hint'),
                     onPressed: () => setState(() => _showStudyHint = false),
@@ -1807,7 +1807,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                     onComplete: _voiceNoteCompleted,
                     onStop: _stopVoiceSequence,
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text('Next voice note', style: TextStyle(color: u.textMuted, fontSize: 12)),
+                      Text(ChatUiCopy.of(context, 'Next voice note'), style: TextStyle(color: u.textMuted, fontSize: 12)),
                       _VoiceBubble(
                         key: ValueKey('continuation-$noteId'),
                         attachment: _sequenceNotes[noteId]!,
@@ -3972,18 +3972,18 @@ class _ChatBubble extends StatelessWidget {
           ]),
         ),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'reply', child: Text('Reply')),
-         const PopupMenuItem(value: 'quick-reaction',
-           child: Text('Set double-tap reaction')),
-        const PopupMenuItem(value: 'copy', child: Text('Copy')),
+        PopupMenuItem(value: 'reply', child: Text(ChatUiCopy.of(context, 'Reply'))),
+         PopupMenuItem(value: 'quick-reaction',
+           child: Text(ChatUiCopy.of(context, 'Set double-tap reaction'))),
+        PopupMenuItem(value: 'copy', child: Text(ChatUiCopy.of(context, 'Copy'))),
         if (onEdit != null)
-          const PopupMenuItem(value: 'edit', child: Text('Edit on this device')),
-        const PopupMenuItem(value: 'forward', child: Text('Forward')),
-        const PopupMenuItem(value: 'share', child: Text('Share')),
+          PopupMenuItem(value: 'edit', child: Text(ChatUiCopy.of(context, 'Edit on this device'))),
+        PopupMenuItem(value: 'forward', child: Text(ChatUiCopy.of(context, 'Forward'))),
+        PopupMenuItem(value: 'share', child: Text(ChatUiCopy.of(context, 'Share'))),
         if (onSaveMedia != null)
-          const PopupMenuItem(value: 'save', child: Text('Save media')),
-        const PopupMenuItem(value: 'select', child: Text('Select')),
-        const PopupMenuItem(value: 'delete', child: Text('Hide on this device')),
+          PopupMenuItem(value: 'save', child: Text(ChatUiCopy.of(context, 'Save media'))),
+        PopupMenuItem(value: 'select', child: Text(ChatUiCopy.of(context, 'Select'))),
+        PopupMenuItem(value: 'delete', child: Text(ChatUiCopy.of(context, 'Hide on this device'))),
         if (!message.isUser) ...[
           const PopupMenuDivider(),
           for (final item in const [
@@ -4122,7 +4122,7 @@ class _ChatBubble extends StatelessWidget {
                     ),
                   if (message.deleted)
                     Text(
-                      'Hidden on this device',
+                      ChatUiCopy.of(context, 'Hidden on this device'),
                       style: TextStyle(
                         color: u.textMuted,
                         fontStyle: FontStyle.italic,
@@ -4182,7 +4182,7 @@ class _ChatBubble extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: Text(
-                            'edited',
+                            ChatUiCopy.of(context, 'edited'),
                             style: TextStyle(color: u.textMuted, fontSize: 10),
                           ),
                         ),
@@ -4291,7 +4291,7 @@ class _CollapsibleTranscriptState extends State<_CollapsibleTranscript> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         TextButton.icon(onPressed: () => setState(() => _expanded = !_expanded),
           icon: Icon(_expanded ? Icons.expand_less : Icons.subtitles_outlined, size: 16),
-          label: Text(_expanded ? 'Hide transcript' : 'Show transcript')),
+          label: Text(ChatUiCopy.of(context, _expanded ? 'Hide transcript' : 'Show transcript'))),
         if (_expanded) Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: _RichMessageText(text: widget.text)),
@@ -4763,8 +4763,8 @@ class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
             _downloadFailed ? 'Retry $label' : label,
           maxLines: 2, overflow: TextOverflow.ellipsis),
       ),
-      if (_downloadFailed) const Text(
-        'Download failed · check connection and try again',
+      if (_downloadFailed) Text(
+        ChatUiCopy.of(context, 'Download failed · check connection and try again'),
         textAlign: TextAlign.center),
       ]),
     );
