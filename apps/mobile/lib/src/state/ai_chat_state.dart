@@ -392,6 +392,8 @@ class ChatThread {
     this.pinned = false,
     this.archived = false,
     this.scrollOffset = 0,
+    this.scrollAnchorMessageId,
+    this.scrollAnchorFraction = 0,
     this.draftAttachments = const [],
     this.draftVoice,
   }) : updatedAt = updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -407,6 +409,8 @@ class ChatThread {
   final bool pinned;
   final bool archived;
   final double scrollOffset;
+  final String? scrollAnchorMessageId;
+  final double scrollAnchorFraction;
   final List<ChatAttachment> draftAttachments;
   final ChatAttachment? draftVoice;
 
@@ -435,6 +439,8 @@ class ChatThread {
     bool? pinned,
     bool? archived,
     double? scrollOffset,
+    String? scrollAnchorMessageId,
+    double? scrollAnchorFraction,
     List<ChatAttachment>? draftAttachments,
     ChatAttachment? draftVoice,
     bool clearDraftVoice = false,
@@ -450,6 +456,8 @@ class ChatThread {
     pinned: pinned ?? this.pinned,
     archived: archived ?? this.archived,
     scrollOffset: scrollOffset ?? this.scrollOffset,
+    scrollAnchorMessageId: scrollAnchorMessageId ?? this.scrollAnchorMessageId,
+    scrollAnchorFraction: scrollAnchorFraction ?? this.scrollAnchorFraction,
     draftAttachments: draftAttachments ?? this.draftAttachments,
     draftVoice: clearDraftVoice ? null : (draftVoice ?? this.draftVoice),
   );
@@ -466,6 +474,8 @@ class ChatThread {
     if (pinned) 'pinned': true,
     if (archived) 'archived': true,
     if (scrollOffset > 0) 'scrollOffset': scrollOffset,
+    if (scrollAnchorMessageId != null) 'scrollAnchorMessageId': scrollAnchorMessageId,
+    if (scrollAnchorMessageId != null) 'scrollAnchorFraction': scrollAnchorFraction,
     if (draftAttachments.isNotEmpty)
       'draftAttachments': [for (final item in draftAttachments) item.toJson()],
     if (draftVoice != null) 'draftVoice': draftVoice!.toJson(),
@@ -489,6 +499,9 @@ class ChatThread {
       pinned: json['pinned'] as bool? ?? false,
       archived: json['archived'] as bool? ?? false,
       scrollOffset: (json['scrollOffset'] as num?)?.toDouble() ?? 0,
+      scrollAnchorMessageId: json['scrollAnchorMessageId'] as String?,
+      scrollAnchorFraction: ((json['scrollAnchorFraction'] as num?)?.toDouble() ?? 0)
+          .clamp(0.0, 1.0).toDouble(),
       draftAttachments: [
         for (final raw in (json['draftAttachments'] as List? ?? const []))
           if (raw is Map) ChatAttachment.fromJson(raw.cast<String, dynamic>()),
@@ -2434,6 +2447,22 @@ class AiChatController extends Notifier<AiChatState> {
       throw StateError('Scenario injection is debug-only');
     }
     unawaited(_appendAi(characterId, text, parts: [part]));
+  }
+
+  void setScrollViewportAnchor(String characterId, double offset,
+      {String? messageId, double fraction = 0}) {
+    final thread = threadOf(characterId);
+    final safe = offset.isFinite && offset > 0 ? offset : 0.0;
+    final relative = fraction.isFinite ? fraction.clamp(0.0, 1.0).toDouble() : 0.0;
+    if ((thread.scrollOffset - safe).abs() < 12 &&
+        thread.scrollAnchorMessageId == messageId &&
+        (thread.scrollAnchorFraction - relative).abs() < .03) return;
+    state = state.copyWith(threads: {
+      ...state.threads,
+      characterId: thread.copyWith(scrollOffset: safe,
+          scrollAnchorMessageId: messageId, scrollAnchorFraction: relative),
+    });
+    _save();
   }
 
   void setScrollOffset(String characterId, double offset) {

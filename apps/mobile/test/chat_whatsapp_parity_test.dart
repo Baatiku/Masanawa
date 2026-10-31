@@ -57,4 +57,18 @@ void main() {
     expect(border.borderRadius.topLeft.x, greaterThanOrEqualTo(20));
     expect(field.decoration!.fillColor, MasanawaColors.light().fieldSurface);
   });
+  test('conversation viewport anchor survives storage roundtrip', () {
+    final original = ChatThread(characterId: 'anchor',
+      scrollOffset: 312,
+      scrollAnchorMessageId: 'message-42', scrollAnchorFraction: .3);
+    final restored = ChatThread.fromJson(original.toJson());
+    expect(restored.scrollAnchorMessageId, 'message-42');
+    expect(restored.scrollAnchorFraction, .3);
+    expect(restored.scrollOffset, 312);
+    final updated = restored.copyWith(scrollOffset: 337,
+      scrollAnchorMessageId: 'message-43', scrollAnchorFraction: .2);
+    expect(updated.scrollAnchorMessageId, 'message-43');
+    expect(updated.scrollAnchorFraction, .2);
+  });
+
 }

@@ -108,6 +108,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   final _search = TextEditingController();
   int _searchIndex = 0;
   bool _nearBottom = true;
+  String? _initialUnreadMarkerId;
   int _newBelow = 0;
   bool _loadingOlder = false, _olderHistoryExhausted = false,
       _olderHistoryError = false;
@@ -275,9 +276,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       _scrollPersistTimer?.cancel();
       _scrollPersistTimer = Timer(const Duration(milliseconds: 280), () {
         if (!mounted || !_scroll.hasClients) return;
-        ref
-            .read(aiChatProvider.notifier)
-            .setScrollOffset(widget.characterId, _scroll.offset);
+        final anchor = _visibleMessageAnchor();
+        ref.read(aiChatProvider.notifier).setScrollViewportAnchor(
+            widget.characterId, _scroll.offset,
+            messageId: anchor.messageId, fraction: anchor.fraction);
       });
     });
 
@@ -286,6 +288,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       controller.openThread(widget.characterId);
       final thread = controller.threadOf(widget.characterId);
       final draft = thread.draft;
+      if (_initialUnreadMarkerId == null && thread.unread > 0) {
+        final latestReplies = thread.messages.where(
+          (item) => !item.isUser && !item.deleted).toList();
+        if (latestReplies.isNotEmpty) {
+          final start = latestReplies.length - thread.unread;
+          _initialUnreadMarkerId = latestReplies[start.clamp(0, latestReplies.length - 1)].id;
+        }
+      }
       if (draft.isNotEmpty && _input.text.isEmpty) {
         _input.text = draft;
         _input.selection = TextSelection.collapsed(offset: draft.length);
@@ -308,6 +318,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
               _scroll.position.maxScrollExtent,
             ).toDouble(),
           );
+          final anchorKey = thread.scrollAnchorMessageId == null
+              ? null : _messageKeys[thread.scrollAnchorMessageId]?.currentContext;
+          if (anchorKey != null) {
+            Scrollable.ensureVisible(anchorKey,
+              duration: Duration.zero,
+              alignment: thread.scrollAnchorFraction.clamp(0.0, 1.0));
+          }
         });
       }
     });
@@ -338,6 +355,24 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       ref.read(aiChatProvider.notifier).closeThread();
     } catch (_) {}
     super.dispose();
+  }
+
+  ({String? messageId, double fraction}) _visibleMessageAnchor() {
+    final height = MediaQuery.sizeOf(context).height;
+    String? closestId;
+    var closestY = double.infinity;
+    for (final entry in _messageKeys.entries) {
+      final render = entry.value.currentContext?.findRenderObject();
+      if (render is! RenderBox || !render.attached || !render.hasSize) continue;
+      final y = render.localToGlobal(Offset.zero).dy;
+      if (y >= 0 && y < height && y < closestY) {
+        closestY = y;
+        closestId = entry.key;
+      }
+    }
+    return (messageId: closestId,
+        fraction: closestId == null || height <= 0 ? 0.0
+            : (closestY / height).clamp(0.0, 1.0).toDouble());
   }
 
   void _scrollToBottom() {
@@ -1580,6 +1615,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                           child: Column(
                           children: [
                             if (showDate) _DateSeparator(date: message.createdAt),
+                            if (_initialUnreadMarkerId == message.id)
+                              Center(child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Semantics(liveRegion: true,
+                                  child: Text(ChatUiCopy.of(context, 'New replies'),
+                                    style: TextStyle(color: u.brandStrong,
+                                      fontSize: 12, fontWeight: FontWeight.w700))))),
                             KeyedSubtree(
                               key: _messageKeys.putIfAbsent(
                                 message.id,
