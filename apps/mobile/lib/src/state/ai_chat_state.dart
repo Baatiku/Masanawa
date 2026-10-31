@@ -620,8 +620,47 @@ DownloadedChatMediaCleanup planDownloadedChatMediaCleanup(
   return DownloadedChatMediaCleanup(state.copyWith(threads: threads), paths);
 }
 
+/// Ephemeral per-authorization voice-note resume cursors. No media URI, audio
+/// content, or position is written to disk; a new account/auth epoch clears it.
+class VoicePlaybackResumeMemory {
+  String? _owner;
+  int _epoch = 0;
+  final Map<String, Duration> _positions = {};
+
+  void scopeTo(String? owner, int authorizationEpoch) {
+    if (owner == _owner && authorizationEpoch == _epoch) return;
+    _positions.clear();
+    _owner = owner;
+    _epoch = authorizationEpoch;
+  }
+
+  Duration positionFor(String messageKey) =>
+      _owner == null ? Duration.zero :
+      (_positions[messageKey] ?? Duration.zero);
+
+  void remember(String messageKey, Duration position) {
+    if (_owner == null || messageKey.isEmpty) return;
+    if (position <= Duration.zero) {
+      _positions.remove(messageKey);
+      return;
+    }
+    if (_positions.length >= 128 && !_positions.containsKey(messageKey)) {
+      _positions.remove(_positions.keys.first);
+    }
+    _positions.remove(messageKey);
+    _positions[messageKey] = position;
+  }
+
+  void clear() {
+    _positions.clear();
+    _owner = null;
+    _epoch = 0;
+  }
+}
+
 class AiChatController extends Notifier<AiChatState> {
   int _seq = 0;
+  final VoicePlaybackResumeMemory _voiceResume = VoicePlaybackResumeMemory();
   bool _disposed = false;
   final Map<String, AgentSessionBinding> _bindings = {};
   int _connectionGeneration = 0;
@@ -646,6 +685,7 @@ class AiChatController extends Notifier<AiChatState> {
     _cacheOwnerId =
         initialSession is SessionSignedIn ? initialSession.user.id : null;
     final initialOwner = _cacheOwnerId;
+    _voiceResume.scopeTo(initialOwner, _sessionAuthorizationEpoch);
     if (initialOwner != null && initialOwner.isNotEmpty) {
       // Local conversation state is useful immediately. Hydrate it before
       // starting another platform-channel dependency on slower devices.
@@ -657,6 +697,7 @@ class AiChatController extends Notifier<AiChatState> {
       scheduleMicrotask(_startConnectivityMonitoring);
     }
     ref.onDispose(() {
+      _voiceResume.clear();
       _disposed = true;
       _draftSaveDebounce?.cancel();
       _connectivitySub?.cancel();
@@ -670,6 +711,7 @@ class AiChatController extends Notifier<AiChatState> {
       final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
       final replaced = epoch != _sessionAuthorizationEpoch;
       _sessionAuthorizationEpoch = epoch;
+      _voiceResume.scopeTo(nextOwner, epoch);
       if (nextOwner == _cacheOwnerId) {
         if (replaced && nextOwner != null) {
           // Re-login fences old callbacks without erasing this account's data
@@ -2448,6 +2490,13 @@ class AiChatController extends Notifier<AiChatState> {
     }
     unawaited(_appendAi(characterId, text, parts: [part]));
   }
+
+  /// Resume positions are local to the current signed-in authorization.
+  Duration rememberedVoicePosition(String messageKey) =>
+      _voiceResume.positionFor(messageKey);
+
+  void rememberVoicePosition(String messageKey, Duration position) =>
+      _voiceResume.remember(messageKey, position);
 
   void setScrollViewportAnchor(String characterId, double offset,
       {String? messageId, double fraction = 0}) {

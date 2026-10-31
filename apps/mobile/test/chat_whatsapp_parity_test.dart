@@ -71,4 +71,25 @@ void main() {
     expect(updated.scrollAnchorFraction, .2);
   });
 
+
+  test('voice replay cursor never crosses account or authorization changes', () {
+    final cursor = VoicePlaybackResumeMemory();
+    cursor.scopeTo('owner-a', 1);
+    cursor.remember('message-1:0', const Duration(seconds: 15));
+    expect(cursor.positionFor('message-1:0'), const Duration(seconds: 15));
+    cursor.scopeTo('owner-a', 1);
+    expect(cursor.positionFor('message-1:0'), const Duration(seconds: 15));
+    cursor.scopeTo('owner-a', 2);
+    expect(cursor.positionFor('message-1:0'), Duration.zero);
+    cursor.remember('message-1:0', const Duration(seconds: 7));
+    cursor.scopeTo('owner-b', 2);
+    expect(cursor.positionFor('message-1:0'), Duration.zero);
+    cursor.remember('message-2:0', const Duration(seconds: 23));
+    cursor.remember('message-2:0', Duration.zero);
+    expect(cursor.positionFor('message-2:0'), Duration.zero);
+    cursor.scopeTo(null, 3);
+    cursor.remember('message-1:0', const Duration(seconds: 99));
+    expect(cursor.positionFor('message-1:0'), Duration.zero);
+  });
+
 }

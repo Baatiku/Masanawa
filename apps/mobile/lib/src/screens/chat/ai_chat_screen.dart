@@ -5224,7 +5224,7 @@ Future<T> _withVoiceRoute<T>(Future<T> Function() work) {
   return result.future;
 }
 
-class _VoiceBubble extends StatefulWidget {
+class _VoiceBubble extends ConsumerStatefulWidget {
   const _VoiceBubble({super.key, required this.attachment,
     required this.agent, this.senderIsUser=false,
     this.continuationGeneration, this.canContinue});
@@ -5235,10 +5235,10 @@ class _VoiceBubble extends StatefulWidget {
   final bool Function()? canContinue;
 
   @override
-  State<_VoiceBubble> createState() => _VoiceBubbleState();
+  ConsumerState<_VoiceBubble> createState() => _VoiceBubbleState();
 }
 
-class _VoiceBubbleState extends State<_VoiceBubble> {
+class _VoiceBubbleState extends ConsumerState<_VoiceBubble> {
   AudioPlayer? _player;
   _VoicePlaybackScope? _sequenceScope;
   String? _noteId;
@@ -5253,6 +5253,9 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   bool _speakerOn = true;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  String? _voiceOwnerId;
+  int _voiceOwnerEpoch = 0;
+  int _lastRememberedSecond = -1;
 
   @override
   void initState() {
@@ -5273,11 +5276,34 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _sequenceScope = context.dependOnInheritedWidgetOfExactType<_VoicePlaybackScope>();
-    _noteId = _sequenceScope?.idFor(widget.attachment);
+    final newNoteId = _sequenceScope?.idFor(widget.attachment);
+    final session = ref.read(sessionProvider);
+    _voiceOwnerId = session is SessionSignedIn ? session.user.id : null;
+    _voiceOwnerEpoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (_noteId != newNoteId) {
+      _noteId = newNoteId;
+      _position = newNoteId == null ? Duration.zero :
+          ref.read(aiChatProvider.notifier).rememberedVoicePosition(newNoteId);
+    }
+  }
+
+  bool _hasVoiceLease() {
+    if (!mounted || _voiceOwnerId == null) return false;
+    final current = ref.read(sessionProvider);
+    return current is SessionSignedIn &&
+        current.user.id == _voiceOwnerId &&
+        _voiceOwnerEpoch ==
+            ref.read(sessionProvider.notifier).authorizationEpoch;
+  }
+
+  void _rememberVoicePosition(Duration position) {
+    if (!_hasVoiceLease() || _noteId == null) return;
+    ref.read(aiChatProvider.notifier).rememberVoicePosition(_noteId!, position);
   }
 
   @override
   void dispose() {
+    _rememberVoicePosition(_position);
     _playRequest++;
     if (identical(_activeVoiceBubble, this)) {
       _sequenceScope?.onStop();
@@ -5297,6 +5323,7 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
     try {
       await player.pause();
       await player.seek(Duration.zero);
+      _rememberVoicePosition(Duration.zero);
       if (!identical(_activeVoiceBubble, this)) return;
       await _releaseAudioRoute();
       if (!identical(_activeVoiceBubble, this)) return;
@@ -5357,7 +5384,14 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
       }
     });
     _positionSub = player.positionStream.listen((value) {
-      if (mounted) setState(() => _position = value);
+      if (!mounted) return;
+      setState(() => _position = value);
+      if (_playing && value > Duration.zero &&
+          value.inSeconds != _lastRememberedSecond &&
+          value.inSeconds % 3 == 0) {
+        _lastRememberedSecond = value.inSeconds;
+        _rememberVoicePosition(value);
+      }
     });
 
     final path = widget.attachment.path;
@@ -5380,6 +5414,10 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
 
     _duration = duration ??
         Duration(milliseconds: widget.attachment.durationMs ?? 0);
+    if (_position > Duration.zero &&
+        (_duration == Duration.zero || _position < _duration)) {
+      await player.seek(_position);
+    }
     await player.setSpeed(_sharedVoiceSpeed);
   }
 
@@ -5405,6 +5443,7 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
       if (_playing) {
         _sequenceScope?.onStop();
         if (mounted) setState(() => _playing = false);
+        _rememberVoicePosition(_position);
         await _player!.pause();
         await _releaseAudioRoute();
         return;
@@ -5487,6 +5526,7 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
       if (totalMs <= 0) return;
       final target = Duration(milliseconds: (totalMs * fraction).round());
       setState(() => _position = target);
+      _rememberVoicePosition(target);
       await _player!.seek(target);
     } catch (_) {}
   }
@@ -5556,7 +5596,10 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
         children: [
           if (widget.senderIsUser) ...[avatar, const SizedBox(width: 4)],
           IconButton(
-            tooltip: _broken ? 'Retry voice note' : _playing ? 'Pause voice note' : 'Play voice note',
+            tooltip: ChatUiCopy.of(context, _broken ? 'Retry voice note'
+                : _playing ? 'Pause voice note'
+                : _position > Duration.zero ? 'Resume voice note'
+                : 'Play voice note'),
             onPressed: _toggle,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 42, minHeight: 48),

@@ -24,6 +24,10 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "Resume voice note": "Ci gaba da saƙon murya",
+    "Play voice note": "Kunna saƙon murya",
+    "Pause voice note": "Dakatar da saƙon murya",
+    "Retry voice note": "Sake gwada saƙon murya",
     'New replies': 'Sabbin amsoshi',
     'You': 'Kai',
     "I am an AI persona called {name}, not a real person. Contact the administrator for enquiries.": "Wannan halayyar AI ana kiranta {name}; ba mutum na gaskiya ba ce. Tuntuɓi mai kula da manhajar don tambayoyi.",
@@ -265,6 +269,10 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+    "Resume voice note": "استئناف الرسالة الصوتية",
+    "Play voice note": "تشغيل الرسالة الصوتية",
+    "Pause voice note": "إيقاف الرسالة الصوتية مؤقتًا",
+    "Retry voice note": "إعادة محاولة الرسالة الصوتية",
     'New replies': 'ردود جديدة',
     'You': 'أنت',
     "I am an AI persona called {name}, not a real person. Contact the administrator for enquiries.": "أنا شخصية ذكاء اصطناعي تُدعى {name}، ولست شخصًا حقيقيًا. تواصل مع إدارة التطبيق للاستفسارات.",
