@@ -3169,7 +3169,7 @@ class _CafeSuggestionBar extends StatelessWidget {
               ],
             ],
           ),
-        ),
+        )),
         IconButton(tooltip: 'Dismiss suggestions', onPressed: onDismiss,
           icon: const Icon(Icons.close_rounded, size: 18)),
       ]),
