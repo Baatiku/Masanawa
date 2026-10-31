@@ -65,10 +65,28 @@ class MasanawaConversationTile extends StatelessWidget {
                   child: Text(time, maxLines: 2,
                     style: TextStyle(fontSize: 11.5,
                       color: unread > 0 ? colors.brandStrong : colors.textMuted))),
+              // At 200% text, badges belong beneath the preview rather
+              // than competing with the 48dp trailing action touch target.
+              if (largeText && unread > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(color: colors.brand,
+                        borderRadius: BorderRadius.circular(18)),
+                      child: Text(unread > 99 ? '99+' : '$unread',
+                        style: const TextStyle(color: Colors.white,
+                          fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ),
             ]),
         ),
         trailing: SizedBox(
-          width: onAction != null ? 112 : largeText ? 50 : 90,
+          width: onAction != null ? (largeText ? 48 : 112) : largeText ? 50 : 90,
           height: 48,
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Expanded(child: Column(
@@ -85,7 +103,7 @@ class MasanawaConversationTile extends StatelessWidget {
                       fontSize: 11.5,
                       fontWeight: unread > 0
                         ? FontWeight.w600 : FontWeight.w400)),
-                if (unread > 0 || (pinned && onAction == null))
+                if ((!largeText && unread > 0) || (pinned && onAction == null))
                   Padding(padding: EdgeInsets.only(
                     top: !timeBelowPreview && time.isNotEmpty ? 3 : 0),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -93,7 +111,7 @@ class MasanawaConversationTile extends StatelessWidget {
                         Padding(padding: const EdgeInsetsDirectional.only(end: 5),
                           child: Icon(Icons.push_pin, size: 14,
                             color: colors.brandStrong)),
-                      if (unread > 0)
+                      if (!largeText && unread > 0)
                         Container(
                           constraints: const BoxConstraints(
                             minWidth: 20, minHeight: 20),
