@@ -52,30 +52,41 @@ class GbDataValidityChoices extends StatelessWidget {
   final bool enabled;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    alignment: WrapAlignment.center,
-    spacing: 6,
-    runSpacing: 4,
-    children: [
-      for (final choice in <GbDataValidityPeriod?>[
-        GbDataValidityPeriod.daily,
-        GbDataValidityPeriod.weekly,
-        GbDataValidityPeriod.monthly,
-      ])
-        ChoiceChip(
-          key: ValueKey('data-validity-${choice?.name ?? 'all'}'),
-          checkmarkColor: Theme.of(context).colorScheme.onSurface,
-          label: Text(switch (choice) {
-            null => 'All durations',
-            GbDataValidityPeriod.daily => 'Daily',
-            GbDataValidityPeriod.weekly => 'Weekly',
-            GbDataValidityPeriod.monthly => 'Monthly',
-            GbDataValidityPeriod.other => 'Other',
-          }),
-          selected: choice == period,
-          onSelected: !enabled ? null : (_) => onChanged(choice),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, size) => SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: size.maxWidth),
+        child: SegmentedButton<GbDataValidityPeriod>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: GbDataValidityPeriod.daily,
+              label: Text('Daily'),
+            ),
+            ButtonSegment(
+              value: GbDataValidityPeriod.weekly,
+              label: Text('Weekly'),
+            ),
+            ButtonSegment(
+              value: GbDataValidityPeriod.monthly,
+              label: Text('Monthly'),
+            ),
+          ],
+          selected: period == null ? const {} : {period!},
+          emptySelectionAllowed: true,
+          onSelectionChanged: !enabled
+              ? null
+              : (choices) {
+                  if (choices.isNotEmpty) onChanged(choices.first);
+                },
+          style: const ButtonStyle(
+            minimumSize: WidgetStatePropertyAll(Size(78, 48)),
+            visualDensity: VisualDensity.compact,
+          ),
         ),
-    ],
+      ),
+    ),
   );
 }
 

@@ -10,6 +10,7 @@ import '../ui/components/masanawa_section_heading.dart';
 import 'gb_wallet_summary.dart';
 import 'ngn_wallet.dart';
 import 'ngn_exchange_review.dart';
+import 'gb_wallet_flow_components.dart';
 
 class _Package {
   const _Package(this.gb, this.kobo);
@@ -278,6 +279,19 @@ class _RechargePackagesScreenState
         ? null
         : ref.watch(ngnWalletBalanceProvider(owner));
     final review = _review;
+    final verifiedCash = cash != null && !cash.isLoading && !cash.hasError
+        ? cash.valueOrNull
+        : null;
+    final insufficientCash =
+        review != null &&
+        !_completed &&
+        !_uncertain &&
+        (verifiedCash == null ||
+            verifiedCash.frozen ||
+            verifiedCash.balanceKobo < review.amountKobo);
+    final quoteExpired =
+        review != null && !review.expiresAt.isAfter(DateTime.now().toUtc());
+    final selectedPackage = _packages.where((p) => p.gb == _selected);
     final colors = context.masanawa;
     final insets = MediaQuery.viewInsetsOf(context);
     void closeOrBack() {
@@ -290,6 +304,7 @@ class _RechargePackagesScreenState
         context.go('/home?tab=wallet');
       }
     }
+
     return PopScope(
       canPop: review == null || _uncertain || _completed,
       onPopInvokedWithResult: (didPop, result) {
@@ -302,212 +317,492 @@ class _RechargePackagesScreenState
         child: Padding(
           padding: EdgeInsets.only(bottom: insets.bottom),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 560,
-              maxHeight: (MediaQuery.sizeOf(context).height - insets.bottom) * .92),
+            constraints: BoxConstraints(
+              maxWidth: 560,
+              maxHeight:
+                  (MediaQuery.sizeOf(context).height - insets.bottom) * .92,
+            ),
             child: Material(
               color: colors.surfaceCard,
               elevation: 16,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
               clipBehavior: Clip.antiAlias,
-              child: SafeArea(top: false, child: Column(children: [
-                const SizedBox(height: 10),
-                Container(width: 34, height: 4,
-                  decoration: BoxDecoration(color: colors.structuralBorder,
-                    borderRadius: BorderRadius.circular(20))),
-                Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 8, 0),
-                  child: Row(children: [
-                    const SizedBox(width: 48),
-                    Expanded(child: Text(review == null ? 'Buy Data'
-                        : _completed ? 'Data added' : 'Review exchange',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700))),
-                    IconButton(
-                      tooltip: review != null && !_uncertain && !_completed
-                          ? 'Back to packages' : 'Close Buy Data',
-                      onPressed: _busy ? null : closeOrBack,
-                      icon: Icon(review != null && !_uncertain && !_completed
-                          ? Icons.arrow_back_rounded : Icons.close_rounded),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 34,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colors.structuralBorder,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
-                  ]),
-                ),
-                Expanded(child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (owner == null)
-              const Text('Sign in to buy data.')
-            else ...[
-              if (_loading || _busy) const LinearProgressIndicator(),
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              if (review == null) ...[
-                const MasanawaSectionHeading('Choose a package'),
-                const SizedBox(height: 12),
-                if (!_enabled && !_loading)
-                  const Text('Package exchange is currently unavailable.'),
-                LayoutBuilder(builder: (context, constraints) {
-                  final scale = MediaQuery.textScalerOf(context).scale(1);
-                  final columns = scale >= 1.8 ? 2 : scale > 1.3 ||
-                      constraints.maxWidth < 280 ? 3 : 4;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _packages.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: 7,
-                      mainAxisSpacing: 7,
-                      childAspectRatio: columns == 4 ? .83 : 1.1,
+                    Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(
+                        16,
+                        6,
+                        8,
+                        0,
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 48),
+                          Expanded(
+                            child: Text(
+                              review == null
+                                  ? 'Buy Data'
+                                  : _completed
+                                  ? 'Data added'
+                                  : 'Review exchange',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip:
+                                review != null && !_uncertain && !_completed
+                                ? 'Back to packages'
+                                : 'Close Buy Data',
+                            onPressed: _busy ? null : closeOrBack,
+                            icon: Icon(
+                              review != null && !_uncertain && !_completed
+                                  ? Icons.arrow_back_rounded
+                                  : Icons.close_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    itemBuilder: (context, index) {
-                      final p = _packages[index];
-                      final selected = _selected == p.gb && _custom.text.isEmpty;
-                      return Material(
-                        color: selected ? colors.surfaceMuted : colors.fieldSurface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: selected
-                              ? colors.brand : colors.structuralBorder,
-                            width: selected ? 1.6 : 1),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          key: ValueKey('gb-package-${p.gb}'),
-                          onTap: _busy || !_enabled ? null : () => setState(() {
-                            _selected = p.gb;
-                            _custom.clear();
-                          }),
-                          child: Padding(padding: const EdgeInsets.all(4), child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text('${p.gb} GB', maxLines: 1,
-                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 3),
-                              Text(formatNgn(p.kobo), maxLines: 2,
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelSmall),
-                              if (selected) Icon(Icons.check_circle_rounded,
-                                size: 14, color: colors.brandStrong),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (owner == null)
+                            const Text('Sign in to buy data.')
+                          else ...[
+                            if (_loading || _busy)
+                              const LinearProgressIndicator(),
+                            if (_error != null)
+                              Text(
+                                _error!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            if (review == null) ...[
+                              Row(
+                                children: [
+                                  const Expanded(
+                                    child: MasanawaSectionHeading(
+                                      'Choose a package',
+                                    ),
+                                  ),
+                                  Text(
+                                    verifiedCash == null
+                                        ? 'NGN unavailable'
+                                        : 'Available ${formatNgn(verifiedCash.balanceKobo)}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: colors.textMuted),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              if (!_enabled && !_loading)
+                                const GbWalletInlineNotice(
+                                  message:
+                                      'Package exchange is currently unavailable.',
+                                ),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final scale = MediaQuery.textScalerOf(
+                                    context,
+                                  ).scale(1);
+                                  final columns = scale >= 1.8
+                                      ? 2
+                                      : scale > 1.3 ||
+                                            constraints.maxWidth < 280
+                                      ? 3
+                                      : 4;
+                                  return GridView.builder(
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    itemCount: _loading && _packages.isEmpty
+                                        ? 8
+                                        : _packages.length,
+                                    gridDelegate:
+                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: columns,
+                                          crossAxisSpacing: 7,
+                                          mainAxisSpacing: 7,
+                                          childAspectRatio: columns == 4
+                                              ? 1.05
+                                              : 1.15,
+                                        ),
+                                    itemBuilder: (context, index) {
+                                      if (_loading && _packages.isEmpty)
+                                        return Container(
+                                          decoration: BoxDecoration(
+                                            color: colors.fieldSurface,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.data_usage_outlined,
+                                              size: 20,
+                                              color: colors.textMuted,
+                                            ),
+                                          ),
+                                        );
+                                      final p = _packages[index];
+                                      final selected =
+                                          _selected == p.gb &&
+                                          _custom.text.isEmpty;
+                                      return Material(
+                                        color: !_enabled
+                                            ? colors.surfaceMuted
+                                            : selected
+                                            ? colors.surfaceMuted
+                                            : colors.fieldSurface,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          side: BorderSide(
+                                            color: selected
+                                                ? colors.brand
+                                                : colors.structuralBorder,
+                                            width: selected ? 1.6 : 1,
+                                          ),
+                                        ),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: InkWell(
+                                          key: ValueKey('gb-package-${p.gb}'),
+                                          onTap: _busy || !_enabled
+                                              ? null
+                                              : () => setState(() {
+                                                  _selected = p.gb;
+                                                  _custom.clear();
+                                                }),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(4),
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  '${p.gb} GB',
+                                                  maxLines: 1,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelLarge
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  formatNgn(p.kobo),
+                                                  maxLines: 2,
+                                                  textAlign: TextAlign.center,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.labelSmall,
+                                                ),
+                                                if (selected)
+                                                  Icon(
+                                                    Icons.check_circle_rounded,
+                                                    size: 14,
+                                                    color: colors.brandStrong,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                              TextField(
+                                controller: _custom,
+                                enabled: !_busy,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                  labelText: 'Custom quantity (GB)',
+                                  helperText: '1–2,000 whole GB',
+                                ),
+                                onChanged: (v) => setState(() {
+                                  final n = int.tryParse(v);
+                                  _selected = n != null && n >= 1 && n <= 2000
+                                      ? n
+                                      : null;
+                                }),
+                              ),
+                              const SizedBox(height: 14),
+                              Align(
+                                alignment: AlignmentDirectional.centerEnd,
+                                child: TextButton.icon(
+                                  onPressed: _busy ? null : () => _load(owner),
+                                  icon: const Icon(
+                                    Icons.refresh_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Refresh packages'),
+                                ),
+                              ),
+                            ] else ...[
+                              GbWalletAmountHero(
+                                '${review.sizeGb} GB',
+                                caption: _completed
+                                    ? '${groupedMb(review.amountMb)} MB added to purchased data'
+                                    : 'Will add ${groupedMb(review.amountMb)} purchased MB if confirmed',
+                              ),
+                              Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    children: [
+                                      GbWalletReviewLine(
+                                        _completed
+                                            ? 'Current NGN'
+                                            : 'Available NGN',
+                                        verifiedCash == null
+                                            ? 'Unavailable'
+                                            : formatNgn(
+                                                verifiedCash.balanceKobo,
+                                              ),
+                                      ),
+                                      GbWalletReviewLine(
+                                        'Exchange cost',
+                                        '−${formatNgn(review.amountKobo)}',
+                                      ),
+                                      if (!_completed)
+                                        GbWalletReviewLine(
+                                          'Projected NGN remaining',
+                                          verifiedCash == null
+                                              ? 'Unavailable'
+                                              : formatNgn(
+                                                  verifiedCash.balanceKobo -
+                                                      review.amountKobo,
+                                                ),
+                                          emphasize: true,
+                                        ),
+                                      GbWalletReviewLine(
+                                        _completed
+                                            ? 'Purchased data gained'
+                                            : 'Purchased data expected',
+                                        '+${groupedMb(review.amountMb)} MB',
+                                        emphasize: true,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              ExpansionTile(
+                                title: const Text('Exchange details'),
+                                children: [
+                                  GbWalletReviewLine(
+                                    'Rate version',
+                                    review.rateVersion,
+                                  ),
+                                  GbWalletReviewLine(
+                                    'Valid until',
+                                    TimeOfDay.fromDateTime(
+                                      review.expiresAt.toLocal(),
+                                    ).format(context),
+                                  ),
+                                ],
+                              ),
+                              if (insufficientCash)
+                                GbWalletInlineNotice(
+                                  message: verifiedCash == null
+                                      ? 'Balance unavailable. Refresh your NGN balance.'
+                                      : verifiedCash.frozen
+                                      ? 'Your NGN balance is temporarily unavailable.'
+                                      : 'Not enough NGN. Fund your wallet to continue.',
+                                  actionLabel:
+                                      verifiedCash != null &&
+                                          !verifiedCash.frozen
+                                      ? 'Fund NGN'
+                                      : null,
+                                  onAction:
+                                      verifiedCash != null &&
+                                          !verifiedCash.frozen
+                                      ? () async {
+                                          await context.push('/wallet/fund');
+                                          if (mounted && _owner == owner) {
+                                            ref.invalidate(
+                                              ngnWalletBalanceProvider(owner),
+                                            );
+                                            setState(() {
+                                              _review = null;
+                                              _error = null;
+                                            });
+                                          }
+                                        }
+                                      : null,
+                                ),
+                              if (quoteExpired && !_completed && !_uncertain)
+                                GbWalletInlineNotice(
+                                  message:
+                                      'Quote expired. Go back to packages and review again.',
+                                ),
+                              if (_completed) ...[
+                                const GbWalletInlineNotice(
+                                  message:
+                                      'Your purchased data balance has been updated.',
+                                  warning: false,
+                                ),
+                              ] else if (_uncertain) ...[
+                                if (_error == null)
+                                  GbWalletInlineNotice(
+                                    message:
+                                        'This exchange needs an original receipt check. '
+                                        'Do not start another purchase.',
+                                  ),
+                                if (_canReplay)
+                                  OutlinedButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _confirm(replay: true),
+                                    child: const Text('Retry same exchange'),
+                                  ),
+                              ],
+                              ExpansionTile(
+                                title: const Text('Original reference'),
+                                children: [SelectableText(review.operationId)],
+                              ),
+                              if (!_uncertain && !_completed)
+                                TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => setState(() => _review = null),
+                                  child: const Text('Change package'),
+                                ),
                             ],
-                          )),
-                        ),
-                      );
-                    },
-                  );
-                }),
-                TextField(
-                  controller: _custom,
-                  enabled: !_busy,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Custom quantity (GB)',
-                    helperText: '1–2,000 whole GB',
-                  ),
-                  onChanged: (v) => setState(() {
-                    final n = int.tryParse(v);
-                    _selected = n != null && n >= 1 && n <= 2000 ? n : null;
-                  }),
-                ),
-                const SizedBox(height: 14),
-                FilledButton(
-                  onPressed:
-                      _enabled &&
-                          !_loading &&
-                          !_busy &&
-                          _storeReady &&
-                          _selected != null
-                      ? _quote
-                      : null,
-                  child: const Text('Continue'),
-                ),
-                TextButton(
-                  onPressed: _busy ? null : () => _load(owner),
-                  child: const Text('Refresh packages'),
-                ),
-              ] else ...[
-                Text(
-                  '${review.sizeGb} GB',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                Text(
-                  '${groupedMb(review.amountMb)} MB added to purchased data',
-                ),
-                const SizedBox(height: 10),
-                Text('NGN cost: ${formatNgn(review.amountKobo)}'),
-                const SizedBox(height: 10),
-                if (!_completed && !_uncertain &&
-                    (cash?.valueOrNull == null || cash!.valueOrNull!.frozen ||
-                     cash.valueOrNull!.balanceKobo < review.amountKobo))
-                  Padding(padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(cash?.valueOrNull == null
-                        ? 'Balance unavailable. Refresh before confirming.'
-                        : cash!.valueOrNull!.frozen
-                        ? 'NGN balance is temporarily unavailable.'
-                        : 'Not enough NGN. Fund your wallet to continue.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error))),
-                if (_completed) ...[
-                  const Text('Exchange completed'),
-                  SelectableText('Receipt: ${review.operationId}'),
-                  FilledButton(
-                    onPressed: () => setState(() {
-                      _review = null;
-                      _completed = false;
-                    }),
-                    child: const Text('Choose another package'),
-                  ),
-                ] else if (_uncertain) ...[
-                  SelectableText('Reference: ${review.operationId}'),
-                  FilledButton(
-                    onPressed: _busy ? null : () => _confirm(recover: true),
-                    child: const Text('Check original exchange'),
-                  ),
-                  if (_canReplay)
-                    OutlinedButton(
-                      onPressed: _busy ? null : () => _confirm(replay: true),
-                      child: const Text('Retry same exchange'),
+                          ],
+                        ],
+                      ),
                     ),
-                ] else ...[
-                  FilledButton(
-                    onPressed:
-                        _busy ||
-                            (cash?.valueOrNull?.balanceKobo ?? 0) <
-                                review.amountKobo ||
-                            cash?.valueOrNull?.frozen == true ||
-                            !review.expiresAt.isAfter(DateTime.now().toUtc())
-                        ? null
-                        : _confirm,
-                    child: const Text('Confirm exchange'),
-                  ),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _review = null),
-                    child: const Text('Change package'),
-                  ),
-                ],
-              ],
-              if (!_uncertain && !_busy)
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await context.push('/wallet/fund');
-                    if (mounted && _owner == owner)
-                      ref.invalidate(ngnWalletBalanceProvider(owner));
-                  },
-                  icon: const Icon(Icons.account_balance_outlined),
-                  label: const Text('Fund NGN wallet'),
+                    if (owner != null)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: colors.structuralBorder),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (review == null && _selected != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Selected: $_selected GB',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.labelMedium,
+                                        ),
+                                      ),
+                                      if (selectedPackage.isNotEmpty)
+                                        Text(
+                                          formatNgn(selectedPackage.first.kobo),
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.labelMedium,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              if (review != null && _completed)
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: _busy ? null : closeOrBack,
+                                        child: const Text('Done'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: FilledButton(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => context.push(
+                                                '/wallet/activity',
+                                              ),
+                                        child: const Text('View activity'),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: _busy
+                                        ? null
+                                        : review == null
+                                        ? (_enabled &&
+                                                  !_loading &&
+                                                  _storeReady &&
+                                                  _selected != null &&
+                                                  !_uncertain
+                                              ? _quote
+                                              : null)
+                                        : _uncertain
+                                        ? () => _confirm(recover: true)
+                                        : insufficientCash || quoteExpired
+                                        ? null
+                                        : _confirm,
+                                    icon: Icon(
+                                      review == null
+                                          ? Icons.fact_check_outlined
+                                          : _uncertain
+                                          ? Icons.search_rounded
+                                          : Icons.check_circle_outline_rounded,
+                                    ),
+                                    label: Text(
+                                      review == null
+                                          ? 'Continue to review'
+                                          : _uncertain
+                                          ? 'Check original exchange'
+                                          : 'Confirm exchange',
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-            ],
-          ],
-                )),
-              ])),
+              ),
             ),
           ),
         ),

@@ -23,8 +23,11 @@ class _PendingDataStore extends GbDataPendingStore {
   Future<void> write(String id, GbPendingDataPurchase record) async {
     records[id] = record;
   }
+
   @override
-  Future<void> clear(String id) async { records.remove(id); }
+  Future<void> clear(String id) async {
+    records.remove(id);
+  }
 }
 
 class _SignedOut extends SessionController {
@@ -36,8 +39,12 @@ class _SignedIn extends SessionController {
   @override
   SessionState build() {
     final user = AuthUser(
-      id: 'fan-1', name: 'Masanawa fan', locale: 'en',
-      status: 'ACTIVE', role: 'USER', isNewUser: false,
+      id: 'fan-1',
+      name: 'Masanawa fan',
+      locale: 'en',
+      status: 'ACTIVE',
+      role: 'USER',
+      isNewUser: false,
       createdAt: '2026-10-12T00:00:00Z',
     );
     return SessionSignedIn(
@@ -53,18 +60,24 @@ class _SignedIn extends SessionController {
 }
 
 void main() {
-  testWidgets('compact GB Wallet never represents legacy money as MB',
-      (tester) async {
+  testWidgets('compact GB Wallet never represents legacy money as MB', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(320, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [sessionProvider.overrideWith(_SignedOut.new)],
-      child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sessionProvider.overrideWith(_SignedOut.new)],
+        child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
+      ),
+    );
     expect(find.text('Balance unavailable'), findsOneWidget);
-    expect(find.byKey(const ValueKey('gb-wallet-balance-card')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('gb-wallet-balance-card')),
+      findsOneWidget,
+    );
     expect(find.text('Exact MB balance unavailable'), findsNothing);
     expect(find.text('Send'), findsOneWidget);
     expect(find.text('Request'), findsOneWidget);
@@ -82,125 +95,214 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('renamed Wallet actions remain readable at 320dp large text RTL', (tester)async{
-    tester.view.physicalSize=const Size(320,1000);tester.view.devicePixelRatio=1;
-    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_SignedOut.new)],
-      child:const MaterialApp(home:MediaQuery(data:MediaQueryData(textScaler:TextScaler.linear(2)),
-        child:Directionality(textDirection:TextDirection.rtl,child:Scaffold(body:GbWalletScreen()))))));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Redeem Data'));await tester.pumpAndSettle();
-    expect(tester.widget<Text>(find.text('Redeem Data')).maxLines,isNull);
-    expect(find.text('Buy Data'),findsOneWidget,
-      reason:'The simplified wallet has one Buy Data action, not a duplicate');
-    expect(find.text('Add data'),findsNothing);expect(find.text('Redeem'),findsNothing);
-    await tester.dragUntilVisible(find.text('Recent transactions'),find.byType(ListView),const Offset(0,-180));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(),isNull);
-  });
-
-  testWidgets('reads a scoped authoritative MB summary with separate welcome credit',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sessionProvider.overrideWith(_SignedIn.new),
-        gbWalletSummaryProvider.overrideWith(
-          (ref, owner) async => const GbWalletBalance(
-            totalMb: 11000,
-            availableMb: 10850,
-            purchasedAvailableMb: 10375,
-            welcomeAvailableMb: 475,
-            reservedMb: 150,
-            reservedPurchasedMb: 125,
-            reservedWelcomeMb: 25,
-            frozen: false,
+  testWidgets(
+    'renamed Wallet actions remain readable at 320dp large text RTL',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sessionProvider.overrideWith(_SignedOut.new)],
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Scaffold(body: GbWalletScreen()),
+              ),
+            ),
           ),
         ),
-        gbPromotionJournalProvider.overrideWith((ref, owner) async =>
-          GbPromotionJournal.read({
-            'campaigns': [{'id':'campaign-1','postId':'post-1',
-              'kind':'boost','state':'active','targetViews':20,
-              'deliveredViews':5,'spentMb':5,'reservedMb':15,
-              'refundedUnusedMb':0,'priceVersion':'2026-10-27:1MB'}],
-            'sharingEarnings': [
-              {'postId':'post-2','referredQualifiedViews':3,'pendingHalfMb':3}],
-            'lifecycleNotifications': [],
-          })),
-        gbActivityPageProvider.overrideWith((ref, request) async =>
-          const GbActivityPage([],null)),
-      ],
-      child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('10.85 GB'), findsOneWidget);
-    expect(find.text('10,850 MB'), findsNothing);
-    expect(find.text('Balance details'), findsNothing);
-    expect(find.text('Purchased available'), findsNothing);
-    expect(find.text('Welcome · restricted'), findsNothing);
-    expect(find.text('Campaign MB reserved · loaded receipts'), findsNothing);
-    expect(find.text('Exact MB balance unavailable'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Redeem Data'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.text('Redeem Data')).maxLines, isNull);
+      expect(
+        find.text('Buy Data'),
+        findsOneWidget,
+        reason:
+            'The simplified wallet has one Buy Data action, not a duplicate',
+      );
+      expect(find.text('Add data'), findsNothing);
+      expect(find.text('Redeem'), findsNothing);
+      await tester.dragUntilVisible(
+        find.text('Recent transactions'),
+        find.byType(ListView),
+        const Offset(0, -180),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('wallet preserves verified NGN and bank rows through a failed refresh',
-      (tester) async {
-    var offline = false;
-    await tester.pumpWidget(ProviderScope(overrides: [
-      sessionProvider.overrideWith(_SignedIn.new),
-      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
-        const GbWalletBalance(totalMb: 500, availableMb: 500,
-          purchasedAvailableMb: 0, welcomeAvailableMb: 500,
-          reservedMb: 0, frozen: false)),
-      ngnWalletBalanceProvider.overrideWith((ref, owner) async {
-        if (offline) throw StateError('network disconnected');
-        return const NgnWalletBalance(350000, 0, false, true);
-      }),
-      ngnBankAccountProvider.overrideWith((ref, owner) async {
-        if (offline) throw StateError('network disconnected');
-        return const NgnBankAccount('assigned', bank: '9PSB',
-          number: '1234567890', name: 'Masanawa fan');
-      }),
-      gbActivityPageProvider.overrideWith((ref, request) async =>
-        const GbActivityPage([], null)),
-    ], child: const MaterialApp(home: Scaffold(body: GbWalletScreen()))));
-    await tester.pumpAndSettle();
-    expect(find.text('₦3,500'), findsOneWidget);
-    expect(find.text('1234567890'), findsOneWidget);
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(GbWalletScreen)));
-    final owner = (accountId: 'fan-1', authorizationEpoch:
-      container.read(sessionProvider.notifier).authorizationEpoch);
-    offline = true;
-    container.invalidate(ngnWalletBalanceProvider(owner));
-    container.invalidate(ngnBankAccountProvider(owner));
-    await tester.pumpAndSettle();
-    expect(find.text('₦3,500'), findsOneWidget);
-    expect(find.text('1234567890'), findsOneWidget);
-    expect(find.textContaining('Check your connection'), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'reads a scoped authoritative MB summary with separate welcome credit',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(_SignedIn.new),
+            gbWalletSummaryProvider.overrideWith(
+              (ref, owner) async => const GbWalletBalance(
+                totalMb: 11000,
+                availableMb: 10850,
+                purchasedAvailableMb: 10375,
+                welcomeAvailableMb: 475,
+                reservedMb: 150,
+                reservedPurchasedMb: 125,
+                reservedWelcomeMb: 25,
+                frozen: false,
+              ),
+            ),
+            gbPromotionJournalProvider.overrideWith(
+              (ref, owner) async => GbPromotionJournal.read({
+                'campaigns': [
+                  {
+                    'id': 'campaign-1',
+                    'postId': 'post-1',
+                    'kind': 'boost',
+                    'state': 'active',
+                    'targetViews': 20,
+                    'deliveredViews': 5,
+                    'spentMb': 5,
+                    'reservedMb': 15,
+                    'refundedUnusedMb': 0,
+                    'priceVersion': '2026-10-27:1MB',
+                  },
+                ],
+                'sharingEarnings': [
+                  {
+                    'postId': 'post-2',
+                    'referredQualifiedViews': 3,
+                    'pendingHalfMb': 3,
+                  },
+                ],
+                'lifecycleNotifications': [],
+              }),
+            ),
+            gbActivityPageProvider.overrideWith(
+              (ref, request) async => const GbActivityPage([], null),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('10.85 GB'), findsOneWidget);
+      expect(find.text('10,850 MB'), findsNothing);
+      expect(find.text('Balance details'), findsNothing);
+      expect(find.text('Purchased available'), findsNothing);
+      expect(find.text('Welcome · restricted'), findsNothing);
+      expect(find.text('Campaign MB reserved · loaded receipts'), findsNothing);
+      expect(find.text('Exact MB balance unavailable'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('Wallet leads with account and two real recent movements',
-      (tester) async {
+  testWidgets(
+    'wallet preserves verified NGN and bank rows through a failed refresh',
+    (tester) async {
+      var offline = false;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(_SignedIn.new),
+            gbWalletSummaryProvider.overrideWith(
+              (ref, owner) async => const GbWalletBalance(
+                totalMb: 500,
+                availableMb: 500,
+                purchasedAvailableMb: 0,
+                welcomeAvailableMb: 500,
+                reservedMb: 0,
+                frozen: false,
+              ),
+            ),
+            ngnWalletBalanceProvider.overrideWith((ref, owner) async {
+              if (offline) throw StateError('network disconnected');
+              return const NgnWalletBalance(350000, 0, false, true);
+            }),
+            ngnBankAccountProvider.overrideWith((ref, owner) async {
+              if (offline) throw StateError('network disconnected');
+              return const NgnBankAccount(
+                'assigned',
+                bank: '9PSB',
+                number: '1234567890',
+                name: 'Masanawa fan',
+              );
+            }),
+            gbActivityPageProvider.overrideWith(
+              (ref, request) async => const GbActivityPage([], null),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('₦3,500'), findsOneWidget);
+      expect(find.text('1234567890'), findsOneWidget);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(GbWalletScreen)),
+      );
+      final owner = (
+        accountId: 'fan-1',
+        authorizationEpoch: container
+            .read(sessionProvider.notifier)
+            .authorizationEpoch,
+      );
+      offline = true;
+      container.invalidate(ngnWalletBalanceProvider(owner));
+      container.invalidate(ngnBankAccountProvider(owner));
+      await tester.pumpAndSettle();
+      expect(find.text('₦3,500'), findsOneWidget);
+      expect(find.text('1234567890'), findsOneWidget);
+      expect(find.textContaining('Check your connection'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Wallet leads with account and two real recent movements', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 950);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final entries = [
       for (var i = 1; i <= 3; i++)
-        GbActivityItem(id: 'mb:$i', operationId: 'send_$i', unit: 'MB',
-          amount: -i * 100, kind: 'send', status: 'completed',
-          createdAt: DateTime.utc(2026, 10, 25)),
+        GbActivityItem(
+          id: 'mb:$i',
+          operationId: 'send_$i',
+          unit: 'MB',
+          amount: -i * 100,
+          kind: 'send',
+          status: 'completed',
+          createdAt: DateTime.utc(2026, 10, 25),
+        ),
     ];
-    await tester.pumpWidget(ProviderScope(overrides: [
-      sessionProvider.overrideWith(_SignedIn.new),
-      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
-        const GbWalletBalance(totalMb: 1500, availableMb: 1500,
-          purchasedAvailableMb: 1500, welcomeAvailableMb: 0,
-          reservedMb: 0, frozen: false)),
-      gbActivityPageProvider.overrideWith((ref, request) async =>
-        GbActivityPage(entries, null)),
-    ], child: const MaterialApp(home: Scaffold(body: GbWalletScreen()))));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionProvider.overrideWith(_SignedIn.new),
+          gbWalletSummaryProvider.overrideWith(
+            (ref, owner) async => const GbWalletBalance(
+              totalMb: 1500,
+              availableMb: 1500,
+              purchasedAvailableMb: 1500,
+              welcomeAvailableMb: 0,
+              reservedMb: 0,
+              frozen: false,
+            ),
+          ),
+          gbActivityPageProvider.overrideWith(
+            (ref, request) async => GbActivityPage(entries, null),
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: GbWalletScreen())),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Masanawa fan'), findsOneWidget);
     expect(find.text('Data balance'), findsNothing);
@@ -227,87 +329,155 @@ void main() {
       },
     };
     expect(GbWalletBalance.fromJson(valid).availableMb, 10850);
-    expect(GbWalletBalance.fromJson({...valid,'balance':{
-      ...(valid['balance'] as Map<String,dynamic>),
-      'reservedPurchasedMb':125,'reservedWelcomeMb':25,
-    }}).reservedPurchasedMb,125);
+    expect(
+      GbWalletBalance.fromJson({
+        ...valid,
+        'balance': {
+          ...(valid['balance'] as Map<String, dynamic>),
+          'reservedPurchasedMb': 125,
+          'reservedWelcomeMb': 25,
+        },
+      }).reservedPurchasedMb,
+      125,
+    );
     expect(decimalGb(10001), '10.001');
     expect(decimalGb(500), '0.5');
     expect(groupedMb(1234567), '1,234,567');
-    expect(() => GbWalletBalance.fromJson({
-      ...valid,
-      'balance': {...(valid['balance'] as Map<String, dynamic>), 'unit': 'MSNW'},
-    }), throwsFormatException);
-    expect(() => GbWalletBalance.fromJson({
-      ...valid,
-      'balance': {...(valid['balance'] as Map<String, dynamic>), 'welcomeAvailableMb': 500},
-    }), throwsFormatException);
-    expect(() => GbWalletBalance.fromJson({...valid,'balance':{
-      ...(valid['balance'] as Map<String,dynamic>),
-      'reservedPurchasedMb':151,'reservedWelcomeMb':0,
-    }}),throwsFormatException);
-    expect(() => GbWalletBalance.fromJson({...valid,'balance':{
-      ...(valid['balance'] as Map<String,dynamic>),
-      'reservedPurchasedMb':125,
-    }}),throwsFormatException);
+    expect(
+      () => GbWalletBalance.fromJson({
+        ...valid,
+        'balance': {
+          ...(valid['balance'] as Map<String, dynamic>),
+          'unit': 'MSNW',
+        },
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => GbWalletBalance.fromJson({
+        ...valid,
+        'balance': {
+          ...(valid['balance'] as Map<String, dynamic>),
+          'welcomeAvailableMb': 500,
+        },
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => GbWalletBalance.fromJson({
+        ...valid,
+        'balance': {
+          ...(valid['balance'] as Map<String, dynamic>),
+          'reservedPurchasedMb': 151,
+          'reservedWelcomeMb': 0,
+        },
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => GbWalletBalance.fromJson({
+        ...valid,
+        'balance': {
+          ...(valid['balance'] as Map<String, dynamic>),
+          'reservedPurchasedMb': 125,
+        },
+      }),
+      throwsFormatException,
+    );
   });
 
-  testWidgets('Data enables reviewed approved bundles but never unreviewed purchase',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sessionProvider.overrideWith(_SignedIn.new),
-        gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
-        gbDataCatalogueProvider.overrideWith((ref, owner) async =>
-          [GbVerifiedBundle(
-            id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
-            allowanceGb: 2, costMb: 2000, validityDays: 30,
-            providerAmount: '1500.00',
-            expiresAt: DateTime.utc(2099),
-          )]),
-      ],
-      child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
-    ));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byType(DropdownButtonFormField<String>), 150, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
-    expect(find.text('2 GB'), findsNothing);
-    await tester.enterText(find.byType(TextField), '08031234567');
-    await tester.pump();
-    await tester.ensureVisible(find.text('Monthly'));
-    await tester.tap(find.text('Monthly'));
-    await tester.pump();
-    expect(find.text('2 GB'), findsOneWidget);
-    expect(find.textContaining('2,000 MB'), findsOneWidget);
-    final action = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Review bundle'));
-    expect(action.onPressed, isNull);
-    expect(find.textContaining('Suggested: MTN'), findsOneWidget);
-    await tester.ensureVisible(find.text('2 GB'));
-    await tester.tap(find.text('2 GB'));
-    await tester.pumpAndSettle();
-    expect(find.text('Confirm data purchase'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'Data enables reviewed approved bundles but never unreviewed purchase',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(_SignedIn.new),
+            gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
+            gbDataCatalogueProvider.overrideWith(
+              (ref, owner) async => [
+                GbVerifiedBundle(
+                  id: 'MTN:exact-2gb',
+                  version: 'v1',
+                  network: 'MTN',
+                  allowanceGb: 2,
+                  costMb: 2000,
+                  validityDays: 30,
+                  providerAmount: '1500.00',
+                  expiresAt: DateTime.utc(2099),
+                ),
+              ],
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: DataRedemptionScreen()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.text('Choose a network to see verified bundles'),
+        findsOneWidget,
+      );
+      expect(find.text('2 GB'), findsNothing);
+      await tester.enterText(find.byType(TextField), '08031234567');
+      await tester.pump();
+      await tester.ensureVisible(find.text('Monthly'));
+      await tester.tap(find.text('Monthly'));
+      await tester.pump();
+      expect(find.text('2 GB'), findsOneWidget);
+      expect(find.textContaining('2,000 MB'), findsOneWidget);
+      final action = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Review bundle'),
+      );
+      expect(action.onPressed, isNull);
+      expect(find.textContaining('Suggested MTN'), findsOneWidget);
+      await tester.ensureVisible(find.text('2 GB'));
+      await tester.tap(find.text('2 GB'));
+      await tester.pumpAndSettle();
+      expect(find.text('Confirm data purchase'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('Data never offers unverified Flutterwave purchases',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sessionProvider.overrideWith(_SignedIn.new),
-        gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
-        gbDataCatalogueProvider.overrideWith((ref, owner) async => []),
-      ],
-      child: const MaterialApp(home: Scaffold(
-        body: DataRedemptionScreen(),
-      )),
-    ));
+  testWidgets('Data never offers unverified Flutterwave purchases', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionProvider.overrideWith(_SignedIn.new),
+          gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
+          gbDataCatalogueProvider.overrideWith((ref, owner) async => []),
+        ],
+        child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('No verified GB bundles available'), findsOneWidget);
-    await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Review bundle'), 150, scrollable: find.byType(Scrollable).first);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Review bundle')).onPressed,
-        isNull);
-    await tester.scrollUntilVisible(find.byType(TextField), -150, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(
+      find.widgetWithText(FilledButton, 'Review bundle'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Review bundle'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.scrollUntilVisible(
+      find.byType(TextField),
+      -150,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.enterText(find.byType(TextField), 'not a phone');
     await tester.pump();
     expect(find.text('Enter a valid Nigerian mobile number'), findsOneWidget);
@@ -320,41 +490,85 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('selecting a verified bundle opens its exact review sheet',
-      (tester) async {
+  testWidgets('selecting a verified bundle opens its exact review sheet', (
+    tester,
+  ) async {
     final dio = Dio(BaseOptions(baseUrl: kApiBaseUrl));
-    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
-      if (options.path == '/v1/gb/data/quote') {
-        handler.resolve(Response(requestOptions: options, statusCode: 200,
-          data: {'previewOnly': true, 'quote': {
-            'id': 'MTN:exact-2gb', 'version': 'v1', 'network': 'MTN',
-            'allowanceGb': 2, 'costMb': 2000, 'validityDays': 30,
-            'providerAmount': '1500.00',
-            'expiresAt': DateTime.utc(2099).toIso8601String(),
-            'recipientPhone': '+2348031234567',
-            'quoteExpiresAt': DateTime.now().toUtc()
-                .add(const Duration(minutes: 2)).toIso8601String(),
-            'requiresWalletReservation': true, 'feeMb': 0,
-          }}));
-      } else {
-        handler.reject(DioException(requestOptions: options,
-          type: DioExceptionType.badResponse));
-      }
-    }));
-    await tester.pumpWidget(ProviderScope(overrides: [
-      sessionProvider.overrideWith(_SignedIn.new),
-      apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
-      gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
-      gbDataCatalogueProvider.overrideWith((ref, owner) async => [
-        GbVerifiedBundle(id: 'MTN:exact-2gb', version: 'v1', network: 'MTN',
-          allowanceGb: 2, costMb: 2000, validityDays: 30,
-          providerAmount: '1500.00', expiresAt: DateTime.utc(2099)),
-      ]),
-      gbWalletSummaryProvider.overrideWith((ref, owner) async =>
-        const GbWalletBalance(totalMb: 5000, availableMb: 5000,
-          purchasedAvailableMb: 5000, welcomeAvailableMb: 0,
-          reservedMb: 0, frozen: false)),
-    ], child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen()))));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.path == '/v1/gb/data/quote') {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'previewOnly': true,
+                  'quote': {
+                    'id': 'MTN:exact-2gb',
+                    'version': 'v1',
+                    'network': 'MTN',
+                    'allowanceGb': 2,
+                    'costMb': 2000,
+                    'validityDays': 30,
+                    'providerAmount': '1500.00',
+                    'expiresAt': DateTime.utc(2099).toIso8601String(),
+                    'recipientPhone': '+2348031234567',
+                    'quoteExpiresAt': DateTime.now()
+                        .toUtc()
+                        .add(const Duration(minutes: 2))
+                        .toIso8601String(),
+                    'requiresWalletReservation': true,
+                    'feeMb': 0,
+                  },
+                },
+              ),
+            );
+          } else {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.badResponse,
+              ),
+            );
+          }
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionProvider.overrideWith(_SignedIn.new),
+          apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+          gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
+          gbDataCatalogueProvider.overrideWith(
+            (ref, owner) async => [
+              GbVerifiedBundle(
+                id: 'MTN:exact-2gb',
+                version: 'v1',
+                network: 'MTN',
+                allowanceGb: 2,
+                costMb: 2000,
+                validityDays: 30,
+                providerAmount: '1500.00',
+                expiresAt: DateTime.utc(2099),
+              ),
+            ],
+          ),
+          gbWalletSummaryProvider.overrideWith(
+            (ref, owner) async => const GbWalletBalance(
+              totalMb: 5000,
+              availableMb: 5000,
+              purchasedAvailableMb: 5000,
+              welcomeAvailableMb: 0,
+              reservedMb: 0,
+              frozen: false,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '08031234567');
     await tester.pumpAndSettle();
@@ -370,37 +584,51 @@ void main() {
     await tester.tap(find.text('2 GB'));
     await tester.pumpAndSettle();
     expect(find.text('Review data purchase'), findsOneWidget);
-    expect(find.text('2,000 MB'), findsWidgets);
+    expect(find.textContaining('2,000 MB'), findsWidgets);
     expect(find.text('+2348031234567'), findsOneWidget);
-    expect(find.text('Continue to purchase'), findsOneWidget);
-    await tester.tap(find.text('Continue to purchase'));
-    await tester.pumpAndSettle();
     expect(find.text('Confirm data purchase'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a ported-number manual operator choice survives phone edits',
-      (tester) async {
+  testWidgets('a ported-number manual operator choice survives phone edits', (
+    tester,
+  ) async {
     GbVerifiedBundle bundle(String id, String network, int gb) =>
-      GbVerifiedBundle(
-        id: id, version: 'approved-v1', network: network,
-        allowanceGb: gb, costMb: gb * 1000, validityDays: 30,
-        providerAmount: '1500.00', expiresAt: DateTime.utc(2099),
-      );
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sessionProvider.overrideWith(_SignedIn.new),
-        gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
-        gbDataCatalogueProvider.overrideWith((ref, owner) async => [
-          bundle('mtn-2gb', 'MTN', 2),
-          bundle('airtel-3gb', 'AIRTEL', 3),
-        ]),
-      ],
-      child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
-    ));
+        GbVerifiedBundle(
+          id: id,
+          version: 'approved-v1',
+          network: network,
+          allowanceGb: gb,
+          costMb: gb * 1000,
+          validityDays: 30,
+          providerAmount: '1500.00',
+          expiresAt: DateTime.utc(2099),
+        );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionProvider.overrideWith(_SignedIn.new),
+          gbDataPendingStoreProvider.overrideWithValue(_PendingDataStore()),
+          gbDataCatalogueProvider.overrideWith(
+            (ref, owner) async => [
+              bundle('mtn-2gb', 'MTN', 2),
+              bundle('airtel-3gb', 'AIRTEL', 3),
+            ],
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: DataRedemptionScreen())),
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byType(DropdownButtonFormField<String>), 150, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Choose a network to see verified bundles'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byType(DropdownButtonFormField<String>),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.text('Choose a network to see verified bundles'),
+      findsOneWidget,
+    );
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Airtel').last);

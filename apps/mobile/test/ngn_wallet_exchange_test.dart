@@ -25,8 +25,11 @@ class _DataMemoryStore extends GbDataPendingStore {
   Future<void> write(String id, GbPendingDataPurchase saved) async {
     records[id] = saved;
   }
+
   @override
-  Future<void> clear(String id) async { records.remove(id); }
+  Future<void> clear(String id) async {
+    records.remove(id);
+  }
 }
 
 class _Session extends SessionController {
@@ -287,17 +290,31 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('compact card aligns balances and bank account details', (tester) async {
+  testWidgets('compact card aligns balances and bank account details', (
+    tester,
+  ) async {
     final f = _Fixture();
-    await tester.pumpWidget(f.app(const Scaffold(body: GbWalletBalanceCard(
-      balance: balance, loading: false, compact: true,
-    ))));
+    await tester.pumpWidget(
+      f.app(
+        const Scaffold(
+          body: GbWalletBalanceCard(
+            balance: balance,
+            loading: false,
+            compact: true,
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('NGN balance'), findsNothing);
-    expect(tester.getCenter(find.text('14 GB')).dy,
-      tester.getCenter(find.text('₦90,000')).dy);
-    expect(tester.getCenter(find.text('9PSB Fixture')).dy,
-      tester.getCenter(find.text('0000000100')).dy);
+    expect(
+      tester.getCenter(find.text('14 GB')).dy,
+      tester.getCenter(find.text('₦90,000')).dy,
+    );
+    expect(
+      tester.getCenter(find.text('9PSB Fixture')).dy,
+      tester.getCenter(find.text('0000000100')).dy,
+    );
     expect(find.byTooltip('Copy account number'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -309,16 +326,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('0000000100'), findsNothing);
       expect(find.text('9PSB Fixture'), findsNothing);
-      expect(find.text('NGN balance'), findsNothing,
-        reason: 'The package sheet has no prominent wallet balance block');
-      final first = tester.getTopLeft(find.byKey(const ValueKey('gb-package-1')));
-      final fourth = tester.getTopLeft(find.byKey(const ValueKey('gb-package-10')));
-      expect(first.dy, fourth.dy,
-        reason: 'Four package tiles must fit on a regular phone row');
+      expect(
+        find.text('NGN balance'),
+        findsNothing,
+        reason: 'The package sheet has no prominent wallet balance block',
+      );
+      final first = tester.getTopLeft(
+        find.byKey(const ValueKey('gb-package-1')),
+      );
+      final fourth = tester.getTopLeft(
+        find.byKey(const ValueKey('gb-package-10')),
+      );
+      expect(
+        first.dy,
+        fourth.dy,
+        reason: 'Four package tiles must fit on a regular phone row',
+      );
       expect(first.dx, lessThan(fourth.dx));
       await tester.tap(find.text('10 GB'));
       await tester.pump();
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Continue to review'));
       await tester.pumpAndSettle();
       expect(find.text('Review exchange'), findsOneWidget);
       expect(f.posts, isEmpty);
@@ -326,11 +353,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Choose a package'), findsOneWidget);
       expect(find.byKey(const ValueKey('gb-package-10')), findsOneWidget);
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Continue to review'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm exchange'));
       await tester.pumpAndSettle();
-      expect(find.text('Exchange completed'), findsOneWidget);
+      expect(find.text('Data added'), findsOneWidget);
       expect(f.posts, hasLength(1));
       expect(f.posts.single['reviewAccepted'], isTrue);
       expect(f.store.pending, isEmpty);
@@ -345,7 +372,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('10 GB'));
       await tester.pump();
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Continue to review'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm exchange'));
       await tester.pumpAndSettle();
@@ -358,7 +385,7 @@ void main() {
       expect(find.text('Confirm exchange'), findsNothing);
       await tester.tap(find.text('Check original exchange'));
       await tester.pumpAndSettle();
-      expect(find.text('Exchange completed'), findsOneWidget);
+      expect(find.text('Data added'), findsOneWidget);
       expect(f.posts, hasLength(1));
       expect(f.store.pending, isEmpty);
     },
@@ -372,7 +399,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('10 GB'));
     await tester.pump();
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.text('Continue to review'));
     await tester.pump();
     final container = ProviderScope.containerOf(
       tester.element(find.byType(RechargePackagesScreen)),
@@ -397,41 +424,95 @@ void main() {
       expect(f.posts, isEmpty);
     },
   );
-  testWidgets('existing email account can complete missing funding details',
-      (tester) async {
+  testWidgets('existing email account can complete missing funding details', (
+    tester,
+  ) async {
     final f = _Fixture();
-    await tester.pumpWidget(ProviderScope(overrides: [
-      sessionProvider.overrideWith(_Session.new),
-      apiClientProvider.overrideWithValue(f.api),
-      ngnBankAccountProvider.overrideWith((ref, owner) async =>
-          const NgnBankAccount('unassigned', assignmentEnabled: true,
-              applicantComplete: false)),
-    ], child: const MaterialApp(home: NgnFundingScreen())));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionProvider.overrideWith(_Session.new),
+          apiClientProvider.overrideWithValue(f.api),
+          ngnBankAccountProvider.overrideWith(
+            (ref, owner) async => const NgnBankAccount(
+              'unassigned',
+              assignmentEnabled: true,
+              applicantComplete: false,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: NgnFundingScreen()),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Complete your funding details'), findsOneWidget);
     expect(find.text('Get funding account'), findsNothing);
     expect(find.byType(TextField), findsNWidgets(3));
     expect(tester.takeException(), isNull);
   });
-  testWidgets('invalid funding applicant refreshes the correction form without pending instructions', (tester)async{
-    final dio=Dio(BaseOptions(baseUrl:kApiBaseUrl));var posts=0,reads=0;
-    dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
-      posts++;
-      handler.reject(DioException(requestOptions:options,type:DioExceptionType.badResponse,
-        response:Response(requestOptions:options,statusCode:400,data:{'error':{'code':'invalid_applicant'}})));
-    }));
-    await tester.pumpWidget(ProviderScope(overrides:[sessionProvider.overrideWith(_Session.new),
-      apiClientProvider.overrideWithValue(ApiClient(dio:dio)),
-      ngnWalletBalanceProvider.overrideWith((ref,owner)async=>const NgnWalletBalance(0,0,false,false)),
-      ngnBankAccountProvider.overrideWith((ref,owner)async=>NgnBankAccount('unassigned',
-        assignmentEnabled:true,applicantComplete:reads++==0))],
-      child:const MaterialApp(home:NgnFundingScreen())));
-    await tester.pumpAndSettle();await tester.tap(find.text('Get funding account'));await tester.pumpAndSettle();
-    expect(posts,1);expect(find.text('Complete your funding details'),findsOneWidget);
-    expect(find.text('Check your funding details and Nigerian contact phone. No account assignment was started.'),findsOneWidget);
-    expect(find.textContaining('Account assignment is pending.'),findsNothing);
-    expect(find.text('Get funding account'),findsNothing);expect(tester.takeException(),isNull);
-  });
+  testWidgets(
+    'invalid funding applicant refreshes the correction form without pending instructions',
+    (tester) async {
+      final dio = Dio(BaseOptions(baseUrl: kApiBaseUrl));
+      var posts = 0, reads = 0;
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            posts++;
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.badResponse,
+                response: Response(
+                  requestOptions: options,
+                  statusCode: 400,
+                  data: {
+                    'error': {'code': 'invalid_applicant'},
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(_Session.new),
+            apiClientProvider.overrideWithValue(ApiClient(dio: dio)),
+            ngnWalletBalanceProvider.overrideWith(
+              (ref, owner) async => const NgnWalletBalance(0, 0, false, false),
+            ),
+            ngnBankAccountProvider.overrideWith(
+              (ref, owner) async => NgnBankAccount(
+                'unassigned',
+                assignmentEnabled: true,
+                applicantComplete: reads++ == 0,
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: NgnFundingScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Get funding account'));
+      await tester.pumpAndSettle();
+      expect(posts, 1);
+      expect(find.text('Complete your funding details'), findsOneWidget);
+      expect(
+        find.text(
+          'Check your funding details and Nigerian contact phone. No account assignment was started.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Account assignment is pending.'),
+        findsNothing,
+      );
+      expect(find.text('Get funding account'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'Data uses three compact cards and only three periods, no cashback',
     (tester) async {
@@ -463,7 +544,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Mobile Data'), findsOneWidget);
+      expect(find.text('Mobile Data'), findsNothing);
       expect(find.text('Other'), findsNothing);
       expect(find.text('All durations'), findsNothing);
       expect(find.textContaining('Cashback'), findsNothing);
