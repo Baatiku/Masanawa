@@ -28,6 +28,9 @@ class StatusPostActionRow extends StatelessWidget {
     final colors = context.masanawa;
     final ha = Localizations.localeOf(context).languageCode == 'ha';
     String t(String en, String haus) => ha ? haus : en;
+    final selected=post.currentReaction;
+    final selectedText=selected==null||selected=='like'?'Like':
+      selected[0].toUpperCase()+selected.substring(1);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
       child: LayoutBuilder(builder: (context, constraints) {
@@ -55,7 +58,7 @@ class StatusPostActionRow extends StatelessWidget {
               onLongPress: pending || onLongLike == null
                   ? null : () => onLongLike!(anchor),
               child: Tooltip(
-                message: t('Like', 'So'),
+                message: selected==null?t('Like', 'So'):'$selectedText · long press for reactions',
                 triggerMode: TooltipTriggerMode.manual,
                 child: TextButton.icon(
                   style: TextButton.styleFrom(
@@ -67,11 +70,13 @@ class StatusPostActionRow extends StatelessWidget {
                     minimumSize: const Size(0, 48),
                   ),
                   onPressed: pending ? null : onLike,
-                  icon: Icon(post.currentReaction == 'like'
-                      ? Icons.thumb_up_rounded
-                      : Icons.thumb_up_outlined, size: 20),
+                  icon:selected!=null&&selected!='like'
+                    ?Text(FeedPost.reactionEmoji[selected]??'👍',
+                      style:const TextStyle(fontSize:21))
+                    :Icon(selected=='like'?Icons.thumb_up_rounded:
+                       Icons.thumb_up_outlined,size:20),
                   label: compact ? const SizedBox.shrink() : Text(
-                    t('Like', 'So'), maxLines: 1,
+                    selected==null?t('Like', 'So'):selectedText, maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

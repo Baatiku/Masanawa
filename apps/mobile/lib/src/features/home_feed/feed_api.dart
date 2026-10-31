@@ -256,10 +256,21 @@ class FeedComment {
     this.authorId,
     this.authorName,
     this.authorHandle,
+    this.revision = 1,
+    this.editedAt,
+    this.replyCount = 0,
+    this.viewerReaction,
+    this.reactionCounts = const {},
   });
   final String id, body, state;
   final String? parentId, authorType, authorId, authorName, authorHandle;
   final DateTime createdAt;
+  final int revision, replyCount;
+  final DateTime? editedAt;
+  final String? viewerReaction;
+  final Map<String,int> reactionCounts;
+  int get totalReactions => reactionCounts.values.fold(0,(sum,n)=>sum+n);
+  bool ownedBy(String account) => authorType=='human'&&authorId==account;
   factory FeedComment.fromJson(Map<String, dynamic> json) {
     final raw = json['author'];
     final author = raw is Map
@@ -285,6 +296,12 @@ class FeedComment {
       authorId: (author['id'] ?? json['authorId']) as String?,
       authorName: (author['displayName'] ?? json['authorName']) as String?,
       authorHandle: handle as String?,
+      revision: json['revision'] is int ? json['revision'] as int : 1,
+      editedAt: json['editedAt'] is String ? DateTime.tryParse(json['editedAt'] as String) : null,
+      replyCount: json['replyCount'] is int ? json['replyCount'] as int : 0,
+      viewerReaction: FeedPost.reactionKinds.contains(json['viewerReaction'])
+          ? json['viewerReaction'] as String : null,
+      reactionCounts: FeedPost._parseReactionCounts(json['reactionCounts'],0),
     );
   }
 }
@@ -317,9 +334,25 @@ abstract class SearchFeedApi {
   });
 }
 
+/// Optional transport extension: combinations are applied by SQL *before* pagination.
+abstract class FilteredFeedApi {
+  Future<FeedPage> filteredPosts({required String mode,String? query,String? cursor,
+    String? source,DateTime? from,DateTime? to});
+}
+
+abstract class CommentConversationApi {
+  Future<List<FeedComment>> threadPage(String id,String sort,
+    {String? before,String? scope,String? parentId});
+  Future<void> reactComment(String id,String? kind);
+  Future<void> editComment(String id,String body,int revision);
+  Future<void> removeComment(String id);
+  Future<void> reportComment(String id,String reason);
+}
+
 /// Uses the app's existing Dio (base URL, TLS policies) rather than a second network stack.
 class DioFeedApi
-    implements FeedApi, SearchFeedApi, ReactionFeedApi, SavedStatusLibraryApi, FeedSafetyApi {
+    implements FeedApi, SearchFeedApi, FilteredFeedApi, ReactionFeedApi,
+      CommentConversationApi, SavedStatusLibraryApi, FeedSafetyApi {
   DioFeedApi(this._dio, this._getAccessToken);
   final Dio _dio;
   final Future<String?> Function() _getAccessToken;
@@ -392,6 +425,18 @@ class DioFeedApi
       options: await _options(authRequired: true),
     );
     return FeedPage.fromJson(result.data ?? const {});
+  }
+
+  @override
+  Future<FeedPage> filteredPosts({required String mode,String? query,String? cursor,
+    String? source,DateTime? from,DateTime? to}) async {
+    final r=await _dio.get<Map<String,dynamic>>('/v1/feed',
+      queryParameters:{'mode':mode,if(query!=null)'search':query,
+        if(cursor!=null)'cursor':cursor,if(source!=null)'source':source,
+        if(from!=null)'from':'${from.year.toString().padLeft(4,'0')}-${from.month.toString().padLeft(2,'0')}-${from.day.toString().padLeft(2,'0')}',
+        if(to!=null)'to':'${to.year.toString().padLeft(4,'0')}-${to.month.toString().padLeft(2,'0')}-${to.day.toString().padLeft(2,'0')}'},
+      options:await _options());
+    return FeedPage.fromJson(r.data??const {});
   }
 
   @override
@@ -472,12 +517,15 @@ class DioFeedApi
     String id,
     String sort, {
     String? before,
+    String? scope,
+    String? parentId,
   }) async {
     if (sort != 'newest' && sort != 'oldest')
       throw ArgumentError.value(sort, 'sort');
     final r = await _dio.get<List<dynamic>>(
       '/v1/posts/${Uri.encodeComponent(id)}/comments',
-      queryParameters: {'sort': sort, if (before != null) 'before': before},
+      queryParameters: {'sort': sort, if (before != null) 'before': before,
+        if(scope!=null)'scope':scope,if(parentId!=null)'parentId':parentId},
       options: await _options(),
     );
     return (r.data ?? const [])
@@ -498,6 +546,28 @@ class DioFeedApi
       data: {'body': body, if (parentId != null) 'parentId': parentId},
       options: await _options(key: key, authRequired: true),
     );
+  }
+
+  @override
+  Future<void> reactComment(String id,String? kind) async {
+    if(kind!=null&&!FeedPost.reactionKinds.contains(kind))throw ArgumentError.value(kind);
+    await _dio.put<void>('/v1/comments/${Uri.encodeComponent(id)}/reaction',
+      data:{'kind':kind},options:await _options(authRequired:true));
+  }
+  @override
+  Future<void> editComment(String id,String body,int revision) async {
+    await _dio.patch<void>('/v1/comments/${Uri.encodeComponent(id)}',
+      data:{'body':body,'revision':revision},options:await _options(authRequired:true));
+  }
+  @override
+  Future<void> removeComment(String id) async {
+    await _dio.delete<void>('/v1/comments/${Uri.encodeComponent(id)}',
+      options:await _options(authRequired:true));
+  }
+  @override
+  Future<void> reportComment(String id,String reason) async {
+    await _dio.post<void>('/v1/comments/${Uri.encodeComponent(id)}/reports',
+      data:{'reason':reason},options:await _options(authRequired:true));
   }
 }
 

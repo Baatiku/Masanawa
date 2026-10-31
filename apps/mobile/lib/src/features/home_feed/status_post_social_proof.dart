@@ -5,9 +5,11 @@ import 'feed_api.dart';
 /// A read-only projection of server-reported Status engagement. Neither this
 /// widget nor building a post may create a qualified view or a paid allocation.
 class StatusPostSocialProof extends StatelessWidget {
-  const StatusPostSocialProof({super.key, required this.post});
+  const StatusPostSocialProof({super.key, required this.post,
+    this.onComments,this.onReactions});
 
   final FeedPost post;
+  final VoidCallback? onComments,onReactions;
 
   static String compactCount(int count) {
     if (count < 1000) return '$count';
@@ -45,10 +47,14 @@ class StatusPostSocialProof extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (post.totalReactions > 0)
-          Text('$reactions ${compactCount(post.totalReactions)}', style: style),
+          TextButton(onPressed:onReactions,style:TextButton.styleFrom(
+            padding:EdgeInsets.zero,minimumSize:const Size(48,36)),
+            child:Text('$reactions ${compactCount(post.totalReactions)}',style:style)),
         if (post.commentCount > 0)
-          Text('${compactCount(post.commentCount)} ${ha ? 'sharhi' : post.commentCount == 1 ? 'comment' : 'comments'}',
-              style: style),
+          TextButton(onPressed:onComments,style:TextButton.styleFrom(
+            padding:EdgeInsets.zero,minimumSize:const Size(48,36)),
+            child:Text('${compactCount(post.commentCount)} ${ha ? 'sharhi' : post.commentCount == 1 ? 'comment' : 'comments'}',
+              style: style)),
         Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.visibility_outlined, size: 15,
             color: Theme.of(context).colorScheme.onSurfaceVariant),

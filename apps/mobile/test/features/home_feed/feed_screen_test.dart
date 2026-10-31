@@ -9,6 +9,12 @@ import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
 import 'package:masanawa/src/features/home_feed/status_tip_flow.dart';
 import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
+import 'package:masanawa/src/features/home_feed/status_post_action_row.dart';
+
+Finder get _reactionAction => find.descendant(
+  of: find.byType(StatusPostActionRow).first,
+  matching: find.byType(TextButton),
+).first;
 
 class StubFeed implements FeedApi {
   StubFeed(this.label);
@@ -85,6 +91,16 @@ class TallSearchStubFeed extends SearchStubFeed {
       FeedPage(List.generate(20, (index) => update('Update number $index')), null);
 }
 
+class FilterStubFeed extends SearchStubFeed implements FilteredFeedApi {
+  FilterStubFeed():super('Unfiltered official post');
+  final filterCalls=<String>[];
+  @override Future<FeedPage> filteredPosts({required String mode,String? query,
+    String? cursor,String? source,DateTime? from,DateTime? to})async{
+    filterCalls.add('$mode:$source:${query??'-'}:${cursor??'-'}');
+    return FeedPage([update('Approved $source update')],null);
+  }
+}
+
 FeedPost update(String body) => FeedPost(
   id: '381026c2-9d56-47b1-b73d-1784e24e41e2',
   authorMasanaId: 'masana',
@@ -125,6 +141,22 @@ class TipWidgetStore implements StatusTipStore {
   @override Future<void> write(String? next) async { value=next; }
 }
 void main() {
+  testWidgets('official Status source filter applies before pagination with no For You tabs',
+    (tester)async{
+      final api=FilterStubFeed();
+      await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
+        api:api,accountKey:'fan_current'))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Filters'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Facebook'));
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(api.filterCalls.last,'for_you:facebook:-:-');
+      expect(find.text('Approved facebook update'),findsOneWidget);
+      expect(find.text('For You'),findsNothing);
+      expect(find.text('Following'),findsNothing);
+    });
   testWidgets('Status tip requires an explicit reviewed confirmation and shows receipt',
       (tester) async {
     final store=TipWidgetStore();
@@ -268,9 +300,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Love'));
     await tester.pump();
-    expect(tester.widget<TextButton>(find.ancestor(
-      of:find.byIcon(Icons.thumb_up_outlined),
-      matching:find.byType(TextButton)).first).onPressed,isNull);
+    expect(tester.widget<TextButton>(_reactionAction).onPressed,isNull);
     pending.completeError(StateError('offline'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction not confirmed. Refresh or retry.'),

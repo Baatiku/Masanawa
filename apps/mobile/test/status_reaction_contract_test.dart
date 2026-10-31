@@ -5,6 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
+import 'package:masanawa/src/features/home_feed/status_post_action_row.dart';
+
+Finder get _reactionAction => find.descendant(
+  of: find.byType(StatusPostActionRow).first,
+  matching: find.byType(TextButton),
+).first;
+Finder get _loveChoice => find.descendant(
+  of: find.byType(PopupMenuItem<String>),
+  matching: find.text('Love'),
+);
 
 class _ReactionStub implements FeedApi,ReactionFeedApi {
   _ReactionStub(this.post);
@@ -48,9 +58,9 @@ class _ReadbackStub extends DioFeedApi {
 }
 
 Future<void> _chooseLove(WidgetTester tester) async {
-  await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
+  await tester.longPress(_reactionAction);
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Love'));
+  await tester.tap(_loveChoice);
   await tester.pumpAndSettle();
 }
 
@@ -104,20 +114,20 @@ void main(){
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:
       MasanaFeedScreen(api:api,accountKey:'fan-a'))));
     await tester.pumpAndSettle();
-    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
+    await tester.longPress(_reactionAction);
     await tester.pumpAndSettle();
     expect(find.text('Love'),findsOneWidget);
     expect(find.text('Care'),findsOneWidget);
     for(final label in const ['Like','Haha','Wow','Sad','Angry']){
       expect(find.text(label),findsWidgets);
     }
-    await tester.tap(find.text('Love'));
+    await tester.tap(_loveChoice);
     await tester.pumpAndSettle();
     expect(api.reactions,['love']);
     expect(find.textContaining('👍 ❤️ 3'),findsOneWidget);
-    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
+    await tester.longPress(_reactionAction);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Love'));
+    await tester.tap(_loveChoice);
     await tester.pumpAndSettle();
     expect(api.reactions,['love',null]);
     expect(find.textContaining('❤️'),findsNothing);
@@ -165,12 +175,11 @@ void main(){
       body: MasanaFeedScreen(api: feed, accountKey: 'fan-a'),
     )));
     await tester.pumpAndSettle();
-    await tester.longPress(find.byIcon(Icons.thumb_up_outlined).first);
+    await tester.longPress(_reactionAction);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Love'));
+    await tester.tap(_loveChoice);
     await tester.pump();
-    final disabled = tester.widget<TextButton>(
-        find.widgetWithIcon(TextButton, Icons.thumb_up_outlined));
+    final disabled = tester.widget<TextButton>(_reactionAction);
     expect(disabled.onPressed, isNull);
     pending.completeError(StateError('write unavailable'));
     await tester.pumpAndSettle();

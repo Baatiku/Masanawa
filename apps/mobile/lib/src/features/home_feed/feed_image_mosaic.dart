@@ -29,7 +29,21 @@ class FeedImageMosaic extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Column(children: [
-        GridView.builder(
+        LayoutBuilder(builder:(context,constraints){
+          final height=(constraints.maxWidth*.56).clamp(180.0,300.0).toDouble();
+          Widget tile(int index)=>FeedInlineMediaCard(
+            key: ValueKey('status-media-$accountKey-$postId-${mediaIds[index]}'),
+            api:api,accountKey:accountKey,postId:postId,mediaId:mediaIds[index],
+            mediaCount:mediaIds.length,imageIndex:index+1,tile:true,
+            remainingCount:index==3?mediaIds.length-4:0,
+            onOpen:onOpen==null?null:()=>onOpen!(mediaIds[index]),renderer:renderer);
+          if(visible==2)return SizedBox(height:height,child:Row(children:[
+            Expanded(child:tile(0)),const SizedBox(width:4),Expanded(child:tile(1))]));
+          if(visible==3)return SizedBox(height:height,child:Row(children:[
+            Expanded(child:tile(0)),const SizedBox(width:4),
+            Expanded(child:Column(children:[Expanded(child:tile(1)),
+              const SizedBox(height:4),Expanded(child:tile(2))]))]));
+          return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -39,20 +53,8 @@ class FeedImageMosaic extends StatelessWidget {
             childAspectRatio: 1.42,
           ),
           itemCount: visible,
-          itemBuilder: (context, index) => FeedInlineMediaCard(
-            key: ValueKey('status-media-$accountKey-$postId-${mediaIds[index]}'),
-            api: api,
-            accountKey: accountKey,
-            postId: postId,
-            mediaId: mediaIds[index],
-            mediaCount: mediaIds.length,
-            imageIndex: index + 1,
-            tile: true,
-            remainingCount: index == 3 ? mediaIds.length - 4 : 0,
-            onOpen: onOpen == null ? null : () => onOpen!(mediaIds[index]),
-            renderer: renderer,
-          ),
-        ),
+          itemBuilder: (context, index) => tile(index),
+        );}),
         Align(
           alignment: AlignmentDirectional.centerEnd,
           child: TextButton(

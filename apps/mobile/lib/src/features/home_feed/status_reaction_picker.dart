@@ -23,11 +23,12 @@ Future<String?> showStatusReactionPicker(
       PopupMenuItem<String>(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Builder(builder: (menuContext) => SizedBox(
-          width: 260,
-          child: Wrap(spacing: 4, runSpacing: 4, children: [
+          width: (overlay.size.width-48).clamp(180.0,332.0).toDouble(),
+          child: SingleChildScrollView(scrollDirection:Axis.horizontal,
+            child:Row(mainAxisSize:MainAxisSize.min,children: [
             for (final kind in FeedPost.reactionKinds)
               SizedBox(
-                width: 60,
+                width: 48,
                 height: 58,
                 child: TextButton(
                   style: TextButton.styleFrom(
@@ -48,7 +49,7 @@ Future<String?> showStatusReactionPicker(
                   ),
                 ),
               ),
-          ]),
+          ])),
         )),
       ),
     ],

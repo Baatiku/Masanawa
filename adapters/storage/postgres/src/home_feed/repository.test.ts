@@ -42,16 +42,19 @@ describe("J06 tenant-scoped SQL and no duplicate follower registry",()=>{
  });
  it("C22 uses tenant, post, visible top-level parent for reply admission",async()=>{
   const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[]}));
-  const repo=new PgHomeFeedRepository({query} as unknown as Pool);
+  // Comment writes now own an advisory-locked transaction for real abuse rate
+  // enforcement. The insert still binds the exact historic C22 parameters.
+  const repo=new PgHomeFeedRepository({query,connect:async()=>({query,release:()=>{}})} as unknown as Pool);
   await expect(repo.comment("tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2",
    "Reply","reply-key-001",true,"9b8c8884-7a31-49d9-aee5-521364b54aef")).rejects.toMatchObject({status:409});
-  const sql=String(query.mock.calls[0]?.[0]);
+  const insert=query.mock.calls.find(call=>String(call[0]).includes('WITH inserted AS'));
+  const sql=String(insert?.[0]);
   expect(sql).toContain("parent.tenant_id=$1");
   expect(sql).toContain("parent.post_id=p.id");
   expect(sql).toContain("parent.state='visible'");
   expect(sql).toContain("parent.parent_comment_id IS NULL");
   expect(sql).toContain("IS NOT DISTINCT FROM EXCLUDED.parent_comment_id");
-  expect(query.mock.calls[0]?.[1]).toEqual(["tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2","Reply","pending","reply-key-001","9b8c8884-7a31-49d9-aee5-521364b54aef"]);
+  expect(insert?.[1]).toEqual(["tenantA","fanA","381026c2-9d56-47b1-b73d-1784e24e41e2","Reply","pending","reply-key-001","9b8c8884-7a31-49d9-aee5-521364b54aef"]);
  });
  it("C22 selects deterministic oldest-first without a raw SQL order injection",async()=>{
   const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[]}));

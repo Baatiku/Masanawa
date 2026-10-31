@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../agents/agent_directory.dart';
@@ -22,6 +23,7 @@ import 'my_status_promotions_screen.dart';
 import 'status_qualified_view_observer.dart';
 import 'status_reaction_picker.dart';
 import 'status_post_action_row.dart';
+import 'status_feed_metrics.dart';
 
 /// Account-scoped Status feed. Typed author cards preserve legacy Masana reads.
 class MasanaFeedScreen extends StatefulWidget {
@@ -81,7 +83,20 @@ class MasanaFeedScreen extends StatefulWidget {
 }
 
 class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
+  void _frameTimings(List<FrameTiming> frames){
+    for(final frame in frames){
+      if(frame.totalSpan.inMilliseconds>32){
+        StatusFeedMetrics.observe('frame-jank',frame.totalSpan,succeeded:false);
+        break;
+      }
+    }
+  }
   final searchController = TextEditingController();
+  final scrollController=ScrollController();
+  Timer? freshnessTimer;
+  FeedPage? newerPage;
+  String? sourceFilter;
+  DateTimeRange? dateFilter;
   String searchTerm = '';
   String mode = 'for_you';
   bool localSearchExpanded = false;
@@ -113,6 +128,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     pendingActions.clear();
     sharingPosts.clear();shareGeneration++;
     promotionsAvailable = false;
+    newerPage=null;
   }
 
   @override
@@ -120,6 +136,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     generation++;
     widget.searchExpanded?.removeListener(_onExternalSearchChanged);
     searchController.dispose();
+    freshnessTimer?.cancel();
+    scrollController.dispose();
+    SchedulerBinding.instance.removeTimingsCallback(_frameTimings);
     super.dispose();
   }
 
@@ -161,6 +180,11 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   }
 
   Future<FeedPage> listCurrent([String? after]) {
+    if ((sourceFilter!=null||dateFilter!=null)&&widget.api is FilteredFeedApi){
+      return (widget.api as FilteredFeedApi).filteredPosts(mode:mode,
+        query:searchTerm.isEmpty?null:searchTerm,cursor:after,
+        source:sourceFilter,from:dateFilter?.start,to:dateFilter?.end);
+    }
     if (searchTerm.isNotEmpty && widget.api is SearchFeedApi) {
       return (widget.api as SearchFeedApi).searchPosts(
         mode: mode,
@@ -187,6 +211,13 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     super.initState();
     widget.searchExpanded?.addListener(_onExternalSearchChanged);
     mode = widget.ownPostsOnly ? 'mine' : 'for_you';
+    scrollController.addListener(() {
+      if(!scrollController.hasClients||!mounted)return;
+      if(scrollController.position.extentAfter<650&&cursor!=null&&
+          !fetchingMore&&!loading&&pageError==null)unawaited(nextPage());
+    });
+    SchedulerBinding.instance.addTimingsCallback(_frameTimings);
+    freshnessTimer=Timer.periodic(const Duration(minutes:2),(_)=>unawaited(checkNewUpdates()));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {refresh();checkPromotions();}
     });
@@ -211,6 +242,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       mode = widget.ownPostsOnly ? 'mine' : 'for_you';
       searchController.clear();
       searchTerm = '';
+      sourceFilter=null;
+      dateFilter=null;
       if (widget.enabled) refresh();
       if (widget.enabled) checkPromotions();
     }
@@ -258,6 +291,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
 
   Future<void> refresh() async {
     if (!widget.enabled) return;
+    final timing=Stopwatch()..start();
     final ticket = ++generation;
     setState(() {
       loading = true;
@@ -266,6 +300,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       pageError = null;
       pendingActions.clear();
       sharingPosts.clear();shareGeneration++;
+      newerPage=null;
     });
     try {
       final page = await listCurrent();
@@ -276,6 +311,10 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         cursor = page.items.isEmpty ? null : page.nextCursor;
         offline = false;
         loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted&&ticket==generation)StatusFeedMetrics.observe(
+          'first-page',timing.elapsed,succeeded:true);
       });
     } catch (e) {
       if (!mounted || ticket != generation) return;
@@ -291,11 +330,60 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                 e.type == DioExceptionType.connectionTimeout);
         loading = false;
       });
+      StatusFeedMetrics.observe('first-page',timing.elapsed,succeeded:false);
     }
+  }
+
+  Future<void> checkNewUpdates() async {
+    if(!mounted||!widget.enabled||loading||items.isEmpty||
+       fetchingMore||newerPage!=null||ModalRoute.of(context)?.isCurrent==false)return;
+    final ticket=generation,firstId=items.first.id;
+    try{
+      final page=await listCurrent();
+      if(!mounted||ticket!=generation||items.isEmpty||items.first.id!=firstId)return;
+      if(page.items.isNotEmpty&&page.items.first.id!=firstId&&
+         page.items.first.publishedAt.isAfter(items.first.publishedAt)){
+        setState(()=>newerPage=page);
+      }
+    }catch(_){/* Freshness checks are optional, never replace visible content. */}
+  }
+
+  Future<void> showFilters() async {
+    if(widget.api is! FilteredFeedApi)return;
+    String? draft=sourceFilter;
+    DateTimeRange? range=dateFilter;
+    final apply=await showModalBottomSheet<bool>(context:context,isScrollControlled:true,
+      showDragHandle:true,builder:(sheet)=>StatefulBuilder(builder:(ctx,update)=>
+        SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(20,8,20,24),
+          child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(t('Filter Status','Tace labarai'),style:Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height:12),
+            Wrap(spacing:8,children:[
+              for(final entry in const <String?,String>{null:'All sources','x':'X','facebook':'Facebook'}.entries)
+                ChoiceChip(label:Text(entry.value),selected:draft==entry.key,
+                  onSelected:(_)=>update(()=>draft=entry.key)),
+            ]),
+            ListTile(leading:const Icon(Icons.date_range_outlined),
+              title:Text(range==null?'Any date':'${MaterialLocalizations.of(ctx).formatMediumDate(range!.start)} – ${MaterialLocalizations.of(ctx).formatMediumDate(range!.end)}'),
+              onTap:() async {
+                final picked=await showDateRangePicker(context:ctx,firstDate:DateTime(2004),
+                  lastDate:DateTime.now(),initialDateRange:range);
+                if(picked!=null)update(()=>range=picked);
+              }),
+            Row(children:[TextButton(onPressed:()=>update(()=>range=null),child:const Text('Clear dates')),
+              const Spacer(),FilledButton(onPressed:()=>Navigator.pop(ctx,true),
+                child:Text(t('Apply','Aiwatar')))]),
+          ])))));
+    if(apply!=true||!mounted)return;
+    if(sourceFilter==draft&&dateFilter?.start==range?.start&&dateFilter?.end==range?.end)return;
+    setState((){sourceFilter=draft;dateFilter=range;items=[];cursor=null;newerPage=null;});
+    if(scrollController.hasClients)scrollController.jumpTo(0);
+    await refresh();
   }
 
   Future<void> nextPage() async {
     if (!widget.enabled || fetchingMore || cursor == null || loading) return;
+    final timing=Stopwatch()..start();
     final ticket = generation, after = cursor;
     setState(() {
       fetchingMore = true;
@@ -314,6 +402,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
             ? null : page.nextCursor;
         fetchingMore = false;
       });
+      StatusFeedMetrics.observe('next-page',timing.elapsed,succeeded:true);
     } catch (e) {
       if (mounted && ticket == generation) {
         setState(() {
@@ -325,6 +414,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           fetchingMore = false;
           pageError = e.toString();
         });
+        StatusFeedMetrics.observe('next-page',timing.elapsed,succeeded:false);
       }
     }
   }
@@ -370,6 +460,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       return;
     final index = items.indexWhere((row) => row.id == post.id);
     if (index < 0) return;
+    final timing=Stopwatch()..start();
     final version = generation;
     setState(() {
       pendingActions.add(post.id);
@@ -377,6 +468,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     });
     try {
       await (widget.api as ReactionFeedApi).react(post.id, kind);
+      StatusFeedMetrics.observe('reaction-write',timing.elapsed,succeeded:true);
       // The PUT has succeeded at this point. A later detail GET can be stale
       // or temporarily unavailable; it must never turn a committed reaction
       // into an apparent failed write (a retry could then remove it).
@@ -406,6 +498,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         }
       }
     } catch (e) {
+      StatusFeedMetrics.observe('reaction-write',timing.elapsed,succeeded:false);
       if (!mounted || version != generation) return;
       if (accessLost(e)) {
         setState(() {
@@ -439,6 +532,20 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
         'Reaction saved. Counts may be out of date; pull to refresh.',
         'An ajiye martani. Watakila adadin bai sabunta ba; ja ƙasa don sabuntawa.',
       )),
+    ));
+  }
+
+  void showReactionBreakdown(FeedPost post){
+    showDialog<void>(context:context,builder:(ctx)=>AlertDialog(
+      title:Text(t('Masanawa reactions','Martanin Masanawa')),
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        for(final kind in FeedPost.reactionKinds)
+          if((post.effectiveReactionCounts[kind]??0)>0)
+            ListTile(dense:true,leading:Text(FeedPost.reactionEmoji[kind]??''),
+              title:Text(kind[0].toUpperCase()+kind.substring(1)),
+              trailing:Text('${post.effectiveReactionCounts[kind]}')),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close'))],
     ));
   }
 
@@ -492,9 +599,24 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
   }
 
   void openComments(FeedPost post) {
-    // Use the complete thread page so typing, scrolling and keyboard focus
-    // are not lost in a height-constrained modal.
-    openPost(post);
+    if(!widget.enabled||widget.accountKey.isEmpty)return;
+    final feed=widget.api,account=widget.accountKey;
+    final detail=FeedPostDetailScreen(
+          initialPost:post,accountKey:account,commentsOnly:true,
+          loadPost:(id)=>feed is DioFeedApi?feed.detail(id):Future.value(post),
+          loadThread:(id,sort)=>feed is DioFeedApi?feed.thread(id,sort):feed.comments(id),
+          loadMoreThread:feed is DioFeedApi?(id,sort,before)=>feed.threadPage(id,sort,before:before):null,
+          sendComment:(id,body,key,parent) async {
+            if(feed is DioFeedApi){await feed.sendThreadComment(id,body,key,parent);}
+            else if(parent==null){await feed.comment(id,body,key);}
+            else{throw StateError('Reply unavailable');}
+          },engagementApi:feed,canReply:feed is DioFeedApi,
+          onHumanProfile:widget.onHumanProfile,onMasanaProfile:widget.onMasanaProfile,
+        );
+    showModalBottomSheet<void>(context:context,isScrollControlled:true,useSafeArea:true,
+      showDragHandle:true,builder:(sheet)=>FractionallySizedBox(
+        heightFactor:MediaQuery.textScalerOf(sheet).scale(14)>21?1:0.9,
+        child:widget.wrapAccountRoute?.call(detail)??detail));
   }
 
   Future<void> sharePost(FeedPost post) async {
@@ -508,7 +630,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
           ? await (widget.api as DioFeedApi).detail(post.id) : post;
       if (!current()) return;
       await SharePlus.instance.share(ShareParams(text:
-        '${currentPost.displayAuthor}\n\n${currentPost.body}'));
+        '${currentPost.displayAuthor}\n\n${currentPost.body}'
+        '${currentPost.source==null?'':'\n\nOriginal: ${currentPost.source!.url}'}'));
     } catch (_) {
       if (!current()) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -517,6 +640,26 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
     } finally {
       if(current())setState(()=>sharingPosts.remove(post.id));
     }
+  }
+
+  void hideWithUndo(FeedPost post){
+    if(!mounted)return;
+    final account=widget.accountKey,scope=generation;
+    setState((){locallyHiddenPosts.add(post.id);items.removeWhere((p)=>p.id==post.id);});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content:Text(t('Post hidden from your feed.','An ɓoye labarin.')),
+      action:SnackBarAction(label:t('Undo','Mayar'),onPressed:() async {
+        final api=widget.api;
+        if(api is! FeedSafetyApi||!mounted||account!=widget.accountKey||scope!=generation)return;
+        try{
+          await (api as FeedSafetyApi).hidePost(post.id,false,()=>mounted&&account==widget.accountKey&&scope==generation);
+          if(!mounted||account!=widget.accountKey||scope!=generation)return;
+          setState(()=>locallyHiddenPosts.remove(post.id));
+          await refresh();
+        }catch(_){if(mounted&&scope==generation)ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content:Text(t('Could not restore this post.','An kasa mayar da labarin.'))));}
+      }),
+    ));
   }
 
   Future<void> tipPost(FeedPost post) async {
@@ -626,6 +769,21 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
       );
     return Column(
       children: [
+        if(!widget.authorScoped&&!widget.ownPostsOnly&&widget.api is FilteredFeedApi)
+          Row(children:[const Spacer(),TextButton.icon(
+            onPressed:showFilters,icon:const Icon(Icons.tune,size:18),
+            label:Text(sourceFilter==null&&dateFilter==null?'Filters':
+              'Filters · ${(sourceFilter==null?0:1)+(dateFilter==null?0:1)}')),
+            const SizedBox(width:12)]),
+        if(newerPage!=null)MaterialBanner(
+          content:Text(t('New official updates are available','Akwai sabbin labarai')),
+          actions:[TextButton(onPressed:(){setState(()=>newerPage=null);refresh();
+            if(scrollController.hasClients){
+              if(MediaQuery.of(context).disableAnimations){scrollController.jumpTo(0);}
+              else{scrollController.animateTo(0,
+                duration:const Duration(milliseconds:220),curve:Curves.easeOut);}
+            }},
+            child:Text(t('Show updates','Nuna sabbi')))]),
         // The real Home shell already has its wordmark and expandable Search.
         // Embedded/standalone feeds may still need their own compact search.
         if (!widget.authorScoped && widget.searchExpanded == null &&
@@ -748,8 +906,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                   child: ColoredBox(
                     color: context.masanawa.surfaceBg,
                     child: ListView.separated(
+                    controller:scrollController,
                     key: PageStorageKey<String>(
-                      'status-feed-${widget.accountKey}-$mode-$searchTerm',
+                      'status-feed-${widget.accountKey}-$mode-$searchTerm-$sourceFilter-${dateFilter?.start}-${dateFilter?.end}',
                     ),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: items.length + (cursor == null ? 0 : 1),
@@ -759,7 +918,8 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                         return Center(
                           child: TextButton(
                             onPressed: fetchingMore ? null : nextPage,
-                            child: Text(t('Load more', 'Kara nunawa')),
+                            child:fetchingMore?const CircularProgressIndicator.adaptive():
+                              Text(t('Load more', 'Kara nunawa')),
                           ),
                         );
                       final post = items[i];
@@ -805,7 +965,7 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                     StatusPostSafetyMenu(postId:post.id,accountKey:widget.accountKey,
                                       api:widget.api is FeedSafetyApi?widget.api as FeedSafetyApi:null,
                                       isCurrent:()=>mounted&&widget.enabled,
-                                      onHidden:()=>setState((){locallyHiddenPosts.add(post.id);items.removeWhere((p)=>p.id==post.id);})),
+                                      onHidden:()=>hideWithUndo(post)),
                                     if (widget.statusTips != null && !post.isHuman)
                                       IconButton(
                                         tooltip: t('Tip MB', 'Kyautar MB'),
@@ -844,7 +1004,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                  StatusPostSocialProof(post: post),
+                                  StatusPostSocialProof(post: post,
+                                    onComments:()=>openComments(post),
+                                    onReactions:()=>showReactionBreakdown(post)),
                                   StatusPostBoostAction(
                                     post: post,
                                     enabled: false,
@@ -857,7 +1019,9 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                 post: post,
                                 pending: pendingActions.contains(post.id),
                                 shareEarnEnabled: false,
-                                onLike: () => likePost(post),
+                                onLike: () => widget.api is ReactionFeedApi
+                                  ? react(post,post.currentReaction==null?'like':null)
+                                  : likePost(post),
                                 onComment: () => openComments(post),
                                 onShare: sharingPosts.contains(post.id) ? null : () => sharePost(post),
                                 onLongLike: widget.api is ReactionFeedApi
