@@ -1,6 +1,7 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import '../theme/masanawa_theme.dart';
+import '../screens/chat/chat_ui_copy.dart';
 import 'chat_text_editing.dart';
 
 /// Offline emoji keyboard. Explicit editing avoids the picker's default
@@ -34,7 +35,7 @@ class ChatEmojiPanel extends StatelessWidget {
                   children: [
                     const SizedBox(width: 16),
                     Text(
-                      'Emoji',
+                      ChatUiCopy.of(context, 'Emoji'),
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: colors.textPrimary,
@@ -42,7 +43,7 @@ class ChatEmojiPanel extends StatelessWidget {
                     ),
                     const Spacer(),
                     IconButton(
-                      tooltip: 'Return to keyboard',
+                      tooltip: ChatUiCopy.of(context, 'Return to keyboard'),
                       onPressed: onClose,
                       icon: Icon(Icons.keyboard_rounded, color: colors.brand),
                       padding: EdgeInsets.zero,
@@ -82,7 +83,7 @@ class ChatEmojiPanel extends StatelessWidget {
                       recentsLimit: 48,
                       replaceEmojiOnLimitExceed: true,
                       noRecents: Text(
-                        'Your recent emoji will appear here',
+                        ChatUiCopy.of(context, 'Your recent emoji will appear here'),
                         style: TextStyle(fontSize: 13, color: colors.textMuted),
                       ),
                       loadingIndicator: const Center(
@@ -105,7 +106,7 @@ class ChatEmojiPanel extends StatelessWidget {
                     searchViewConfig: SearchViewConfig(
                       backgroundColor: colors.surfaceCard,
                       buttonIconColor: colors.brand,
-                      hintText: 'Search emoji',
+                      hintText: ChatUiCopy.of(context, 'Search emoji'),
                       inputTextStyle: TextStyle(color: colors.textPrimary),
                     ),
                   ),

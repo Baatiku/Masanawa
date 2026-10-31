@@ -153,3 +153,23 @@ SP-136 reference-pixel parity. Provider/native permission strings, device RTL
 behavior, media/Bluetooth lifecycle and cross-device state still need actual
 integration/handset evidence. The PR remains draft and unmerged.
 
+## Shared Chats component follow-up
+
+- Localized the shared emoji keyboard's search, recents hint and keyboard-return
+  semantics; the separate voice-note recording/preview/permission/owner-change
+  messages and actions; and the structured AI result/document fallback UI. The
+  server-authored document titles, choices, values and file names remain
+  unmodified content rather than being mistaken for built-in English labels.
+- Restricted rich-result external file actions to valid HTTPS links without
+  embedded user information. Malformed, local-file, intent and JavaScript links
+  now show a translated unavailable state instead of an actionable opener.
+- Added direct translation-catalog coverage and focused Hausa/Arabic widget
+  regressions for recording, RTL large text, emoji actions, rich-result links
+  and document form errors. These test assertions are source-level evidence;
+  framework fonts, accessibility services, actual media permissions and signed
+  remote downloads still need separately qualified runtime evidence.
+
+The complete 145-row audit remains unaccepted; this batch does not close the
+SP-111 or SP-136 merge gates. Do not publish an APK or merge PR #612 merely
+because the new widget checks or hosted workflows pass.
+

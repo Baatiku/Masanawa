@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/masanawa_theme.dart';
+import '../screens/chat/chat_ui_copy.dart';
 import 'chat_format.dart';
 import 'message_parts.dart';
 import 'shell_document.dart';
@@ -64,11 +65,24 @@ class _PartCard extends StatelessWidget {
     AgentMessagePartKind.status => 'Status',
   };
 
+  /// Server result metadata is not a grant to launch arbitrary URI schemes.
+  /// Offer only an ordinary secure web link; never expose file:// or intents.
+  Uri? get _safeFileLink {
+    final file = part.file;
+    if (file == null) return null;
+    for (final value in [file.previewUrl, file.downloadUrl]) {
+      if (value == null) continue;
+      final uri = Uri.tryParse(value);
+      if (uri?.scheme == 'https' && uri!.host.isNotEmpty &&
+          uri.userInfo.isEmpty) return uri;
+    }
+    return null;
+  }
+
   Future<void> _openFile() async {
-    final value = part.file?.previewUrl ?? part.file?.downloadUrl;
-    if (value == null) return;
-    final uri = Uri.tryParse(value);
-    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final uri = _safeFileLink;
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -98,7 +112,7 @@ class _PartCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  part.title ?? file?.name ?? fallbackTitle,
+                  part.title ?? file?.name ?? ChatUiCopy.of(context, fallbackTitle),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -138,14 +152,18 @@ class _PartCard extends StatelessWidget {
               style: TextStyle(color: u.textMuted, fontSize: 11),
             ),
           ],
-          if (file != null &&
-              (file.previewUrl != null || file.downloadUrl != null)) ...[
+          if (_safeFileLink != null) ...[
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _openFile,
               icon: const Icon(Icons.open_in_new, size: 17),
-              label: const Text('Open'),
+              label: Text(ChatUiCopy.of(context, 'Open')),
             ),
+          ] else if (file != null &&
+              (file.previewUrl != null || file.downloadUrl != null)) ...[
+            const SizedBox(height: 8),
+            Text(ChatUiCopy.of(context, 'Secure file link unavailable'),
+              style: TextStyle(color: u.textMuted, fontSize: 12)),
           ],
           if (part.actionLabel?.isNotEmpty == true) ...[
             const SizedBox(height: 5),

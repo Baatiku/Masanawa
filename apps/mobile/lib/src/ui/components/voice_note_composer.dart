@@ -8,6 +8,7 @@ import '../../core/app_permissions.dart';
 import '../../core/audio_failure.dart';
 import '../../core/voice_note_recorder.dart';
 import '../../state/ai_chat_state.dart';
+import '../../screens/chat/chat_ui_copy.dart';
 import '../../theme/masanawa_theme.dart';
 
 final voiceNoteRecorderFactoryProvider = Provider<VoiceNoteRecorder Function()>((ref) => () => VoiceNoteRecorder());
@@ -132,11 +133,14 @@ class _VoiceNoteComposerState extends State<VoiceNoteComposer> {
         final ready = recorder.state == VoiceNoteState.ready;
         final busy = _sending || _previewLoading || recorder.state == VoiceNoteState.starting || recorder.state == VoiceNoteState.stopping;
         final seconds = recorder.elapsed.inSeconds;
-        final message = _error ?? recorder.error;
+        // These are locally defined, allowlisted recorder failures, never
+        // untranslated native/provider diagnostics or private file paths.
+        final rawMessage = _error ?? recorder.error;
+        final message = rawMessage == null ? null : ChatUiCopy.of(context, rawMessage);
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.mic, size: 36, color: recording || paused ? colors.emergency : colors.brandStrong),
           const SizedBox(height: 12),
-          Text(paused ? 'Recording paused' : recording ? 'Recording voice note' : ready ? 'Voice note ready' : busy ? 'Starting recording…' : 'Voice note',
+          Text(ChatUiCopy.of(context, paused ? 'Recording paused' : recording ? 'Recording voice note' : ready ? 'Voice note ready' : busy ? 'Starting recording…' : 'Voice note'),
             textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Text('${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
@@ -146,26 +150,26 @@ class _VoiceNoteComposerState extends State<VoiceNoteComposer> {
           if (busy) const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()),
           const SizedBox(height: 16),
           Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 8, children: [
-            TextButton(onPressed: _sending ? null : _cancel, child: const Text('Cancel')),
+            TextButton(onPressed: _sending ? null : _cancel, child: Text(ChatUiCopy.of(context, 'Cancel'))),
             if (recording || paused) OutlinedButton(
               onPressed: busy ? null : () => unawaited(recorder.stop()),
-              child: const Text('Stop & review')),
+              child: Text(ChatUiCopy.of(context, 'Stop & review'))),
             if (recording || paused) OutlinedButton.icon(
               onPressed: busy ? null : () => unawaited(
                 paused ? recorder.resume() : recorder.pause()),
               icon: Icon(paused ? Icons.play_arrow : Icons.pause),
-              label: Text(paused ? 'Resume' : 'Pause')),
+              label: Text(ChatUiCopy.of(context, paused ? 'Resume' : 'Pause'))),
             if (ready) OutlinedButton.icon(
               onPressed: busy ? null : _togglePreview,
               icon: Icon(_previewPlaying ? Icons.pause : Icons.play_arrow),
-              label: Text(_previewPlaying ? 'Pause preview' : 'Play voice note'),
+              label: Text(ChatUiCopy.of(context, _previewPlaying ? 'Pause preview' : 'Play voice note')),
             ),
             if (ready) FilledButton.icon(
-              onPressed: busy ? null : _send, icon: const Icon(Icons.send), label: const Text('Send voice note')),
+              onPressed: busy ? null : _send, icon: const Icon(Icons.send), label: Text(ChatUiCopy.of(context, 'Send voice note'))),
             if (!recording && !paused && !ready && !busy && widget.isOwnerCurrent())
-              FilledButton(onPressed: () => recorder.start(isOwnerCurrent: widget.isOwnerCurrent), child: const Text('Record again')),
+              FilledButton(onPressed: () => recorder.start(isOwnerCurrent: widget.isOwnerCurrent), child: Text(ChatUiCopy.of(context, 'Record again'))),
             if (recorder.error?.contains('permission') == true)
-              TextButton(onPressed: AppPermissions.openSettings, child: const Text('Microphone settings')),
+              TextButton(onPressed: AppPermissions.openSettings, child: Text(ChatUiCopy.of(context, 'Microphone settings'))),
           ]),
         ]);
       }),

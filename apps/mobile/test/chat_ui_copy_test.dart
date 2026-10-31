@@ -64,6 +64,23 @@ void main() {
         checked++;
       }
     }
+    for (final name in [
+      'lib/src/chat/chat_emoji_panel.dart',
+      'lib/src/chat/message_parts_view.dart',
+      'lib/src/chat/shell_document_view.dart',
+      'lib/src/ui/components/voice_note_composer.dart',
+    ]) {
+      final path = File(name).existsSync() ? name : 'apps/mobile/$name';
+      final source = File(path).readAsStringSync();
+      for (final match in expression.allMatches(source)) {
+        final key = match.group(1)!;
+        expect(ChatUiCopy.hasTranslation('ha', key), isTrue,
+            reason: '$name lacks Hausa for $key');
+        expect(ChatUiCopy.hasTranslation('ar', key), isTrue,
+            reason: '$name lacks Arabic for $key');
+        checked++;
+      }
+    }
     expect(checked, greaterThan(100));
   });
 
@@ -130,6 +147,27 @@ void main() {
       'The voice service is unavailable right now. Please retry shortly.',
       'I couldn’t respond just now. Please try again.',
       'Microphone access is needed to make a voice call.',
+      'Return to keyboard',
+      'Your recent emoji will appear here',
+      'Search emoji',
+      'Recording paused',
+      'Recording voice note',
+      'Voice note ready',
+      'Starting recording…',
+      'Stop & review',
+      'Send voice note',
+      'Record again',
+      'The recording could not be played. You can record again.',
+      'The account changed. Record a new voice note.',
+      'Could not pause recording. Stop and review it.',
+      'Microphone permission was denied. Allow microphone access in Android settings to record.',
+      'The recording is empty or too large. Please record again.',
+      'Choose an option',
+      'Processing',
+      'Please complete this field',
+      'This option has expired. Ask for updated options.',
+      'Could not confirm this action. Ask for its status before continuing.',
+      'Secure file link unavailable',
     ];
     for (final key in keys) {
       expect(ChatUiCopy.hasTranslation('ha', key), isTrue,
