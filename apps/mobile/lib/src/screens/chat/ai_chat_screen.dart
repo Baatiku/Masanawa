@@ -700,7 +700,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         ),
         action: result.permanentlyDenied
             ? SnackBarAction(
-                label: 'Settings',
+                label: ChatUiCopy.of(context, 'Settings'),
                 onPressed: AppPermissions.openSettings,
               )
             : null,
@@ -1201,7 +1201,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
 
     if (agent == null) {
       return Scaffold(
-        appBar: AppBar(title: Text(thread?.title ?? 'Unavailable Masana')),
+        appBar: AppBar(title: Text(thread?.title ?? ChatUiCopy.of(context, 'Unavailable Masana'))),
         body: Column(children: [
           Padding(padding: const EdgeInsets.all(16),
             child: Column(children: [
@@ -1468,7 +1468,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   child: Text(ChatUiCopy.of(context, 'Search chat'))),
                 PopupMenuItem(value: 'wallet',
                   child: Text(ChatUiCopy.of(context, 'Wallet'))),
-                PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
+                PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ChatUiCopy.of(context, ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech'))),
                 if (widget.embeddedInShell) ...[
                   PopupMenuItem(value: 'activity', child: Text(ChatUiCopy.of(context, 'Activity'))),
                   PopupMenuItem(value: 'profile', child: Text(ChatUiCopy.of(context, 'Profile'))),
@@ -1491,7 +1491,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           bottom: _showSearch ? PreferredSize(
             preferredSize: const Size.fromHeight(40),
             child: SizedBox(height: 40, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              Text(searchMatches.isEmpty ? 'No matches' : '${_searchIndex + 1}/${searchMatches.length}'),
+              Text(searchMatches.isEmpty ? ChatUiCopy.of(context, 'No matches') : '${_searchIndex + 1}/${searchMatches.length}'),
               IconButton(tooltip: ChatUiCopy.of(context, 'Previous result'),icon:const Icon(Icons.keyboard_arrow_up),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(-1,searchMatches)),
               IconButton(tooltip: ChatUiCopy.of(context, 'Next result'),icon:const Icon(Icons.keyboard_arrow_down),onPressed:searchMatches.isEmpty?null:()=>_moveSearch(1,searchMatches)),
             ])),
@@ -1561,8 +1561,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                               icon: _loadingOlder ? const SizedBox(width: 18, height: 18,
                                   child: CircularProgressIndicator(strokeWidth: 2))
                                   : const Icon(Icons.history),
-                              label: Text(_olderHistoryError ? 'Retry earlier messages'
-                                  : 'Load earlier messages'))));
+                              label: Text(ChatUiCopy.of(context, _olderHistoryError ? 'Retry earlier messages'
+                                  : 'Load earlier messages')))));
                         }
                         final messageIndex = index - 1 - (showLoadOlder ? 1 : 0);
                         if (messageIndex >= messages.length) {
@@ -3021,7 +3021,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                       if(_recording!.recording){await _recording!.stop();}else{await _recording!.start();}
                     },
                     icon:Icon(_recording!.recording?Icons.stop_circle_outlined:Icons.fiber_manual_record,color:_recording!.recording?u.emergency:u.textPrimary),
-                    label:Text(_recording!.recording?'Stop recording':_recording!.saving?'Saving recording…':'Record call'),
+                    label:Text(ChatUiCopy.of(context, _recording!.recording?'Stop recording':_recording!.saving?'Saving recording…':'Record call')),
                   ),
                   if(_recording!.recording)Text(ChatUiCopy.of(context, 'Recording · saved on this device'),style:TextStyle(color:u.emergency)),
                   if(_recording!.error!=null)Text(_recording!.error!,textAlign:TextAlign.center),
@@ -3058,14 +3058,15 @@ class _CallControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = context.masanawa;
     final color = danger ? u.emergency : selected ? u.brand : u.surfaceMuted;
-    return Tooltip(message:label,child:Semantics(button:true,label:label,
+    final localized = ChatUiCopy.of(context, label);
+    return Tooltip(message:localized,child:Semantics(button:true,label:localized,
       onTap:onTap,toggled:danger?null:selected,child:ExcludeSemantics(child:Material(
         color:Colors.transparent,child:InkWell(onTap:onTap,borderRadius:BorderRadius.circular(20),
           child:SizedBox(width:72,child:Column(mainAxisSize:MainAxisSize.min,children:[
             Container(width:60,height:60,decoration:BoxDecoration(color:color,shape:BoxShape.circle),
               child:Icon(icon,size:26,color:selected||danger?Colors.white:u.textPrimary)),
             const SizedBox(height:5),
-            Text(label,textAlign:TextAlign.center,style:TextStyle(color:u.textMuted,fontSize:13,fontWeight:FontWeight.w500)),
+            Text(localized,textAlign:TextAlign.center,style:TextStyle(color:u.textMuted,fontSize:13,fontWeight:FontWeight.w500)),
           ])))))));
 
   }
@@ -3111,7 +3112,7 @@ class _AttachOption extends StatelessWidget {
             ),
             const SizedBox(height: 7),
             Text(
-              label,
+              ChatUiCopy.of(context, label),
               style: TextStyle(
                 color: u.textPrimary,
                 fontSize: 12.5,
@@ -3119,7 +3120,7 @@ class _AttachOption extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            Text(subtitle, style: TextStyle(color: u.textMuted,
+            Text(ChatUiCopy.of(context, subtitle), style: TextStyle(color: u.textMuted,
               fontSize: 10.5), textAlign: TextAlign.center),
           ],
         ),
@@ -3994,7 +3995,7 @@ class _ChatBubble extends StatelessWidget {
                       style: const TextStyle(fontSize: 22))))),
               ),
             Semantics(button: true, excludeSemantics: true,
-              label: 'More reactions',
+              label: ChatUiCopy.of(context, 'More reactions'),
               onTap: () => Navigator.of(context).pop('more-reactions'),
               child: InkWell(borderRadius: BorderRadius.circular(22),
                 onTap: () => Navigator.of(context).pop('more-reactions'),
@@ -4028,7 +4029,7 @@ class _ChatBubble extends StatelessWidget {
             ('continue', 'Continue'),
           ])
             PopupMenuItem<String>(
-              value: 'agent:${item.$1}', child: Text(item.$2)),
+              value: 'agent:${item.$1}', child: Text(ChatUiCopy.of(context, item.$2))),
         ],
       ],
     );
@@ -4144,7 +4145,7 @@ class _ChatBubble extends StatelessWidget {
                       ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(message.isUser ? 'Reply to Masana' : 'Reply to you',
+                          Text(ChatUiCopy.of(context, message.isUser ? 'Reply to Masana' : 'Reply to you'),
                             style: TextStyle(color: u.brand, fontSize: 11,
                               fontWeight: FontWeight.w600)),
                           Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -4203,7 +4204,7 @@ class _ChatBubble extends StatelessWidget {
                     Center(child: TextButton.icon(
                       onPressed: onRetry,
                       icon: const Icon(Icons.refresh, size: 18),
-                      label: Text(failure.actionLabel ?? 'Try again'),
+                      label: Text(ChatUiCopy.of(context, failure.actionLabel ?? 'Try again')),
                     )),
                   if (showMeta) const SizedBox(height: 3),
                   if (showMeta) Align(alignment: AlignmentDirectional.centerEnd,
@@ -4790,7 +4791,7 @@ class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
          kind == 'video' ? 'Video' : 'Document');
     return Semantics(
       button: true,
-      label: 'Download $label securely',
+      label: '${ChatUiCopy.of(context, 'Download securely')} $label',
       child: Column(mainAxisSize: MainAxisSize.min, children: [
       if (widget.attachment.sizeBytes case final bytes? when bytes > 0)
         Padding(padding: const EdgeInsets.only(bottom: 4),
@@ -4803,8 +4804,8 @@ class _RemoteChatMediaTileState extends ConsumerState<_RemoteChatMediaTile> {
             ? const SizedBox(width: 17, height: 17,
                 child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.download_for_offline_outlined),
-        label: Text(_loading ? 'Downloading...' :
-            _downloadFailed ? 'Retry $label' : label,
+        label: Text(_loading ? ChatUiCopy.of(context, 'Downloading...') :
+            _downloadFailed ? '${ChatUiCopy.of(context, 'Retry')} $label' : label,
           maxLines: 2, overflow: TextOverflow.ellipsis),
       ),
       if (_downloadFailed) Text(
@@ -4919,8 +4920,8 @@ class _ImageGalleryViewerState extends State<_ImageGalleryViewer> {
         fileName: filename.isEmpty ? 'masanawa-photo.jpg' : filename,
         bytes: bytes, mimeType: lookupMimeType(path) ?? 'image/jpeg');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(output == null ? 'Save cancelled'
-            : 'Photo saved through the device file picker')));
+        content: Text(ChatUiCopy.of(context, output == null ? 'Save cancelled'
+            : 'Photo saved through the device file picker'))));
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Could not save this photo. Try again.'))));
     } finally {
@@ -5021,14 +5022,14 @@ class _ImageGalleryViewerState extends State<_ImageGalleryViewer> {
                         TextButton.icon(onPressed: _sharing ? null :
                             () => unawaited(_shareCurrent()),
                           icon: const Icon(Icons.share_outlined),
-                          label: Text(_sharing ? 'Sharing…' : 'Share'),
+                          label: Text(ChatUiCopy.of(context, _sharing ? 'Sharing…' : 'Share')),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.white,
                             minimumSize: const Size(96, 48))),
                         TextButton.icon(onPressed: _saving ? null :
                             () => unawaited(_saveCurrent()),
                           icon: const Icon(Icons.download_outlined),
-                          label: Text(_saving ? 'Saving…' : 'Save'),
+                          label: Text(ChatUiCopy.of(context, _saving ? 'Saving…' : 'Save')),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.white,
                             minimumSize: const Size(96, 48))),
@@ -5671,7 +5672,7 @@ class _VoiceBubbleState extends ConsumerState<_VoiceBubble> {
           ),
           if (!widget.senderIsUser) ...[const SizedBox(width: 4), avatar],
           IconButton(
-            tooltip: _speakerOn ? 'Use earpiece' : 'Use speaker',
+            tooltip: ChatUiCopy.of(context, _speakerOn ? 'Use earpiece' : 'Use speaker'),
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 40),
             padding: EdgeInsets.zero,
@@ -5712,11 +5713,11 @@ class _TypingBubble extends StatelessWidget {
         ),
         child: Semantics(
           liveRegion: true,
-          label: waiting ? 'Waiting for agent reply' : 'Agent replying',
+          label: ChatUiCopy.of(context, waiting ? 'Waiting for agent reply' : 'Agent replying'),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(waiting ? Icons.hourglass_empty : Icons.more_horiz, color: u.brand, size: 20),
             const SizedBox(width: 6),
-            Text(waiting ? 'Waiting for reply…' : 'Replying…', style: TextStyle(color: u.textMuted, fontSize: 13)),
+            Text(ChatUiCopy.of(context, waiting ? 'Waiting for reply…' : 'Replying…'), style: TextStyle(color: u.textMuted, fontSize: 13)),
           ]),
         ),
       ),
