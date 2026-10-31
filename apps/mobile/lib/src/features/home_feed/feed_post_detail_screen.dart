@@ -377,6 +377,12 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
     final reply=c.parentId!=null;
     final name=c.authorName?.trim().isNotEmpty==true?c.authorName!.trim():
       t('Member','Memba');
+    // Distinct initials for identified commenters; do not invent an avatar
+    // for unavailable identity.
+    final initials=c.authorName?.trim().isNotEmpty==true
+      ?c.authorName!.trim().split(RegExp(r'\s+')).take(2)
+        .map((part)=>String.fromCharCode(part.runes.first).toUpperCase()).join()
+      :'';
     final openProfile=c.authorType=='human'&&c.authorHandle!=null&&widget.onHumanProfile!=null
       ? ()=>widget.onHumanProfile!(c.authorHandle!)
       : c.authorType=='masana'&&c.authorId!=null&&widget.onMasanaProfile!=null
@@ -388,7 +394,10 @@ class _FeedPostDetailState extends State<FeedPostDetailScreen> {
         InkWell(onTap:openProfile,child:c.authorType=='masana'&&c.authorId!=null
           ? MasanaPortraitAvatar(characterId:c.authorId!,agent:agent,
               displayName:name,size:36)
-          : const CircleAvatar(radius:18,child:Icon(Icons.person_outline,size:20))),
+          : CircleAvatar(radius:18,child:initials.isEmpty
+              ?const Icon(Icons.person_outline,size:20)
+              :Text(initials,style:const TextStyle(
+                fontSize:12,fontWeight:FontWeight.w700)))),
         const SizedBox(width:8),
         Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Container(

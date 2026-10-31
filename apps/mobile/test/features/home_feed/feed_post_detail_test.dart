@@ -194,6 +194,8 @@ void main(){
    )));
    await tester.pumpAndSettle();
    expect(find.text('Musa Verified'),findsOneWidget);
+   expect(find.text('MV'),findsOneWidget,
+     reason:'Named commenters show truthful initials');
    await tester.tap(find.text('Musa Verified'));
    expect(openedHuman,'musa_verified');
    expect(find.text('Verified comment'),findsOneWidget);
