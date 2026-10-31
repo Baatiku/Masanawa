@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import '../../chat/chat_format.dart';
 
 /// Small Chats-specific catalog for surfaces that can be presented even when
 /// the full app localization delegate has not been installed (widget previews,
@@ -22,6 +23,16 @@ class ChatUiCopy {
     if (locale == 'ar') return _ar[english] ?? english;
     return english;
   }
+
+  /// Render dates in the active Chats UI language. The original timestamp is
+  /// never rewritten or reinterpreted as if it came from a different zone.
+  static String time(BuildContext context, DateTime timestamp) =>
+      formatChatTime(timestamp,
+          languageCode: Localizations.maybeLocaleOf(context)?.languageCode ?? 'en');
+
+  static String clock(BuildContext context, DateTime timestamp) =>
+      formatClock(timestamp,
+          languageCode: Localizations.maybeLocaleOf(context)?.languageCode ?? 'en');
 
   /// Translate complete sentences before substituting names and numbers so
   /// Hausa/Arabic word order is not inherited from English fragments.

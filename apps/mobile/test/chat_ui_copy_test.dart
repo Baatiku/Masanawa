@@ -117,6 +117,24 @@ void main() {
       'Kashi 65 cikin ɗari');
   });
 
+  testWidgets('Message chronology follows the active Hausa and Arabic locale', (tester) async {
+    Future<void> checkClock(String language, String expected) async {
+      await tester.pumpWidget(Localizations(
+        locale: Locale(language),
+        delegates: const [AppLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
+        child: Builder(builder: (context) => Directionality(
+          textDirection: language == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+          child: Text(ChatUiCopy.clock(context, DateTime(2026, 10, 31, 13, 5))),
+        )),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text(expected), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+    await checkClock('ha', '1:05 na yamma');
+    await checkClock('ar', '1:05 م');
+  });
+
   test('Sensitive and dynamic copy is translated in Hausa and Arabic', () {
     const keys = [
       'Could not keep the selected files for sending. Choose the files again or retry.',

@@ -1,6 +1,5 @@
 import '../../features/masana_chat/inbox_search.dart';
 import '../../agents/masana_portrait_avatar.dart';
-import '../../chat/chat_format.dart';
 import '../../ui/components/masanawa_conversation_tile.dart';
 import '../../theme/masanawa_theme.dart';
 
@@ -333,7 +332,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
             style: TextStyle(color: context.masanawa.textMuted, fontSize: 14),
           ),
           time: result.lastActivityAt == null
-              ? '' : formatChatTime(result.lastActivityAt!),
+              ? '' : ChatUiCopy.time(context, result.lastActivityAt!),
           unread: result.unreadCount,
           pinned: result.pinned,
           actionLoading: _savingPins.contains(result.characterId),

@@ -173,3 +173,16 @@ The complete 145-row audit remains unaccepted; this batch does not close the
 SP-111 or SP-136 merge gates. Do not publish an APK or merge PR #612 merely
 because the new widget checks or hosted workflows pass.
 
+## Localized chronology follow-up
+
+- The inbox, archive, server-search rows, unavailable-profile history and
+  conversation bubble clock now use the active language rather than raw
+  English-only timestamp rendering. Hausa and Arabic weekdays, Yesterday and
+  AM/PM equivalents are selected without mutating server `DateTime` values;
+  UTC inputs are normalized through `toLocal()` before day classification.
+- Source regressions cover locale changes, 12-hour clock periods, relative
+  weekday labels and UTC/local equality. Exact visual chronology still needs
+  comparison to an owner-selected handset reference; system 24-hour-clock
+  preference and locale-specific numeric date patterns remain separate audit
+  considerations, not silently claimed as accepted.
+

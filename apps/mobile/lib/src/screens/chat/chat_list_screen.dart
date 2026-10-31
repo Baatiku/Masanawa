@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../chat/chat_format.dart';
 import '../../chat/message_parts.dart';
 import '../../features/masana_chat/inbox_search.dart';
 import '../../core/startup_metrics.dart';
@@ -380,8 +379,8 @@ class ChatListScreen extends ConsumerWidget {
               style: TextStyle(color: u.textMuted, fontSize: 14))
           : _buildSubtitle(context, u, thread),
         time: canonical?.lastActivityAt != null
-            ? formatChatTime(canonical!.lastActivityAt!)
-            : last == null ? '' : formatChatTime(thread.lastMessageActivityAt),
+            ? ChatUiCopy.time(context, canonical!.lastActivityAt!)
+            : last == null ? '' : ChatUiCopy.time(context, thread.lastMessageActivityAt),
         pinned: canonical?.pinned ?? thread.pinned,
         unread: canonical?.unreadCount ?? thread.unread,
         onAction: onPin,
@@ -716,9 +715,9 @@ class _ArchivedMasanaConversationsScreenState
                           ChatUiCopy.of(context, 'Saved conversation'),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                     time: row?.lastActivityAt != null
-                        ? formatChatTime(row!.lastActivityAt!)
+                        ? ChatUiCopy.time(context, row!.lastActivityAt!)
                         : thread.lastMessage == null ? ''
-                          : formatChatTime(thread.lastMessageActivityAt),
+                          : ChatUiCopy.time(context, thread.lastMessageActivityAt),
                     pinned: row?.pinned ?? thread.pinned,
                     unread: row?.unreadCount ?? thread.unread,
                     actionTooltip: ChatUiCopy.of(context,
@@ -751,7 +750,7 @@ class _ArchivedMasanaConversationsScreenState
                       : row.lastMessage,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                   time: row.lastActivityAt == null
-                      ? '' : formatChatTime(row.lastActivityAt!),
+                      ? '' : ChatUiCopy.time(context, row.lastActivityAt!),
                   pinned: row.pinned, unread: row.unreadCount,
                   actionIcon: Icons.unarchive_outlined,
                   actionTooltip: ChatUiCopy.of(context,

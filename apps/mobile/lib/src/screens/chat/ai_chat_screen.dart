@@ -1218,7 +1218,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
             for (final message in messages) ListTile(
               title: Text(message.deleted ? ChatUiCopy.of(context, 'Hidden on this device') : message.text),
               subtitle: Text('${ChatUiCopy.of(context, message.isUser ? 'You' : 'AI persona')} · '
-                '${formatChatTime(message.createdAt)}')),
+                '${ChatUiCopy.time(context, message.createdAt)}')),
           ])),
         ]),
       );
@@ -4090,7 +4090,7 @@ class _ChatBubble extends StatelessWidget {
       alignment: failure != null ? Alignment.center : isUser ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
       child: Semantics(container: true,
         label: '${isUser ? ChatUiCopy.of(context, 'You') : agent.displayName}, '
-            '${formatClock(message.createdAt)}, '
+            '${ChatUiCopy.clock(context, message.createdAt)}, '
             '${message.deleted ? ChatUiCopy.of(context, 'hidden on this device') : message.text}, '
             '${ChatUiCopy.of(context, message.deliveryStatus)}${message.reaction == null ? '' : ', ${ChatUiCopy.format(context, 'reaction {emoji}', {'emoji': message.reaction!})}'}',
         child: GestureDetector(
@@ -4223,7 +4223,7 @@ class _ChatBubble extends StatelessWidget {
                           ),
                         ),
                       Text(
-                        formatClock(message.createdAt),
+                        ChatUiCopy.clock(context, message.createdAt),
                         style: TextStyle(color: u.textMuted, fontSize: 10.5),
                       ),
                       if (isUser) ...[
