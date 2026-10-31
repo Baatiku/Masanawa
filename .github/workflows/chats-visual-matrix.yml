@@ -7,6 +7,7 @@ on:
       - 'apps/mobile/lib/src/screens/chat/**'
       - 'apps/mobile/lib/src/ui/components/masanawa_conversation_tile.dart'
       - 'apps/mobile/test/chat_visual_matrix_test.dart'
+      - 'apps/mobile/test/chat_conversation_visual_matrix_test.dart'
       - '.github/workflows/chats-visual-matrix.yml'
 
 permissions:
@@ -29,7 +30,7 @@ jobs:
         run: flutter pub get
       - name: Render seven first-party Chats baselines
         working-directory: apps/mobile
-        run: flutter test --dart-define=CHAT_CAPTURE_GOLDENS=true --update-goldens test/chat_visual_matrix_test.dart
+        run: flutter test --dart-define=CHAT_CAPTURE_GOLDENS=true --update-goldens test/chat_visual_matrix_test.dart test/chat_conversation_visual_matrix_test.dart
       - name: Publish visual baselines for reference review
         if: always()
         uses: actions/upload-artifact@v4
