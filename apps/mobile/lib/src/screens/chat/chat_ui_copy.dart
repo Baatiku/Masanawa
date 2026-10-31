@@ -15,6 +15,14 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "Could not block this Masana.": "Ba a iya toshe wannan Masana ba.",
+    "Download this media before saving it.": "Sauke wannan fayil kafin ajiye shi.",
+    "Sharing is unavailable. Try again.": "Ba a samun damar rabawa yanzu. Sake gwadawa.",
+    "No local text or media is available to share.": "Babu rubutu ko fayil a wannan na’ura da za a iya rabawa.",
+    "Download the original attachment before sharing.": "Sauke fayil na asali kafin rabawa.",
+    "Voice preview could not play.": "Ba a iya kunna samfurin saƙon murya ba.",
+    "End the live call before recording a voice note.": "Ƙare kiran kai tsaye kafin yin rikodin saƙon murya.",
+    "Original message not loaded. Load earlier messages to find it.": "Ba a ɗauko saƙon asali ba. Ɗauko tsofaffin saƙonni don nemo shi.",
     "Forward failed. Review the target chat before retrying.": "Turawa ya gaza. Duba hirar da aka zaɓa kafin sake gwadawa.",
     "Original media unavailable. Download before forwarding.": "Ba a samun fayil na asali. Sauke shi kafin turawa.",
     "Photo unavailable": "Ba a samun hoto",
@@ -192,6 +200,14 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+    "Could not block this Masana.": "تعذّر حظر ماسانا.",
+    "Download this media before saving it.": "نزّل هذه الوسائط قبل حفظها.",
+    "Sharing is unavailable. Try again.": "المشاركة غير متاحة. حاول مجددًا.",
+    "No local text or media is available to share.": "لا يوجد نص أو وسائط محلية متاحة للمشاركة.",
+    "Download the original attachment before sharing.": "نزّل المرفق الأصلي قبل المشاركة.",
+    "Voice preview could not play.": "تعذّر تشغيل معاينة الرسالة الصوتية.",
+    "End the live call before recording a voice note.": "أنه المكالمة المباشرة قبل تسجيل رسالة صوتية.",
+    "Original message not loaded. Load earlier messages to find it.": "لم تُحمّل الرسالة الأصلية. حمّل الرسائل الأقدم للعثور عليها.",
     "Forward failed. Review the target chat before retrying.": "تعذرت إعادة التوجيه. راجع المحادثة المستهدفة قبل المحاولة مجددًا.",
     "Original media unavailable. Download before forwarding.": "الوسائط الأصلية غير متاحة. نزّلها قبل إعادة توجيهها.",
     "Photo unavailable": "الصورة غير متاحة",
