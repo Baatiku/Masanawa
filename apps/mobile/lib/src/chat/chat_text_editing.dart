@@ -33,7 +33,7 @@ TextEditingValue editChatText(
 /// A single joined family, flag or skin-tone sequence is one visible emoji.
 int emojiOnlyChatGraphemeCount(String text) =>
     isEmojiOnlyChatText(text)
-        ? text.replaceAll(RegExp(r'\\s'), '').characters.length
+        ? text.replaceAll(RegExp(r'\s'), '').characters.length
         : 0;
 
 /// Staged font-size tokens before runtime scaling/width constraints apply.
