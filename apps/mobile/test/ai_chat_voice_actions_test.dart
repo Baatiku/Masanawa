@@ -103,11 +103,13 @@ void main() {
   ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
     home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
-  // The message text itself is selectable; press its painted bubble padding
-  // to exercise the bubble's action gesture without selecting text.
-  final textRect=tester.getRect(find.text('A message to react to'));
-  await tester.longPressAt(Offset(textRect.left+4,textRect.top-4));
+  // Text selection owns long-press gestures over text. Invoke the painted
+  // bubble action to exercise the reaction menu's independent touch targets.
+  final bubbleGestures=tester.widgetList<GestureDetector>(find.ancestor(
+    of:find.text('A message to react to'),matching:find.byType(GestureDetector)));
+  bubbleGestures.firstWhere((gesture)=>gesture.onLongPress!=null).onLongPress!();
   await tester.pumpAndSettle();
+  expect(find.text('Reply'),findsOneWidget);
   final like=find.bySemanticsLabel('React with 👍');
   expect(like, findsOneWidget);
   expect(tester.getSize(like).width, greaterThanOrEqualTo(44));
