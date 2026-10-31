@@ -51,6 +51,7 @@ void main() {
       'ai_chat_screen.dart',
       'chat_list_screen.dart',
       'masana_list_screen.dart',
+      'masana_report_screen.dart',
       'unified_chat_inbox.dart',
     ]) {
       final source = File('$prefix/$name').readAsStringSync();
