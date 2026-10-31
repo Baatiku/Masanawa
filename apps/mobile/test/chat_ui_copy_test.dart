@@ -6,16 +6,18 @@ import 'package:masanawa/src/screens/chat/chat_ui_copy.dart';
 void main() {
   Future<void> check(WidgetTester tester, String language,
       String expected, String expectedArchive) async {
-    await tester.pumpWidget(MaterialApp(
+    // The app's own Hausa catalog is supported; Flutter's built-in Material
+    // translations do not cover every language. Test the Chats copy directly
+    // without claiming a framework Material locale that is unavailable.
+    await tester.pumpWidget(Localizations(
       locale: Locale(language),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(builder: (context) => Directionality(
+      delegates: const [AppLocalizations.delegate],
+      child: Builder(builder: (context) => Directionality(
         textDirection: language == 'ar' ? TextDirection.rtl : TextDirection.ltr,
-        child: Column(children: [
+        child: DefaultTextStyle(style: const TextStyle(), child: Column(children: [
           Text(ChatUiCopy.of(context, 'Search conversations')),
           Text(ChatUiCopy.of(context, 'Archived chats')),
-        ]),
+        ])),
       )),
     ));
     await tester.pumpAndSettle();
