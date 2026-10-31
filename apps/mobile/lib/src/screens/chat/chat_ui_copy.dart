@@ -24,6 +24,20 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "Submit report": "Aika rahoto",
+    "Submitting…": "Ana aikawa…",
+    "Could not confirm this report. Your details are still here. Check your connection before retrying.": "Ba a iya tabbatar da rahoton ba. Bayananka suna nan. Duba haɗin intanet kafin sake gwadawa.",
+    "Describe what happened": "Bayyana abin da ya faru",
+    "Additional details (optional)": "Ƙarin bayani (ba dole ba)",
+    "Something else": "Wani abu daban",
+    "Spam": "Saƙonnin banza",
+    "Self-harm concern": "Damuwa game da cutar da kai",
+    "Hate or abuse": "Ƙiyayya ko cin mutunci",
+    "Sexual content": "Abubuwan batsa",
+    "Harassment": "Cin zarafi",
+    "Fraud or scam": "Zamba ko yaudara",
+    "Impersonation": "Yin ƙarya da sunan wani",
+    "Choose the most relevant reason. Reports are reviewed for safety.": "Zaɓi dalilin da ya fi dacewa. Ana duba rahotanni don tabbatar da tsaro.",
     "I am an AI persona called {name}, not a real person. Contact admin for enquiries.": "Wannan halayyar AI ana kiranta {name}, ba mutum na gaskiya ba ce. Tuntuɓi mai kula da manhaja.",
     "I am an AI persona based on the public profile of {name}, not the real person or an official representative. Contact admin for enquiries.": "Wannan halayyar AI ta dogara da bayanan jama'a na {name}. Ba ainihin mutumin ba ce, kuma ba wakiliyar hukuma ba ce. Tuntuɓi mai kula da manhaja.",
     "Voice playback position": "Matsayin kunna saƙon murya",
@@ -312,6 +326,20 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+    "Submit report": "إرسال البلاغ",
+    "Submitting…": "جارٍ الإرسال…",
+    "Could not confirm this report. Your details are still here. Check your connection before retrying.": "تعذّر تأكيد البلاغ. لا تزال التفاصيل محفوظة. تحقق من الاتصال قبل المحاولة مجددًا.",
+    "Describe what happened": "اشرح ما حدث",
+    "Additional details (optional)": "تفاصيل إضافية (اختياري)",
+    "Something else": "سبب آخر",
+    "Spam": "رسائل مزعجة",
+    "Self-harm concern": "القلق من إيذاء النفس",
+    "Hate or abuse": "كراهية أو إساءة",
+    "Sexual content": "محتوى جنسي",
+    "Harassment": "مضايقة",
+    "Fraud or scam": "احتيال أو خداع",
+    "Impersonation": "انتحال شخصية",
+    "Choose the most relevant reason. Reports are reviewed for safety.": "اختر السبب الأنسب. تتم مراجعة البلاغات حفاظًا على السلامة.",
     "I am an AI persona called {name}, not a real person. Contact admin for enquiries.": "أنا شخصية ذكاء اصطناعي تُدعى {name}، ولست شخصًا حقيقيًا. تواصل مع إدارة التطبيق.",
     "I am an AI persona based on the public profile of {name}, not the real person or an official representative. Contact admin for enquiries.": "أنا شخصية ذكاء اصطناعي مبنية على الملف العام لـ{name}، ولست الشخص الحقيقي أو ممثلًا رسميًا له. تواصل مع إدارة التطبيق.",
     "Voice playback position": "موضع تشغيل الصوت",
