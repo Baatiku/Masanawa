@@ -10,7 +10,8 @@ export type Actor = {kind:"fan"|"masana"|"staff"; tenantId:string; id:string; pe
 export interface Post {source?:{platform:'x'|'facebook';url:string;originalPublishedAt:string;revision:number};id:string; tenantId:string; authorMasanaId:string;authorName?:string;kind:PostKind;body:string;media:readonly string[];transcript:string|null;publishedAt:string;likeCount:number;commentCount:number;viewerLiked:boolean;viewerSaved:boolean;
  verifiedViewCount?:number;promotionDeliveredViews?:number;promotionActive?:boolean;destinationUrl?:string|null;shareEarnEligible?:boolean;boostEligible?:boolean;
  viewerReaction?:ReactionKind|null;reactionCounts?:Partial<Record<ReactionKind,number>>;
- author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}}
+ news?:{id:string;name:string;title:string;summary:string;url:string;verified:boolean;logoUrl?:string|null};
+ author?:{type:"masana";id:string;displayName:string}|{type:"human";id:string;handle:string;displayName:string;avatarUrl?:string|null}|{type:"publisher";id:string;displayName:string}
 export interface Comment {id:string;postId:string;body:string;state:"pending"|"visible"|"removed";createdAt:string;parentId?:string|null;
  author?:{type:"human";id:string;handle:string;displayName:string}|null;
  revision?:number;editedAt?:string|null;replyCount?:number;viewerReaction?:ReactionKind|null;
@@ -20,6 +21,8 @@ export class FeedError extends Error {constructor(readonly status:number,readonl
 
 export interface Repository {
  list(tenant:string,viewer:string|null,mode:FeedMode,cursor:{at:string;id:string}|null,limit:number,authorMasanaId?:string,search?:string,masanaOnly?:boolean,filters?:FeedFilters):Promise<readonly Post[]>;
+ listNews?(tenant:string,viewer:string|null,before:{at:string;id:string}|null,limit:number,publisher?:string,search?:string):Promise<readonly Post[]>;
+ newsPublishers?(tenant:string):Promise<readonly {id:string;name:string}[]>;
  find(tenant:string,viewer:string|null,id:string,masanaOnly?:boolean):Promise<Post|null>;
  publish(tenant:string,publisher:string,value:Required<Publish>):Promise<Post>;
  setLike(tenant:string,fan:string,post:string,enabled:boolean):Promise<boolean>;
@@ -116,6 +119,20 @@ export class FeedService {
    return {items,nextCursor:rows.length>20&&last?Buffer.from(JSON.stringify(
      scoped?[last.publishedAt,last.id,scope]:
      search===undefined?[last.publishedAt,last.id]:[last.publishedAt,last.id,search,mode])).toString("base64url"):null};
+ }
+ async newsList(tenant:string,viewer:string|null,cursor?:string,publisher?:string,search?:string){
+  requireId(tenant);if(viewer)requireId(viewer);
+  if(publisher!==undefined&&!/^[a-z][a-z0-9-]{1,39}$/.test(publisher))throw new FeedError(422,'invalid_publisher');
+  if(search!==undefined&&(search!==search.trim()||search.length<2||Buffer.byteLength(search,'utf8')>80))
+   throw new FeedError(422,'invalid_search');
+  const scope=createHash('sha256').update(JSON.stringify({kind:'news',tenant,viewer,publisher:publisher??null,search:search??null})).digest('hex');
+  const after=cursor?filteredCursor(cursor,scope):null;
+  const rows=this.repo.listNews?await this.repo.listNews(tenant,viewer,after,21,publisher,search):[];
+  const items=rows.slice(0,20),last=items.at(-1);
+  return {items,nextCursor:rows.length>20&&last?Buffer.from(JSON.stringify([last.publishedAt,last.id,scope])).toString('base64url'):null};
+ }
+ async newsPublishers(tenant:string){requireId(tenant);
+  return this.repo.newsPublishers?this.repo.newsPublishers(tenant):[];
  }
  async detail(tenant:string,viewer:string|null,id:string){requireId(tenant);requirePostId(id);
   const post=this.masanaOnly
