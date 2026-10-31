@@ -139,6 +139,7 @@ void main() {
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
   expect(find.text('Recording voice note'),findsOneWidget);
   expect(callPermissionRequests,0);
+  await tester.tap(find.byTooltip('Stop & review'));await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsLabel('Send voice note'));await tester.pumpAndSettle();
   expect(chats.sent,hasLength(1));expect(chats.sent.single.kind,'voice');expect(recorder.retained,true);
   expect(find.text('Recording voice note'),findsNothing);
@@ -180,6 +181,7 @@ void main() {
   await tester.pumpWidget(ProviderScope(overrides:[aiChatProvider.overrideWith(()=>chats),agentDirectoryProvider.overrideWith(_Directory.new),sessionProvider.overrideWith(_Session.new),walletProvider.overrideWith(_Wallet.new),voiceNoteRecorderFactoryProvider.overrideWithValue(()=>recorder)],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsLabel('Record voice note'));await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('Stop & review'));await tester.pumpAndSettle();
   await tester.tap(find.bySemanticsLabel('Send voice note'));await tester.pump();await tester.pump();
   expect(chats.sent,hasLength(1));
   expect(find.text('Recording voice note'),findsNothing);

@@ -259,28 +259,11 @@ class ChatListScreen extends ConsumerWidget {
     }
     if (action == 'rename') {
       if (!context.mounted) return;
-      final editor = TextEditingController(
-        text: canonical?.customTitle ?? local?.title ?? '');
       final value = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Rename conversation'),
-          content: TextField(controller: editor, autofocus: true,
-            maxLength: 80, textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(hintText: 'Conversation name')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, editor.text),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+        builder: (_) => _RenameConversationDialog(
+          initial: canonical?.customTitle ?? local?.title ?? ''),
       );
-      editor.dispose();
       if (value != null && context.mounted && stillAuthorized()) {
         final normalized = value.trim();
         if (canonical != null) {
@@ -453,6 +436,57 @@ class ChatListScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Own the editor for the full dialog route lifetime, including its dismissal
+/// animation. Disposing it as soon as showDialog resolves can race TextField's
+/// final focus/overlay frame on Android and in widget tests.
+class _RenameConversationDialog extends StatefulWidget {
+  const _RenameConversationDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_RenameConversationDialog> createState() =>
+      _RenameConversationDialogState();
+}
+
+class _RenameConversationDialogState extends State<_RenameConversationDialog> {
+  late final TextEditingController _editor;
+
+  @override
+  void initState() {
+    super.initState();
+    _editor = TextEditingController(text: widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _editor.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Rename conversation'),
+    content: TextField(
+      controller: _editor,
+      autofocus: true,
+      maxLength: 80,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: const InputDecoration(hintText: 'Conversation name'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _editor.text),
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }
 
 class _ArchivedMasanaConversationsScreen extends ConsumerStatefulWidget {

@@ -54,53 +54,68 @@ class MasanawaConversationTile extends StatelessWidget {
         ]),
         subtitle: Padding(
           padding: const EdgeInsetsDirectional.only(top: 3),
-          child: preview,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, children: [
+              preview,
+              if (largeText && time.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 3),
+                  child: Text(time, maxLines: 2,
+                    style: TextStyle(fontSize: 11.5,
+                      color: unread > 0 ? colors.brandStrong : colors.textMuted))),
+            ]),
         ),
         trailing: SizedBox(
-          width: largeText ? 87 : 90,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (time.isNotEmpty)
-                Text(time, maxLines: 2, softWrap: true,
-                  textAlign: TextAlign.end,
-                  style: TextStyle(color: unread > 0
-                    ? colors.brandStrong : colors.textMuted,
-                    fontSize: 11.5,
-                    fontWeight: unread > 0
-                      ? FontWeight.w600 : FontWeight.w400)),
-              const SizedBox(height: 3),
-              Row(mainAxisSize: MainAxisSize.min, children: [
-              if (pinned && onAction == null)
-                Padding(padding: const EdgeInsetsDirectional.only(end: 5),
-                  child: Icon(Icons.push_pin, size: 14,
-                    color: colors.brandStrong)),
-              if (unread > 0)
-                Container(
-                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  decoration: BoxDecoration(color: colors.brand,
-                    borderRadius: BorderRadius.circular(20)),
-                  child: Text(unread > 99 ? '99+' : '$unread',
-                    style: const TextStyle(color: Colors.white,
-                      fontSize: 11, fontWeight: FontWeight.w700)),
-                ),
-              if (onAction != null)
-                SizedBox(height: 48, width: 48, child: actionLoading
-                  ? const Center(child: SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2)))
-                  : IconButton(
+          width: onAction != null ? 112 : largeText ? 50 : 90,
+          height: 48,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!largeText && time.isNotEmpty)
+                  Text(time, maxLines: 2, softWrap: true,
+                    textAlign: TextAlign.end,
+                    overflow: TextOverflow.fade,
+                    style: TextStyle(color: unread > 0
+                      ? colors.brandStrong : colors.textMuted,
+                      fontSize: 11.5,
+                      fontWeight: unread > 0
+                        ? FontWeight.w600 : FontWeight.w400)),
+                if (unread > 0 || (pinned && onAction == null))
+                  Padding(padding: EdgeInsets.only(
+                    top: !largeText && time.isNotEmpty ? 3 : 0),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (pinned && onAction == null)
+                        Padding(padding: const EdgeInsetsDirectional.only(end: 5),
+                          child: Icon(Icons.push_pin, size: 14,
+                            color: colors.brandStrong)),
+                      if (unread > 0)
+                        Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 20, minHeight: 20),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          decoration: BoxDecoration(color: colors.brand,
+                            borderRadius: BorderRadius.circular(20)),
+                          child: Text(unread > 99 ? '99+' : '$unread',
+                            style: const TextStyle(color: Colors.white,
+                              fontSize: 11, fontWeight: FontWeight.w700)),
+                        ),
+                    ])),
+              ],
+            )),
+            if (onAction != null)
+              SizedBox(height: 48, width: 48, child: actionLoading
+                ? const Center(child: SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2)))
+                : IconButton(
                   tooltip: actionTooltip,
                   icon: Icon(actionIcon ?? Icons.more_horiz,
                     size: 19, color: colors.textMuted),
                   onPressed: onAction,
-                ))
-              ]),
-            ],
-          ),
+                )),
+          ]),
         ),
         onTap: onTap,
         onLongPress: onLongPress,

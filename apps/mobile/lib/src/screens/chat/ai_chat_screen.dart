@@ -1227,7 +1227,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                         ),
                       ),
                       Text(
-                        'AI persona · $workingLabel',
+                        '${agent.publicOfficialSimulation ? 'AI simulation' : 'AI persona'} · $workingLabel',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(
@@ -1260,10 +1260,16 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 onPressed: () => setState(_selectedMessageIds.clear),
               ),
             ] else ...[
+            if (MediaQuery.sizeOf(context).width >= 430)
+              IconButton(
+                tooltip: 'Search this chat',
+                icon: const Icon(Icons.search),
+                onPressed: () => setState(() { _showSearch = true; _searchIndex = 0; }),
+              ),
             IconButton(
-              tooltip: 'Search this chat',
-              icon: const Icon(Icons.search),
-              onPressed: () => setState(() { _showSearch = true; _searchIndex = 0; }),
+              tooltip: 'Wallet',
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              onPressed: () => context.push('/wallet'),
             ),
             IconButton(
               tooltip: 'Call',
@@ -1299,6 +1305,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 if (value == 'report') await _reportAgent(agent);
               },
               itemBuilder: (_) => [
+                const PopupMenuItem(value: 'search', child: Text('Search chat')),
                 const PopupMenuItem(value: 'wallet', child: Text('Wallet')),
                 PopupMenuItem(value:'voice-autoplay',enabled:!ref.read(voiceReplyAutoplayProvider).isLoading,child:Text(ref.read(voiceReplyAutoplayProvider).asData?.value==true?'Turn off automatic speech':'Turn on automatic speech')),
                 if (widget.embeddedInShell) ...const [
@@ -3176,6 +3183,8 @@ class _Composer extends StatelessWidget {
   Widget _buildExpandedVoicePanel(BuildContext context, MasanawaColors u,
       bool isRecording, bool isPaused) {
     final active = isRecording || isPaused;
+    final narrowLargeText = MediaQuery.sizeOf(context).width <= 360 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.3;
     final durationMs = active
         ? recorder!.elapsed.inMilliseconds
         : recorder!.note?.durationMs ?? recorder!.elapsed.inMilliseconds;
@@ -3202,11 +3211,12 @@ class _Composer extends StatelessWidget {
               fontWeight: FontWeight.w600,
               fontFeatures: const [FontFeature.tabularFigures()])),
             const SizedBox(width: 6),
-            Expanded(child: SizedBox(height: 30, child: _VoiceWaveform(
+            if (!narrowLargeText) Expanded(child: SizedBox(height: 30, child: _VoiceWaveform(
               values: recorder!.waveform,
               progress: active ? 1 : previewProgress,
               enabled: !active && onSeekPreview != null,
               onSeek: onSeekPreview ?? (_) {}))),
+            if (narrowLargeText) const Spacer(),
             if (active) IconButton(
               tooltip: isPaused ? 'Resume recording' : 'Pause recording',
               onPressed: () => unawaited(isPaused
@@ -3230,6 +3240,13 @@ class _Composer extends StatelessWidget {
                 onPressed: sending || active ? null : onSendVoiceNote,
                 icon: const Icon(Icons.send_rounded, size: 22)))),
           ]),
+          if (narrowLargeText)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 4),
+              child: SizedBox(height: 30, child: _VoiceWaveform(
+                values: recorder!.waveform,
+                progress: active ? 1 : previewProgress,
+                enabled: !active && onSeekPreview != null,
+                onSeek: onSeekPreview ?? (_) {}))),
           if (active)
             Text(isPaused ? 'Recording paused · resume or stop to review'
                 : recordingLocked ? 'Recording locked · stop to review'
@@ -4734,6 +4751,12 @@ class _VoiceWaveform extends StatelessWidget {
         final rtl = Directionality.of(context) == TextDirection.rtl;
         return Semantics(label: 'Voice playback position',
           value: '${(progress * 100).round()} percent',
+          increasedValue: enabled
+              ? '${((progress + .05).clamp(0.0, 1.0) * 100).round()} percent'
+              : null,
+          decreasedValue: enabled
+              ? '${((progress - .05).clamp(0.0, 1.0) * 100).round()} percent'
+              : null,
           onIncrease: enabled ? () => onSeek((progress + .05).clamp(0.0, 1.0).toDouble()) : null,
           onDecrease: enabled ? () => onSeek((progress - .05).clamp(0.0, 1.0).toDouble()) : null,
           child: GestureDetector(
