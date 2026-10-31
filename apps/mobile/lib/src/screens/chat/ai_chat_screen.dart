@@ -380,8 +380,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           curve: Curves.easeOut, alignment: .35);
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Original message not loaded. Load earlier messages to find it.')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Original message not loaded. Load earlier messages to find it.'))));
   }
 
   void _sendText() {
@@ -682,7 +681,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     if (_inlineRecorder != null || !mounted) return;
     if (_inlineVoiceSession != null || _modalVoiceSession != null || LiveCallForeground.active) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End the live call before recording a voice note.')),
+        SnackBar(content: Text(ChatUiCopy.of(context, 'End the live call before recording a voice note.'))),
       );
       return;
     }
@@ -815,7 +814,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       try { await player.play(); } catch (_) {
         await _pauseInlinePreviewFromAnotherPlayer();
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Voice preview could not play.')));
+          SnackBar(content: Text(ChatUiCopy.of(context, 'Voice preview could not play.'))));
       }
     }
   }
@@ -1973,16 +1972,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final unavailable = message.allAttachments.any(
       (item) => !File(item.path).existsSync());
     if (unavailable) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Download the original attachment before sharing.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Download the original attachment before sharing.'))));
       return;
     }
     final attachments = message.allAttachments
         .where((item) => File(item.path).existsSync())
         .toList();
     if (message.text.isEmpty && attachments.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No local text or media is available to share.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'No local text or media is available to share.'))));
       return;
     }
     try { await SharePlus.instance.share(
@@ -1998,8 +1995,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         ],
       ),
     ); } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Sharing is unavailable. Try again.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Sharing is unavailable. Try again.'))));
     }
   }
 
@@ -2009,8 +2005,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         .toList();
     final unavailable = message.allAttachments.length - items.length;
     if (items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Download this media before saving it.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Download this media before saving it.'))));
       return;
     }
 
@@ -2130,8 +2125,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       if (originals.any((item) =>
           item.path.startsWith('masanawa-remote|') ||
           !File(item.path).existsSync())) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Original media unavailable. Download before forwarding.')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Original media unavailable. Download before forwarding.'))));
         return;
       }
       if (originals.isNotEmpty) {
@@ -2141,8 +2135,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         await ctl.sendText(target.characterId, message.text);
       }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Forward failed. Review the target chat before retrying.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ChatUiCopy.of(context, 'Forward failed. Review the target chat before retrying.'))));
       return;
     }
     if (mounted) {
@@ -2178,7 +2171,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       context.go('/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not block this Masana.')),
+        SnackBar(content: Text(ChatUiCopy.of(context, 'Could not block this Masana.'))),
       );
     }
   }
