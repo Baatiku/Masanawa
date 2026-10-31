@@ -3,6 +3,8 @@ type Actor={kind:"fan"|"staff"|"masana";tenantId:string;id:string;permissions?:r
 type Filters={source?:'x'|'facebook';from?:string;to?:string};
 type FeedPort={
  list(t:string,v:string|null,m:"for_you"|"following"|"mine",c?:string,authorMasanaId?:string,search?:string,filters?:Filters):Promise<unknown>;
+ newsList?(t:string,v:string|null,c?:string,publisher?:string,search?:string):Promise<unknown>;
+ newsPublishers?(t:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
  like(a:Actor,id:string,e:boolean):Promise<unknown>;save(a:Actor,id:string,e:boolean):Promise<unknown>;
@@ -37,6 +39,23 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
   catch(e){const err=e as {status?:number;code?:string};if(err.status&&err.status>=400&&err.status<500)return reply.code(err.status).send({code:err.code??"invalid_request"});throw e;}
  };
  const member=(actor:Actor|null)=>{if(!actor)throw Object.assign(new Error("authentication_required"),{status:401,code:"authentication_required"});return actor};
+ app.get('/v1/news',async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
+  const q=object(req.query),params=new URL(req.raw.url??'/v1/news','http://local').searchParams;
+  if(Object.keys(q).some(k=>!['cursor','publisher','search'].includes(k))||
+    ['cursor','publisher','search'].some(k=>params.getAll(k).length>1))
+    return rep.code(422).send({code:'invalid_news_query'});
+  const cursor=q.cursor,publisher=q.publisher,search=q.search;
+  if(cursor!==undefined&&(typeof cursor!=='string'||cursor.length>700||!cursor)||
+    publisher!==undefined&&(typeof publisher!=='string'||!/^[a-z][a-z0-9-]{1,39}$/.test(publisher))||
+    search!==undefined&&(typeof search!=='string'||search!==search.trim()||search.length<2||Buffer.byteLength(search)>80))
+    return rep.code(422).send({code:'invalid_news_query'});
+  if(!o.service.newsList)return rep.code(503).send({code:'news_unavailable'});
+  return o.service.newsList(tenant,viewer,cursor as string|undefined,publisher as string|undefined,search as string|undefined);
+ }));
+ app.get('/v1/news/publishers',async(req,rep)=>run(req,rep,async({tenant})=>{
+  if(Object.keys(object(req.query)).length)return rep.code(422).send({code:'invalid_news_query'});
+  return o.service.newsPublishers?o.service.newsPublishers(tenant):[];
+ }));
  app.get("/v1/feed",async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
   const q=object(req.query),mode=q.mode===undefined?"for_you":str(q.mode);
   if(mode!=="for_you"&&mode!=="following"&&mode!=="mine")throw Object.assign(new Error("invalid_mode"),{status:422,code:"invalid_mode"});
