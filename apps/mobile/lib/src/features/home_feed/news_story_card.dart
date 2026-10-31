@@ -29,7 +29,7 @@ class NewsPublisherHeader extends StatelessWidget {
       style:Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight:FontWeight.w700))),
      if(story.verified)...[
       const SizedBox(width:4),
-      const Tooltip(message:'Publisher source verified by Masanawa, not an endorsement',
+      Tooltip(message:'Publisher source verified by Masanawa, not an endorsement',
        child:Icon(Icons.verified_rounded,size:18,color:Theme.of(context).colorScheme.tertiary)),
      ],
     ]),
