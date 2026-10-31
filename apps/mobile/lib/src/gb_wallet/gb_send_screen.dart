@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -210,6 +211,14 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
     _reviewBalanceMb = null;
   }
 
+  // An unsubmitted quote can be edited. Never release an original send
+  // whose confirmation may already have reached the payment service.
+  void _editUnsubmitted(GbWalletOwner owner) {
+    if (_busy || _uncertain || _receipt != null || !_storeReady ||
+        !_isOwner(owner)) return;
+    setState(_clearReview);
+  }
+
   bool _isOwner(GbWalletOwner owner) {
     final state = ref.read(sessionProvider);
     return state is SessionSignedIn &&
@@ -316,7 +325,9 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
         _busy = false;
         _error = switch (error.response?.statusCode) {
           404 => 'No verified recipient or Send service was found.',
-          409 => 'Insufficient purchased MB for this transfer.',
+          409 => _insufficientPurchasedMb(error)
+              ? 'Insufficient purchased MB for this transfer.'
+              : 'This Send review was declined. Check details and retry.',
           401 || 403 => 'Please sign in again or check your account status.',
           _ => 'Send review is unavailable. No MB was moved.',
         };
@@ -330,8 +341,17 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
     }
   }
 
+  bool _insufficientPurchasedMb(DioException error) {
+    final data = error.response?.data;
+    if (data is! Map) return false;
+    final details = data['error'];
+    return details is Map && details['code'] == 'insufficient_purchased_mb';
+  }
+
   Future<void> _showSendReview(GbWalletOwner owner, GbSendQuote quote) async {
     var sheetBusy = false;
+    Timer? quoteExpiryTimer;
+    try {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -339,7 +359,15 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       enableDrag: false,
       useSafeArea: true,
       builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, refreshSheet) => PopScope(
+        builder: (sheetContext, refreshSheet) {
+          quoteExpiryTimer ??= Timer(
+            quote.expiresAt.difference(DateTime.now().toUtc()).isNegative
+                ? Duration.zero
+                : quote.expiresAt.difference(DateTime.now().toUtc()) +
+                    const Duration(milliseconds: 50),
+            () { if (sheetContext.mounted) refreshSheet(() {}); },
+          );
+          return PopScope(
           canPop: !sheetBusy,
           child: GbWalletReviewSheet(
             title: _receipt != null
@@ -377,7 +405,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                       const GbWalletReviewLine('Transfer fee', '0 MB'),
                       if (_reviewBalanceMb != null)
                         GbWalletReviewLine(
-                          'Remaining purchased MB',
+                          'Estimated remaining purchased MB',
                           '${groupedMb(_reviewBalanceMb! - quote.amountMb)} MB',
                           emphasize: true,
                         ),
@@ -385,6 +413,16 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                   ),
                 ),
               ),
+              if (!_uncertain && _receipt == null)
+                TextButton.icon(
+                  key: const ValueKey('send-edit-details'),
+                  onPressed: sheetBusy ? null : () {
+                    Navigator.pop(sheetContext);
+                    _editUnsubmitted(owner);
+                  },
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Change recipient or amount'),
+                ),
               if (_uncertain || _receipt != null)
                 ExpansionTile(
                   title: const Text('Original reference'),
@@ -414,7 +452,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                   !quote.expiresAt.isAfter(DateTime.now().toUtc()))
                 GbWalletInlineNotice(
                   message:
-                      'This review expired. Close and review the amount again.',
+                      'Review expired. Change details and request a fresh review.',
                 ),
             ],
             action: FilledButton.icon(
@@ -430,7 +468,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                         refreshSheet(() => sheetBusy = false);
                     }
                   : !quote.expiresAt.isAfter(DateTime.now().toUtc())
-                  ? null
+                  ? () { Navigator.pop(sheetContext); _editUnsubmitted(owner); }
                   : () async {
                       refreshSheet(() => sheetBusy = true);
                       await _confirm(owner, quote);
@@ -451,13 +489,19 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                     ? 'Done'
                     : _uncertain
                     ? 'Check original transfer'
+                    : !quote.expiresAt.isAfter(DateTime.now().toUtc())
+                    ? 'Review again'
                     : 'Send MB',
               ),
             ),
           ),
-        ),
+        );
+        },
       ),
     );
+    } finally {
+      quoteExpiryTimer?.cancel();
+    }
   }
 
   Future<void> _confirm(GbWalletOwner owner, GbSendQuote quote) async {
@@ -678,6 +722,12 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               '${groupedMb(_receipt!.amountMb)} MB',
               caption: 'Sent successfully',
             ),
+            if (_quote != null)
+              Card(child: ListTile(
+                leading: const Icon(Icons.verified_user_outlined),
+                title: Text(_quote!.recipientName),
+                subtitle: Text('@${_quote!.recipientHandle}'),
+              )),
             const GbWalletInlineNotice(
               message: 'Your purchased MB transfer is confirmed.',
               warning: false,
@@ -706,6 +756,13 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                 ),
               ),
             const SizedBox(height: 18),
+            if (_quote != null && !_uncertain && !_busy && _receipt == null)
+              TextButton.icon(
+                key: const ValueKey('send-form-change-details'),
+                onPressed: owner == null ? null : () => _editUnsubmitted(owner),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Change recipient or amount'),
+              ),
             GbRecipientField(
               controller: _username,
               owner: owner,
@@ -713,6 +770,9 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               onChanged: (_) => setState(_clearReview),
               label: 'Find recipient',
             ),
+            if (!_validHandle && _username.text.trim().isNotEmpty)
+              Text('Select a verified recipient from search results.',
+                style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
             MasanawaSectionHeading(
               'Quick amounts',
