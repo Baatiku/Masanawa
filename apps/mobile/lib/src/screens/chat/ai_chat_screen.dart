@@ -619,7 +619,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
 
   void _pickerFailed(String what) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not open $what. Check file access and try again.')),
+      SnackBar(content: Text('${ChatUiCopy.of(context, 'Could not open')} $what. ${ChatUiCopy.of(context, 'Check file access and try again.')}')),
     );
   }
 
@@ -1299,7 +1299,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                       : context.go('/home?tab=chats'),
                 ),
           title: _selectedMessageIds.isNotEmpty
-              ? Text('${_selectedMessageIds.length} selected')
+              ? Text('${_selectedMessageIds.length} ${ChatUiCopy.of(context, 'selected')}')
               : _showSearch
               ? TextField(
                   controller: _search,
@@ -1943,8 +1943,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       builder: (dialogContext) => AlertDialog(
         title: Text(originals.length == 1
             ? 'Hide message?' : 'Hide ${originals.length} messages?'),
-        content: const Text('This hides messages on this device only. '
-            'Server history is not deleted.'),
+        content: Text(ChatUiCopy.of(context, 'This hides messages on this device only. Server history is not deleted.')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(ChatUiCopy.of(context, 'Cancel'))),
@@ -2036,9 +2035,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$saved saved through the device file picker'
-              '${failed > 0 ? ' · $failed unavailable or failed' : ''}'
-              '${cancelled ? ' · remaining saves cancelled' : ''}'),
+          content: Text('$saved ${ChatUiCopy.of(context, 'files saved')}'
+              '${failed > 0 ? ' · $failed ${ChatUiCopy.of(context, 'failed')}' : ''}'
+              '${cancelled ? ' · ${ChatUiCopy.of(context, 'remaining saves cancelled')}' : ''}'),
         ),
       );
     }
@@ -2091,9 +2090,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
     final confirmed = await showDialog<bool>(context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Forward to ${target.displayName}?'),
-        content: const Text('Forwarding starts a new AI turn. A successful '
-            'Masana reply may use 1 MB from your eligible balance.'),
+        title: Text('${ChatUiCopy.of(context, 'Forward to')} ${target.displayName}?'),
+        content: Text(ChatUiCopy.of(context, 'Forwarding starts a new AI turn. A successful Masana reply may use 1 MB from your eligible balance.')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(ChatUiCopy.of(context, 'Cancel'))),
@@ -2149,8 +2147,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Block ${agent.displayName}?'),
-                content: const Text('They will no longer be available to you until you unblock them.'),
+        title: Text('${ChatUiCopy.of(context, 'Block')} ${agent.displayName}?'),
+                content: Text(ChatUiCopy.of(context, 'They will no longer be available to you until you unblock them.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -2190,8 +2188,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 current.user.id != expectedAccount) {
               return Scaffold(
                 appBar: AppBar(title: Text(ChatUiCopy.of(context, 'Report Masana'))),
-                body: const Center(
-                  child: Text('Your session changed. Sign in again to report.'),
+                body: Center(
+                  child: Text(ChatUiCopy.of(context, 'Your session changed. Sign in again to report.')),
                 ),
               );
             }
@@ -2219,7 +2217,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     );
     if (!mounted || submitted != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Masana report submitted.')),
+      SnackBar(content: Text(ChatUiCopy.of(context, 'Masana report submitted.'))),
     );
   }
   MbCallFlow _captureMbCallFlow(
@@ -2315,7 +2313,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Voice with ${agent.displayName}'),
+        title: Text('${ChatUiCopy.of(context, 'Voice with')} ${agent.displayName}'),
         content: Text(
           'Reserve up to ${review.budgetMb} MB for this call. '
           'Only server-confirmed connected seconds are charged at 1 MB '
@@ -2740,7 +2738,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Clear chat with ${agent.displayName}?'),
+        title: Text('${ChatUiCopy.of(context, 'Clear chat with')} ${agent.displayName}?'),
         content: const Text(
           'All messages in this conversation will be removed.',
         ),
@@ -2972,7 +2970,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
                       fontWeight:FontWeight.w600, letterSpacing:1)),
                 ],
                 if (widget.session.audioInterrupted)
-                  TextButton.icon(onPressed:widget.session.resumeAudio,icon:const Icon(Icons.play_arrow),label:const Text('Resume audio')),
+                  TextButton.icon(onPressed:widget.session.resumeAudio,icon:const Icon(Icons.play_arrow),label:Text(ChatUiCopy.of(context, 'Resume audio'))),
                 if (_recording != null && _connected) ...[
                   const SizedBox(height:12),
                   TextButton.icon(
