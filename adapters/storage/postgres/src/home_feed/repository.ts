@@ -17,7 +17,10 @@ function item(r:Row){
  :{type:'masana' as const,id:authorMasanaId,displayName:authorName};
  return {id:String(r.id),tenantId:String(r.tenant_id),authorMasanaId,authorName,author,
   ...(!publisher&&r.source_provenance?{source:r.source_provenance as {platform:'x'|'facebook';url:string;originalPublishedAt:string;revision:number}}:{}),
-  ...(publisher&&r.news_info?{news:r.news_info}:{}),
+  ...(publisher&&r.news_info?{news:r.news_info as {
+    id:string;name:string;title:string;summary:string;url:string;
+    verified:boolean;logoUrl?:string|null;
+   }}:{}),
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
   verifiedViewCount:Number(r.verified_view_count??0),
