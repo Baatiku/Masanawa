@@ -27,7 +27,7 @@ final _archivedServerPage = FutureProvider.autoDispose
     throw StateError('Server archive search is not available');
   }
   final parts = jsonDecode(key) as List<dynamic>;
-  return access.archivedPage(
+  return (access as MasanaInboxControlsAccess).archivedPage(
     bearer: parts[1] as String, query: parts[2] as String);
 });
 
@@ -301,7 +301,9 @@ class ChatListScreen extends ConsumerWidget {
     final owner = ref.read(sessionProvider);
     if (owner is! SessionSignedIn) return;
     final access = ref.read(masanaInboxSearchProvider);
-    final controls = access is MasanaInboxControlsAccess ? access : null;
+    final MasanaInboxControlsAccess? controls =
+        access is MasanaInboxControlsAccess
+          ? access as MasanaInboxControlsAccess : null;
     if (field != 'pinned' && controls == null) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Server conversation controls are unavailable.')));
@@ -515,7 +517,7 @@ class _ArchivedMasanaConversationsScreenState
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     setState(() { _loadingMore = true; _pageError = false; });
     try {
-      final page = await access.archivedPage(
+      final page = await (access as MasanaInboxControlsAccess).archivedPage(
         bearer: owner.tokens.accessToken, query: _remoteQuery,
         cursor: cursor);
       if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
@@ -549,7 +551,7 @@ class _ArchivedMasanaConversationsScreenState
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     setState(() => _busy.add(row.characterId));
     try {
-      final receipt = await access.setArchived(
+      final receipt = await (access as MasanaInboxControlsAccess).setArchived(
         bearer: owner.tokens.accessToken, characterId: row.characterId,
         archived: false, expectedRevision: row.revision);
       if (!mounted || !identical(owner, ref.read(sessionProvider)) ||

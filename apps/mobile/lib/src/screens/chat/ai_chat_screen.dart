@@ -3324,7 +3324,7 @@ class _Composer extends StatelessWidget {
                   textAlignVertical: TextAlignVertical.top,
                   decoration: const InputDecoration(
                     hintText: 'Compose a longer message',
-                    border: OutlineInputBorder()))),
+                    border: OutlineInputBorder())))),
             ]),
           ),
         )),
@@ -3981,7 +3981,7 @@ class _ChatBubble extends StatelessWidget {
                   painter: _ChatBubbleNipPainter(
                     isUser ? u.bubbleOut : u.surfaceCard,
                     toRight: isUser !=
-                        (Directionality.of(context) == TextDirection.rtl))),
+                        (Directionality.of(context) == TextDirection.rtl)))),
             if ((message.reaction ?? '').isNotEmpty)
               PositionedDirectional(
                 end: isUser ? 8 : null,
@@ -4250,7 +4250,6 @@ class _CodeBlock extends StatelessWidget {
           SingleChildScrollView(scrollDirection: Axis.horizontal,
             child: SelectableText(
               value,
-              softWrap: false,
               style: TextStyle(
                 color: u.textPrimary,
                 fontFamily: 'monospace',
