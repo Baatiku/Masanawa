@@ -1,5 +1,7 @@
 import {statusAuthorOwnership,officialSourceEligibility} from "./author_scope.js";
+import type {FeedFilters} from '@masanawa/feed';
 import type {Pool} from "pg";
+import {withTransaction} from '../transaction.js';
 /** PG18 tenant-scoped implementation. Composition injects the canonical Masana approved-revision check. */
 type Row=Record<string,unknown>;
 type Cursor={at:string;id:string}|null;
@@ -25,8 +27,11 @@ function item(r:Row){
   viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction) as "like"|"love"|"care"|"haha"|"wow"|"sad"|"angry",
   reactionCounts:(r.reaction_counts??{}) as Record<string,number>};
 }
-function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:String(r.body),state:String(r.state) as "pending"|"visible",
+function comment(r:Row){return {id:String(r.id),postId:String(r.post_id),body:String(r.body),state:String(r.state) as "pending"|"visible"|"removed",
  createdAt:new Date(String(r.created_at)).toISOString(),parentId:r.parent_comment_id==null?null:String(r.parent_comment_id),
+ revision:Number(r.revision??1),editedAt:r.edited_at==null?null:new Date(String(r.edited_at)).toISOString(),
+ replyCount:Number(r.reply_count??0),viewerReaction:r.viewer_reaction==null?null:String(r.viewer_reaction),
+ reactionCounts:(r.reaction_counts??{}) as Record<string,number>,
  author:r.author && typeof r.author==="object" && !Array.isArray(r.author)
   ? r.author as {type:"human";id:string;handle:string;displayName:string} : null};}
 // Approval alone survives character deactivation/ownership transfer. Recheck
@@ -96,7 +101,8 @@ export class PgHomeFeedRepository {
  private get access(){const author=this.enforceOfficialSources?`(${eligibleAuthor} AND ${officialSourceEligibility})`:eligibleAuthor;
   return this.enforceViewerSafety?`(${author} AND NOT EXISTS(SELECT 1 FROM feed.hidden_posts h WHERE h.tenant_id=p.tenant_id AND h.post_id=p.id AND h.fan_id=$2))`:author;}
  private get commentAccess(){return this.access.replace(/\$2\b/g,"$3");}
- async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true) {
+  async list(tenant:string,viewer:string|null,mode:"for_you"|"following"|"mine",before:Cursor,limit:number,authorMasanaId?:string,search?:string,masanaOnly=true,filters?:FeedFilters) {
+  const filtered=filters?.source!==undefined||filters?.from!==undefined||filters?.to!==undefined;
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p WHERE p.tenant_id=$1 AND p.state='published' AND ${this.access}
    AND ($3::text='for_you'
     OR ($3::text='mine' AND p.author_type='human' AND p.author_user_id=$2)
@@ -109,11 +115,18 @@ export class PgHomeFeedRepository {
           AND f.follower_user_id=$2 AND f.followed_user_id=p.author_user_id)))))
    AND ($4::timestamptz IS NULL OR (p.published_at,p.id)<($4::timestamptz,$5::uuid))
    AND ($7::text IS NULL OR p.author_masana_id=$7)
-   AND ($8::text IS NULL OR p.body ILIKE $8 ESCAPE E'\\\\')
+    AND ($8::text IS NULL OR p.body ILIKE $8 ESCAPE E'\\\\'
+       OR EXISTS(SELECT 1 FROM masana.character_revisions sr WHERE sr.tenant_id=p.tenant_id
+         AND sr.character_id=p.author_masana_id AND sr.state='approved'
+         AND sr.profile->>'displayName' ILIKE $8 ESCAPE E'\\\\'))
    AND (NOT $9::boolean OR p.author_type='masana')
+    ${filtered?`AND ($10::text IS NULL OR p.source_provenance->>'platform'=$10)
+    AND ($11::date IS NULL OR p.published_at >= $11::date)
+    AND ($12::date IS NULL OR p.published_at < $12::date + interval '1 day')`:''}
    ORDER BY p.published_at DESC,p.id DESC LIMIT $6`,
    [tenant,viewer,mode,before?.at??null,before?.id??null,limit,authorMasanaId??null,
-    search===undefined?null:`%${search.replace(/[\\%_]/g,"\\$&")}%`,masanaOnly]);
+     search===undefined?null:`%${search.replace(/[\\%_]/g,"\\$&")}%`,masanaOnly,
+     ...(filtered?[filters?.source??null,filters?.from??null,filters?.to??null]:[])]);
   return rows.rows.map(item);
  }
  async find(tenant:string,viewer:string|null,id:string,masanaOnly=true){
@@ -202,7 +215,23 @@ export class PgHomeFeedRepository {
   return enabled;
  }
  async comment(tenant:string,fan:string,post:string,body:string,key:string,pending:boolean,parentId:string|null=null){
-  const rows=await this.pool.query(`WITH inserted AS (
+  return withTransaction(this.pool,async client=>{
+   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+     [JSON.stringify([tenant,fan,'status-comment'])]);
+   const retry=await client.query('SELECT id FROM feed.comments WHERE tenant_id=$1 AND fan_id=$2 AND idempotency_key=$3',
+     [tenant,fan,key]);
+   if(!retry.rows[0]){
+    const traffic=await client.query(`SELECT count(*)::int AS n FROM feed.comments
+      WHERE tenant_id=$1 AND fan_id=$2 AND created_at>clock_timestamp()-interval '1 minute'`,[tenant,fan]);
+    if(Number(traffic.rows[0]?.n)>=8)throw Object.assign(new Error('comment_rate_limited'),
+      {status:429,code:'comment_rate_limited'});
+    const duplicate=await client.query(`SELECT 1 FROM feed.comments WHERE tenant_id=$1
+      AND fan_id=$2 AND post_id=$3::uuid AND body=$4
+      AND created_at>clock_timestamp()-interval '10 seconds' LIMIT 1`,[tenant,fan,post,body]);
+    if(duplicate.rows.length)throw Object.assign(new Error('duplicate_comment'),
+      {status:429,code:'duplicate_comment'});
+   }
+  const rows=await client.query(`WITH inserted AS (
    INSERT INTO feed.comments(tenant_id,post_id,fan_id,body,state,idempotency_key,parent_comment_id)
    SELECT $1,p.id,$2,$4,$5,$6,$7::uuid FROM feed.posts p WHERE p.tenant_id=$1 AND p.id=$3::uuid AND p.state='published' AND ${this.access} AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM feed.comments parent WHERE parent.tenant_id=$1 AND parent.post_id=p.id AND parent.id=$7::uuid AND parent.state='visible' AND parent.parent_comment_id IS NULL))
    ON CONFLICT(tenant_id,fan_id,idempotency_key) DO UPDATE
@@ -230,20 +259,165 @@ export class PgHomeFeedRepository {
   if(!row)throw Object.assign(new Error("idempotency_conflict_or_post_unavailable"),{status:409,code:"idempotency_conflict"});
   if(row.post_id!==post||row.body!==body||(row.parent_comment_id??null)!==(parentId??null))throw Object.assign(new Error("idempotency_conflict"),{status:409,code:"idempotency_conflict"});
   return comment(row);
+  });
  }
- async comments(tenant:string,post:string,viewer:string|null,before:string|null,limit:number,sort:"newest"|"oldest"="newest"){
-  const rows=await this.pool.query(`SELECT c.id,c.post_id,c.body,c.state,c.created_at,c.parent_comment_id,
-   ${resolvedCommentAuthor} FROM feed.comments c
+  async comments(tenant:string,post:string,viewer:string|null,before:string|null,limit:number,sort:"newest"|"oldest"="newest",scope?:'roots'|'replies',parentId?:string){
+   const rows=await this.pool.query(`SELECT c.id,c.post_id,
+    CASE WHEN c.state='removed' THEN 'Comment removed' ELSE c.body END AS body,
+    c.state,c.created_at,c.parent_comment_id,c.revision,c.edited_at,
+    (SELECT count(*)::int FROM feed.comments child WHERE child.tenant_id=c.tenant_id
+      AND child.post_id=c.post_id AND child.parent_comment_id=c.id
+      AND (child.state='visible' OR (child.state='pending' AND child.fan_id=$3))) AS reply_count,
+    COALESCE((SELECT jsonb_object_agg(rr.reaction_kind,rr.n) FROM
+      (SELECT reaction_kind,count(*)::int AS n FROM feed.comment_reactions r
+       WHERE r.tenant_id=c.tenant_id AND r.comment_id=c.id GROUP BY reaction_kind) rr),'{}'::jsonb) AS reaction_counts,
+    (SELECT reaction_kind FROM feed.comment_reactions r WHERE r.tenant_id=c.tenant_id
+      AND r.comment_id=c.id AND r.fan_id=$3) AS viewer_reaction,
+    ${resolvedCommentAuthor} FROM feed.comments c
    LEFT JOIN identity.users actor ON actor.tenant_id=c.tenant_id
      AND actor.user_id=c.fan_id AND actor.state='active'
    LEFT JOIN talks.public_profiles person ON person.tenant_id=c.tenant_id
      AND person.user_id=actor.user_id
    WHERE c.tenant_id=$1 AND c.post_id=$2::uuid
    AND EXISTS (SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id AND p.state='published' AND ${this.commentAccess})
-   AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3))
+    AND (c.state='visible' OR (c.state='pending' AND c.fan_id=$3)
+      OR (c.state='removed' AND EXISTS(SELECT 1 FROM feed.comments child
+        WHERE child.tenant_id=c.tenant_id AND child.parent_comment_id=c.id AND child.state='visible')))
+    AND (c.parent_comment_id IS NULL OR EXISTS(SELECT 1 FROM feed.comments parent
+      WHERE parent.tenant_id=c.tenant_id AND parent.post_id=c.post_id AND parent.id=c.parent_comment_id
+        AND parent.state IN ('visible','removed')))
+    ${scope===undefined?'':`AND ($7::text IS NULL OR ($7='roots' AND c.parent_comment_id IS NULL)
+      OR ($7='replies' AND c.parent_comment_id=$8::uuid))`}
    AND ($4::uuid IS NULL OR (CASE WHEN $6::text='newest' THEN (c.created_at,c.id)<(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) ELSE (c.created_at,c.id)>(SELECT c2.created_at,c2.id FROM feed.comments c2 WHERE c2.tenant_id=$1 AND c2.post_id=$2::uuid AND c2.id=$4::uuid) END))
-   ORDER BY CASE WHEN $6::text='newest' THEN c.created_at END DESC, CASE WHEN $6::text='oldest' THEN c.created_at END ASC, CASE WHEN $6::text='newest' THEN c.id END DESC, CASE WHEN $6::text='oldest' THEN c.id END ASC LIMIT $5`,[tenant,post,viewer,before,limit,sort]);
+    ORDER BY CASE WHEN $6::text='newest' THEN c.created_at END DESC, CASE WHEN $6::text='oldest' THEN c.created_at END ASC, CASE WHEN $6::text='newest' THEN c.id END DESC, CASE WHEN $6::text='oldest' THEN c.id END ASC LIMIT $5`,
+    [tenant,post,viewer,before,limit,sort,...(scope===undefined?[]:[scope,parentId??null])]);
   return rows.rows.map(comment);
  }
+  async setCommentReaction(tenant:string,fan:string,id:string,kind:'like'|'love'|'care'|'haha'|'wow'|'sad'|'angry'|null){
+   // A reaction exists only while the parent post and the comment are visible
+   // to this authenticated fan. Never trust a client-supplied comment author.
+   const eligible=`SELECT c.id FROM feed.comments c JOIN feed.posts p
+      ON p.tenant_id=c.tenant_id AND p.id=c.post_id
+      WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.state='visible'
+      AND p.state='published' AND ${this.access}`;
+   const result=kind===null
+     ? await this.pool.query(`WITH eligible AS (${eligible}), deleted AS (
+        DELETE FROM feed.comment_reactions r USING eligible e
+        WHERE r.tenant_id=$1 AND r.comment_id=e.id AND r.fan_id=$2 RETURNING r.comment_id)
+        SELECT EXISTS(SELECT 1 FROM eligible) AS admitted`,[tenant,fan,id])
+     : await this.pool.query(`WITH eligible AS (${eligible}), changed AS (
+        INSERT INTO feed.comment_reactions(tenant_id,comment_id,fan_id,reaction_kind)
+        SELECT $1,id,$2,$4 FROM eligible
+        ON CONFLICT(tenant_id,comment_id,fan_id) DO UPDATE SET reaction_kind=EXCLUDED.reaction_kind
+        RETURNING comment_id) SELECT EXISTS(SELECT 1 FROM eligible) AS admitted`,[tenant,fan,id,kind]);
+   if(result.rows[0]?.admitted!==true)throw Object.assign(new Error('comment_not_found'),{status:404,code:'comment_not_found'});
+   return kind;
+  }
+  async editComment(tenant:string,fan:string,id:string,body:string,revision:number){
+   const result=await this.pool.query(`WITH previous AS (
+      SELECT c.id,c.body,c.revision FROM feed.comments c WHERE c.tenant_id=$1 AND c.id=$3::uuid
+      AND c.fan_id=$2 AND c.revision=$5 AND c.state IN ('visible','pending')
+      AND EXISTS(SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id
+        AND p.id=c.post_id AND p.state='published' AND ${this.access}) FOR UPDATE
+    ), changed AS (
+      UPDATE feed.comments c SET body=$4,revision=c.revision+1,edited_at=clock_timestamp()
+      FROM previous prior WHERE c.tenant_id=$1 AND c.id=prior.id
+      RETURNING c.id,c.body,c.revision,c.edited_at
+    ), journal AS (
+      INSERT INTO feed.comment_edit_audit(tenant_id,comment_id,actor_id,action,
+        before_revision,after_revision,before_sha256,after_sha256)
+      SELECT $1,changed.id,$2,'edit',prior.revision,changed.revision,
+        encode(sha256(convert_to(prior.body,'UTF8')),'hex'),
+        encode(sha256(convert_to(changed.body,'UTF8')),'hex')
+      FROM changed JOIN previous prior ON prior.id=changed.id
+      RETURNING comment_id
+    ) SELECT changed.id::text,changed.body,changed.revision,changed.edited_at
+      FROM changed JOIN journal ON journal.comment_id=changed.id`,[tenant,fan,id,body,revision]);
+   if(result.rows[0])return result.rows[0];
+   throw Object.assign(new Error('comment_edit_conflict_or_denied'),{status:409,code:'comment_edit_conflict_or_denied'});
+  }
+  async removeComment(tenant:string,fan:string,id:string){
+   const result=await this.pool.query(`WITH previous AS (
+      SELECT c.id,c.body,c.state,c.revision FROM feed.comments c
+      WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.fan_id=$2
+        AND c.state IN ('visible','pending','removed')
+        AND EXISTS(SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id
+          AND p.id=c.post_id AND p.state='published' AND ${this.access}) FOR UPDATE
+    ), changed AS (
+      UPDATE feed.comments c SET state='removed',removed_at=COALESCE(c.removed_at,clock_timestamp()),
+        revision=CASE WHEN c.state='removed' THEN c.revision ELSE c.revision+1 END
+      FROM previous prior WHERE c.tenant_id=$1 AND c.id=prior.id
+      RETURNING c.id,c.state,c.revision
+    ), journal AS (
+      INSERT INTO feed.comment_edit_audit(tenant_id,comment_id,actor_id,action,
+        before_revision,after_revision,before_sha256,after_sha256)
+      SELECT $1,changed.id,$2,'delete',prior.revision,changed.revision,
+        encode(sha256(convert_to(prior.body,'UTF8')),'hex'),
+        encode(sha256(convert_to(prior.body,'UTF8')),'hex')
+      FROM changed JOIN previous prior ON prior.id=changed.id WHERE prior.state<>'removed'
+      RETURNING comment_id
+    ) SELECT changed.id::text,changed.state FROM changed`,[tenant,fan,id]);
+   if(result.rows[0])return result.rows[0];
+   throw Object.assign(new Error('comment_not_found'),{status:404,code:'comment_not_found'});
+  }
+  async reportComment(tenant:string,fan:string,id:string,reason:string){
+   return withTransaction(this.pool,async client=>{
+    const eligible=await client.query(`SELECT c.revision FROM feed.comments c
+      JOIN feed.posts p ON p.tenant_id=c.tenant_id AND p.id=c.post_id
+      WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.state='visible'
+      AND p.state='published' AND ${this.access}`,[tenant,fan,id]);
+    const revision=eligible.rows[0]?.revision;
+    if(!revision)throw Object.assign(new Error('comment_not_found'),{status:404,code:'comment_not_found'});
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+      [JSON.stringify([tenant,fan,'comment-report'])]);
+    const existing=await client.query(`SELECT id::text,state FROM feed.comment_reports
+      WHERE tenant_id=$1 AND reporter_id=$2 AND comment_id=$3::uuid
+        AND reason=$4 AND content_revision=$5`,[tenant,fan,id,reason,revision]);
+    if(existing.rows[0])return existing.rows[0];
+    const count=await client.query(`SELECT count(*)::int AS n FROM feed.comment_reports
+      WHERE tenant_id=$1 AND reporter_id=$2 AND created_at>clock_timestamp()-interval '24 hours'`,[tenant,fan]);
+    if(Number(count.rows[0]?.n)>=50)throw Object.assign(new Error('report_limit_reached'),{status:429,code:'report_limit_reached'});
+    const added=await client.query(`INSERT INTO feed.comment_reports
+      (tenant_id,reporter_id,comment_id,reason,content_revision) VALUES($1,$2,$3::uuid,$4,$5)
+      ON CONFLICT DO NOTHING RETURNING id::text,state`,[tenant,fan,id,reason,revision]);
+    return added.rows[0]??existing.rows[0];
+   });
+  }
+  async listCommentReports(tenant:string){
+   const rows=await this.pool.query(`SELECT r.id::text,r.comment_id::text,r.reason,r.state,
+      r.created_at,r.content_revision,c.revision<>r.content_revision AS content_changed
+      FROM feed.comment_reports r JOIN feed.comments c ON c.tenant_id=r.tenant_id
+       AND c.id=r.comment_id WHERE r.tenant_id=$1 AND r.state='open'
+      ORDER BY r.created_at,r.id LIMIT 50`,[tenant]);
+   return {items:rows.rows};
+  }
+  async resolveCommentReport(tenant:string,reviewer:string,id:string,state:'reviewed'|'dismissed'){
+   return withTransaction(this.pool,async client=>{
+    const result=await client.query(`UPDATE feed.comment_reports SET state=$4,
+      reviewed_by=$2,reviewed_at=clock_timestamp()
+      WHERE tenant_id=$1 AND id=$3::uuid AND state='open' RETURNING id::text,state`,
+      [tenant,reviewer,id,state]);
+    if(result.rows[0])return result.rows[0];
+    const existing=await client.query('SELECT id::text,state FROM feed.comment_reports WHERE tenant_id=$1 AND id=$2::uuid',[tenant,id]);
+    if(existing.rows[0]?.state===state)return existing.rows[0];
+    throw Object.assign(new Error('report_not_open'),{status:existing.rows.length?409:404,code:'report_not_open'});
+   });
+  }
+  async moderateComment(tenant:string,reviewer:string,id:string,state:'hidden'|'visible',reason:string,revision:number){
+   return withTransaction(this.pool,async client=>{
+    const previous=state==='hidden'?'visible':'hidden';
+    const result=await client.query(`UPDATE feed.comments c SET state=$4,revision=revision+1
+      WHERE c.tenant_id=$1 AND c.id=$3::uuid AND c.revision=$6 AND c.state=$7
+      AND EXISTS(SELECT 1 FROM feed.posts p WHERE p.tenant_id=c.tenant_id AND p.id=c.post_id
+        AND p.state='published' AND ${this.access})
+      RETURNING c.id::text,c.revision,c.state`,[tenant,reviewer,id,state,reason,revision,previous]);
+    if(!result.rows[0])throw Object.assign(new Error('comment_moderation_conflict'),{status:409,code:'comment_moderation_conflict'});
+    await client.query(`INSERT INTO feed.comment_moderation_actions
+      (tenant_id,comment_id,reviewer_id,action,reason,content_revision)
+      VALUES($1,$2::uuid,$3,$4,$5,$6)`,
+      [tenant,id,reviewer,state==='hidden'?'hide':'restore',reason,result.rows[0].revision]);
+    return result.rows[0];
+   });
+  }
 }
 

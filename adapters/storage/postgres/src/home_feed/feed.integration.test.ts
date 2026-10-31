@@ -56,11 +56,71 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
    "0010_promotion_rejection_appeals.sql","0011_promotion_budget_immutability.sql",
    "0012_reviewed_paid_post_edits.sql","0013_campaign_drafts_and_expiry.sql",
   ])await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/"+name,import.meta.url),"utf8"));
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0017_official_social_sources.sql",import.meta.url),"utf8"));
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0023_post_safety.sql",import.meta.url),"utf8"));
   await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0024_report_content_versions.sql",import.meta.url),"utf8"));
+  const commentsMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0026_comment_conversations.sql",import.meta.url),"utf8");
+  await pool.query(commentsMigration);
+  await pool.query(commentsMigration); // forward-only and repeat-safe on historic rows
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
+ it('SF-FB PG18 preserves native threaded reactions, CAS edits, reports, and removed parent tombstones',async()=>{
+  const pool=isolated.pool,t='tenant_conversations';
+  await pool.query(`INSERT INTO identity.characters VALUES($1,'masana_one','active');
+    INSERT INTO identity.character_ownership(tenant_id,character_id,kind) VALUES($1,'masana_one','platform');
+    INSERT INTO masana.character_revisions VALUES($1,'masana_one','approved','{"displayName":"Teacher"}'::jsonb);
+    INSERT INTO identity.users(tenant_id,user_id,state) VALUES($1,'fan_one','active'),($1,'fan_two','active');
+    INSERT INTO talks.public_profiles(tenant_id,user_id,handle,display_name)
+      VALUES($1,'fan_one','comment_one','Comment One'),($1,'fan_two','comment_two','Comment Two');`,[t]);
+  const created=await pool.query(`INSERT INTO feed.posts(tenant_id,author_masana_id,kind,body,idempotency_key,published_by,
+    source_provenance,published_at) VALUES($1,'masana_one','text','Official approved discussion',
+    'conversation-post-001','masana_one',
+    '{"platform":"facebook","url":"https://www.facebook.com/official/posts/1","originalPublishedAt":"2026-10-15T12:00:00Z","revision":1}'::jsonb,
+    '2026-10-15T12:00:00Z') RETURNING id::text`,[t]);
+  const id=created.rows[0]!.id as string;
+  const root=await repo.comment(t,'fan_one',id,'Original question','conversation-root-001',false);
+  const reply=await repo.comment(t,'fan_two',id,'Helpful answer','conversation-reply-001',false,root.id);
+  const roots=await repo.comments(t,id,'fan_one',null,30,'newest','roots');
+  expect(roots).toHaveLength(1);expect(roots[0]).toMatchObject({id:root.id,replyCount:1,revision:1});
+  const children=await repo.comments(t,id,'fan_one',null,30,'oldest','replies',root.id);
+  expect(children).toHaveLength(1);expect(children[0]?.id).toBe(reply.id);
+  await repo.setCommentReaction(t,'fan_two',root.id,'love');
+  await repo.setCommentReaction(t,'fan_two',root.id,'care');
+  const revised=await repo.comments(t,id,'fan_two',null,30,'newest','roots');
+  expect(revised[0]).toMatchObject({viewerReaction:'care',reactionCounts:{care:1}});
+  await repo.editComment(t,'fan_one',root.id,'Edited question',1);
+  const editAudit=await pool.query(`SELECT action,before_revision,after_revision FROM feed.comment_edit_audit
+    WHERE tenant_id=$1 AND comment_id=$2::uuid`,[t,root.id]);
+  expect(editAudit.rows).toEqual([expect.objectContaining({action:'edit',before_revision:1,after_revision:2})]);
+  await expect(repo.editComment(t,'fan_one',root.id,'Stale',1)).rejects.toMatchObject({status:409});
+  await expect(repo.editComment(t,'fan_two',root.id,'Forged',2)).rejects.toMatchObject({status:409});
+  const [r1,r2]=await Promise.all([repo.reportComment(t,'fan_two',root.id,'spam'),
+    repo.reportComment(t,'fan_two',root.id,'spam')]);
+  expect(r1.id).toBe(r2.id);
+  expect((await repo.listCommentReports(t)).items).toEqual([expect.objectContaining({reason:'spam'})]);
+  await repo.resolveCommentReport(t,'editor',r1.id,'reviewed');
+  expect((await repo.listCommentReports(t)).items).toHaveLength(0);
+  const moderated=await repo.moderateComment(t,'editor',reply.id,'hidden','Visible policy violation',1);
+  expect(moderated.state).toBe('hidden');
+  expect((await repo.comments(t,id,'fan_two',null,30,'oldest','replies',root.id))).toHaveLength(0);
+  await expect(repo.moderateComment(t,'editor',reply.id,'visible','Restore after review',1))
+    .rejects.toMatchObject({status:409});
+  await repo.moderateComment(t,'editor',reply.id,'visible','Restore after review',2);
+  await repo.removeComment(t,'fan_one',root.id);
+  const tombstone=await repo.comments(t,id,'fan_two',null,30,'newest','roots');
+  expect(tombstone[0]).toMatchObject({body:'Comment removed',state:'removed',replyCount:1});
+  expect((await repo.comments(t,id,'fan_two',null,30,'oldest','replies',root.id))[0]?.body).toBe('Helpful answer');
+  const audit=await pool.query(`SELECT action FROM feed.comment_edit_audit WHERE tenant_id=$1
+    AND comment_id=$2::uuid ORDER BY created_at`,[t,root.id]);
+  expect(audit.rows.map(row=>row.action)).toEqual(['edit','delete']);
+  await expect(repo.setCommentReaction(t,'fan_two',root.id,'like')).rejects.toMatchObject({status:404});
+  const s=new FeedService(repo,async()=>true);
+  expect((await s.list(t,'fan_two','for_you',undefined,undefined,undefined,
+    {source:'facebook',from:'2026-10-15',to:'2026-10-15'})).items).toHaveLength(1);
+  expect((await s.list(t,'fan_two','for_you',undefined,undefined,undefined,
+    {source:'x'})).items).toHaveLength(0);
+ });
  it("ST0/ST4 pages microsecond ties through service cursors on real PG18",async()=>{
   const pool=isolated.pool;
   await pool.query(`INSERT INTO identity.users VALUES

@@ -65,6 +65,10 @@ class AccountBoundFeedApi extends DioFeedApi {
     () => super.searchPosts(mode: mode, query: query, cursor: cursor),
   );
   @override
+  Future<FeedPage> filteredPosts({required String mode,String? query,String? cursor,
+    String? source,DateTime? from,DateTime? to}) => _checked(() => super.filteredPosts(
+      mode:mode,query:query,cursor:cursor,source:source,from:from,to:to));
+  @override
   Future<void> like(String id, bool enabled) =>
       _checked(() => super.like(id, enabled));
   @override
@@ -89,7 +93,21 @@ class AccountBoundFeedApi extends DioFeedApi {
     String id,
     String sort, {
     String? before,
-  }) => _checked(() => super.threadPage(id, sort, before: before));
+    String? scope,
+    String? parentId,
+  }) => _checked(() => super.threadPage(id, sort, before: before,scope:scope,parentId:parentId));
+  @override
+  Future<void> reactComment(String id,String? kind) =>
+    _checked(() => super.reactComment(id,kind));
+  @override
+  Future<void> editComment(String id,String body,int revision) =>
+    _checked(() => super.editComment(id,body,revision));
+  @override
+  Future<void> removeComment(String id) =>
+    _checked(() => super.removeComment(id));
+  @override
+  Future<void> reportComment(String id,String reason) =>
+    _checked(() => super.reportComment(id,reason));
   @override
   Future<void> sendThreadComment(
     String id,
@@ -220,7 +238,8 @@ class StatusSavedScreen extends ConsumerWidget {
         if(!context.mounted||currentAccount()!=account)return;
         if(!context.mounted||currentAccount()!=account)return;
         await SharePlus.instance.share(ShareParams(text:
-          '${fresh.displayAuthor}\n\n${fresh.body}'));
+          '${fresh.displayAuthor}\n\n${fresh.body}'
+          '${fresh.source==null?'':'\n\nOriginal: ${fresh.source!.url}'}'));
       }catch(_){
         if(context.mounted&&currentAccount()==account){
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -267,6 +286,27 @@ class StatusSavedScreen extends ConsumerWidget {
       ));
     }
 
+    Future<void> openComments(FeedPost post)async{
+      if(currentAccount()!=account)return;
+      await showModalBottomSheet<void>(context:context,isScrollControlled:true,
+        showDragHandle:true,useSafeArea:true,builder:(sheet)=>FractionallySizedBox(
+          heightFactor:MediaQuery.textScalerOf(sheet).scale(14)>21?1:0.9,
+          child:Consumer(builder:(ctx,routeRef,__){
+            final active=routeRef.watch(sessionProvider);
+            if(active is! SessionSignedIn||active.user.id!=account){
+              return const Scaffold(body:Center(child:Text('Sign in to read comments.')));
+            }
+            return FeedPostDetailScreen(
+              initialPost:post,accountKey:account,commentsOnly:true,
+              loadPost:feed.detail,loadThread:feed.thread,
+              loadMoreThread:(id,sort,before)=>feed.threadPage(id,sort,before:before),
+              sendComment:feed.sendThreadComment,
+              onHumanProfile:openHuman,onMasanaProfile:openMasana,
+              engagementApi:feed,
+            );
+          })));
+    }
+
     return FutureBuilder<bool>(
       key: ValueKey('saved-promotion-$account'),
       future: promotions.available(),
@@ -281,6 +321,7 @@ class StatusSavedScreen extends ConsumerWidget {
         onOpenMedia: openMedia,
         engagementApi: feed,
         onSharePost: shareOriginal,
+        onComments: openComments,
         shareEarnEnabled: false,
         onHumanProfile: openHuman,
         onMasanaProfile: openMasana,

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import 'feed_media_api.dart';
+import 'status_feed_metrics.dart';
 
 /// A lightweight, viewport-built Status preview of a currently approved original.
 /// Each card obtains its own per-post media grant. Signed URLs are NEVER passed to
@@ -34,6 +35,8 @@ class FeedInlineMediaCard extends StatefulWidget {
 }
 
 class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
+  final _firstFrameClock=Stopwatch();
+  bool _firstFrameSeen=false;
   FeedMediaGrant? grant;
   bool loading=true;
   String? error;
@@ -77,6 +80,8 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
       return;
     }
     final ticket=++generation;
+    _firstFrameClock..reset()..start();
+    _firstFrameSeen=false;
     setState(() {loading=true;error=null;grant=null;});
     try{
       final result=await widget.api.getGrant(widget.postId,widget.mediaId);
@@ -154,6 +159,14 @@ class _FeedInlineMediaCardState extends State<FeedInlineMediaCard> {
       height:widget.tile?double.infinity:220,
       width:double.infinity,
       cacheWidth:960,fit:BoxFit.cover,
+      frameBuilder:(context,child,frame,wasSync){
+        if(frame!=null&&!_firstFrameSeen){
+          _firstFrameSeen=true;
+          StatusFeedMetrics.observe('preview-first-frame',_firstFrameClock.elapsed,
+            succeeded:true);
+        }
+        return child;
+      },
       errorBuilder:(_,__,___)=>Center(child:retry(
         'Image failed to load · retry preview')),
     );

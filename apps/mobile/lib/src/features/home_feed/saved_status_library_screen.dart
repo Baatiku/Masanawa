@@ -34,6 +34,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
     this.onOpenMedia,
     this.engagementApi,
     this.onSharePost,
+    this.onComments,
     this.shareEarnEnabled = false,
   });
 
@@ -49,6 +50,7 @@ class SavedStatusLibraryScreen extends StatefulWidget {
   final void Function(FeedPost post, String mediaId)? onOpenMedia;
   final FeedApi? engagementApi;
   final Future<void> Function(FeedPost)? onSharePost;
+  final Future<void> Function(FeedPost)? onComments;
   final bool shareEarnEnabled;
 
   @override
@@ -493,8 +495,9 @@ class _SavedStatusLibraryScreenState extends State<SavedStatusLibraryScreen> {
                                     shareEarnEnabled:widget.shareEarnEnabled,
                                     onLike:widget.engagementApi==null?null:
                                       ()=>unawaited(reactSaved(item,
-                                        item.post!.currentReaction=='like'?null:'like')),
-                                    onComment:()=>unawaited(open(item)),
+                                        item.post!.currentReaction==null?'like':null)),
+                                    onComment:widget.onComments==null?()=>unawaited(open(item)):
+                                      ()=>unawaited(widget.onComments!(item.post!)),
                                     onShare:widget.onSharePost==null?null:
                                       ()=>unawaited(widget.onSharePost!(item.post!)),
                                     onLongLike:widget.engagementApi is ReactionFeedApi?

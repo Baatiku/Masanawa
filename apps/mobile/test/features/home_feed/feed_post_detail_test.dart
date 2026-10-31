@@ -33,7 +33,61 @@ class _DetailReactions implements FeedApi, ReactionFeedApi {
   @override Future<List<FeedComment>> comments(String id) async => [];
 }
 
+class _Conversation extends _DetailReactions implements CommentConversationApi {
+  final operations=<String>[];
+  final pages=<String>[];
+  final rows=<FeedComment>[
+    FeedComment(id:'9b8c8884-7a31-49d9-aee5-521364b54aef',
+      body:'Question from verified member',state:'visible',
+      createdAt:DateTime.utc(2026),authorType:'human',authorId:'fan_one',
+      authorHandle:'fan_one',authorName:'Member One',replyCount:1),
+  ];
+  @override Future<List<FeedComment>> threadPage(String id,String sort,
+    {String? before,String? scope,String? parentId}) async {
+    pages.add('$sort/$scope/$parentId');
+    if(scope=='replies')return [FeedComment(
+      id:'a3b8e304-ea60-4719-84be-0cc999a0a857',
+      body:'The reply text',state:'visible',parentId:parentId,
+      createdAt:DateTime.utc(2026),authorType:'human',authorName:'Reply Member')];
+    return rows;
+  }
+  @override Future<void> reactComment(String id,String? kind)async=>operations.add('react:$kind');
+  @override Future<void> editComment(String id,String body,int revision)async=>operations.add('edit:$body:$revision');
+  @override Future<void> removeComment(String id)async=>operations.add('remove');
+  @override Future<void> reportComment(String id,String reason)async=>operations.add('report:$reason');
+}
+
 void main(){
+ test('native comment JSON retains edit, reply and reaction contract',(){
+   final model=FeedComment.fromJson({'id':'comment-1','body':'Hello',
+     'state':'visible','createdAt':'2026-10-31T12:00:00Z',
+     'replyCount':2,'revision':3,'editedAt':'2026-10-31T12:05:00Z',
+     'viewerReaction':'love','reactionCounts':{'love':4,'like':1},
+     'author':{'type':'human','id':'fan_one','handle':'one','displayName':'Owner'}});
+   expect(model.replyCount,2);expect(model.revision,3);
+   expect(model.totalReactions,5);expect(model.viewerReaction,'love');
+   expect(model.ownedBy('fan_one'),isTrue);expect(model.editedAt,isNotNull);
+ });
+ testWidgets('comment sheet hides repeated post content, opens bounded nested replies and reacts',(tester)async{
+   final api=_Conversation();
+   await tester.pumpWidget(MaterialApp(home:FeedPostDetailScreen(
+     initialPost:sample,accountKey:'fan_one',commentsOnly:true,engagementApi:api,
+     loadPost:(_)async=>sample,loadThread:(_,__)async=>[],
+     sendComment:(_,__,___,____)async{})));
+   await tester.pumpAndSettle();
+   expect(find.text('Study tips for today'),findsNothing);
+   expect(find.text('Question from verified member'),findsOneWidget);
+   expect(api.pages.first,'newest/roots/null');
+   await tester.tap(find.text('1 reply'));
+   await tester.pumpAndSettle();
+   expect(find.text('The reply text'),findsOneWidget);
+   expect(api.pages.last,'oldest/replies/${api.rows.first.id}');
+   await tester.tap(find.byTooltip('Comment options').first);
+   await tester.pumpAndSettle();
+   await tester.tap(find.text('❤️ Love').last);
+   await tester.pumpAndSettle();
+   expect(api.operations,contains('react:love'));
+ });
  testWidgets('original detail has the Home action strip and preserves accepted reaction on stale GET',
      (tester) async {
    final api=_DetailReactions(),shared=<String>[];

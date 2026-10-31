@@ -173,3 +173,61 @@ describe("lite Masana-only persisted Status visibility",()=>{
   expect(repo.find).toHaveBeenCalledWith("tenant","fan",post.id,true);
  });
 });
+
+describe('SF-FB native feed filters and comment conversations',()=>{
+ const commentId='9b8c8884-7a31-49d9-aee5-521364b54aef';
+ it('binds a cursor to the complete source/date/search scope and rejects forged filters',async()=>{
+  const rows=Array.from({length:21},(_,n)=>({...post,
+   id:`381026c2-9d56-47b1-b73d-${String(1784+n).padStart(12,'0')}`}));
+  const db={...mock(),list:vi.fn(async()=>rows)},service=new FeedService(db,async()=>true);
+  const filters={source:'facebook' as const,from:'2026-10-01',to:'2026-10-31'};
+  const first=await service.list('tenant','fan','for_you',undefined,undefined,'river',filters);
+  expect(first.nextCursor).toBeTruthy();
+  expect(db.list).toHaveBeenCalledWith('tenant','fan','for_you',null,21,undefined,'river',true,filters);
+  await service.list('tenant','fan','for_you',first.nextCursor!,undefined,'river',filters);
+  await expect(service.list('tenant','fan','for_you',first.nextCursor!,undefined,'river',
+   {...filters,source:'x'})).rejects.toMatchObject({code:'invalid_cursor'});
+  await expect(service.list('tenant','fan','for_you',undefined,undefined,undefined,
+   {from:'2026-02-30'})).rejects.toMatchObject({code:'invalid_feed_date'});
+  await expect(service.list('tenant','fan','for_you',undefined,undefined,undefined,
+   {from:'2026-10-31',to:'2026-10-01'})).rejects.toMatchObject({code:'invalid_feed_date'});
+ });
+ it('provides separately paged root and reply threads with validated parent IDs',async()=>{
+  const db=mock(),service=new FeedService(db,async()=>true);
+  await service.comments('tenant',post.id,fan.id,undefined,'newest','roots');
+  expect(db.comments).toHaveBeenCalledWith('tenant',post.id,fan.id,null,30,'newest','roots',undefined);
+  await service.comments('tenant',post.id,fan.id,undefined,'oldest','replies',commentId);
+  expect(db.comments).toHaveBeenCalledWith('tenant',post.id,fan.id,null,30,'oldest','replies',commentId);
+  await expect(service.comments('tenant',post.id,fan.id,undefined,'oldest','replies'))
+   .rejects.toMatchObject({code:'invalid_comment_scope'});
+ });
+ it('fences comment reaction, edit, deletion and report to actual fan and validates version',async()=>{
+  const db={...mock(),setCommentReaction:vi.fn(async()=> 'care' as ReactionKind|null),
+   editComment:vi.fn(async()=>({revision:2})),removeComment:vi.fn(async()=>({state:'removed'})),
+   reportComment:vi.fn(async()=>({state:'open'}))};
+  const s=new FeedService(db,async()=>true);
+  await s.reactComment(fan,commentId,'care');
+  await s.editComment(fan,commentId,'Updated comment',1);
+  await s.removeComment(fan,commentId);
+  await s.reportComment(fan,commentId,'spam');
+  expect(db.setCommentReaction).toHaveBeenCalledWith('tenant','fan',commentId,'care');
+  expect(db.editComment).toHaveBeenCalledWith('tenant','fan',commentId,'Updated comment',1);
+  expect(db.removeComment).toHaveBeenCalledWith('tenant','fan',commentId);
+  expect(db.reportComment).toHaveBeenCalledWith('tenant','fan',commentId,'spam');
+  await expect(s.editComment(fan,commentId,'Hello',0)).rejects.toMatchObject({code:'invalid_comment_edit'});
+  await expect(s.reportComment(fan,commentId,'political_disagreement')).rejects.toMatchObject({code:'invalid_comment_report'});
+  await expect(s.removeComment({...fan,kind:'staff'},commentId)).rejects.toMatchObject({status:403});
+ });
+ it('requires reviewed staff capability for reporting queue and resolution',async()=>{
+  const db={...mock(),listCommentReports:vi.fn(async()=>({items:[]})),
+   resolveCommentReport:vi.fn(async()=>({state:'dismissed'}))};
+  const s=new FeedService(db,async()=>true);
+  await expect(s.commentReports(fan)).rejects.toMatchObject({status:403});
+  await expect(s.commentReports({...fan,kind:'staff',permissions:[]})).rejects.toMatchObject({status:403});
+  const editor={...fan,kind:'staff' as const,permissions:['content_editor']};
+  await s.commentReports(editor);
+  await s.resolveCommentReport(editor,commentId,'dismissed');
+  expect(db.listCommentReports).toHaveBeenCalledWith('tenant');
+  expect(db.resolveCommentReport).toHaveBeenCalledWith('tenant','fan',commentId,'dismissed');
+ });
+});
