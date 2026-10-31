@@ -19,7 +19,7 @@ describe("SQL-level Masana feed filtering without erasing historic posts",()=>{
   const repo=new PgHomeFeedRepository({query} as unknown as Pool);
   await repo.find("tenant","fan","381026c2-9d56-47b1-b73d-1784e24e41e2",true);
   const [sql,parameters]=query.mock.calls[0] as unknown as [string,unknown[]];
-  expect(sql).toContain("(NOT $4::boolean OR p.author_type='masana')");
+  expect(sql).toContain("(NOT $4::boolean OR p.author_type IN ('masana','publisher'))");
   expect(parameters[3]).toBe(true);
  });
 });
