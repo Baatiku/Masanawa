@@ -24,6 +24,8 @@ class ChatUiCopy {
   }
 
   static const _ha = <String, String>{
+    "I am an AI persona called {name}, not a real person. Contact admin for enquiries.": "Wannan halayyar AI ana kiranta {name}, ba mutum na gaskiya ba ce. Tuntuɓi mai kula da manhaja.",
+    "I am an AI persona based on the public profile of {name}, not the real person or an official representative. Contact admin for enquiries.": "Wannan halayyar AI ta dogara da bayanan jama'a na {name}. Ba ainihin mutumin ba ce, kuma ba wakiliyar hukuma ba ce. Tuntuɓi mai kula da manhaja.",
     "Voice playback position": "Matsayin kunna saƙon murya",
     "Open photo": "Buɗe hoto",
     "End call": "Ƙare kira",
@@ -310,6 +312,8 @@ class ChatUiCopy {
   };
 
   static const _ar = <String, String>{
+    "I am an AI persona called {name}, not a real person. Contact admin for enquiries.": "أنا شخصية ذكاء اصطناعي تُدعى {name}، ولست شخصًا حقيقيًا. تواصل مع إدارة التطبيق.",
+    "I am an AI persona based on the public profile of {name}, not the real person or an official representative. Contact admin for enquiries.": "أنا شخصية ذكاء اصطناعي مبنية على الملف العام لـ{name}، ولست الشخص الحقيقي أو ممثلًا رسميًا له. تواصل مع إدارة التطبيق.",
     "Voice playback position": "موضع تشغيل الصوت",
     "Open photo": "فتح الصورة",
     "End call": "إنهاء المكالمة",

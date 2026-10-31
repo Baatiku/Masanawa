@@ -102,3 +102,28 @@ These are **source-level implementation changes pending CI**, not proof of all
 
 No human-human chat, copied proprietary assets, claimed WhatsApp E2EE,
 unqualified provider approval, production financial write or APK is added.
+
+## 31 October extended source and evidence
+
+Additional exact-head source changes in draft PR #612 now cover the owner-fenced
+voice replay cursor (ephemeral, not stored on disk), readable Play/Pause/Resume
+labels, a safe fix for provider access during widget disposal, first-unread-reply
+boundary, visible-message scroll anchor, 1–6-grapheme adaptive emoji typography,
+compact/accessible AI disclosures and a wider Hausa/Arabic UI-action catalog.
+Source-level contract tests cover account/authorization isolation and history
+round trips.
+
+The visual workflow captures **22 configurations**: inbox and conversation,
+320/360/390/430dp, light/dark, 200% text, RTL, Hausa, Arabic, and
+landscape. These are Flutter-test glyph/layout images (the test font renders
+glyph boxes), **not actual-device screenshots or a substitute for comparison
+against the selected WhatsApp version**. The evidence artifact is attached to
+the `Chats Visual Matrix` CI run. Host-side scalability fixtures use 500,
+2,000 and 10,000 messages and report *model* durations only; they cannot
+establish GPU raster p95, physical memory or playback focus.
+
+The acceptance register remains authoritative. Device-only, provider,
+multi-account, cross-device and true reference-pixel results are **not accepted**
+without their corresponding measured evidence. Draft PR #612 must stay
+unmerged until those required checks are qualified.
+
