@@ -15,10 +15,16 @@ import 'gb_wallet_summary.dart';
 /// A single durable original purchase, recovered without re-submitting a bill.
 /// The encrypted intent must be written BEFORE the first financial request.
 class GbDataPurchasePanel extends ConsumerStatefulWidget {
-  const GbDataPurchasePanel({super.key, required this.owner,
-    required this.quote, required this.onStarted, required this.onResolved,
-    required this.onFinished, this.onInsufficientBalance,
-    this.reviewVisible = false});
+  const GbDataPurchasePanel({
+    super.key,
+    required this.owner,
+    required this.quote,
+    required this.onStarted,
+    required this.onResolved,
+    required this.onFinished,
+    this.onInsufficientBalance,
+    this.reviewVisible = false,
+  });
 
   final GbDataOwner owner;
   final GbReadOnlyQuote? quote;
@@ -29,10 +35,11 @@ class GbDataPurchasePanel extends ConsumerStatefulWidget {
   final bool reviewVisible;
 
   @override
-  ConsumerState<GbDataPurchasePanel> createState() => _GbDataPurchasePanelState();
+  ConsumerState<GbDataPurchasePanel> createState() =>
+      GbDataPurchasePanelState();
 }
 
-class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
+class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
   bool _busy = false;
   bool _restoring = true;
   bool _recoveryBlocked = false;
@@ -54,6 +61,34 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
 
   bool _current(int generation) =>
       mounted && generation == _generation && _isOwner;
+
+  /// The review sheet may invoke only the existing durable purchase path.
+  /// A false result means no request was attempted; it is never a success ACK.
+  bool get canConfirmReviewedQuote {
+    final quote = widget.quote;
+    if (quote == null ||
+        _busy ||
+        _restoring ||
+        _recoveryBlocked ||
+        !_isOwner ||
+        _pending != null ||
+        _operationId != null ||
+        !quote.expiresAt.isAfter(DateTime.now().toUtc()))
+      return false;
+    final wallet = ref.read(gbWalletSummaryProvider(widget.owner));
+    final verified = wallet.valueOrNull;
+    return !wallet.isLoading &&
+        !wallet.hasError &&
+        verified != null &&
+        !verified.frozen &&
+        verified.purchasedAvailableMb >= quote.bundle.costMb;
+  }
+
+  Future<bool> confirmReviewedQuote() async {
+    if (!canConfirmReviewedQuote) return false;
+    await _purchase();
+    return true;
+  }
 
   @override
   void initState() {
@@ -95,8 +130,7 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
 
   static String _originalKey() {
     final random = math.Random.secure();
-    return 'redeem_${List<int>.generate(24, (_) => random.nextInt(256))
-        .map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
+    return 'redeem_${List<int>.generate(24, (_) => random.nextInt(256)).map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
   }
 
   // The Gateway returns this exact 409 only when the purchased-MB reserve
@@ -117,7 +151,8 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     final generation = ++_generation;
     widget.onStarted();
     try {
-      final saved = await ref.read(gbDataPendingStoreProvider)
+      final saved = await ref
+          .read(gbDataPendingStoreProvider)
           .read(widget.owner.accountId);
       if (!_current(generation)) return;
       setState(() {
@@ -136,7 +171,8 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
       setState(() {
         _restoring = false;
         _recoveryBlocked = true;
-        _error = 'Could not read the saved data purchase. '
+        _error =
+            'Could not read the saved data purchase. '
             'Try recovery before buying again.';
       });
       // An inaccessible secure slot must NOT unlock another purchase.
@@ -144,11 +180,17 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
   }
 
   /// Apply only authoritative server states to the exact saved request.
-  Future<void> _accept(Object? raw, int generation,
-      {String? expectedId, bool originalLookup = false}) async {
+  Future<void> _accept(
+    Object? raw,
+    int generation, {
+    String? expectedId,
+    bool originalLookup = false,
+  }) async {
     if (raw is! Map<String, dynamic> ||
         raw['operationId'] is! String ||
-        !RegExp(r'^data_[a-f0-9]{48}$').hasMatch(raw['operationId'] as String) ||
+        !RegExp(
+          r'^data_[a-f0-9]{48}$',
+        ).hasMatch(raw['operationId'] as String) ||
         (expectedId != null && raw['operationId'] != expectedId) ||
         !const ['pending', 'delivered', 'failed'].contains(raw['state'])) {
       throw const FormatException('Unverified data purchase readback');
@@ -157,9 +199,9 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     if (saved == null) throw const FormatException('Original request missing');
     if (originalLookup &&
         (raw['bundleId'] != saved.bundleId ||
-         raw['version'] != saved.version ||
-         raw['recipientPhone'] != saved.recipientPhone ||
-         raw['costMb'] != saved.costMb)) {
+            raw['version'] != saved.version ||
+            raw['recipientPhone'] != saved.recipientPhone ||
+            raw['costMb'] != saved.costMb)) {
       throw const FormatException('Original request details differ');
     }
     final id = raw['operationId'] as String;
@@ -196,13 +238,19 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     final token = CancelToken();
     _cancel?.cancel();
     _cancel = token;
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      final response = await ref.read(apiClientProvider).dio.get<Object?>(
-        '/v1/gb/data/purchases/intent/${Uri.encodeComponent(saved.idempotencyKey)}',
-        cancelToken: token,
-        options: Options(headers: const {'Cache-Control': 'no-store'}),
-      );
+      final response = await ref
+          .read(apiClientProvider)
+          .dio
+          .get<Object?>(
+            '/v1/gb/data/purchases/intent/${Uri.encodeComponent(saved.idempotencyKey)}',
+            cancelToken: token,
+            options: Options(headers: const {'Cache-Control': 'no-store'}),
+          );
       if (!_current(generation)) return;
       await _accept(response.data, generation, originalLookup: true);
     } catch (_) {
@@ -218,15 +266,25 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     final quote = widget.quote;
     final wallet = ref.read(gbWalletSummaryProvider(widget.owner));
     final verified = wallet.hasError || wallet.isLoading
-        ? null : wallet.valueOrNull;
-    if (_busy || _restoring || _recoveryBlocked || !_isOwner || _pending != null ||
-        _operationId != null || quote == null ||
-        verified == null || verified.frozen ||
+        ? null
+        : wallet.valueOrNull;
+    if (_busy ||
+        _restoring ||
+        _recoveryBlocked ||
+        !_isOwner ||
+        _pending != null ||
+        _operationId != null ||
+        quote == null ||
+        verified == null ||
+        verified.frozen ||
         verified.purchasedAvailableMb < quote.bundle.costMb ||
-        !quote.expiresAt.isAfter(DateTime.now().toUtc())) return;
+        !quote.expiresAt.isAfter(DateTime.now().toUtc()))
+      return;
     final saved = GbPendingDataPurchase(
-      idempotencyKey: _originalKey(), bundleId: quote.bundle.id,
-      version: quote.bundle.version, recipientPhone: quote.recipientPhone,
+      idempotencyKey: _originalKey(),
+      bundleId: quote.bundle.id,
+      version: quote.bundle.version,
+      recipientPhone: quote.recipientPhone,
       costMb: quote.bundle.costMb,
     );
     final generation = ++_generation;
@@ -234,9 +292,14 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     _cancel?.cancel();
     _cancel = token;
     widget.onStarted();
-    setState(() { _busy = true; _pending = saved; _error = null; });
+    setState(() {
+      _busy = true;
+      _pending = saved;
+      _error = null;
+    });
     try {
-      await ref.read(gbDataPendingStoreProvider)
+      await ref
+          .read(gbDataPendingStoreProvider)
           .write(widget.owner.accountId, saved);
     } catch (_) {
       if (!_current(generation)) return;
@@ -250,17 +313,20 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     }
     if (!_current(generation)) return;
     try {
-      final response = await ref.read(apiClientProvider).dio.post<Object?>(
-        '/v1/gb/data/redeem',
-        data: {
-          'bundleId': saved.bundleId,
-          'version': saved.version,
-          'recipientPhone': saved.recipientPhone,
-          'idempotencyKey': saved.idempotencyKey,
-        },
-        cancelToken: token,
-        options: Options(headers: const {'Cache-Control': 'no-store'}),
-      );
+      final response = await ref
+          .read(apiClientProvider)
+          .dio
+          .post<Object?>(
+            '/v1/gb/data/redeem',
+            data: {
+              'bundleId': saved.bundleId,
+              'version': saved.version,
+              'recipientPhone': saved.recipientPhone,
+              'idempotencyKey': saved.idempotencyKey,
+            },
+            cancelToken: token,
+            options: Options(headers: const {'Cache-Control': 'no-store'}),
+          );
       if (!_current(generation)) return;
       await _accept(response.data, generation);
     } catch (error) {
@@ -270,7 +336,9 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
         // A successful secure-slot clear permits an ordinary fresh review;
         // if clearing fails, retain the original idempotency lock instead.
         try {
-          await ref.read(gbDataPendingStoreProvider).clear(widget.owner.accountId);
+          await ref
+              .read(gbDataPendingStoreProvider)
+              .clear(widget.owner.accountId);
           if (!_current(generation)) return;
           setState(() {
             _pending = null;
@@ -303,20 +371,27 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     final token = CancelToken();
     _cancel?.cancel();
     _cancel = token;
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      final response = await ref.read(apiClientProvider).dio.post<Object?>(
-        '/v1/gb/data/purchases/${Uri.encodeComponent(id)}/reconcile',
-        cancelToken: token,
-        options: Options(headers: const {'Cache-Control': 'no-store'}),
-      );
+      final response = await ref
+          .read(apiClientProvider)
+          .dio
+          .post<Object?>(
+            '/v1/gb/data/purchases/${Uri.encodeComponent(id)}/reconcile',
+            cancelToken: token,
+            options: Options(headers: const {'Cache-Control': 'no-store'}),
+          );
       if (!_current(generation)) return;
       await _accept(response.data, generation, expectedId: id);
     } catch (_) {
       if (!_current(generation)) return;
       setState(() {
         _busy = false;
-        _error = 'Status unavailable. Keep the original reference and try again.';
+        _error =
+            'Status unavailable. Keep the original reference and try again.';
       });
     }
   }
@@ -328,99 +403,133 @@ class _GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     if (session is! SessionSignedIn || !_isOwner) {
       return const SizedBox.shrink();
     }
-    if (!_restoring && _pending == null && _operationId == null &&
-        widget.quote == null && _error == null) return const SizedBox.shrink();
+    // Prime the same authorized, read-only spendable balance used by both the
+    // review sheet and the durable confirmation guard (including on restore).
+    ref.watch(gbWalletSummaryProvider(widget.owner));
+    if (!_restoring &&
+        _pending == null &&
+        _operationId == null &&
+        widget.quote == null &&
+        _error == null)
+      return const SizedBox.shrink();
     final theme = Theme.of(context);
     final colors = context.masanawa;
-    final balance = ref.watch(gbWalletSummaryProvider(widget.owner));
-    final verified = balance.hasError || balance.isLoading
-        ? null : balance.valueOrNull;
-    final quote = widget.quote;
-    final canAfford = quote != null && verified != null &&
-        !verified.frozen &&
-        verified.purchasedAvailableMb >= quote.bundle.costMb;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (_restoring || _busy) const LinearProgressIndicator(minHeight: 3),
-      if (_restoring)
-        const Padding(padding: EdgeInsets.all(12),
-          child: Text('Checking previous purchase…',
-            textAlign: TextAlign.center)),
-      if (_error != null && _pending == null && !_recoveryBlocked)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 9),
-          child: Text(_error!, textAlign: TextAlign.center,
-            style: TextStyle(color: theme.colorScheme.error))),
-      if (!widget.reviewVisible && !_restoring && _pending == null && _operationId == null &&
-          widget.quote != null)
-        if (!canAfford)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(verified == null
-                ? 'Check your data balance connection.'
-                : verified.frozen
-                ? 'Your data balance is unavailable.'
-                : 'Not enough redeemable MB. Buy Data to continue.',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_restoring || _busy) const LinearProgressIndicator(minHeight: 3),
+        if (_restoring)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Checking previous purchase…',
               textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.error))),
-      if (!widget.reviewVisible && !_restoring && _pending == null && _operationId == null &&
-          widget.quote != null)
-        FilledButton.icon(
-          onPressed: canAfford && !_busy && !_recoveryBlocked &&
-              widget.quote!.expiresAt.isAfter(DateTime.now().toUtc())
-              ? _purchase : null,
-          icon: const Icon(Icons.shopping_bag_outlined),
-          label: const Text('Confirm data purchase'),
-        ),
-      if (!_restoring && _pending == null && _operationId == null &&
-          _recoveryBlocked)
-        Center(child: Column(children: [
-          const Text('Could not restore the previous purchase.',
-            textAlign: TextAlign.center),
-          OutlinedButton.icon(
-            onPressed: _restore, icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Try again')),
-        ])),
-      if (_pending != null && _operationId == null)
-        Card(child: Padding(padding: const EdgeInsets.all(14),
-          child: Column(children: [
-            Text(_error == null
-                ? 'Previous purchase is being checked.'
-                : 'Previous purchase needs checking.',
+            ),
+          ),
+        if (_error != null && _pending == null && !_recoveryBlocked)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            child: Text(
+              _error!,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 9),
-            OutlinedButton.icon(onPressed: _busy ? null : _recoverOriginal,
-              icon: const Icon(Icons.search_rounded),
-              label: const Text('Check previous purchase')),
-          ]))),
-      if (_operationId != null)
-        Card(child: Padding(padding: const EdgeInsets.all(14),
-          child: Column(children: [
-            Text(switch (_status) {
-              'delivered' => 'Data delivered',
-              'failed' => 'Purchase unsuccessful',
-              _ => 'Purchase pending',
-            }, style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            SelectableText(_operationId!, textAlign: TextAlign.center,
-              style: TextStyle(color: colors.textMuted)),
-            if (_receiptDetails != null) ...[
-              const SizedBox(height: 6),
-              Text('Recipient: ${_receiptDetails!.recipientPhone}'),
-              Text('Bundle: ${_receiptDetails!.bundleId}'),
-              Text('Cost: ${groupedMb(_receiptDetails!.costMb)} MB'),
-            ],
-            TextButton.icon(
-              onPressed: () => Clipboard.setData(ClipboardData(text: _operationId!)),
-              icon: const Icon(Icons.copy_rounded),
-              label: const Text('Copy original reference')),
-            if (_pending != null)
-              TextButton.icon(
-                onPressed: _busy ? null :
-                    _status == 'pending' ? _checkStatus : _recoverOriginal,
-                icon: const Icon(Icons.sync_rounded),
-                label: Text(_status == 'pending'
-                    ? 'Check status' : 'Finish recovery')),
-          ]))),
-    ]);
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
+        if (!_restoring &&
+            _pending == null &&
+            _operationId == null &&
+            _recoveryBlocked)
+          Center(
+            child: Column(
+              children: [
+                const Text(
+                  'Could not restore the previous purchase.',
+                  textAlign: TextAlign.center,
+                ),
+                OutlinedButton.icon(
+                  onPressed: _restore,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Try again'),
+                ),
+              ],
+            ),
+          ),
+        if (_pending != null && _operationId == null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  Text(
+                    _error == null
+                        ? 'Previous purchase is being checked.'
+                        : 'Previous purchase needs checking.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 9),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _recoverOriginal,
+                    icon: const Icon(Icons.search_rounded),
+                    label: const Text('Check previous purchase'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (_operationId != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  Text(
+                    switch (_status) {
+                      'delivered' => 'Data delivered',
+                      'failed' => 'Purchase unsuccessful',
+                      _ => 'Purchase pending',
+                    },
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    _operationId!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.textMuted),
+                  ),
+                  if (_receiptDetails != null) ...[
+                    const SizedBox(height: 6),
+                    Text('Recipient: ${_receiptDetails!.recipientPhone}'),
+                    Text('Bundle: ${_receiptDetails!.bundleId}'),
+                    Text('Cost: ${groupedMb(_receiptDetails!.costMb)} MB'),
+                  ],
+                  TextButton.icon(
+                    onPressed: () =>
+                        Clipboard.setData(ClipboardData(text: _operationId!)),
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy original reference'),
+                  ),
+                  if (_pending != null)
+                    TextButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : _status == 'pending'
+                          ? _checkStatus
+                          : _recoverOriginal,
+                      icon: const Icon(Icons.sync_rounded),
+                      label: Text(
+                        _status == 'pending'
+                            ? 'Check status'
+                            : 'Finish recovery',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

@@ -270,15 +270,29 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
     title: Text(recipient.name, maxLines: 2, overflow: TextOverflow.ellipsis),
     subtitle: Text('@${recipient.handle}'),
     trailing: selected
-        ? IconButton(
-            tooltip: 'Clear recipient',
-            onPressed: widget.enabled ? () {
-              if (widget.owner == null || !_same(widget.owner!, _generation, widget.controller.text.trim())) return;
-              widget.controller.clear();
-              setState(_invalidate);
-              widget.onChanged('');
-            } : null,
-            icon: const Icon(Icons.close),
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.verified_user_outlined, size: 20),
+              IconButton(
+                tooltip: 'Clear recipient',
+                onPressed: widget.enabled
+                    ? () {
+                        if (widget.owner == null ||
+                            !_same(
+                              widget.owner!,
+                              _generation,
+                              widget.controller.text.trim(),
+                            ))
+                          return;
+                        widget.controller.clear();
+                        setState(_invalidate);
+                        widget.onChanged('');
+                      }
+                    : null,
+                icon: const Icon(Icons.close),
+              ),
+            ],
           )
         : const Icon(Icons.chevron_right),
   );
@@ -303,9 +317,8 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
             labelText: widget.label,
             hintText: 'Name, @username, email or phone',
             counterText: '',
-            helperText:
-                'Use a complete email or a phone number with country code. Choose a name below.',
-            helperMaxLines: 3,
+            helperText: 'Search by @username, name, email or full phone.',
+            helperMaxLines: 1,
             border: const OutlineInputBorder(),
             suffixIcon: _checking
                 ? const Padding(

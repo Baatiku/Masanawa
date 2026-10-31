@@ -125,7 +125,11 @@ void main() {
       expect(find.text('All'), findsNothing);
       expect(find.text('All durations'), findsNothing);
       expect(find.text('Other'), findsNothing);
-      expect(find.byType(ChoiceChip), findsNWidgets(7));
+      expect(find.byType(ChoiceChip), findsNWidgets(4));
+      expect(
+        find.byType(SegmentedButton<GbDataValidityPeriod>),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Airtel'));
       await tester.tap(find.text('Weekly'));
       expect(network, 'AIRTEL');
