@@ -103,7 +103,10 @@ void main() {
   ],child:MaterialApp(theme:buildMasanawaTheme(brightness:Brightness.light),
     home:const AiChatScreen(characterId:'agent'))));
   await tester.pumpAndSettle();
-  await tester.longPress(find.text('A message to react to'));
+  // The message text itself is selectable; press its painted bubble padding
+  // to exercise the bubble's action gesture without selecting text.
+  final textRect=tester.getRect(find.text('A message to react to'));
+  await tester.longPressAt(Offset(textRect.left+4,textRect.top-4));
   await tester.pumpAndSettle();
   final like=find.bySemanticsLabel('React with 👍');
   expect(like, findsOneWidget);
