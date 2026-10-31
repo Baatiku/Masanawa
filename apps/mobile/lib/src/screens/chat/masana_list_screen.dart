@@ -16,6 +16,7 @@ import '../../theme/masanawa_theme.dart';
 import '../../ui/components/masanawa_list_skeleton.dart';
 
 import '../../ui/components/conversation_search_field.dart';
+import 'chat_ui_copy.dart';
 
 /// UI-only display name: professional titles are not contact identities.
 String masanaContactName(String value) => value.trim().replaceFirst(
@@ -88,7 +89,8 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.callPicker ? 'New call' : 'Contacts',
+                widget.callPicker ? ChatUiCopy.of(context, 'New call')
+                    : ChatUiCopy.of(context, 'Find Masana'),
                 style: TextStyle(
                   color: u.textPrimary,
                   fontSize: 18,
@@ -121,8 +123,8 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
           children: [
             ConversationSearchField(
               controller: _searchController,
-              hintText: 'Search Masana',
-              clearTooltip: 'Clear Masana search',
+              hintText: ChatUiCopy.of(context, 'Search Masana profiles'),
+              clearTooltip: ChatUiCopy.of(context, 'Clear Masana search'),
               onChanged: (value) =>
                   setState(() => _query = value.trim().toLowerCase()),
               onClear: () => setState(() {
