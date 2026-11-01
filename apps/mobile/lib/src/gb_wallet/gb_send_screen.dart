@@ -378,6 +378,10 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                 ? 'Check original transfer'
                 : 'Review MB send',
             busy: sheetBusy,
+            onEdit: sheetBusy || _uncertain || _receipt != null ? null : () {
+              Navigator.pop(sheetContext);
+              _editUnsubmitted(owner);
+            },
             onClose: sheetBusy ? null : () => Navigator.pop(sheetContext),
             children: [
               GbWalletAmountHero(

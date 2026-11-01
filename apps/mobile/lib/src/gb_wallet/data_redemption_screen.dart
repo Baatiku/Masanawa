@@ -249,6 +249,10 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 child: GbWalletReviewSheet(
                   title: 'Review data purchase',
                   busy: submitting,
+                  onEdit: submitting ? null : () {
+                    Navigator.pop(sheetContext);
+                    if (mounted && _isOwner(owner)) setState(_clearQuote);
+                  },
                   onClose: submitting
                       ? null
                       : () => Navigator.pop(sheetContext),

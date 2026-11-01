@@ -11,6 +11,7 @@ class GbWalletReviewSheet extends StatelessWidget {
     required this.children,
     required this.action,
     this.onClose,
+    this.onEdit,
     this.busy = false,
     this.back = false,
   });
@@ -19,6 +20,7 @@ class GbWalletReviewSheet extends StatelessWidget {
   final List<Widget> children;
   final Widget action;
   final VoidCallback? onClose;
+  final VoidCallback? onEdit;
   final bool busy, back;
 
   @override
@@ -54,6 +56,12 @@ class GbWalletReviewSheet extends StatelessWidget {
                         onPressed: busy ? null : onClose,
                         tooltip: 'Back',
                         icon: const Icon(Icons.arrow_back_rounded),
+                      )
+                    else if (onEdit != null)
+                      IconButton(
+                        tooltip: 'Edit details',
+                        onPressed: busy ? null : onEdit,
+                        icon: const Icon(Icons.edit_outlined),
                       )
                     else
                       const SizedBox(width: 48),

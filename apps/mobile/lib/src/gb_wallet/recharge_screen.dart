@@ -531,12 +531,16 @@ class _RechargePackagesScreenState
                                         clipBehavior: Clip.antiAlias,
                                         child: InkWell(
                                           key: ValueKey('gb-package-${p.gb}'),
-                                          onTap: _busy || !_enabled
+                                          onTap: _busy || !_enabled || !_storeReady || _uncertain
                                               ? null
-                                              : () => setState(() {
-                                                  _selected = p.gb;
-                                                  _custom.clear();
-                                                }),
+                                              : () {
+                                                  setState(() {
+                                                    _selected = p.gb;
+                                                    _custom.clear();
+                                                  });
+                                                  // Signed quote only: never charges on preset tap.
+                                                  _quote();
+                                                },
                                           child: Padding(
                                             padding: const EdgeInsets.all(4),
                                             child: Column(
