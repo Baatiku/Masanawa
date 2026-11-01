@@ -93,14 +93,16 @@ class _GbReceiptActionsState extends ConsumerState<GbReceiptActions> {
             return StatefulBuilder(
               builder: (context, setSheetState) => SafeArea(
                 child: SizedBox(
-                  height: MediaQuery.sizeOf(context).height * .82,
+                  height: MediaQuery.sizeOf(context).height * .76,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
                         Row(
                           children: [
-                            const Expanded(child: Text('Wallet receipt')),
+                            Expanded(child: Text('Wallet receipt',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700))),
                             IconButton(
                               tooltip: 'Close receipt',
                               onPressed: sharing
@@ -129,6 +131,7 @@ class _GbReceiptActionsState extends ConsumerState<GbReceiptActions> {
                         ),
                         if (sharing) const LinearProgressIndicator(),
                         Wrap(
+                          alignment: WrapAlignment.center,
                           spacing: 12,
                           runSpacing: 8,
                           children: [

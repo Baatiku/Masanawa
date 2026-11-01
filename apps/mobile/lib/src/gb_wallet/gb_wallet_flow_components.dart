@@ -217,6 +217,43 @@ class GbWalletInlineNotice extends StatelessWidget {
   }
 }
 
+/// Presentation-only status; never infer network delivery from wallet posting.
+class GbWalletResultSummary extends StatelessWidget {
+  const GbWalletResultSummary({
+    super.key, required this.title, required this.detail,
+    this.icon = Icons.check_circle_outline_rounded,
+  });
+  final String title;
+  final String detail;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.masanawa;
+    return Semantics(
+      liveRegion: true,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, size: 32, color: colors.brandStrong),
+              const SizedBox(height: 8),
+              Text(title, textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(detail, textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class GbWalletAmountHero extends StatelessWidget {
   const GbWalletAmountHero(this.amount, {super.key, this.caption});
   final String amount;

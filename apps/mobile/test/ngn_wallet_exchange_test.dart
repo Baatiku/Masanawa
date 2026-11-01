@@ -420,6 +420,45 @@ void main() {
       expect(f.posts, isEmpty);
     },
   );
+  testWidgets('funding applicant requires valid form values before saving', (
+    tester,
+  ) async {
+    final f = _Fixture();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionProvider.overrideWith(_Session.new),
+          apiClientProvider.overrideWithValue(f.api),
+          ngnBankAccountProvider.overrideWith(
+            (ref, owner) async => const NgnBankAccount(
+              'unassigned',
+              assignmentEnabled: true,
+              applicantComplete: false,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: NgnFundingScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'A');
+    await tester.enterText(fields.at(1), 'B');
+    await tester.enterText(fields.at(2), '123');
+    await tester.pump();
+    expect(find.text('Enter first name'), findsOneWidget);
+    expect(find.text('Enter last name'), findsOneWidget);
+    expect(find.text('Enter a valid Nigerian mobile number'), findsOneWidget);
+    await tester.enterText(fields.at(0), 'Amina');
+    await tester.enterText(fields.at(1), 'Bello');
+    await tester.enterText(fields.at(2), '08031234567');
+    await tester.pump();
+    expect(find.text('Enter first name'), findsNothing);
+    expect(find.text('Enter last name'), findsNothing);
+    expect(find.text('Enter a valid Nigerian mobile number'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('existing email account can complete missing funding details', (
     tester,
   ) async {

@@ -724,10 +724,9 @@ class _RechargePackagesScreenState
                                   },
                                 ),
                               if (_completed) ...[
-                                const GbWalletInlineNotice(
-                                  message:
-                                      'Your purchased data balance has been updated.',
-                                  warning: false,
+                                const GbWalletResultSummary(
+                                  title: 'Exchange confirmed',
+                                  detail: 'Your purchased data balance has been updated.',
                                 ),
                               ] else if (_uncertain) ...[
                                 if (_error == null)

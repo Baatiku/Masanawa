@@ -994,8 +994,9 @@ class _SelectableDataBundle extends StatelessWidget {
       selected: selected,
       button: true,
       label:
-          '${bundle.network}, ${bundle.allowanceLabel}, '
-          '${bundle.costMb} MB, ${bundle.validityDays} days',
+          '${bundle.network}: receive ${bundle.allowanceLabel}, '
+          'debit ${bundle.costMb} purchased MB, '
+          'valid for ${bundle.validityDays} days',
       child: Material(
         color: selected ? colors.surfaceMuted : colors.surfaceCard,
         shape: RoundedRectangleBorder(
@@ -1054,7 +1055,7 @@ class _SelectableDataBundle extends StatelessWidget {
                   ),
                 ),
                 if (bundle.extrasLabel?.isNotEmpty == true)
-                  Text(bundle.extrasLabel!,
+                  Text('Extra: ${bundle.extrasLabel!}',
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.labelSmall),

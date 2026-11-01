@@ -559,8 +559,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
         _busy = false;
         _uncertain = true;
         _error =
-            'Confirmation was not verified. Do not start another Send. '
-            'Retry this SAME review, or contact support with the reference.';
+            'Send not yet confirmed. Check the original reference; do not start another transfer.';
       });
     }
   }
@@ -735,9 +734,9 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                 title: Text(_quote!.recipientName),
                 subtitle: Text('@${_quote!.recipientHandle}'),
               )),
-            const GbWalletInlineNotice(
-              message: 'Your purchased MB transfer is confirmed.',
-              warning: false,
+            const GbWalletResultSummary(
+              title: 'MB sent',
+              detail: 'Your purchased MB transfer is confirmed.',
             ),
             Card(
               child: ExpansionTile(
