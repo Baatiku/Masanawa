@@ -45,8 +45,7 @@ class _NgnFundingBalanceState extends ConsumerState<NgnFundingBalance> {
                 ? 'Last verified: ${formatNgn(verified.balanceKobo)}'
                 : formatNgn(verified.balanceKobo),
         textAlign: TextAlign.end,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        softWrap: true,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       ),
     );

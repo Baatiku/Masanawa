@@ -105,7 +105,7 @@ class GbWalletBalanceCard extends StatelessWidget {
               Row(children: [
                 Expanded(child: Semantics(label: 'Data balance', child: Text(
                   '${decimalGb(balance!.availableMb)} GB',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  softWrap: true,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800, color: colors.textPrimary),
                 ))),
