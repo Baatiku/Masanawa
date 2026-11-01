@@ -125,6 +125,15 @@ class GbWalletBalanceCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (!showSendable) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Redeemable purchased data: '
+                '${groupedMb(balance!.frozen ? 0 : balance!.purchasedAvailableMb)} MB',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.textPrimary, fontWeight: FontWeight.w600),
+              ),
+            ],
             if (showSendable) ...[
               const SizedBox(height: 8),
               Text(
