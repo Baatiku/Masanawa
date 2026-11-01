@@ -35,7 +35,13 @@ export function parseNewsFeed(xml:string,publisherId:string):ParsedNews[]{
   const description=plain(xmlElement(block,'description')||xmlElement(block,'summary')).slice(0,520);
   const atomLink=/<link\b[^>]*\bhref=["']([^"']+)["']/i.exec(block)?.[1]??'';
   const link=plain(xmlElement(block,'link'))||atomLink;
-  const url=safeNewsArticleUrl(entry,decodeEntities(link));
+  const decoded=decodeEntities(link);
+  // Africanews currently advertises http://www.africanews.com article links
+  // inside its HTTPS RSS response. Upgrade only that pinned host to HTTPS;
+  // all other insecure, off-host, or credential-bearing URLs stay rejected.
+  const secureLink=entry.id==='africanews'&&/^http:\/\/(?:www\.)?africanews\.com\//i.test(decoded)
+   ?'https://'+decoded.slice('http://'.length):decoded;
+  const url=safeNewsArticleUrl(entry,secureLink);
   const date=plain(xmlElement(block,'pubDate')||xmlElement(block,'published')||xmlElement(block,'updated'));
   const time=Date.parse(date);
   if(!url||seen.has(url)||title.length<3||description.length<15||!Number.isFinite(time))continue;
@@ -60,16 +66,33 @@ async function boundedFeedFetch(url:string,fetchImpl:typeof fetch):Promise<strin
   return Buffer.concat(pieces).toString('utf8');
  }finally{clearTimeout(timer);}
 }
-export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch){
- return {runOnce:async()=>{
+/** Register the owner's fixed source list for the existing platform tenant.
+ * ON CONFLICT intentionally preserves suspensions and manual source changes.
+ * These records authorise short RSS previews, not copied article bodies or logos.
+ */
+export async function ensurePlatformNewsPublishers(pool:Pool,tenantId:string):Promise<number>{
+ const sources=newsCatalog.map((_,index)=>`($${index*3+2}::text,$${index*3+3}::text,$${index*3+4}::text)`).join(',');
+ const result=await pool.query(`INSERT INTO feed.news_publishers
+   (tenant_id,publisher_id,display_name,feed_url,rights_basis,reviewed_by,rights_until,state)
+   SELECT t.tenant_id,source.id,source.name,source.feed,
+    'Owner-approved short RSS headline/description previews with attribution and a canonical original link',
+    'owner-news-policy-2026-11-01','infinity'::timestamptz,'approved'
+   FROM identity.tenants t CROSS JOIN (VALUES ${sources}) AS source(id,name,feed)
+   WHERE t.tenant_id=$1
+   ON CONFLICT(tenant_id,publisher_id) DO NOTHING
+   RETURNING publisher_id`,[tenantId,...newsCatalog.flatMap(source=>[source.id,source.name,source.feed])]);
+ return result.rowCount??result.rows.length;
+}
+export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,platformTenantId?:string){
+ async function pollOne(){
   const leased=await pool.query(`UPDATE feed.news_publishers p SET lease_until=clock_timestamp()+interval '2 minutes',
      next_poll_at=clock_timestamp()+interval '15 minutes'
    WHERE (p.tenant_id,p.publisher_id) IN
      (SELECT tenant_id,publisher_id FROM feed.news_publishers
-      WHERE state='approved' AND rights_until>clock_timestamp()
+      WHERE tenant_id=$1 AND state='approved' AND rights_until>clock_timestamp()
        AND next_poll_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
       ORDER BY next_poll_at LIMIT 1 FOR UPDATE SKIP LOCKED)
-   RETURNING p.*`);
+   RETURNING p.*`,[platformTenantId]);
   const row=leased.rows[0];if(!row)return {checked:0,imported:0};
   const canonical=newsCatalog.find(p=>p.id===row.publisher_id&&p.feed===row.feed_url&&p.name===row.display_name);
   let imported=0;
@@ -116,5 +139,17 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch){
      WHERE tenant_id=$1 AND publisher_id=$2`,[row.tenant_id,row.publisher_id]);
    return {checked:1,imported,error:'feed_unavailable'};
   }
+ }
+ return {runOnce:async()=>{
+  if(!platformTenantId)return {checked:0,imported:0,failed:0,enrolled:0};
+  const enrolled=await ensurePlatformNewsPublishers(pool,platformTenantId);
+  let checked=0,imported=0,failed=0;
+  // Poll every due source at startup rather than making the user wait 35 minutes
+  // for a seven-publisher initial feed. Individual provider failures are isolated.
+  for(let n=0;n<newsCatalog.length;n++){
+   const result=await pollOne();if(!result.checked)break;
+   checked+=result.checked;imported+=result.imported;if('error' in result)failed++;
+  }
+  return {checked,imported,failed,enrolled};
  }};
 }

@@ -165,10 +165,15 @@ export async function startWorkerService(
         onError:()=>process.stderr.write(JSON.stringify({event:"creator_media.retry",reason:"batch_failed"})+"\n"),
       });
     }
-    const newsPoller=createNewsFeedPoller(database.pool);
+    const newsTenantId=env.MASANAWA_PLATFORM_TENANT_ID?.trim();
+    const newsPoller=createNewsFeedPoller(database.pool,fetch,newsTenantId);
     newsImporter=createJobScheduler({
-      runOnce:newsPoller.runOnce,
-      enabled:()=>!drain.isDraining()&&env.MASANAWA_NEWS_INGEST_ENABLED==='true',
+      runOnce:async()=>{
+        const result=await newsPoller.runOnce();
+        if(result.checked||result.enrolled)
+          process.stdout.write(JSON.stringify({event:'news_ingest.batch',...result})+'\n');
+      },
+      enabled:()=>!drain.isDraining()&&Boolean(newsTenantId)&&env.MASANAWA_NEWS_INGEST_ENABLED==='true',
       intervalMs:5*60_000,
       onError:()=>process.stderr.write(JSON.stringify({event:'news_ingest.retry',reason:'feed_unavailable'})+'\n'),
     });
