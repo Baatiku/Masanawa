@@ -2375,6 +2375,9 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   bool _ending = false;
   bool _muted = false;
   bool _speaker = true;
+  bool _choosingAudioRoute = false;
+  String? _audioRouteLabel;
+  String? _audioRouteKind;
   String? _error;
   Timer? _durationTimer;
   Timer? _elapsedTimer;
@@ -2442,6 +2445,90 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
     }
   }
 
+  Future<void> _chooseAudioRoute() async {
+    if (_choosingAudioRoute || _ending || _callFailed) return;
+    _choosingAudioRoute = true;
+    try {
+      final routes = await LivePcmAudio.availableCallRoutes();
+      if (!mounted || _ending || _callFailed) return;
+      // A missing method channel (older client or unsupported device) keeps
+      // the original simple speaker action available.
+      if (routes.isEmpty) {
+        final next = !_speaker;
+        await widget.session.setSpeaker(next);
+        if (mounted)
+          setState(() {
+            _speaker = next;
+            _audioRouteLabel = next ? 'Speaker' : 'Earpiece';
+            _audioRouteKind = next ? 'speaker' : 'earpiece';
+          });
+        return;
+      }
+      final chosen = await showModalBottomSheet<CallAudioRoute>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (sheetContext) => SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Audio output',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                  ),
+                ),
+                for (final route in routes)
+                  ListTile(
+                    key: ValueKey('call-audio-route-${route.id}'),
+                    leading: Icon(_routeIcon(route.kind)),
+                    title: Text(route.label),
+                    trailing: route.selected
+                        ? const Icon(Icons.check_rounded)
+                        : null,
+                    onTap: () => Navigator.of(sheetContext).pop(route),
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (!mounted || chosen == null || _ending || _callFailed) return;
+      final changed = await widget.session.selectAudioRoute(chosen);
+      if (!mounted) return;
+      if (!changed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Audio output disconnected. Try another device.'),
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _audioRouteLabel = chosen.label;
+        _audioRouteKind = chosen.kind;
+        _speaker = chosen.kind == 'speaker';
+      });
+    } finally {
+      _choosingAudioRoute = false;
+    }
+  }
+
+  IconData _routeIcon(String? kind) => switch (kind) {
+    'bluetooth' => Icons.bluetooth_audio_rounded,
+    'wired' || 'usb' => Icons.headset_mic_rounded,
+    'earpiece' => Icons.hearing,
+    _ => Icons.volume_up,
+  };
+
   @override
   void dispose() {
     _durationTimer?.cancel();
@@ -2484,10 +2571,16 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
           decoration: BoxDecoration(color:u.surfaceCard,
             borderRadius:const BorderRadius.vertical(top:Radius.circular(28))),
           child: Wrap(alignment:WrapAlignment.center,spacing:20,runSpacing:12,children:[
-            if (!_callFailed) _CallControl(label:_speaker?'Speaker':'Earpiece',
-              icon:_speaker?Icons.volume_up:Icons.hearing,selected:_speaker,
-              onTap:() async {final next=!_speaker;await widget.session.setSpeaker(next);
-                if(mounted)setState(()=>_speaker=next);}),
+              if (!_callFailed)
+                _CallControl(
+                  label:
+                      _audioRouteLabel ?? (_speaker ? 'Speaker' : 'Earpiece'),
+                  icon: _routeIcon(
+                    _audioRouteKind ?? (_speaker ? 'speaker' : 'earpiece'),
+                  ),
+                  selected: _speaker,
+                  onTap: () => unawaited(_chooseAudioRoute()),
+                ),
             if (!_callFailed) _CallControl(label:_muted?'Unmute':'Mute',
               icon:_muted?Icons.mic_off:Icons.mic,selected:_muted,
               onTap:() async {final next=!_muted;await widget.session.mute(next);

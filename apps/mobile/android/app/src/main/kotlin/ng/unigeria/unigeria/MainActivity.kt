@@ -12,6 +12,7 @@ import android.net.Uri
 import android.view.WindowManager
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioDeviceInfo
 import android.media.AudioTrack
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -247,6 +248,13 @@ class MainActivity : FlutterActivity() {
                     result.success(setSpeakerRoute(enabled))
                 }
 
+                "routes" -> result.success(availableCallRoutes())
+
+                "route" -> {
+                    val id = call.argument<String>("id")
+                    result.success(id != null && selectCallRoute(id))
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -299,13 +307,94 @@ class MainActivity : FlutterActivity() {
         return true
     }
 
+    // Route names are local UI labels; never return a Bluetooth address, pairing
+    // identifier or system device metadata to the agent/Gateway.
+    private fun callRouteKind(device: AudioDeviceInfo): String? = when (device.type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "speaker"
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "earpiece"
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET -> "bluetooth"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired"
+        AudioDeviceInfo.TYPE_USB_HEADSET -> "usb"
+        else -> null
+    }
+
+    private fun availableCallRoutes(): List<Map<String, Any>> {
+        val manager = getSystemService(AUDIO_SERVICE) as AudioManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val currentId = manager.communicationDevice?.id
+                manager.availableCommunicationDevices.mapNotNull { device ->
+                    val kind = callRouteKind(device) ?: return@mapNotNull null
+                    val generic = when (kind) {
+                        "speaker" -> "Speaker"
+                        "earpiece" -> "Earpiece"
+                        "bluetooth" -> "Bluetooth"
+                        "wired" -> "Wired headset"
+                        else -> "USB headset"
+                    }
+                    val product = device.productName.toString().trim().take(48)
+                    val label = if (kind == "bluetooth" && product.isNotEmpty()) product else generic
+                    mapOf<String, Any>(
+                        "id" to "device:${device.id}", "kind" to kind,
+                        "label" to label, "selected" to (device.id == currentId),
+                    )
+                }
+            } else {
+                // The pre-Android-12 APIs cannot reliably switch between
+                // multiple Bluetooth communication endpoints by device ID.
+                listOf(
+                    mapOf("id" to "legacy:speaker", "kind" to "speaker",
+                        "label" to "Speaker", "selected" to manager.isSpeakerphoneOn),
+                    mapOf("id" to "legacy:earpiece", "kind" to "earpiece",
+                        "label" to "Earpiece", "selected" to !manager.isSpeakerphoneOn),
+                )
+            }
+        } catch (_: SecurityException) {
+            emptyList()
+        } catch (_: RuntimeException) {
+            emptyList()
+        }
+    }
+
+    private fun selectCallRoute(id: String): Boolean {
+        if (id.length > 40) return false
+        if (id == "legacy:speaker" || id == "legacy:earpiece") {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return false
+            return setSpeakerRoute(id == "legacy:speaker")
+        }
+        if (!id.startsWith("device:") || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val deviceId = id.removePrefix("device:").toIntOrNull() ?: return false
+        val manager = getSystemService(AUDIO_SERVICE) as AudioManager
+        return try {
+            manager.mode = AudioManager.MODE_IN_COMMUNICATION
+            val device = manager.availableCommunicationDevices.firstOrNull {
+                it.id == deviceId && callRouteKind(it) != null
+            } ?: return false
+            manager.setCommunicationDevice(device)
+        } catch (_: SecurityException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun setSpeakerRoute(enabled: Boolean): Boolean {
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         return try {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            audioManager.isSpeakerphoneOn = enabled
-            true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val type = if (enabled) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                    else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                val device = audioManager.availableCommunicationDevices
+                    .firstOrNull { it.type == type } ?: return false
+                audioManager.setCommunicationDevice(device)
+            } else {
+                audioManager.isSpeakerphoneOn = enabled
+                true
+            }
+        } catch (_: SecurityException) {
+            false
         } catch (_: RuntimeException) {
             false
         }
@@ -394,7 +483,11 @@ class MainActivity : FlutterActivity() {
     private fun restoreAudioRoute() {
         @Suppress("DEPRECATION")
         (getSystemService(AUDIO_SERVICE) as AudioManager).apply {
-            isSpeakerphoneOn = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                clearCommunicationDevice()
+            } else {
+                isSpeakerphoneOn = false
+            }
             mode = AudioManager.MODE_NORMAL
         }
     }
