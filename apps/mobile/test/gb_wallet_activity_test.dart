@@ -499,9 +499,13 @@ void main() {
         find.byKey(const ValueKey('activity-toggle-more-filters')),
       );
       await tester.pumpAndSettle();
+      final beforeDraft = fake.requests.length;
       await choose('activity-direction-outgoing');
-      expect(fake.filters.last.direction, 'outgoing');
       await choose('activity-history-30');
+      expect(fake.requests.length, beforeDraft,
+          reason: 'Draft filter taps cannot refetch activity');
+      await tester.tap(find.text('Show transactions'));
+      await tester.pumpAndSettle();
       expect(fake.filters.last.days, '30');
       expect(fake.filters.last.purpose, 'funding');
       expect(fake.filters.last.status, 'reversed');
@@ -538,6 +542,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
       await tester.pumpAndSettle();
       expect(fake.filters.last.reference, 'refer_42');
+      await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+      await tester.pumpAndSettle();
       await tester.enterText(input, "evil' OR 1=1");
       await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
       await tester.pumpAndSettle();
