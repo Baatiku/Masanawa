@@ -544,7 +544,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                           setState(() {
                             _network = value;
                             _manualNetwork = true;
-                            _validity = GbDataValidityPeriod.daily;
+                            if (!bundles.any((b) => gbBundleMatchesSelection(b,
+                                network: value, period: _validity))) {
+                              _validity = GbDataValidityPeriod.values.firstWhere(
+                                (period) => bundles.any((b) => gbBundleMatchesSelection(b,
+                                  network: value, period: period)),
+                                orElse: () => GbDataValidityPeriod.daily);
+                            }
                             _bundleId = null;
                             _clearQuote();
                           });
@@ -625,6 +631,24 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 );
               },
             ),
+            if (owner != null && session is SessionSignedIn &&
+                (session.user.contactPhone ?? '').isNotEmpty &&
+                _phone.text != session.user.contactPhone)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton.icon(
+                  key: const ValueKey('data-use-my-number'),
+                  onPressed: () => setState(() {
+                    _phone.text = session.user.contactPhone!;
+                    if (!_manualNetwork)
+                      _network = guessGbNetworkForNigerianPhone(_phone.text);
+                    _bundleId = null;
+                    _clearQuote();
+                  }),
+                  icon: const Icon(Icons.person_outline, size: 18),
+                  label: const Text('Use my number'),
+                ),
+              ),
             if (_manualNetwork && owner != null)
               Align(
                 alignment: AlignmentDirectional.centerEnd,
@@ -772,6 +796,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                           key: ValueKey('verified-data-bundle-${bundle.id}'),
                           bundle: bundle,
                           selected: _bundleId == bundle.id,
+                          quoting: _bundleId == bundle.id && _loadingQuote,
                           onSelect:
                               currentBundles == null ||
                                   catalogue?.hasError == true
@@ -925,11 +950,13 @@ class _SelectableDataBundle extends StatelessWidget {
     super.key,
     required this.bundle,
     required this.selected,
+    this.quoting = false,
     required this.onSelect,
   });
 
   final GbVerifiedBundle bundle;
   final bool selected;
+  final bool quoting;
   final VoidCallback? onSelect;
 
   @override
@@ -990,13 +1017,20 @@ class _SelectableDataBundle extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 Text(
-                  '${groupedMb(bundle.costMb)} MB',
+                  'Debit: ${groupedMb(bundle.costMb)} MB',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: colors.brandStrong,
                   ),
                 ),
+                if (bundle.extrasLabel.isNotEmpty)
+                  Text(bundle.extrasLabel,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall),
+                if (quoting)
+                  const LinearProgressIndicator(minHeight: 2),
               ],
             ),
           ),
