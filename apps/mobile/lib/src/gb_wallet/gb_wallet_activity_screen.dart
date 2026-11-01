@@ -383,7 +383,7 @@ class _GbWalletActivityScreenState
       _direction = 'all',
       _period = 'all',
       _reference = '';
-  bool _badReference = false, _exporting = false;
+  bool _exporting = false;
   final _referenceInput = TextEditingController();
 
   GbActivityFilters get _facets => (
@@ -410,24 +410,10 @@ class _GbWalletActivityScreenState
       _direction = 'all';
       _period = 'all';
       _reference = '';
-      _badReference = false;
       _referenceInput.clear();
     });
   }
 
-  void _submitReference() {
-    final text = _referenceInput.text.trim();
-    if (!validGbActivityReference(text)) {
-      setState(() => _badReference = true);
-      return;
-    }
-    if (text == _reference) return;
-    setState(() {
-      _reset();
-      _badReference = false;
-      _reference = text;
-    });
-  }
 
   void _reset() {
     ++_request;
@@ -618,101 +604,103 @@ class _GbWalletActivityScreenState
     ],
   );
 
-  Future<void> _openFilterSheet() => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (sheetContext, refreshSheet) {
-        void change(VoidCallback update) {
-          setState(() {
-            _reset();
-            update();
-          });
-          refreshSheet(() {});
-        }
-
-        return GbWalletReviewSheet(
-          title: 'Filter transactions',
-          onClose: () => Navigator.pop(sheetContext),
-          children: [
-            _sheetChoices('Balance', _unit, const {
-              'all': 'All',
-              'MB': 'Data MB',
-              'NGN': 'Naira NGN',
-            }, (v) => change(() => _unit = v)),
-            const SizedBox(height: 16),
-            _sheetChoices('Direction', _direction, const {
-              'all': 'In & out',
-              'incoming': 'Received',
-              'outgoing': 'Spent',
-            }, (v) => change(() => _direction = v)),
-            const SizedBox(height: 16),
-            _sheetChoices('History period', _period, const {
-              'all': 'All dates',
-              '7': 'Last 7 days',
-              '30': 'Last 30 days',
-            }, (v) => change(() => _period = v)),
-            const SizedBox(height: 16),
-            TextField(
-              key: const ValueKey('activity-reference-input'),
-              controller: _referenceInput,
-              maxLength: 160,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                labelText: 'Exact operation reference',
-                hintText: 'Paste original reference',
-                errorText: _badReference
-                    ? 'Use letters, numbers, _, ., : or -'
-                    : null,
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: IconButton.filledTonal(
-                  key: const ValueKey('activity-reference-submit'),
-                  tooltip: 'Find exact operation',
-                  onPressed: () {
-                    _submitReference();
-                    refreshSheet(() {});
+  Future<void> _openFilterSheet() async {
+    var unit = _unit, direction = _direction, period = _period;
+    var draftBadReference = false;
+    _referenceInput.text = _reference;
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (sheetContext, update) {
+            void apply() {
+              final reference = _referenceInput.text.trim();
+              if (!validGbActivityReference(reference)) {
+                update(() => draftBadReference = true);
+                return;
+              }
+              if (mounted && (unit != _unit || direction != _direction ||
+                  period != _period || reference != _reference)) {
+                setState(() {
+                  _reset();
+                  _unit = unit;
+                  _direction = direction;
+                  _period = period;
+                  _reference = reference;
+                            });
+              }
+              Navigator.pop(sheetContext);
+            }
+            return GbWalletReviewSheet(
+              title: 'Filter transactions',
+              onClose: () => Navigator.pop(sheetContext),
+              children: [
+                _sheetChoices('Balance', unit, const {
+                  'all': 'All', 'MB': 'Data MB', 'NGN': 'Naira NGN',
+                }, (v) => update(() => unit = v)),
+                const SizedBox(height: 16),
+                _sheetChoices('Direction', direction, const {
+                  'all': 'In & out',
+                  'incoming': 'Received', 'outgoing': 'Spent',
+                }, (v) => update(() => direction = v)),
+                const SizedBox(height: 16),
+                _sheetChoices('History period', period, const {
+                  'all': 'All dates', '7': 'Last 7 days', '30': 'Last 30 days',
+                }, (v) => update(() => period = v)),
+                const SizedBox(height: 16),
+                TextField(
+                  key: const ValueKey('activity-reference-input'),
+                  controller: _referenceInput,
+                  maxLength: 160,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => apply(),
+                  onChanged: (_) {
+                    if (draftBadReference) update(() => draftBadReference = false);
                   },
-                  icon: const Icon(Icons.search_rounded),
+                  decoration: InputDecoration(
+                    labelText: 'Exact operation reference',
+                    hintText: 'Paste original reference',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: IconButton.filledTonal(
+                      key: const ValueKey('activity-reference-submit'),
+                      tooltip: 'Find exact operation',
+                      onPressed: apply,
+                      icon: const Icon(Icons.search_rounded),
+                    ),
+                  ),
                 ),
+                if (draftBadReference)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text('Use letters, numbers, _, ., : or -'),
+                  ),
+                TextButton.icon(
+                  onPressed: () => update(() {
+                    unit = 'all';
+                    direction = 'all';
+                    period = 'all';
+                    _referenceInput.clear();
+                    draftBadReference = false;
+                  }),
+                  icon: const Icon(Icons.filter_alt_off_rounded),
+                  label: const Text('Reset draft filters'),
+                ),
+              ],
+              action: FilledButton(
+                onPressed: apply,
+                child: const Text('Show transactions'),
               ),
-              onChanged: (_) {
-                if (_badReference) {
-                  setState(() => _badReference = false);
-                  refreshSheet(() {});
-                }
-              },
-              onSubmitted: (_) {
-                _submitReference();
-                refreshSheet(() {});
-              },
-            ),
-            if (_filtered)
-              TextButton.icon(
-                onPressed: () {
-                  _clearFilters();
-                  refreshSheet(() {});
-                },
-                icon: const Icon(Icons.filter_alt_off_rounded),
-                label: const Text('Clear filters'),
-              ),
-          ],
-          action: FilledButton(
-            onPressed: () {
-              if (_referenceInput.text.trim() != _reference) _submitReference();
-              refreshSheet(() {});
-              if (!_badReference) Navigator.pop(sheetContext);
-            },
-            child: const Text('Show transactions'),
-          ),
-        );
-      },
-    ),
-  );
+            );
+          },
+        ),
+      );
+    } finally {
+      if (mounted) _referenceInput.text = _reference;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -726,7 +714,6 @@ class _GbWalletActivityScreenState
       _direction = 'all';
       _period = 'all';
       _reference = '';
-      _badReference = false;
       _referenceInput.clear();
     }
     final request = owner == null
@@ -780,7 +767,7 @@ class _GbWalletActivityScreenState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.ios_share_rounded),
-            label: const Text('Export'),
+            label: Text(_exporting ? 'Preparing…' : 'Export'),
           ),
         ],
       ),
@@ -823,13 +810,15 @@ class _GbWalletActivityScreenState
                   key: const PageStorageKey('gb-wallet-activity-all'),
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            LayoutBuilder(
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _WalletFacetHeader(
+                        height: MediaQuery.sizeOf(context).width < 332 ||
+                            MediaQuery.textScalerOf(context).scale(1) > 1.4
+                            ? 152 : 80,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: LayoutBuilder(
                               builder: (context, size) {
                                 final category = _HistoryFilter(
                                   value: _purpose,
@@ -853,7 +842,7 @@ class _GbWalletActivityScreenState
                                   label: 'Status',
                                   choices: const {
                                     'all': 'All statuses',
-                                    'completed': 'Successful',
+                                    'completed': 'Posted to wallet',
                                     'reversed': 'Reversed',
                                   },
                                   onChanged: (v) => setState(() {
@@ -882,6 +871,16 @@ class _GbWalletActivityScreenState
                                       );
                               },
                             ),
+                        ),
+                      ),
+                    ),
+
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                             const SizedBox(height: 8),
                             Align(
                               alignment: AlignmentDirectional.centerStart,
@@ -901,31 +900,32 @@ class _GbWalletActivityScreenState
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
+                                  if (_purpose != 'all')
+                                    InputChip(label: Text('Category: $_purpose'),
+                                      onDeleted: () => setState(() { _reset(); _purpose = 'all'; })),
+                                  if (_status != 'all')
+                                    InputChip(label: Text('Status: $_status'),
+                                      onDeleted: () => setState(() { _reset(); _status = 'all'; })),
                                   if (_unit != 'all')
-                                    Chip(label: Text('Balance: $_unit')),
+                                    InputChip(label: Text('Balance: $_unit'),
+                                      onDeleted: () => setState(() { _reset(); _unit = 'all'; })),
                                   if (_direction != 'all')
-                                    Chip(
-                                      label: Text(
-                                        _direction == 'incoming'
-                                            ? 'Received'
-                                            : 'Spent',
-                                      ),
+                                    InputChip(
+                                      label: Text(_direction == 'incoming' ? 'Received' : 'Spent'),
+                                      onDeleted: () => setState(() { _reset(); _direction = 'all'; }),
                                     ),
                                   if (_period != 'all')
-                                    Chip(
-                                      label: Text(
-                                        _period == '7'
-                                            ? 'Last 7 days'
-                                            : 'Last 30 days',
-                                      ),
+                                    InputChip(
+                                      label: Text(_period == '7' ? 'Last 7 days' : 'Last 30 days'),
+                                      onDeleted: () => setState(() { _reset(); _period = 'all'; }),
                                     ),
                                   if (_reference.isNotEmpty)
-                                    Chip(
-                                      label: Text(
-                                        'Ref: $_reference',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                    InputChip(
+                                      label: Text('Ref: $_reference', maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                      onDeleted: () => setState(() {
+                                        _reset(); _reference = ''; _referenceInput.clear();
+                                      }),
                                     ),
                                   TextButton.icon(
                                     onPressed: _clearFilters,
@@ -1049,6 +1049,11 @@ class _GbWalletActivityScreenState
                               const LinearProgressIndicator(
                                 semanticsLabel: 'Loading more wallet activity',
                               ),
+                            if (!_loadingMore && !_pageError && cursor == null &&
+                                 initial != null && byId.isNotEmpty)
+                               Text('You have reached the end of your activity.',
+                                 textAlign: TextAlign.center,
+                                 style: Theme.of(context).textTheme.bodySmall),
                             if (!_loadingMore &&
                                 !_pageError &&
                                 cursor != null &&
@@ -1068,6 +1073,23 @@ class _GbWalletActivityScreenState
             ),
     );
   }
+}
+
+class _WalletFacetHeader extends SliverPersistentHeaderDelegate {
+  const _WalletFacetHeader({required this.height, required this.child});
+  final double height;
+  final Widget child;
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      Material(color: Theme.of(context).scaffoldBackgroundColor,
+        child: SizedBox.expand(child: child));
+  @override
+  bool shouldRebuild(covariant _WalletFacetHeader oldDelegate) =>
+      height != oldDelegate.height || child != oldDelegate.child;
 }
 
 class _HistoryFilter extends StatelessWidget {

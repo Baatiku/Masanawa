@@ -101,9 +101,19 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
           else ...[
             Center(
               child: Icon(
-                item.amount > 0
-                    ? Icons.south_west_rounded
-                    : Icons.north_east_rounded,
+                switch (item.kind) {
+                  'redeem' => Icons.sim_card_outlined,
+                  'ngn_exchange' || 'exchange' => Icons.swap_horiz_rounded,
+                  'send' || 'request_pay' => Icons.send_outlined,
+                  'tip' => Icons.favorite_outline_rounded,
+                  'reply' => Icons.chat_bubble_outline_rounded,
+                  'connected_call' => Icons.call_outlined,
+                  'deposit' || 'verified_deposit' => Icons.account_balance_outlined,
+                  'reversal' || 'deposit_reversal' => Icons.undo_rounded,
+                  _ => item.amount > 0
+                      ? Icons.south_west_rounded
+                      : Icons.north_east_rounded,
+                },
                 size: 52,
                 color: colors.brandStrong,
               ),
@@ -156,6 +166,11 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                           ? 'Reversed journal entry'
                           : 'Posted journal entry',
                     ),
+                    if (item.kind == 'redeem')
+                      const GbWalletReviewLine(
+                        'Delivery',
+                        'Provider delivery is separate from this wallet entry',
+                      ),
                     GbWalletReviewLine(
                       'Ledger',
                       item.unit == 'MB'
@@ -169,6 +184,11 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                         'Purchased data',
                         '${groupActivityAmount(item.details!.exchangedMb!)} MB',
                       ),
+                    if (item.details?.reversesOperationId != null)
+                      GbWalletReviewLine(
+                        'Reversal of',
+                        item.details!.reversesOperationId!,
+                      ),
                     if (item.details?.exchangeKobo != null)
                       GbWalletReviewLine(
                         'NGN exchanged',
@@ -180,6 +200,24 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                title: const Text('Operation reference'),
+                subtitle: SelectableText(item.operationId),
+                trailing: IconButton(
+                  tooltip: 'Copy operation reference',
+                  icon: const Icon(Icons.copy_outlined),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: item.operationId));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Reference copied')),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ),
             Card(
               child: ExpansionTile(
                 title: const Text('Technical details'),
@@ -211,21 +249,6 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                       'Reverses operation',
                       item.details!.reversesOperationId!,
                     ),
-                  const Text('Original operation reference'),
-                  SelectableText(item.operationId),
-                  TextButton.icon(
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: item.operationId),
-                      );
-                      if (context.mounted)
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Reference copied')),
-                        );
-                    },
-                    icon: const Icon(Icons.copy_outlined),
-                    label: const Text('Copy reference'),
-                  ),
                 ],
               ),
             ),
@@ -234,8 +257,8 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'This is an authorized posted ledger entry. '
-                'It is not proof of external bank settlement or data delivery.',
+                'Wallet posting verified; external bank settlement or '
+                'mobile-network delivery must be checked separately.',
               ),
             ),
             TextButton.icon(

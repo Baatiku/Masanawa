@@ -449,6 +449,8 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('activity-unit-NGN')));
       await tester.pump();
+      await tester.tap(find.text('Show transactions'));
+      await tester.pump();
       fake.pending!.complete(GbActivityPage([item('mb:stale', 999)], null));
       await tester.pumpAndSettle();
       expect(fake.units, contains('NGN'));
@@ -499,9 +501,13 @@ void main() {
         find.byKey(const ValueKey('activity-toggle-more-filters')),
       );
       await tester.pumpAndSettle();
+      final beforeDraft = fake.requests.length;
       await choose('activity-direction-outgoing');
-      expect(fake.filters.last.direction, 'outgoing');
       await choose('activity-history-30');
+      expect(fake.requests.length, beforeDraft,
+          reason: 'Draft filter taps cannot refetch activity');
+      await tester.tap(find.text('Show transactions'));
+      await tester.pumpAndSettle();
       expect(fake.filters.last.days, '30');
       expect(fake.filters.last.purpose, 'funding');
       expect(fake.filters.last.status, 'reversed');
@@ -514,6 +520,31 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('filter draft closes without changing live Activity', (tester) async {
+    final fake = _Activity()
+      ..responses[null] = GbActivityPage([item('mb:draft', -200)], null);
+    await mount(tester, fake);
+    final initialRequests = fake.requests.length;
+    await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('activity-direction-outgoing')));
+    await tester.pumpAndSettle();
+    expect(fake.requests.length, initialRequests);
+    await tester.tap(find.byTooltip('Close review'));
+    await tester.pumpAndSettle();
+    expect(fake.requests.length, initialRequests);
+    expect(fake.filters.last.direction, 'all');
+    await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('activity-direction-outgoing')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show transactions'));
+    await tester.pumpAndSettle();
+    expect(fake.filters.last.direction, 'outgoing');
+    expect(fake.requests.length, greaterThan(initialRequests));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'exact reference Search is explicit and invalid input never makes a read',
@@ -538,8 +569,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
       await tester.pumpAndSettle();
       expect(fake.filters.last.reference, 'refer_42');
+      await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+      await tester.pumpAndSettle();
       await tester.enterText(input, "evil' OR 1=1");
-      await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
+      // Keyboard covers the trailing icon in a compact modal; Search is the
+      // accessible submission path and must validate without refetching.
+      await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
       expect(fake.filters.last.reference, 'refer_42');
       expect(find.textContaining('Use letters, numbers'), findsOneWidget);
@@ -783,14 +818,14 @@ void main() {
       await tester.tap(find.text('Technical details'));
       await tester.pumpAndSettle();
       expect(find.text('original_ngn:fund_1'), findsOneWidget);
-      expect(find.text('Copy reference'), findsOneWidget);
-      await tester.dragUntilVisible(
-        find.textContaining('not proof of external bank settlement'),
-        find.byType(ListView),
-        const Offset(0, -150),
+      expect(find.byTooltip('Copy operation reference'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.textContaining('external bank settlement'),
+        160,
+        scrollable: find.byType(Scrollable).first,
       );
       expect(
-        find.textContaining('not proof of external bank settlement'),
+        find.textContaining('external bank settlement'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -822,7 +857,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('View / share receipt'));
+      await tester.scrollUntilVisible(
+        find.text('View / share receipt'), 160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('View / share receipt'));
       await tester.pump();
@@ -880,7 +918,10 @@ void main() {
         160,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.ensureVisible(find.text('View / share receipt'));
+      await tester.scrollUntilVisible(
+        find.text('View / share receipt'), 160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('View / share receipt'));
       await tester.pumpAndSettle();
@@ -921,7 +962,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       fake.fail = true;
-      await tester.ensureVisible(find.text('View / share receipt'));
+      await tester.scrollUntilVisible(
+        find.text('View / share receipt'), 160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('View / share receipt'));
       await tester.pumpAndSettle();

@@ -256,7 +256,7 @@ void main() {
       container.invalidate(ngnWalletBalanceProvider(owner));
       container.invalidate(ngnBankAccountProvider(owner));
       await tester.pumpAndSettle();
-      expect(find.text('₦3,500'), findsOneWidget);
+      expect(find.text('Last verified: ₦3,500'), findsOneWidget);
       expect(find.text('1234567890'), findsOneWidget);
       expect(find.textContaining('Check your connection'), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -427,8 +427,8 @@ void main() {
       expect(find.text('2 GB'), findsNothing);
       await tester.enterText(find.byType(TextField), '08031234567');
       await tester.pump();
-      await tester.ensureVisible(find.text('Monthly'));
-      await tester.tap(find.text('Monthly'));
+      await tester.ensureVisible(find.textContaining('Monthly'));
+      await tester.tap(find.textContaining('Monthly'));
       await tester.pump();
       expect(find.text('2 GB'), findsOneWidget);
       expect(find.textContaining('2,000 MB'), findsOneWidget);
@@ -576,8 +576,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('MTN').last);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Monthly'));
-    await tester.tap(find.text('Monthly'));
+    await tester.ensureVisible(find.textContaining('Monthly'));
+    await tester.tap(find.textContaining('Monthly'));
     await tester.pumpAndSettle();
     expect(find.text('2 GB'), findsOneWidget);
     await tester.ensureVisible(find.text('2 GB'));
@@ -633,8 +633,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Airtel').last);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Monthly'));
-    await tester.tap(find.text('Monthly'));
+    await tester.ensureVisible(find.textContaining('Monthly'));
+    await tester.tap(find.textContaining('Monthly'));
     await tester.pump();
     expect(find.text('3 GB'), findsOneWidget);
     expect(find.text('2 GB'), findsNothing);

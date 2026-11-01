@@ -105,7 +105,7 @@ class GbWalletBalanceCard extends StatelessWidget {
               Row(children: [
                 Expanded(child: Semantics(label: 'Data balance', child: Text(
                   '${decimalGb(balance!.availableMb)} GB',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  softWrap: true,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800, color: colors.textPrimary),
                 ))),
@@ -123,6 +123,15 @@ class GbWalletBalanceCard extends StatelessWidget {
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colors.textMuted,
                 ),
+              ),
+            ],
+            if (!showSendable) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Redeemable purchased data: '
+                '${groupedMb(balance!.frozen ? 0 : balance!.purchasedAvailableMb)} MB',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.textPrimary, fontWeight: FontWeight.w600),
               ),
             ],
             if (showSendable) ...[

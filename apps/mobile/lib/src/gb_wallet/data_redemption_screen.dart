@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,17 +40,20 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   String? _bundleId;
   GbReadOnlyQuote? _quote;
   String? _error;
+  String? _phoneError;
   CancelToken? _cancel;
   bool _loadingQuote = false;
   bool _purchaseLocked = false;
   bool _showingResult = false;
   bool _reviewOpen = false;
+  Timer? _redeemQuoteTimer;
   int _generation = 0;
 
   @override
   void dispose() {
     _generation++;
     _cancel?.cancel();
+    _redeemQuoteTimer?.cancel();
     _phone.dispose();
     super.dispose();
   }
@@ -67,6 +72,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     setState(() {
       _clearQuote();
       _phone.clear();
+      _phoneError = null;
       _network = null;
       _manualNetwork = false;
       _validity = GbDataValidityPeriod.daily;
@@ -88,16 +94,15 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     if (!mounted || !_isOwner(owner)) return;
     final value = data?.text?.trim();
     if (value == null || normalizeNigerianDataPhone(value) == null) {
-      setState(
-        () =>
-            _error = 'Copy a valid Nigerian phone number, then paste it here.',
-      );
+      setState(() =>
+        _phoneError = 'Copy a valid Nigerian phone number, then paste it here.');
       return;
     }
     setState(() {
       _clearQuote();
       _bundleId = null;
       _phone.text = value;
+      _phoneError = null;
       if (!_manualNetwork) _network = guessGbNetworkForNigerianPhone(value);
     });
   }
@@ -193,6 +198,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   ) async {
     if (_reviewOpen) return;
     setState(() => _reviewOpen = true);
+    _redeemQuoteTimer?.cancel();
     var submitting = false;
     try {
       await showModalBottomSheet<void>(
@@ -206,7 +212,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (sheetContext) => StatefulBuilder(
-          builder: (sheetContext, updateSheet) => Consumer(
+          builder: (sheetContext, updateSheet) {
+            final delay = quote.expiresAt.difference(DateTime.now().toUtc());
+            _redeemQuoteTimer ??= Timer(
+              delay.isNegative ? Duration.zero : delay + const Duration(milliseconds: 50),
+              () { if (sheetContext.mounted) updateSheet(() {}); },
+            );
+            return Consumer(
             builder: (context, sheetRef, _) {
               final session = sheetRef.watch(sessionProvider);
               if (session is! SessionSignedIn ||
@@ -341,10 +353,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 ),
               );
             },
-          ),
+          );
+          },
         ),
       );
     } finally {
+      _redeemQuoteTimer?.cancel();
+      _redeemQuoteTimer = null;
       if (mounted) setState(() => _reviewOpen = false);
     }
   }
@@ -530,7 +545,17 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                           setState(() {
                             _network = value;
                             _manualNetwork = true;
-                            _validity = GbDataValidityPeriod.daily;
+                            if (!bundles.any((b) => gbBundleMatchesSelection(b,
+                                network: value, period: _validity))) {
+                              _validity = const [
+                                GbDataValidityPeriod.daily,
+                                GbDataValidityPeriod.weekly,
+                                GbDataValidityPeriod.monthly,
+                              ].firstWhere(
+                                (period) => bundles.any((b) => gbBundleMatchesSelection(b,
+                                  network: value, period: period)),
+                                orElse: () => GbDataValidityPeriod.daily);
+                            }
                             _bundleId = null;
                             _clearQuote();
                           });
@@ -541,6 +566,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   enabled: owner != null,
                   keyboardType: TextInputType.phone,
                   onChanged: (value) => setState(() {
+                    _phoneError = null;
                     _clearQuote();
                     _bundleId = null;
                     // Number portability means a deliberate operator choice must
@@ -561,6 +587,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                             tooltip: 'Clear mobile number',
                             onPressed: () => setState(() {
                               _phone.clear();
+                              _phoneError = null;
                               _clearQuote();
                               _bundleId = null;
                               if (!_manualNetwork) _network = null;
@@ -587,9 +614,10 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                       ),
                       borderRadius: BorderRadius.circular(13),
                     ),
-                    errorText: phone.isNotEmpty && !validPhone
-                        ? 'Enter a valid Nigerian mobile number'
-                        : null,
+                    errorText: _phoneError ??
+                        (phone.isNotEmpty && !validPhone
+                            ? 'Enter a valid Nigerian mobile number'
+                            : null),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(13),
                     ),
@@ -611,6 +639,39 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 );
               },
             ),
+            if (owner != null && session is SessionSignedIn &&
+                (session.user.contactPhone ?? '').isNotEmpty &&
+                _phone.text != session.user.contactPhone)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton.icon(
+                  key: const ValueKey('data-use-my-number'),
+                  onPressed: () => setState(() {
+                    _phone.text = session.user.contactPhone!;
+                    if (!_manualNetwork)
+                      _network = guessGbNetworkForNigerianPhone(_phone.text);
+                    _bundleId = null;
+                    _clearQuote();
+                  }),
+                  icon: const Icon(Icons.person_outline, size: 18),
+                  label: const Text('Use my number'),
+                ),
+              ),
+            if (_manualNetwork && owner != null)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton.icon(
+                  key: const ValueKey('data-detect-network-again'),
+                  onPressed: () => setState(() {
+                    _manualNetwork = false;
+                    _network = guessGbNetworkForNigerianPhone(_phone.text);
+                    _bundleId = null;
+                    _clearQuote();
+                  }),
+                  icon: const Icon(Icons.autorenew_rounded, size: 18),
+                  label: const Text('Detect network again'),
+                ),
+              ),
             if (validPhone && _network != null && !_manualNetwork)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -662,6 +723,18 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             ),
             GbDataValidityChoices(
               period: _validity,
+              counts: currentBundles == null || _network == null
+                ? const {}
+                : {
+                    for (final p in const [
+                      GbDataValidityPeriod.daily,
+                      GbDataValidityPeriod.weekly,
+                      GbDataValidityPeriod.monthly,
+                    ])
+                      p: currentBundles.where((b) =>
+                        b.network == _network &&
+                        gbDataValidityPeriod(b.validityDays) == p).length,
+                  },
               enabled: owner != null && _network != null,
               onChanged: (choice) {
                 if (choice == _validity) return;
@@ -743,6 +816,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                           key: ValueKey('verified-data-bundle-${bundle.id}'),
                           bundle: bundle,
                           selected: _bundleId == bundle.id,
+                          quoting: _bundleId == bundle.id && _loadingQuote,
                           onSelect:
                               currentBundles == null ||
                                   catalogue?.hasError == true
@@ -802,10 +876,33 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               ),
           ],
           if (_quote != null && !_purchaseLocked && !_showingResult)
-            TextButton.icon(
-              onPressed: () => setState(_clearQuote),
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text('Back to plans'),
+            Card(
+              key: const ValueKey('data-selected-review-summary'),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Selected: ${_quote!.bundle.allowanceLabel}',
+                      style: theme.textTheme.titleSmall),
+                    Text('${_quote!.bundle.network} · ${_quote!.recipientPhone} · '
+                      '${groupedMb(_quote!.bundle.costMb)} MB debit'),
+                    Wrap(spacing: 8, children: [
+                      TextButton.icon(
+                        onPressed: () => setState(_clearQuote),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Edit choice'),
+                      ),
+                      if (owner != null)
+                        FilledButton.tonalIcon(
+                          onPressed: () => _showPurchaseReview(owner, _quote!),
+                          icon: const Icon(Icons.fact_check_outlined),
+                          label: const Text('Reopen review'),
+                        ),
+                    ]),
+                  ],
+                ),
+              ),
             ),
           if (_showingResult && !_purchaseLocked)
             Row(
@@ -873,11 +970,13 @@ class _SelectableDataBundle extends StatelessWidget {
     super.key,
     required this.bundle,
     required this.selected,
+    this.quoting = false,
     required this.onSelect,
   });
 
   final GbVerifiedBundle bundle;
   final bool selected;
+  final bool quoting;
   final VoidCallback? onSelect;
 
   @override
@@ -938,13 +1037,20 @@ class _SelectableDataBundle extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 Text(
-                  '${groupedMb(bundle.costMb)} MB',
+                  'Debit: ${groupedMb(bundle.costMb)} MB',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: colors.brandStrong,
                   ),
                 ),
+                if (bundle.extrasLabel?.isNotEmpty == true)
+                  Text(bundle.extrasLabel!,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall),
+                if (quoting)
+                  const LinearProgressIndicator(minHeight: 2),
               ],
             ),
           ),

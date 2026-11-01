@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +42,7 @@ class _RechargePackagesScreenState
   bool _canReplay = false;
   NgnExchangeReview? _review;
   CancelToken? _cancel;
+  Timer? _buyReviewExpiryTimer;
   int _generation = 0;
   bool _current(GbWalletOwner owner, int generation) {
     final s = ref.read(sessionProvider);
@@ -55,6 +58,7 @@ class _RechargePackagesScreenState
   void dispose() {
     _generation++;
     _cancel?.cancel();
+    _buyReviewExpiryTimer?.cancel();
     _custom.dispose();
     super.dispose();
   }
@@ -112,6 +116,8 @@ class _RechargePackagesScreenState
       setState(() {
         _version = raw['version'] as String;
         _packages = packages;
+        if (_custom.text.isEmpty && _selected != null &&
+            !packages.any((p) => p.gb == _selected)) _selected = null;
         _enabled = raw['exchangeEnabled'] as bool;
         _loading = false;
       });
@@ -148,6 +154,13 @@ class _RechargePackagesScreenState
         expectedVersion: _version,
       );
       if (!_current(owner, generation)) return;
+      _buyReviewExpiryTimer?.cancel();
+      final expiryDelay = review.expiresAt.difference(DateTime.now().toUtc());
+      _buyReviewExpiryTimer = Timer(
+        expiryDelay.isNegative ? Duration.zero
+          : expiryDelay + const Duration(milliseconds: 50),
+        () { if (mounted && identical(_review, review)) setState(() {}); },
+      );
       setState(() => _review = review);
     } catch (_) {
       if (!_current(owner, generation)) return;
@@ -257,6 +270,7 @@ class _RechargePackagesScreenState
       _generation++;
       _cancel?.cancel();
       _owner = owner;
+      _buyReviewExpiryTimer?.cancel();
       _packages = [];
       _review = null;
       _custom.clear();
@@ -417,6 +431,17 @@ class _RechargePackagesScreenState
                                   ),
                                 ],
                               ),
+                              if (verifiedCash != null && !verifiedCash.frozen &&
+                                  verifiedCash.balanceKobo == 0)
+                                GbWalletInlineNotice(
+                                  message: 'No NGN available to buy Data.',
+                                  actionLabel: 'Fund NGN',
+                                  onAction: () async {
+                                    await context.push('/wallet/fund');
+                                    if (mounted && _owner == owner)
+                                      ref.invalidate(ngnWalletBalanceProvider(owner));
+                                  },
+                                ),
                               const SizedBox(height: 12),
                               if (!_enabled && !_loading)
                                 const GbWalletInlineNotice(
@@ -428,7 +453,8 @@ class _RechargePackagesScreenState
                                   final scale = MediaQuery.textScalerOf(
                                     context,
                                   ).scale(1);
-                                  final columns = scale >= 1.8
+                                  final columns = scale >= 1.8 ||
+                                      _packages.any((p) => formatNgn(p.kobo).length > 13)
                                       ? 2
                                       : scale > 1.3 ||
                                             constraints.maxWidth < 280
@@ -519,8 +545,7 @@ class _RechargePackagesScreenState
                                                   formatNgn(p.kobo),
                                                   maxLines: 2,
                                                   textAlign: TextAlign.center,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                                  softWrap: true,
                                                   style: Theme.of(
                                                     context,
                                                   ).textTheme.labelSmall,
@@ -664,8 +689,12 @@ class _RechargePackagesScreenState
                                 ),
                               if (quoteExpired && !_completed && !_uncertain)
                                 GbWalletInlineNotice(
-                                  message:
-                                      'Quote expired. Go back to packages and review again.',
+                                  message: 'Quote expired. Request a fresh review.',
+                                  actionLabel: 'Requote same size',
+                                  onAction: _busy ? null : () {
+                                    setState(() => _review = null);
+                                    _quote();
+                                  },
                                 ),
                               if (_completed) ...[
                                 const GbWalletInlineNotice(
