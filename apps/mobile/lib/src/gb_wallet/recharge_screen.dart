@@ -442,6 +442,20 @@ class _RechargePackagesScreenState
                                       ref.invalidate(ngnWalletBalanceProvider(owner));
                                   },
                                 ),
+                              if (verifiedCash != null && !verifiedCash.frozen &&
+                                  verifiedCash.balanceKobo > 0 &&
+                                  selectedPackage.isNotEmpty &&
+                                  verifiedCash.balanceKobo < selectedPackage.first.kobo)
+                                GbWalletInlineNotice(
+                                  message: 'Not enough NGN for this package.',
+                                  actionLabel: 'Fund NGN',
+                                  onAction: () async {
+                                    await context.push('/wallet/fund');
+                                    if (mounted && _owner == owner) {
+                                      ref.invalidate(ngnWalletBalanceProvider(owner));
+                                    }
+                                  },
+                                ),
                               const SizedBox(height: 12),
                               if (!_enabled && !_loading)
                                 const GbWalletInlineNotice(
@@ -517,12 +531,16 @@ class _RechargePackagesScreenState
                                         clipBehavior: Clip.antiAlias,
                                         child: InkWell(
                                           key: ValueKey('gb-package-${p.gb}'),
-                                          onTap: _busy || !_enabled
+                                          onTap: _busy || !_enabled || !_storeReady || _uncertain
                                               ? null
-                                              : () => setState(() {
-                                                  _selected = p.gb;
-                                                  _custom.clear();
-                                                }),
+                                              : () {
+                                                  setState(() {
+                                                    _selected = p.gb;
+                                                    _custom.clear();
+                                                  });
+                                                  // Signed quote only: never charges on preset tap.
+                                                  _quote();
+                                                },
                                           child: Padding(
                                             padding: const EdgeInsets.all(4),
                                             child: Column(
@@ -574,7 +592,7 @@ class _RechargePackagesScreenState
                                 ],
                                 decoration: const InputDecoration(
                                   labelText: 'Custom quantity (GB)',
-                                  helperText: '1–2,000 whole GB',
+                                  helperText: '1–2,000 whole GB · exact NGN cost shown at review',
                                 ),
                                 onChanged: (v) => setState(() {
                                   final n = int.tryParse(v);
@@ -596,6 +614,15 @@ class _RechargePackagesScreenState
                                 ),
                               ),
                             ] else ...[
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.swap_horiz_rounded, size: 18),
+                                  const SizedBox(width: 6),
+                                  Text('NGN → purchased MB',
+                                    style: Theme.of(context).textTheme.labelLarge),
+                                ],
+                              ),
                               GbWalletAmountHero(
                                 '${review.sizeGb} GB',
                                 caption: _completed
@@ -719,7 +746,20 @@ class _RechargePackagesScreenState
                               ],
                               ExpansionTile(
                                 title: const Text('Original reference'),
-                                children: [SelectableText(review.operationId)],
+                                children: [
+                                  SelectableText(review.operationId),
+                                  TextButton.icon(
+                                    onPressed: () async {
+                                      await Clipboard.setData(ClipboardData(text: review.operationId));
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Exchange reference copied')));
+                                      }
+                                    },
+                                    icon: const Icon(Icons.copy_outlined),
+                                    label: const Text('Copy exchange reference'),
+                                  ),
+                                ],
                               ),
                               if (!_uncertain && !_completed)
                                 TextButton(
@@ -817,11 +857,17 @@ class _RechargePackagesScreenState
                                           : Icons.check_circle_outline_rounded,
                                     ),
                                     label: Text(
-                                      review == null
-                                          ? 'Continue to review'
-                                          : _uncertain
-                                          ? 'Check original exchange'
-                                          : 'Confirm exchange',
+                                      _busy
+                                          ? review == null
+                                              ? 'Verifying package…'
+                                              : _uncertain
+                                                  ? 'Checking original…'
+                                                  : 'Exchanging NGN…'
+                                          : review == null
+                                              ? 'Continue to review'
+                                              : _uncertain
+                                                  ? 'Check original exchange'
+                                                  : 'Confirm exchange',
                                     ),
                                   ),
                                 ),

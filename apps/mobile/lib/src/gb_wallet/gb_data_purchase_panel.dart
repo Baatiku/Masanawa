@@ -494,6 +494,14 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
                     ),
                   ),
                   const SizedBox(height: 6),
+                  Icon(
+                    _status == 'delivered'
+                      ? Icons.check_circle_outline_rounded
+                      : _status == 'failed'
+                          ? Icons.info_outline_rounded
+                          : Icons.hourglass_empty_rounded,
+                    size: 25, color: colors.brandStrong),
+                  const SizedBox(height: 6),
                   SelectableText(
                     _operationId!,
                     textAlign: TextAlign.center,
@@ -502,7 +510,13 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
                   if (_receiptDetails != null) ...[
                     const SizedBox(height: 6),
                     Text('Recipient: ${_receiptDetails!.recipientPhone}'),
-                    Text('Bundle: ${_receiptDetails!.bundleId}'),
+                    Text('Bundle: ${widget.quote?.bundle.id == _receiptDetails!.bundleId
+                        ? widget.quote!.bundle.allowanceLabel
+                        : 'Verified data plan'}'),
+                    ExpansionTile(
+                      title: const Text('Technical bundle reference'),
+                      children: [SelectableText(_receiptDetails!.bundleId)],
+                    ),
                     Text('Cost: ${groupedMb(_receiptDetails!.costMb)} MB'),
                   ],
                   TextButton.icon(

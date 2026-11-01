@@ -9,7 +9,8 @@ import 'gb_wallet_activity.dart';
 import 'gb_receipt_actions.dart';
 import 'gb_wallet_flow_components.dart';
 
-/// Fresh journal readback only. No provider, bank or data-delivery receipt.
+/// Fresh journal readback plus a distinct owner-checked provider status read.
+/// Provider status never replaces the ledger's signed posted state.
 class GbWalletActivityDetailScreen extends ConsumerWidget {
   const GbWalletActivityDetailScreen({super.key, required this.entryId});
   final String entryId;
@@ -30,6 +31,13 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
         ? null
         : ref.watch(gbActivityDetailProvider(request));
     final item = state?.valueOrNull;
+    final deliveryRequest = owner != null && item?.kind == 'redeem'
+        ? (owner: owner, operationId: item!.operationId)
+        : null;
+    final delivery = deliveryRequest == null
+        ? null
+        : ref.watch(gbDeliveryReadbackProvider(deliveryRequest));
+    final verifiedDelivery = delivery?.valueOrNull;
     final colors = context.masanawa;
 
     void returnToActivity() {
@@ -73,7 +81,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Icon(
                       Icons.wifi_off_rounded,
@@ -81,12 +89,12 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                       color: colors.textMuted,
                     ),
                     const SizedBox(height: 12),
-                    const Text('This transaction could not be verified.'),
+                    const Text('Transaction unavailable',
+                      textAlign: TextAlign.center),
                     const SizedBox(height: 10),
-                    const Text(
-                      'It may be unavailable or you may be offline. '
-                      'No balance or payment was changed.',
-                    ),
+                    const Text('Check your connection and retry. '
+                      'The receipt has not been verified.',
+                      textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     TextButton.icon(
                       onPressed: () =>
@@ -155,6 +163,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                       '${MaterialLocalizations.of(context).formatMediumDate(item.createdAt.toLocal())} · '
                           '${TimeOfDay.fromDateTime(item.createdAt.toLocal()).format(context)}',
                     ),
+                    const Divider(height: 12),
                     GbWalletReviewLine(
                       'Amount',
                       signedAmount(item),
@@ -168,8 +177,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                     ),
                     if (item.kind == 'redeem')
                       const GbWalletReviewLine(
-                        'Delivery',
-                        'Provider delivery is separate from this wallet entry',
+                        'Delivery', 'Check separate network status below',
                       ),
                     GbWalletReviewLine(
                       'Ledger',
@@ -199,6 +207,40 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            if (item.kind == 'redeem') ...[
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Mobile data delivery',
+                        style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      if (delivery?.isLoading == true)
+                        const LinearProgressIndicator(minHeight: 3),
+                      Text(switch (verifiedDelivery?.state) {
+                        'delivered' => 'Provider-confirmed delivered',
+                        'failed' => 'Provider reports unsuccessful delivery',
+                        'pending' => 'Delivery is still pending',
+                        _ => delivery?.hasError == true
+                            ? 'Delivery status unavailable. Wallet posting remains recorded.'
+                            : 'Checking provider delivery…',
+                      }),
+                      if (delivery?.hasError == true && deliveryRequest != null)
+                        TextButton.icon(
+                          onPressed: () => ref.invalidate(
+                            gbDeliveryReadbackProvider(deliveryRequest)),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Retry delivery status'),
+                        ),
+                      const Text('Provider delivery is separate from the wallet entry.'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Card(
               child: ListTile(

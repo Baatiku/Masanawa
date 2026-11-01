@@ -93,7 +93,7 @@ class _GbReceiptActionsState extends ConsumerState<GbReceiptActions> {
             return StatefulBuilder(
               builder: (context, setSheetState) => SafeArea(
                 child: SizedBox(
-                  height: MediaQuery.sizeOf(context).height * .9,
+                  height: MediaQuery.sizeOf(context).height * .82,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -134,6 +134,12 @@ class _GbReceiptActionsState extends ConsumerState<GbReceiptActions> {
                           children: [
                             for (final format in GbReceiptFormat.values)
                               FilledButton.icon(
+                                style: format == GbReceiptFormat.pdf
+                                    ? null
+                                    : FilledButton.styleFrom(
+                                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                        foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                      ),
                                 onPressed: sharing
                                     ? null
                                     : () async {

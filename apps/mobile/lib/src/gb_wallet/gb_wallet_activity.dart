@@ -336,3 +336,49 @@ final gbActivitySummaryProvider=FutureProvider.autoDispose.family<GbActivityPeri
     if(!sameOwner())throw StateError('account_changed');
     return result;
   });
+
+/// Independent read-only provider status. A posted MB journal entry does not
+/// establish that the mobile network delivered the purchased bundle.
+class GbDeliveryReadback {
+  const GbDeliveryReadback(this.operationId, this.state, this.costMb);
+  final String operationId, state;
+  final int costMb;
+
+  factory GbDeliveryReadback.read(Object? raw, String originalId) {
+    if (raw is! Map || raw['operationId'] != originalId ||
+        !const {'pending', 'delivered', 'failed'}.contains(raw['state']) ||
+        raw['costMb'] is! int || (raw['costMb'] as int) <= 0) {
+      throw const FormatException('Invalid verified delivery status');
+    }
+    return GbDeliveryReadback(originalId, raw['state'] as String,
+        raw['costMb'] as int);
+  }
+}
+
+typedef GbDeliveryReadbackRequest = ({GbWalletOwner owner, String operationId});
+final gbDeliveryReadbackProvider =
+    FutureProvider.autoDispose.family<GbDeliveryReadback, GbDeliveryReadbackRequest>(
+  (ref, request) async {
+    bool sameOwner() {
+      final session = ref.read(sessionProvider);
+      return session is SessionSignedIn &&
+          session.user.id == request.owner.accountId &&
+          ref.read(sessionProvider.notifier).authorizationEpoch ==
+              request.owner.authorizationEpoch;
+    }
+
+    if (!sameOwner() || request.operationId.isEmpty ||
+        request.operationId.length > 160) {
+      throw StateError('data_delivery_owner_changed');
+    }
+    final cancel = CancelToken();
+    ref.onDispose(cancel.cancel);
+    final response = await ref.watch(apiClientProvider).dio.get<Object?>(
+      '/v1/gb/data/purchases/${Uri.encodeComponent(request.operationId)}',
+      cancelToken: cancel,
+      options: Options(headers: const {'Cache-Control': 'no-store'}),
+    );
+    if (!sameOwner()) throw StateError('data_delivery_owner_changed');
+    return GbDeliveryReadback.read(response.data, request.operationId);
+  },
+);

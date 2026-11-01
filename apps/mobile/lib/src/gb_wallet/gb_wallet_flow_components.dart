@@ -11,6 +11,7 @@ class GbWalletReviewSheet extends StatelessWidget {
     required this.children,
     required this.action,
     this.onClose,
+    this.onEdit,
     this.busy = false,
     this.back = false,
   });
@@ -19,6 +20,7 @@ class GbWalletReviewSheet extends StatelessWidget {
   final List<Widget> children;
   final Widget action;
   final VoidCallback? onClose;
+  final VoidCallback? onEdit;
   final bool busy, back;
 
   @override
@@ -55,12 +57,19 @@ class GbWalletReviewSheet extends StatelessWidget {
                         tooltip: 'Back',
                         icon: const Icon(Icons.arrow_back_rounded),
                       )
+                    else if (onEdit != null)
+                      IconButton(
+                        tooltip: 'Edit details',
+                        onPressed: busy ? null : onEdit,
+                        icon: const Icon(Icons.edit_outlined),
+                      )
                     else
                       const SizedBox(width: 48),
                     Expanded(
                       child: Text(
                         title,
                         textAlign: TextAlign.center,
+                        maxLines: 2,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
@@ -169,7 +178,9 @@ class GbWalletInlineNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.masanawa;
     final theme = Theme.of(context);
-    return Container(
+    return Semantics(
+      liveRegion: true,
+      child: Container(
       padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: colors.fieldSurface,
@@ -201,6 +212,7 @@ class GbWalletInlineNotice extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }

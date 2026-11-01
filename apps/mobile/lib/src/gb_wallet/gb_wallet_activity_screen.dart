@@ -26,6 +26,12 @@ GbWalletOwner? _ownerFor(WidgetRef ref) {
       : null;
 }
 
+String _formatPostedSummaryMb(int amount) =>
+    '${amount < 0 ? '−' : '+'}${groupActivityAmount(amount.abs())} MB';
+String _formatPostedSummaryNgn(int amount) =>
+    '${amount < 0 ? '−' : '+'}₦${groupActivityAmount(amount.abs() ~/ 100)}.'
+    '${(amount.abs() % 100).toString().padLeft(2, '0')}';
+
 String _amountText(GbActivityItem row) {
   final sign = row.amount > 0 ? '+' : '−';
   final absolute = row.amount.abs();
@@ -87,7 +93,11 @@ class _ActivityDateHeader extends SliverPersistentHeaderDelegate {
       child: Padding(
         padding: const EdgeInsetsDirectional.only(start: 4),
         child: Text(
-          MaterialLocalizations.of(context).formatMediumDate(day),
+          DateUtils.isSameDay(day, DateUtils.dateOnly(DateTime.now()))
+              ? 'Today · ${MaterialLocalizations.of(context).formatMediumDate(day)}'
+              : DateUtils.isSameDay(day, DateUtils.dateOnly(DateTime.now().subtract(const Duration(days: 1))))
+                  ? 'Yesterday · ${MaterialLocalizations.of(context).formatMediumDate(day)}'
+                  : MaterialLocalizations.of(context).formatMediumDate(day),
           key: ValueKey('activity-date-${day.toIso8601String()}'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -186,9 +196,15 @@ class GbActivityTile extends StatelessWidget {
                       height: 36,
                       decoration: BoxDecoration(
                         color: colors.brand.withValues(alpha: .09),
-                        shape: BoxShape.circle,
+                        shape: item.status == 'reversed'
+                            ? BoxShape.rectangle : BoxShape.circle,
+                        borderRadius: item.status == 'reversed'
+                            ? BorderRadius.circular(10) : null,
                       ),
-                      child: Icon(icon, color: colors.brand, size: 19),
+                      child: Icon(icon,
+                    color: item.status == 'reversed'
+                        ? Theme.of(context).colorScheme.error : colors.brand,
+                    size: 19),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -314,9 +330,15 @@ class _GbWalletActivitySectionState
             child: Text('Sign in to see wallet activity.'),
           )
         else if (page!.isLoading && visible == null)
-          const ListTile(
-            leading: CircularProgressIndicator(),
-            title: Text('Loading wallet activity…'),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Row(children: [
+              CircleAvatar(radius: 18),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [LinearProgressIndicator(minHeight: 4), SizedBox(height: 8),
+                  Text('Loading wallet activity…')]))
+            ]),
           )
         else if (visible?.items.isEmpty == true)
           const Padding(
@@ -751,6 +773,16 @@ class _GbWalletActivityScreenState
     final byId = <String, GbActivityItem>{};
     for (final entry in entries) byId.putIfAbsent(entry.id, () => entry);
     final cursor = _loadedMore ? _next : initial?.nextCursor;
+    final exactPeriodOnly = owner != null &&
+        (_period == '7' || _period == '30') &&
+        _purpose == 'all' && _status == 'all' &&
+        _direction == 'all' && _reference.isEmpty;
+    final periodData = exactPeriodOnly
+        ? ref.watch(gbActivitySummaryProvider((
+            owner: owner, days: int.parse(_period),
+          )))
+        : null;
+    final periodSummary = periodData?.valueOrNull;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transactions'),
@@ -767,7 +799,8 @@ class _GbWalletActivityScreenState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.ios_share_rounded),
-            label: Text(_exporting ? 'Preparing…' : 'Export'),
+            label: Text(_exporting ? 'Preparing selected transactions…'
+                : MediaQuery.sizeOf(context).width < 360 ? 'CSV' : 'Export'),
           ),
         ],
       ),
@@ -881,6 +914,19 @@ class _GbWalletActivityScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            if (periodSummary != null)
+                              Semantics(
+                                label: 'Verified period totals',
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Wrap(spacing: 12, runSpacing: 4,
+                                    children: [
+                                      Text('Last ${periodSummary.days} days · MB net: '
+                                        '${_formatPostedSummaryMb(periodSummary.mb.net)}'),
+                                      Text('NGN net: ${_formatPostedSummaryNgn(periodSummary.ngn.net)}'),
+                                    ]),
+                                ),
+                              ),
                             const SizedBox(height: 8),
                             Align(
                               alignment: AlignmentDirectional.centerStart,

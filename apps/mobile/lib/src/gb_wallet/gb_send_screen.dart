@@ -378,6 +378,10 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                 ? 'Check original transfer'
                 : 'Review MB send',
             busy: sheetBusy,
+            onEdit: sheetBusy || _uncertain || _receipt != null ? null : () {
+              Navigator.pop(sheetContext);
+              _editUnsubmitted(owner);
+            },
             onClose: sheetBusy ? null : () => Navigator.pop(sheetContext),
             children: [
               GbWalletAmountHero(
@@ -486,7 +490,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               ),
               label: Text(
                 sheetBusy
-                    ? 'Checking…'
+                    ? (_uncertain ? 'Checking original…' : 'Sending MB…')
                     : _receipt != null
                     ? 'Done'
                     : _uncertain
@@ -784,8 +788,8 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            Center(
-              child: SingleChildScrollView(
+            Row(children: [
+              Expanded(child: SingleChildScrollView(
                 key: const ValueKey('send-quick-amounts'),
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -837,22 +841,29 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
                     ),
                   ],
                 ),
-              ),
-            ),
+              )),
+              const Tooltip(message: 'Swipe for more amounts',
+                child: Icon(Icons.chevron_right_rounded, size: 20)),
+            ]),
             const SizedBox(height: 12),
             TextField(
               key: const ValueKey('send-custom-mb'),
               controller: _mb,
               enabled: owner != null && !_busy && _quote == null,
               keyboardType: TextInputType.number,
-              onChanged: (_) => setState(() {
-                _quickSelection = null;
+              onChanged: (value) => setState(() {
+                _quickSelection = const <String>{'100', '500', '1000', '5000', '10000'}.contains(value.trim())
+                    ? value.trim() : null;
                 _clearReview();
               }),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Custom amount (whole MB)',
                 hintText: 'Enter MB',
-                border: OutlineInputBorder(),
+                helperText: '1–1,000,000,000 whole MB',
+                errorText: _mb.text.trim().isNotEmpty && chosenMb == null
+                    ? 'Enter a whole MB amount within the transfer limit'
+                    : null,
+                border: const OutlineInputBorder(),
               ),
             ),
             Padding(

@@ -257,7 +257,7 @@ void main() {
             'The amount/status column must reach the right edge of Activity',
       );
       expect(find.text('Filter'), findsOneWidget);
-      expect(find.text('Export'), findsOneWidget);
+      expect(find.byKey(const ValueKey('activity-export')), findsOneWidget);
       expect(find.text('Analysis'), findsNothing);
       expect(find.text('Wallet inquiries'), findsNothing);
       expect(find.textContaining('Reservations'), findsNothing);
@@ -691,7 +691,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('−125 MB'), findsOneWidget);
       expect(find.text('Filter'), findsOneWidget);
-      expect(find.text('Export'), findsOneWidget);
+      expect(find.byKey(const ValueKey('activity-export')), findsOneWidget);
       expect(find.textContaining('Check your connection'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -1046,7 +1046,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        find.text('This transaction could not be verified.'),
+        find.text('Transaction unavailable'),
         findsOneWidget,
       );
       fake.fail = false;
