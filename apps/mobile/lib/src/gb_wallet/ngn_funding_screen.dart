@@ -109,7 +109,7 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
                 label: const Text('Back to Buy Data'),
               ),
           ] else
-            Text(switch (bank?.state) {
+            GbWalletInlineNotice(message: switch (bank?.state) {
               'pending' =>
                 'Account assignment is pending. Do not transfer until verified bank details appear.',
               'suspended' => 'Funding is currently unavailable.',
@@ -120,20 +120,37 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
               _ =>
                 owner == null
                     ? 'Sign in to view your funding account.'
-                    : 'Bank details unavailable.',
-            }),
+                    : state?.hasError == true
+                        ? 'Connection unavailable. Retry to check funding details.'
+                        : 'Bank details unavailable.',
+            }, actionLabel: owner == null ? null : 'Check again',
+              onAction: owner == null ? null : refresh),
           if (bank?.state == 'unassigned' && bank!.assignmentEnabled &&
               !bank.applicantComplete) ...[
             const SizedBox(height: 12),
-            const Text('Complete your funding details'),
-            TextField(controller:_first,enabled:!_busy,
-              decoration:const InputDecoration(labelText:'First name')),
-            TextField(controller:_last,enabled:!_busy,
-              decoration:const InputDecoration(labelText:'Last name')),
-            TextField(controller:_contact,enabled:!_busy,
+            Text('Complete funding details',
+              style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            TextField(controller:_first, enabled:!_busy,
+              textCapitalization:TextCapitalization.words,
+              textInputAction:TextInputAction.next,
+              decoration:const InputDecoration(labelText:'First name',
+                border:OutlineInputBorder(), isDense:true)),
+            const SizedBox(height: 10),
+            TextField(controller:_last, enabled:!_busy,
+              textCapitalization:TextCapitalization.words,
+              textInputAction:TextInputAction.next,
+              decoration:const InputDecoration(labelText:'Last name',
+                border:OutlineInputBorder(), isDense:true)),
+            const SizedBox(height: 10),
+            TextField(controller:_contact, enabled:!_busy,
               keyboardType:TextInputType.phone,
+              textInputAction:TextInputAction.done,
+              onSubmitted: (_) => FocusScope.of(context).unfocus(),
               decoration:const InputDecoration(labelText:'Contact phone',
-                hintText:'08012345678')),
+                hintText:'08012345678', helperText:'Nigerian phone number',
+                border:OutlineInputBorder(), isDense:true)),
+            const SizedBox(height: 10),
             FilledButton(onPressed:_busy?null:() async {
               if(owner==null)return;
               setState(() { _busy=true;_error=null; });
@@ -152,7 +169,7 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
               } finally {
                 if(mounted&&_owner==owner)setState(()=>_busy=false);
               }
-            },child:const Text('Save funding details')),
+            },child:Text(_busy ? 'Saving…' : 'Save funding details')),
           ],
           if (bank?.state == 'unassigned' && bank!.assignmentEnabled &&
               bank.applicantComplete)
@@ -194,9 +211,10 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
                           setState(() => _busy = false);
                       }
                     },
-              child: const Text('Get funding account'),
+              child: Text(_busy ? 'Checking account…' : 'Get funding account'),
             ),
-          if (_error != null) Text(_error!),
+          if (_error != null)
+            GbWalletInlineNotice(message: _error!),
           TextButton(
             onPressed: _busy || owner == null ? null : refresh,
             child: const Text('Check account and balance'),

@@ -61,6 +61,7 @@ class GbWalletReviewSheet extends StatelessWidget {
                       child: Text(
                         title,
                         textAlign: TextAlign.center,
+                        maxLines: 2,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
