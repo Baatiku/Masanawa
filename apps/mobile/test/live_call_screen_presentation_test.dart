@@ -17,6 +17,14 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool off
   const toneChannel = MethodChannel('masanawa/call_tone');
   messenger.setMockMethodCallHandler(toneChannel, (_) async => true);
   addTearDown(() => messenger.setMockMethodCallHandler(toneChannel, null));
+  // The visual/legacy-control test represents a device without a selectable
+  // communication-route list. Bluetooth picker behavior has separate tests.
+  const pcmChannel = MethodChannel('masanawa/live_pcm');
+  messenger.setMockMethodCallHandler(pcmChannel, (call) async {
+    if (call.method == 'routes') return <Map<String, Object>>[];
+    return false;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(pcmChannel, null));
   final session = _Session();
   when(() => session.audioInterrupted).thenReturn(false);
   when(() => session.errors).thenAnswer((_) => const Stream<String>.empty());
