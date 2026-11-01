@@ -87,7 +87,11 @@ class _ActivityDateHeader extends SliverPersistentHeaderDelegate {
       child: Padding(
         padding: const EdgeInsetsDirectional.only(start: 4),
         child: Text(
-          MaterialLocalizations.of(context).formatMediumDate(day),
+          DateUtils.isSameDay(day, DateUtils.dateOnly(DateTime.now()))
+              ? 'Today · ${MaterialLocalizations.of(context).formatMediumDate(day)}'
+              : DateUtils.isSameDay(day, DateUtils.dateOnly(DateTime.now().subtract(const Duration(days: 1))))
+                  ? 'Yesterday · ${MaterialLocalizations.of(context).formatMediumDate(day)}'
+                  : MaterialLocalizations.of(context).formatMediumDate(day),
           key: ValueKey('activity-date-${day.toIso8601String()}'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -188,7 +192,10 @@ class GbActivityTile extends StatelessWidget {
                         color: colors.brand.withValues(alpha: .09),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(icon, color: colors.brand, size: 19),
+                      child: Icon(icon,
+                    color: item.status == 'reversed'
+                        ? Theme.of(context).colorScheme.error : colors.brand,
+                    size: 19),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -314,9 +321,15 @@ class _GbWalletActivitySectionState
             child: Text('Sign in to see wallet activity.'),
           )
         else if (page!.isLoading && visible == null)
-          const ListTile(
-            leading: CircularProgressIndicator(),
-            title: Text('Loading wallet activity…'),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Row(children: [
+              CircleAvatar(radius: 18),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [LinearProgressIndicator(minHeight: 4), SizedBox(height: 8),
+                  Text('Loading wallet activity…')]))
+            ]),
           )
         else if (visible?.items.isEmpty == true)
           const Padding(
@@ -767,7 +780,8 @@ class _GbWalletActivityScreenState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.ios_share_rounded),
-            label: Text(_exporting ? 'Preparing…' : 'Export'),
+            label: Text(_exporting ? 'Preparing selected transactions…'
+                : MediaQuery.sizeOf(context).width < 360 ? 'CSV' : 'Export'),
           ),
         ],
       ),

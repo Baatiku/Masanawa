@@ -93,7 +93,7 @@ class _GbReceiptActionsState extends ConsumerState<GbReceiptActions> {
             return StatefulBuilder(
               builder: (context, setSheetState) => SafeArea(
                 child: SizedBox(
-                  height: MediaQuery.sizeOf(context).height * .9,
+                  height: MediaQuery.sizeOf(context).height * .82,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(

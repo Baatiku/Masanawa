@@ -301,7 +301,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                             ? 'Check your data balance connection.'
                             : verified.frozen
                             ? 'Your data balance is unavailable.'
-                            : 'Not enough purchased MB. Buy Data to continue.',
+                            : 'Not enough purchased MB. Your selection will stay here.',
                         actionLabel: verified != null && !verified.frozen
                             ? 'Buy Data'
                             : null,
@@ -623,7 +623,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                     ),
                   ),
                 );
-                if (constraints.maxWidth < 330 ||
+                if (constraints.maxWidth < 365 ||
                     MediaQuery.textScalerOf(context).scale(16) > 20) {
                   return Column(
                     children: [network, const SizedBox(height: 12), phoneField],
@@ -632,8 +632,8 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 108, child: network),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 120, child: network),
+                    const SizedBox(width: 8),
                     Expanded(child: phoneField),
                   ],
                 );
@@ -1001,7 +1001,9 @@ class _SelectableDataBundle extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onSelect,
-          child: Padding(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 126),
+            child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -1052,6 +1054,7 @@ class _SelectableDataBundle extends StatelessWidget {
                 if (quoting)
                   const LinearProgressIndicator(minHeight: 2),
               ],
+            ),
             ),
           ),
         ),

@@ -73,7 +73,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Icon(
                       Icons.wifi_off_rounded,
@@ -81,12 +81,12 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                       color: colors.textMuted,
                     ),
                     const SizedBox(height: 12),
-                    const Text('This transaction could not be verified.'),
+                    const Text('Transaction unavailable',
+                      textAlign: TextAlign.center),
                     const SizedBox(height: 10),
-                    const Text(
-                      'It may be unavailable or you may be offline. '
-                      'No balance or payment was changed.',
-                    ),
+                    const Text('Check your connection and retry. '
+                      'The receipt has not been verified.',
+                      textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     TextButton.icon(
                       onPressed: () =>
@@ -155,6 +155,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
                       '${MaterialLocalizations.of(context).formatMediumDate(item.createdAt.toLocal())} · '
                           '${TimeOfDay.fromDateTime(item.createdAt.toLocal()).format(context)}',
                     ),
+                    const Divider(height: 12),
                     GbWalletReviewLine(
                       'Amount',
                       signedAmount(item),
