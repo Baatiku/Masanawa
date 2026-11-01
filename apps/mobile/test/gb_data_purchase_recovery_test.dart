@@ -489,8 +489,8 @@ void main() {
     );
     await tester.enterText(find.byType(TextField), '08031234567');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Monthly'));
-    await tester.tap(find.text('Monthly'));
+    await tester.ensureVisible(find.textContaining('Monthly'));
+    await tester.tap(find.textContaining('Monthly'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('2 GB'));
     await tester.tap(find.text('2 GB'));
@@ -545,8 +545,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '08031234567');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Monthly'));
-    await tester.tap(find.text('Monthly'));
+    await tester.ensureVisible(find.textContaining('Monthly'));
+    await tester.tap(find.textContaining('Monthly'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('2 GB'));
     await tester.tap(find.text('2 GB'));
