@@ -819,10 +819,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('original_ngn:fund_1'), findsOneWidget);
       expect(find.byTooltip('Copy operation reference'), findsOneWidget);
-      await tester.dragUntilVisible(
+      await tester.scrollUntilVisible(
         find.textContaining('External bank settlement'),
-        find.byType(ListView),
-        const Offset(0, -150),
+        160,
+        scrollable: find.byType(Scrollable).first,
       );
       expect(
         find.textContaining('External bank settlement'),
