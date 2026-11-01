@@ -41,7 +41,9 @@ class _NgnFundingBalanceState extends ConsumerState<NgnFundingBalance> {
       child: Text(
         verified == null
             ? (cash?.isLoading == true ? 'Checking…' : 'Unavailable')
-            : formatNgn(verified.balanceKobo),
+            : cash?.hasError == true
+                ? 'Last verified: ${formatNgn(verified.balanceKobo)}'
+                : formatNgn(verified.balanceKobo),
         textAlign: TextAlign.end,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
