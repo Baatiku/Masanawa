@@ -557,8 +557,8 @@ void main() {
     expect(f.purchasePosts, 0, reason: 'Quote is not a purchase');
     await tester.tap(find.byTooltip('Close review'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Back to plans'));
-    await tester.tap(find.text('Back to plans'));
+    await tester.ensureVisible(find.text('Edit choice'));
+    await tester.tap(find.text('Edit choice'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Review bundle'),
