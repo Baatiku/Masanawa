@@ -907,28 +907,22 @@ class _GbWalletActivityScreenState
                                     InputChip(label: Text('Balance: $_unit'),
                                       onDeleted: () => setState(() { _reset(); _unit = 'all'; })),
                                   if (_direction != 'all')
-                                    Chip(
-                                      label: Text(
-                                        _direction == 'incoming'
-                                            ? 'Received'
-                                            : 'Spent',
-                                      ),
+                                    InputChip(
+                                      label: Text(_direction == 'incoming' ? 'Received' : 'Spent'),
+                                      onDeleted: () => setState(() { _reset(); _direction = 'all'; }),
                                     ),
                                   if (_period != 'all')
-                                    Chip(
-                                      label: Text(
-                                        _period == '7'
-                                            ? 'Last 7 days'
-                                            : 'Last 30 days',
-                                      ),
+                                    InputChip(
+                                      label: Text(_period == '7' ? 'Last 7 days' : 'Last 30 days'),
+                                      onDeleted: () => setState(() { _reset(); _period = 'all'; }),
                                     ),
                                   if (_reference.isNotEmpty)
-                                    Chip(
-                                      label: Text(
-                                        'Ref: $_reference',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                    InputChip(
+                                      label: Text('Ref: $_reference', maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                      onDeleted: () => setState(() {
+                                        _reset(); _reference = ''; _referenceInput.clear();
+                                      }),
                                     ),
                                   TextButton.icon(
                                     onPressed: _clearFilters,
