@@ -62,7 +62,7 @@ Legend: **existing** = source implementation observed, **improved in this batch*
 | Calls | Failed connection reason stays visible | `MasanaLiveCallScreen` | **Improved in this batch** (previously closed route automatically) |
 | Calls | Reconnecting/interrupted/audio-resume states | `LiveVoiceSession`, call status UI | Existing; verify under network changes |
 | Calls | Background/lock-screen interruption and return | `LiveVoiceSession`, native bridge | Device acceptance required |
-| Calls | Bluetooth and wired headset routing | `LiveVoiceSession`, Android native bridge | Device acceptance required; no verified chooser parity |
+| Calls | Bluetooth and wired headset routing | `LiveVoiceSession`, `LivePcmAudio`, Android native bridge | **Native output chooser added in follow-up**; handset input/output acceptance required |
 | Calls | Provider-backed audio streaming/turn-taking | `LiveVoiceSession`, Gateway | Provider/device acceptance required |
 | Calls | MB review, reserve, connected-seconds settlement | `MbCallFlow` and Gateway | Masanawa-only safety/financial flow, mandatory |
 | Calls | Call recording with user control | `MasanaLiveCallScreen`, `CallRecorder` | Existing; device microphone consent/OS behavior pending |
@@ -77,6 +77,22 @@ Legend: **existing** = source implementation observed, **improved in this batch*
 4. **Cross-auth backup retry:** A background backup can fail with HTTP 401 after a session changes. A failed private backup write is no longer replayed with refreshed credentials. Normal list/auth flows remain eligible for refresh.
 5. **Hidden call failure:** A failed session setup previously closed the call screen before the error could be read. Failure now stays in view with centered, actionable feedback and a Close control; speaker/mute disappear in this failed state.
 6. **Call exit race:** The End/Close action ignores repeated taps while closing the live session.
+
+## 1 November follow-up — available call-audio routes
+
+The first merged pass left calls with only a speaker/earpiece toggle. The second
+pass adds a local-only Android communication-device chooser. The Android 12+
+bridge enumerates only presently selectable speaker, earpiece, Bluetooth, wired
+or USB communication outputs, selects by ephemeral device ID, validates a device
+is still available before switching, and restores the prior system routing on
+call release. Android 7–11 safely show legacy speaker/earpiece selection without
+claiming per-device Bluetooth control that the older platform API cannot verify.
+The Flutter bridge discards malformed output descriptors, handles unsupported
+native channels, and offers an accessible in-call bottom sheet. Audio output
+names remain on the device; they are not transmitted to Masana, the Gateway,
+or stored in the chat transcript. Android Studio/Gradle build and handset routing
+checks remain required: a mocked platform channel cannot establish which
+physical microphone or speaker Android actually uses with a Bluetooth headset.
 
 ## Qualification still required
 

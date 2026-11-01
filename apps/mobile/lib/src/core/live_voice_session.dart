@@ -610,6 +610,15 @@ class LiveVoiceSession with WidgetsBindingObserver {
     if (_ownsAudio) await LivePcmAudio.setSpeaker(enabled);
   }
 
+  /// Select only a route reported by Android for this active call. A device
+  /// that disconnected before selection fails without changing the UI state.
+  Future<bool> selectAudioRoute(CallAudioRoute route) async {
+    if (_closed || !_ownsAudio) return false;
+    final selected = await LivePcmAudio.selectCallRoute(route.id);
+    if (selected && !_closed) _speaker = route.kind == 'speaker';
+    return selected && !_closed;
+  }
+
   Future<void> mute(bool muted) async {
     if (_closed) return;
     _muted = muted;

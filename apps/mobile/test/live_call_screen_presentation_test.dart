@@ -17,6 +17,14 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool off
   const toneChannel = MethodChannel('masanawa/call_tone');
   messenger.setMockMethodCallHandler(toneChannel, (_) async => true);
   addTearDown(() => messenger.setMockMethodCallHandler(toneChannel, null));
+  // The visual/legacy-control test represents a device without a selectable
+  // communication-route list. Bluetooth picker behavior has separate tests.
+  const pcmChannel = MethodChannel('masanawa/live_pcm');
+  messenger.setMockMethodCallHandler(pcmChannel, (call) async {
+    if (call.method == 'routes') return <Map<String, Object>>[];
+    return false;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(pcmChannel, null));
   final session = _Session();
   when(() => session.audioInterrupted).thenReturn(false);
   when(() => session.errors).thenAnswer((_) => const Stream<String>.empty());
@@ -141,7 +149,14 @@ void main() {
     expect(find.text('Unmute'), findsOneWidget);
     verify(() => session.mute(true)).called(1);
     await tester.tap(find.byTooltip('Speaker'));
-    await tester.pump();
+    // The route picker first checks the native channel. If this older-device
+    // bridge reports no routes, its legacy speaker toggle completes in a
+    // second asynchronous microtask. Pump frames rather than asserting before
+    // the native lookup has settled; avoid pumpAndSettle during call timers.
+    for (var attempt = 0; attempt < 8 &&
+        find.text('Earpiece').evaluate().isEmpty; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('Earpiece'), findsOneWidget);
     verify(() => session.setSpeaker(false)).called(1);
     await tester.tap(find.text('End call'));
