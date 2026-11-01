@@ -28,8 +28,10 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
   codec.dispose();
   final rows=<(String,String)>[
     ('Status',item.status=='reversed'?'Reversed posted entry':'Posted journal entry'),
-    ('Purpose',item.title),('Amount',item.amountLabel),
+    ('Purpose',item.title),
     if(item.unit=='MB')('Data equivalent',item.gbLabel),
+    if(item.kind=='redeem')('Data delivery','Check the provider order separately; wallet posting is not proof of network delivery'),
+    ('Recorded (device local time)',item.createdAt.toLocal().toString()),
     ('Recorded (UTC)',item.createdAt.toUtc().toIso8601String()),
     ('Operation reference',item.operationId),('Entry reference',item.id),
     if(item.details?.counterpartyLabel!=null)('Counterparty',item.details!.counterpartyLabel!),
@@ -61,7 +63,14 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
     canvas.drawParagraph(paragraph('Masanawa',28,bold:true,color:_receiptColor(MasanawaTokens.light.brandStrong)),const ui.Offset(120,36));
     canvas.drawParagraph(paragraph('Wallet receipt',16),const ui.Offset(120,72));
     canvas.drawLine(const ui.Offset(40,114),const ui.Offset(555,114),ui.Paint()..color=_receiptColor(MasanawaTokens.light.structuralBorder));
-    y=132;
+    canvas.drawParagraph(paragraph(item.amountLabel,26,bold:true),
+      const ui.Offset(40,140));
+    canvas.drawParagraph(paragraph(
+      item.status=='reversed'?'Reversed wallet entry':'Posted to wallet',13),
+      const ui.Offset(40,180));
+    canvas.drawLine(const ui.Offset(40,212),const ui.Offset(555,212),
+      ui.Paint()..color=_receiptColor(MasanawaTokens.light.structuralBorder));
+    y=230;
   }
   Future<void> finishPage()async{
     canvas.drawParagraph(paragraph('Posted ledger entry. This does not establish external bank settlement or data delivery.',10),const ui.Offset(40,772));
