@@ -257,7 +257,7 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Wallet posting verified. External bank settlement or '
+                'Wallet posting verified; external bank settlement or '
                 'mobile-network delivery must be checked separately.',
               ),
             ),
