@@ -725,7 +725,7 @@ class _RechargePackagesScreenState
                                 ),
                               if (_completed) ...[
                                 const GbWalletResultSummary(
-                                  title: 'Data added',
+                                  title: 'Exchange confirmed',
                                   detail: 'Your purchased data balance has been updated.',
                                 ),
                               ] else if (_uncertain) ...[
