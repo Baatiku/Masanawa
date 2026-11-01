@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../screens/chat/chat_ui_copy.dart';
 import 'shell_document.dart';
 import 'shell_document_session.dart';
 
@@ -36,7 +37,7 @@ class ShellDocumentSessionView extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(liveRegion: true, child: Text(label)),
+          Semantics(liveRegion: true, child: Text(ChatUiCopy.of(context, label))),
           const SizedBox(height: 8),
           ShellDocumentView(
             key: ValueKey('${session.scope}:$documentId'),
@@ -279,7 +280,7 @@ class _ShellDocumentViewState extends State<ShellDocumentView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(node.text ?? 'Working'),
+              Text(node.text ?? ChatUiCopy.of(context, 'Working')),
               const SizedBox(height: 6),
               LinearProgressIndicator(value: node.progress),
               if (node.subtitle != null) Text(node.subtitle!),
@@ -325,13 +326,13 @@ class _ShellDocumentViewState extends State<ShellDocumentView> {
           onChanged: (value) => _values[node.id!] = value,
           validator: (value) =>
               node.requiredValue && (value?.trim().isEmpty ?? true)
-              ? 'Please complete this field'
+              ? ChatUiCopy.of(context, 'Please complete this field')
               : null,
         );
       case 'button':
         return FilledButton(
           onPressed: _disabled ? null : () => _submit(node),
-          child: Text(node.text ?? 'Choose', textAlign: TextAlign.center),
+          child: Text(node.text ?? ChatUiCopy.of(context, 'Choose'), textAlign: TextAlign.center),
         );
       case 'divider':
         return const Divider();
@@ -358,13 +359,13 @@ class _ShellDocumentViewState extends State<ShellDocumentView> {
           if (widget.onAction == null) Text(widget.document.fallback),
           if (_busy) const LinearProgressIndicator(),
           if (widget.document.expired)
-            const Text('This option has expired. Ask for updated options.'),
-          if (_consumed && _error == null) const Text('Selection submitted.'),
+            Text(ChatUiCopy.of(context, 'This option has expired. Ask for updated options.')),
+          if (_consumed && _error == null) Text(ChatUiCopy.of(context, 'Selection submitted.')),
           if (_error != null)
             Semantics(
               liveRegion: true,
               child: Text(
-                _error!,
+                ChatUiCopy.of(context, _error!),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),

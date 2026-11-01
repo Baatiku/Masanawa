@@ -26,6 +26,8 @@ void main() {
       await File(output).writeAsBytes([1, 2, 3, 4]);
     });
     when(() => native.stop()).thenAnswer((_) async => output);
+    when(() => native.pause()).thenAnswer((_) async {});
+    when(() => native.resume()).thenAnswer((_) async {});
     when(() => native.cancel()).thenAnswer((_) async {});
     when(() => native.dispose()).thenAnswer((_) async {});
     recorder = VoiceNoteRecorder(recorder: native, directory: () async => directory);
@@ -46,6 +48,25 @@ void main() {
     recorder.retain();
     await recorder.close();
     expect(await File(note.path).exists(), true, reason: 'Offline/retry owns the sent file now.');
+  });
+  test('pause and resume retain one recording file and exclude paused time', () async {
+    await recorder.start();
+    await recorder.pause();
+    expect(recorder.state, VoiceNoteState.paused);
+    final paused = recorder.elapsed;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(recorder.elapsed, paused);
+    await recorder.resume();
+    expect(recorder.state, VoiceNoteState.recording);
+    expect((await recorder.stop())?.sizeBytes, 4);
+    verify(() => native.pause()).called(1);
+    verify(() => native.resume()).called(1);
+  });
+  test('stopping while paused leaves the original note reviewable', () async {
+    await recorder.start();
+    await recorder.pause();
+    expect(await recorder.stop(), isNotNull);
+    expect(recorder.state, VoiceNoteState.ready);
   });
   test('retained send stays owned by transport, later cancelled note is deleted', () async {
     await recorder.start();

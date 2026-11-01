@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:masanawa/src/agents/agent_directory.dart';
 import 'package:masanawa/src/core/api/models.dart';
 import 'package:masanawa/src/screens/chat/chat_list_screen.dart';
+import 'package:masanawa/src/features/masana_chat/inbox_search.dart';
 import 'package:masanawa/src/state/agent_directory_state.dart';
 import 'package:masanawa/src/state/ai_chat_state.dart';
 import 'package:masanawa/src/state/session_state.dart';
@@ -19,6 +20,27 @@ const _user = AuthUser(
   isNewUser: false,
   createdAt: '2026-10-12T00:00:00Z',
 );
+
+class _EmptyCanonicalInbox implements MasanaInboxSearchAccess {
+  @override
+  Future<List<MasanaInboxSearchItem>> search({
+    required String bearer, required String query,
+  }) async => const [];
+  @override
+  Future<MasanaInboxPage> searchPage({
+    required String bearer, required String query,
+    String? cursor, int limit = 15,
+  }) async => const MasanaInboxPage(items: [], nextCursor: null);
+  @override
+  Future<int> setPinned({
+    required String bearer, required String characterId,
+    required bool pinned, required int expectedRevision,
+  }) async => expectedRevision + 1;
+  @override
+  Future<void> markRead({
+    required String bearer, required String characterId,
+  }) async {}
+}
 
 class _Session extends SessionController {
   @override
@@ -153,6 +175,7 @@ void main() {
           sessionProvider.overrideWith(_Session.new),
           aiChatProvider.overrideWith(() => _Chats(offline)),
           agentDirectoryProvider.overrideWith(_Directory.new),
+          masanaInboxSearchProvider.overrideWithValue(_EmptyCanonicalInbox()),
         ],
         child: MaterialApp.router(
           theme: buildMasanawaTheme(brightness: Brightness.light),

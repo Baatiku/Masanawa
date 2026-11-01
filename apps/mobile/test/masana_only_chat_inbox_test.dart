@@ -61,6 +61,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         sessionProvider.overrideWith(_Session.new),
+        aiChatProvider.overrideWith(_OfflineChats.new),
       ],
       child: const MaterialApp(
         home: Scaffold(body: UnifiedChatInbox(

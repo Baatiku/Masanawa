@@ -11,9 +11,12 @@ function fixture() {
     unreadCount:1,revision:0,
   }]);
   const setPinned=vi.fn(async () => 1 as number|null);
+  const setArchived=vi.fn(async () => 1 as number|null);
+  const setTitle=vi.fn(async () => 1 as number|null);
   const markRead=vi.fn(async () => 2 as number|null);
-  registerMasanaInboxRoutes(app,{resolveFan,inbox:{list,setPinned,markRead}});
-  return {app,resolveFan,list,setPinned,markRead};
+  registerMasanaInboxRoutes(app,{resolveFan,inbox:{
+    list,setPinned,setArchived,setTitle,markRead}});
+  return {app,resolveFan,list,setPinned,setArchived,setTitle,markRead};
 }
 describe("C10 authenticated Chats list HTTP",()=>{
   it("requires bearer authorization before any private read or write",async()=>{
@@ -101,6 +104,40 @@ describe("C10 authenticated Chats list HTTP",()=>{
       const legacy=await f.app.inject({method:"GET",url:"/v1/chats?q=teacher",headers});
       expect(legacy.statusCode).toBe(200);
       expect(legacy.json()).not.toHaveProperty("nextCursor");
+    } finally {await f.app.close();}
+  });
+  it("keeps archive/rename private, revision-CAS and distinct from canonical identity",async()=>{
+    const f=fixture(),headers={authorization:"Bearer fan"};
+    try {
+      const archived=await f.app.inject({method:"GET",
+        url:"/v1/chats?archived=true&limit=10",headers});
+      expect(archived.statusCode).toBe(200);
+      expect(f.list).toHaveBeenCalledWith(
+        {tenantId:"tenant-a",fanUserId:"fan-a"},"",
+        {limit:11,cursor:null},true);
+      const archive=await f.app.inject({method:"PATCH",
+        url:"/v1/chats/"+character,headers,
+        payload:{archived:true,expectedRevision:0,fanUserId:"other"}});
+      expect(archive.statusCode).toBe(200);
+      expect(f.setArchived).toHaveBeenCalledWith(
+        {tenantId:"tenant-a",fanUserId:"fan-a"},character,true,0);
+      const rename=await f.app.inject({method:"PATCH",
+        url:"/v1/chats/"+character,headers,
+        payload:{title:"Study history",expectedRevision:1}});
+      expect(rename.statusCode).toBe(200);
+      expect(f.setTitle).toHaveBeenCalledWith(
+        {tenantId:"tenant-a",fanUserId:"fan-a"},character,"Study history",1);
+      for (const payload of [
+        {archived:"true",expectedRevision:0},
+        {title:"\n",expectedRevision:0},
+        {archived:true,pinned:true,expectedRevision:0},
+      ]) {
+        expect((await f.app.inject({method:"PATCH",
+          url:"/v1/chats/"+character,headers,payload})).statusCode).toBe(422);
+      }
+      f.setArchived.mockResolvedValueOnce(null);
+      expect((await f.app.inject({method:"PATCH",url:"/v1/chats/"+character,
+        headers,payload:{archived:false,expectedRevision:2}})).statusCode).toBe(409);
     } finally {await f.app.close();}
   });
 });

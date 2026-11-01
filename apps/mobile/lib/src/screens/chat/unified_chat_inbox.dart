@@ -1,6 +1,5 @@
 import '../../features/masana_chat/inbox_search.dart';
 import '../../agents/masana_portrait_avatar.dart';
-import '../../chat/chat_format.dart';
 import '../../ui/components/masanawa_conversation_tile.dart';
 import '../../theme/masanawa_theme.dart';
 
@@ -15,6 +14,7 @@ import '../../state/ai_chat_state.dart';
 import '../../state/agent_directory_state.dart';
 import '../../state/session_state.dart';
 import '../../ui/components/conversation_search_field.dart';
+import 'chat_ui_copy.dart';
 
 final _serverSearch = FutureProvider.autoDispose
     .family<MasanaInboxPage, String>((ref, key) {
@@ -24,15 +24,26 @@ final _serverSearch = FutureProvider.autoDispose
           .searchPage(bearer: parts[1] as String, query: parts[2] as String);
     });
 
+final _messageSearchCache = Expando<String>();
+String _messageSearchText(List<AiChatMessage> messages) =>
+    _messageSearchCache[messages] ??=
+        messages.map((message) => message.text).join(' ').toLowerCase();
+
 /// Account-scoped Masana conversations.
 class UnifiedChatInbox extends ConsumerStatefulWidget {
   const UnifiedChatInbox({
     super.key,
     required this.masanaThreads,
     required this.masanaRow,
+    this.canonicalRow,
+    this.serverActions,
   });
   final List<ChatThread> masanaThreads;
   final Widget Function(ChatThread) masanaRow;
+  final Widget Function(ChatThread, MasanaInboxSearchItem?,
+      VoidCallback?, bool, ValueChanged<MasanaInboxSearchItem?>)? canonicalRow;
+  final void Function(MasanaInboxSearchItem,
+      ValueChanged<MasanaInboxSearchItem?>)? serverActions;
   @override
   ConsumerState<UnifiedChatInbox> createState() => _UnifiedChatInboxState();
 }
@@ -42,9 +53,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   final _search = TextEditingController();
   String _query = '', _remoteQuery = '';
   Timer? _searchDebounce;
-  final Map<String, MasanaInboxSearchItem> _confirmedPinUpdates = {};
+  final Map<String, MasanaInboxSearchItem> _confirmedUpdates = {};
   final List<MasanaInboxSearchItem> _additionalResults = [];
   final Set<String> _seenCursors = {};
+  final Set<String> _savingPins = {};
   String? _additionalResultsKey, _nextCursor;
   bool _loadedMore = false, _loadingMore = false, _pageError = false;
   ProviderSubscription<SessionState>? _sessionSubscription;
@@ -68,7 +80,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       if (!mounted) return;
       setState(() {
         _query = _remoteQuery = '';
-        _confirmedPinUpdates.clear();
+        _confirmedUpdates.clear();
+        _savingPins.clear();
         _resetPages();
       });
     });
@@ -94,7 +107,6 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     setState(() {
       _query = raw.trim().toLowerCase();
       _remoteQuery = '';
-      _confirmedPinUpdates.clear();
       _resetPages();
     });
     if (_query.isNotEmpty && _query.length <= 80)
@@ -103,11 +115,46 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       });
   }
 
+  Future<void> _pinServer(MasanaInboxSearchItem result,
+      SessionSignedIn session, String serverKey) async {
+    if (_savingPins.contains(result.characterId)) return;
+    final owner = ref.read(sessionProvider);
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    final access = ref.read(masanaInboxSearchProvider);
+    setState(() => _savingPins.add(result.characterId));
+    try {
+      final nextRevision = await access.setPinned(
+        bearer: session.tokens.accessToken,
+        characterId: result.characterId,
+        pinned: !result.pinned,
+        expectedRevision: result.revision,
+      );
+      if (mounted && identical(owner, ref.read(sessionProvider)) &&
+          epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+        setState(() => _confirmedUpdates[result.characterId] =
+            result.withPin(!result.pinned, nextRevision));
+        ref.invalidate(_serverSearch(serverKey));
+      }
+    } catch (_) {
+      if (mounted && identical(owner, ref.read(sessionProvider)) &&
+          epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+        ref.invalidate(_serverSearch(serverKey));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ChatUiCopy.of(context, 'Pin changed elsewhere or is unavailable. Reloaded the latest state.'))));
+      }
+    } finally {
+      if (mounted && identical(owner, ref.read(sessionProvider)) &&
+          epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
+        setState(() => _savingPins.remove(result.characterId));
+      }
+    }
+  }
+
   Future<void> _refresh() async {
     final owner = ref.read(sessionProvider);
     await ref.read(agentDirectoryProvider.notifier).refresh();
     if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
-        owner is! SessionSignedIn || _remoteQuery.isEmpty ||
+        owner is! SessionSignedIn ||
         _remoteQuery != _query || !ref.read(aiChatProvider).online) return;
     setState(_resetPages);
     ref.invalidate(_serverSearch(jsonEncode([
@@ -121,7 +168,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     final owner = ref.read(sessionProvider);
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     if (owner is! SessionSignedIn || !ref.read(aiChatProvider).online ||
-        _remoteQuery != _query || _remoteQuery.isEmpty ||
+        _remoteQuery != _query ||
         jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch]) != key) return;
     setState(() { _loadingMore = true; _pageError = false; });
     try {
@@ -155,8 +202,10 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   @override
   Widget build(BuildContext context) {
     final signedIn = ref.watch(sessionProvider) is SessionSignedIn;
-    if (!signedIn)
-      return const Center(child: Text('Sign in to see your conversations.'));
+    if (!signedIn) {
+      return Center(child: Text(ChatUiCopy.of(context,
+          'Sign in to see your conversations.')));
+    }
     final session = ref.watch(sessionProvider) as SessionSignedIn;
     final serverKey = jsonEncode([
       session.user.id,
@@ -171,8 +220,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     final archivedIds = localState.threads.values
         .where((thread) => thread.archived)
         .map((thread) => thread.characterId).toSet();
-    final server = !offline && _remoteQuery.isNotEmpty &&
-            _remoteQuery == _query
+    final server = !offline && _remoteQuery == _query
         ? ref.watch(_serverSearch(serverKey))
         : null;
     // One identity per result, including server replay and locally archived
@@ -185,7 +233,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         ..._additionalResults,
     ];
     for (final incoming in resultPages) {
-      final confirmed = _confirmedPinUpdates[incoming.characterId];
+      final confirmed = _confirmedUpdates[incoming.characterId];
       final result = confirmed != null && confirmed.revision > incoming.revision
           ? confirmed : incoming;
       final previous = serverById[result.characterId];
@@ -196,26 +244,73 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         serverById[result.characterId] = result;
       }
     }
+    void confirmUpdate(MasanaInboxSearchItem? receipt) {
+      if (!mounted || !identical(session, ref.read(sessionProvider)) ||
+          _authorizationEpoch !=
+              ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      if (receipt != null) {
+        setState(() => _confirmedUpdates[receipt.characterId] = receipt);
+      }
+      ref.invalidate(_serverSearch(serverKey));
+    }
+    // The authorized server preference record wins over stale device controls.
+    // Synchronize only existing cached threads, keeping their messages/drafts.
+    if (_query.isEmpty && firstPage != null) {
+      for (final result in serverById.values) {
+        final local = localState.threads[result.characterId];
+        if (local != null && (local.archived != result.archived ||
+            local.pinned != result.pinned ||
+            (result.customTitle != null && local.title != result.customTitle))) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !identical(session, ref.read(sessionProvider)) ||
+                ref.read(sessionProvider.notifier).authorizationEpoch !=
+                    _authorizationEpoch) return;
+            if ((_confirmedUpdates[result.characterId]?.revision ?? -1) >
+                result.revision) return;
+            ref.read(aiChatProvider.notifier).applyCanonicalControls(
+              result.characterId, pinned: result.pinned,
+              archived: result.archived, title: result.customTitle,
+              setTitle: result.customTitle != null);
+          });
+        }
+      }
+    }
     final rows = <({DateTime at, String id, bool pinned, Widget row})>[];
     final localIds = <String>{...archivedIds};
     for (final t in widget.masanaThreads) {
-        if (t.archived || !localIds.add(t.characterId)) continue;
+        final canonical = serverById[t.characterId];
+        if (canonical?.archived == true || t.archived ||
+            !localIds.add(t.characterId)) continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
+        // A cached thread without a current directory identity must not be
+        // rediscovered by local search alone. The signed-in server inbox may
+        // explicitly authorize that character even if directory hydration
+        // is late; otherwise fail closed rather than exposing stale content.
+        // The production inbox supplies canonicalRow; isolated offline
+        // presenters may intentionally supply self-owned rows without a
+        // directory (e.g. an archive/order fixture).
+        if (widget.canonicalRow != null && agent == null && canonical == null) {
+          continue;
+        }
         if (_query.isNotEmpty &&
-            !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
+            !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${_messageSearchText(t.messages)}'
                 .toLowerCase()
                 .contains(_query) &&
             !serverById.containsKey(t.characterId))
           continue;
         rows.add((
-          at: t.lastMessageActivityAt,
+          at: canonical?.lastActivityAt ?? t.lastMessageActivityAt,
           id: t.characterId,
-          pinned: t.pinned,
-          row: widget.masanaRow(t),
+          pinned: canonical?.pinned ?? t.pinned,
+          row: widget.canonicalRow?.call(t, canonical,
+                canonical == null ? null :
+                    () => unawaited(_pinServer(canonical, session, serverKey)),
+                _savingPins.contains(t.characterId),
+                confirmUpdate) ?? widget.masanaRow(t),
         ));
     }
     for (final result in serverById.values) {
-      if (localIds.contains(result.characterId)) continue;
+      if (result.archived || localIds.contains(result.characterId)) continue;
       rows.add((
         at: result.lastActivityAt ?? DateTime.utc(1970),
         id: result.characterId,
@@ -228,46 +323,26 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
             displayName: result.displayName,
             size: 52,
           ),
-          name: result.displayName,
+          name: result.customTitle ?? result.displayName,
           preview: Text(
-            result.lastMessage.isEmpty ? result.profession : result.lastMessage,
+            result.lastMessage.isEmpty
+                ? ChatUiCopy.of(context, 'Saved conversation')
+                : result.lastMessage,
             maxLines: 1, overflow: TextOverflow.ellipsis,
             style: TextStyle(color: context.masanawa.textMuted, fontSize: 14),
           ),
           time: result.lastActivityAt == null
-              ? '' : formatChatTime(result.lastActivityAt!.toLocal()),
+              ? '' : ChatUiCopy.time(context, result.lastActivityAt!),
           unread: result.unreadCount,
           pinned: result.pinned,
-          actionTooltip: result.pinned
-              ? 'Unpin server conversation' : 'Pin server conversation',
+          actionLoading: _savingPins.contains(result.characterId),
+          actionTooltip: ChatUiCopy.of(context, result.pinned
+              ? 'Unpin server conversation' : 'Pin server conversation'),
           actionIcon: result.pinned
               ? Icons.push_pin : Icons.push_pin_outlined,
-          onAction: () async {
-            final owner = ref.read(sessionProvider);
-            final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
-            final access = ref.read(masanaInboxSearchProvider);
-            try {
-              final nextRevision = await access.setPinned(
-                bearer: session.tokens.accessToken,
-                characterId: result.characterId,
-                pinned: !result.pinned,
-                expectedRevision: result.revision,
-              );
-              if (mounted && identical(owner, ref.read(sessionProvider)) &&
-                  epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
-                setState(() => _confirmedPinUpdates[result.characterId] =
-                    result.withPin(!result.pinned, nextRevision));
-                ref.invalidate(_serverSearch(serverKey));
-              }
-            } catch (_) {
-              if (mounted && identical(owner, ref.read(sessionProvider)) &&
-                  epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Could not update pin.')),
-                );
-              }
-            }
-          },
+          onAction: () => unawaited(_pinServer(result, session, serverKey)),
+          onLongPress: widget.serverActions == null ? null : () =>
+              widget.serverActions!(result, confirmUpdate),
           onTap: () {
             final owner = ref.read(sessionProvider);
             if (owner is! SessionSignedIn) return;
@@ -298,14 +373,19 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       children: [
         ConversationSearchField(
           controller: _search,
-          hintText: 'Search conversations',
-          clearTooltip: 'Clear chat search',
+          hintText: ChatUiCopy.of(context, 'Search conversations'),
+          clearTooltip: ChatUiCopy.of(context, 'Clear chat search'),
           onChanged: _changed,
           onClear: () {
             _search.clear();
             _changed('');
           },
         ),
+        if (_query.length > 80)
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(ChatUiCopy.of(context,
+                'Shorten search to 80 characters to include conversations stored on other devices.'),
+              textAlign: TextAlign.center)),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -318,31 +398,50 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                     padding: const EdgeInsets.all(32),
                     child: Column(
                       children: [
+                        Icon(_query.isEmpty ? Icons.smart_toy_outlined
+                            : offline ? Icons.wifi_off_rounded : Icons.search_off,
+                          color: context.masanawa.textMuted, size: 42),
+                        const SizedBox(height: 12),
                         Text(
                           _query.isEmpty
-                              ? 'No conversations yet'
+                              ? ChatUiCopy.of(context, 'No conversations yet')
                               : offline
-                              ? 'No matches in saved conversations'
-                              : 'No matching conversations',
+                              ? ChatUiCopy.of(context, 'No matches in saved conversations')
+                              : ChatUiCopy.of(context, 'No matching conversations'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: context.masanawa.textPrimary,
+                            fontSize: 16, fontWeight: FontWeight.w600),
                         ),
+                        const SizedBox(height: 6),
+                        if (!offline || _query.isEmpty)
+                          Text(ChatUiCopy.of(context, _query.isEmpty
+                              ? 'Choose a Masana to start an AI conversation.'
+                              : 'Try another name or search term.'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: context.masanawa.textMuted)),
                         if (offline && _query.isNotEmpty)
-                          const Text('Offline searches only include saved conversations.'),
+                          Text(ChatUiCopy.of(context,
+                              'Offline searches only include saved conversations.'),
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
                         TextButton(
                           onPressed: () => context.push('/masana'),
-                          child: const Text('Find Masana'),
+                          child: Text(ChatUiCopy.of(context, 'Find Masana')),
                         ),
                       ],
                     ),
                   ),
                 for (final row in rows) row.row,
                 if (server?.isLoading == true)
-                  const LinearProgressIndicator(minHeight: 2,
-                    semanticsLabel: 'Searching server conversations'),
+                  LinearProgressIndicator(minHeight: 2,
+                    semanticsLabel: ChatUiCopy.of(context, 'Syncing conversations')),
                 if (server?.hasError == true)
                   ListTile(
-                    title: const Text('Server search unavailable. Saved conversations remain visible.', textAlign: TextAlign.center),
+                    title: Text(ChatUiCopy.of(context,
+                        'Conversation sync unavailable. Saved conversations remain visible.'),
+                      textAlign: TextAlign.center),
                     trailing: IconButton(
-                      tooltip: 'Retry server search',
+                      tooltip: ChatUiCopy.of(context, 'Retry conversation sync'),
                       onPressed: () => ref.invalidate(_serverSearch(serverKey)),
                       icon: const Icon(Icons.refresh),
                     ),
@@ -355,16 +454,18 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                       (_loadedMore && _additionalResultsKey == serverKey
                           ? _nextCursor : firstPage.nextCursor)!),
                     icon: const Icon(Icons.expand_more),
-                    label: const Text('Load more conversations'),
+                    label: Text(ChatUiCopy.of(context, 'Load more conversations')),
                   )),
                 if (firstPage != null && _loadingMore && _remoteQuery == _query)
-                  const LinearProgressIndicator(minHeight: 2,
-                    semanticsLabel: 'Loading more conversations'),
+                  LinearProgressIndicator(minHeight: 2,
+                    semanticsLabel: ChatUiCopy.of(context, 'Loading more conversations')),
                 if (firstPage != null && _pageError && _remoteQuery == _query)
                   ListTile(
-                    title: const Text('Could not load more conversations. Previous results are saved.', textAlign: TextAlign.center),
+                    title: Text(ChatUiCopy.of(context,
+                        'Could not load more conversations. Previous results are saved.'),
+                      textAlign: TextAlign.center),
                     trailing: IconButton(
-                      tooltip: 'Retry loading conversations',
+                      tooltip: ChatUiCopy.of(context, 'Retry loading conversations'),
                       onPressed: () {
                         final cursor = _loadedMore && _additionalResultsKey == serverKey
                             ? _nextCursor : firstPage.nextCursor;

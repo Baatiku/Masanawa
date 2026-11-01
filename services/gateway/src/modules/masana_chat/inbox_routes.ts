@@ -10,18 +10,22 @@ export interface FanInboxItem {
   readonly lastMessage: string;
   readonly lastActivityAt: string;
   readonly pinned: boolean;
+  readonly archived?: boolean;
+  readonly customTitle?: string | null;
   readonly unreadCount: number;
   readonly revision: number;
 }
-type InboxCursor = { readonly v: 1; readonly q: string; readonly at: string; readonly id: string };
+type InboxCursor = { readonly v: 1; readonly q: string; readonly a?: boolean;
+  readonly at: string; readonly id: string };
 const inboxId = /^character_[0-9a-f-]{36}$/i;
-function decodeCursor(raw: string, query: string): InboxCursor | null {
+function decodeCursor(raw: string, query: string, archived = false): InboxCursor | null {
   if (raw.length > 1024) return null;
   try {
     const parsed: unknown = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
     if (!parsed || typeof parsed !== "object") return null;
     const c = parsed as Partial<InboxCursor>;
-    if (c.v !== 1 || c.q !== query || typeof c.id !== "string" ||
+    if (c.v !== 1 || c.q !== query || (c.a === true) !== archived ||
+        typeof c.id !== "string" ||
         !inboxId.test(c.id) || typeof c.at !== "string" ||
         !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(c.at) ||
         !Number.isFinite(Date.parse(c.at)) ||
@@ -29,8 +33,8 @@ function decodeCursor(raw: string, query: string): InboxCursor | null {
     return c as InboxCursor;
   } catch { return null; }
 }
-function encodeCursor(last: FanInboxItem, query: string): string {
-  return Buffer.from(JSON.stringify({v:1,q:query,
+function encodeCursor(last: FanInboxItem, query: string, archived = false): string {
+  return Buffer.from(JSON.stringify({v:1,q:query,a:archived,
     at:new Date(last.lastActivityAt).toISOString(),id:last.characterId})).toString("base64url");
 }
 
@@ -44,9 +48,13 @@ export interface MasanaInboxRoutesDeps {
     list(scope: FanInboxScope, query: string, page?: {
       readonly limit: number;
       readonly cursor: { readonly lastActivityAt: string; readonly characterId: string } | null;
-    }): Promise<readonly FanInboxItem[]>;
+    }, archived?: boolean): Promise<readonly FanInboxItem[]>;
     setPinned(scope: FanInboxScope, characterId: string,
       pinned: boolean, expectedRevision: number): Promise<number | null>;
+    setArchived?(scope: FanInboxScope, characterId: string,
+      archived: boolean, expectedRevision: number): Promise<number | null>;
+    setTitle?(scope: FanInboxScope, characterId: string,
+      title: string | null, expectedRevision: number): Promise<number | null>;
     markRead(scope: FanInboxScope, characterId: string): Promise<number | null>;
   };
 }
@@ -76,12 +84,20 @@ export function registerMasanaInboxRoutes(
         (typeof raw !== "string" || raw.length > 80))
       return reply.code(422).send({code:"invalid_search"});
     const query = typeof raw === "string" ? raw.trim() : "";
+    if (parameters.archived !== undefined &&
+        parameters.archived !== "true" && parameters.archived !== "false")
+      return reply.code(422).send({code:"invalid_archive_filter"});
+    const archived = parameters.archived === "true";
+    if (archived && !deps.inbox.setArchived)
+      return reply.code(503).send({code:"archive_unavailable"});
     // Old mobile clients receive the unchanged list response. Paging is
     // explicit, with a cursor tied to this exact normalized query.
     if (parameters.limit === undefined && parameters.cursor !== undefined)
       return reply.code(422).send({code:"invalid_page"});
     if (parameters.limit === undefined) {
-      const chats = await deps.inbox.list(scope, query);
+      const chats = archived
+        ? await deps.inbox.list(scope, query, undefined, true)
+        : await deps.inbox.list(scope, query);
       return reply.send({chats});
     }
     const limit = Number(parameters.limit);
@@ -91,14 +107,17 @@ export function registerMasanaInboxRoutes(
         (parameters.cursor !== undefined && typeof parameters.cursor !== "string"))
       return reply.code(422).send({code:"invalid_page"});
     const cursor = parameters.cursor === undefined
-      ? null : decodeCursor(parameters.cursor, query);
+      ? null : decodeCursor(parameters.cursor, query, archived);
     if (parameters.cursor !== undefined && !cursor)
       return reply.code(422).send({code:"invalid_cursor"});
-    const found = await deps.inbox.list(scope, query, {limit:limit+1,
-      cursor:cursor ? {lastActivityAt:cursor.at, characterId:cursor.id} : null});
+    const page = {limit:limit+1,
+      cursor:cursor ? {lastActivityAt:cursor.at, characterId:cursor.id} : null};
+    const found = archived
+      ? await deps.inbox.list(scope, query, page, true)
+      : await deps.inbox.list(scope, query, page);
     const chats = found.slice(0,limit);
     const nextCursor = found.length > limit && chats.length > 0
-      ? encodeCursor(chats[chats.length-1]!, query) : null;
+      ? encodeCursor(chats[chats.length-1]!, query, archived) : null;
     return reply.send({chats,nextCursor});
   });
   app.patch("/v1/chats/:characterId", async (request, reply) => {
@@ -108,15 +127,39 @@ export function registerMasanaInboxRoutes(
     if (!scope) return reply.code(401).send({code:"unauthorized"});
     const id = record(request.params).characterId;
     const body = record(request.body);
-    if (!validId(id) || typeof body.pinned !== "boolean" ||
+    if (!validId(id) ||
         !Number.isSafeInteger(body.expectedRevision) ||
         (body.expectedRevision as number) < 0)
       return reply.code(422).send({code:"invalid_pin"});
-    const updated = await deps.inbox.setPinned(
-      scope, id, body.pinned, body.expectedRevision as number);
+    const changes = ["pinned", "archived", "title"]
+      .filter((field) => Object.prototype.hasOwnProperty.call(body, field));
+    if (changes.length !== 1)
+      return reply.code(422).send({code:"invalid_chat_preference"});
+    const expectedRevision = body.expectedRevision as number;
+    let updated: number | null;
+    if (changes[0] === "pinned") {
+      if (typeof body.pinned !== "boolean")
+        return reply.code(422).send({code:"invalid_pin"});
+      updated = await deps.inbox.setPinned(scope, id, body.pinned, expectedRevision);
+    } else if (changes[0] === "archived") {
+      if (typeof body.archived !== "boolean")
+        return reply.code(422).send({code:"invalid_archive"});
+      if (!deps.inbox.setArchived)
+        return reply.code(503).send({code:"archive_unavailable"});
+      updated = await deps.inbox.setArchived(scope, id, body.archived, expectedRevision);
+    } else {
+      if (body.title !== null &&
+          (typeof body.title !== "string" || body.title.length < 1 ||
+           body.title.length > 80 || /[\x00-\x1f\x7f]/.test(body.title)))
+        return reply.code(422).send({code:"invalid_title"});
+      if (!deps.inbox.setTitle)
+        return reply.code(503).send({code:"rename_unavailable"});
+      updated = await deps.inbox.setTitle(scope, id, body.title as string | null,
+        expectedRevision);
+    }
     if (updated === null)
       return reply.code(409).send({code:"stale_or_unavailable_chat"});
-    return reply.send({revision: updated, pinned: body.pinned});
+    return reply.send({revision: updated, [changes[0]!]: body[changes[0]!]});
   });
   app.post("/v1/chats/:characterId/read", async (request, reply) => {
     if (deps.enabled?.() === false)

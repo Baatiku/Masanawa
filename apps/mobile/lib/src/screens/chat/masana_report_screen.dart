@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../safety/twin_safety.dart';
 import '../../theme/masanawa_theme.dart';
+import 'chat_ui_copy.dart';
 
 /// A full-page safety report: no popup form, and a failed submission never
 /// discards the selected reason or the typed detail.
@@ -63,17 +64,17 @@ class _MasanaReportScreenState extends State<MasanaReportScreen> {
     final colors = context.masanawa;
     return Scaffold(
       backgroundColor: colors.surfaceBg,
-      appBar: AppBar(title: const Text('Report Masana')),
+      appBar: AppBar(title: Text(ChatUiCopy.of(context, 'Report Masana'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
           children: [
             Text(
-              'Report ${widget.displayName}',
+              '${ChatUiCopy.of(context, 'Report')} ${widget.displayName}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            const Text('Choose the most relevant reason. Reports are reviewed for safety.'),
+            Text(ChatUiCopy.of(context, 'Choose the most relevant reason. Reports are reviewed for safety.')),
             const SizedBox(height: 16),
             for (final reason in TwinReportReason.values)
               Semantics(
@@ -81,7 +82,7 @@ class _MasanaReportScreenState extends State<MasanaReportScreen> {
                 selected: _selected == reason,
                 child: ListTile(
                   key: ValueKey('report-reason-${reason.name}'),
-                  title: Text(twinReportReasonLabel(reason)),
+                  title: Text(ChatUiCopy.of(context, twinReportReasonLabel(reason))),
                   leading: Icon(
                     _selected == reason
                         ? Icons.radio_button_checked
@@ -105,17 +106,17 @@ class _MasanaReportScreenState extends State<MasanaReportScreen> {
               maxLength: 1000,
               enabled: !_sending,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Additional details (optional)',
+              decoration: InputDecoration(
+                labelText: ChatUiCopy.of(context, 'Additional details (optional)'),
                 alignLabelWithHint: true,
-                hintText: 'Describe what happened',
+                hintText: ChatUiCopy.of(context, 'Describe what happened'),
               ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
               Semantics(
                 liveRegion: true,
-                child: Text(_error!, style: TextStyle(color: colors.emergency)),
+                child: Text(ChatUiCopy.of(context, _error!), style: TextStyle(color: colors.emergency)),
               ),
             ],
             const SizedBox(height: 20),
@@ -129,7 +130,7 @@ class _MasanaReportScreenState extends State<MasanaReportScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.flag_outlined),
-              label: Text(_sending ? 'Submitting…' : 'Submit report'),
+              label: Text(ChatUiCopy.of(context, _sending ? 'Submitting…' : 'Submit report')),
             ),
           ],
         ),

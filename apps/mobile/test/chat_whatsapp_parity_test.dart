@@ -57,4 +57,39 @@ void main() {
     expect(border.borderRadius.topLeft.x, greaterThanOrEqualTo(20));
     expect(field.decoration!.fillColor, MasanawaColors.light().fieldSurface);
   });
+  test('conversation viewport anchor survives storage roundtrip', () {
+    final original = ChatThread(characterId: 'anchor',
+      scrollOffset: 312,
+      scrollAnchorMessageId: 'message-42', scrollAnchorFraction: .3);
+    final restored = ChatThread.fromJson(original.toJson());
+    expect(restored.scrollAnchorMessageId, 'message-42');
+    expect(restored.scrollAnchorFraction, .3);
+    expect(restored.scrollOffset, 312);
+    final updated = restored.copyWith(scrollOffset: 337,
+      scrollAnchorMessageId: 'message-43', scrollAnchorFraction: .2);
+    expect(updated.scrollAnchorMessageId, 'message-43');
+    expect(updated.scrollAnchorFraction, .2);
+  });
+
+
+  test('voice replay cursor never crosses account or authorization changes', () {
+    final cursor = VoicePlaybackResumeMemory();
+    cursor.scopeTo('owner-a', 1);
+    cursor.remember('message-1:0', const Duration(seconds: 15));
+    expect(cursor.positionFor('message-1:0'), const Duration(seconds: 15));
+    cursor.scopeTo('owner-a', 1);
+    expect(cursor.positionFor('message-1:0'), const Duration(seconds: 15));
+    cursor.scopeTo('owner-a', 2);
+    expect(cursor.positionFor('message-1:0'), Duration.zero);
+    cursor.remember('message-1:0', const Duration(seconds: 7));
+    cursor.scopeTo('owner-b', 2);
+    expect(cursor.positionFor('message-1:0'), Duration.zero);
+    cursor.remember('message-2:0', const Duration(seconds: 23));
+    cursor.remember('message-2:0', Duration.zero);
+    expect(cursor.positionFor('message-2:0'), Duration.zero);
+    cursor.scopeTo(null, 3);
+    cursor.remember('message-1:0', const Duration(seconds: 99));
+    expect(cursor.positionFor('message-1:0'), Duration.zero);
+  });
+
 }

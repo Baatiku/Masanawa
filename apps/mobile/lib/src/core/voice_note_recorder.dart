@@ -15,6 +15,7 @@ enum VoiceNoteState {
   idle,
   starting,
   recording,
+  paused,
   stopping,
   ready,
   failed,
@@ -52,6 +53,35 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
       for(var i=begin;i<end;i++){peak=math.max(peak,_levels[i]);}
       return peak;
     },growable:false);
+  }
+
+  /// Preserve a single local recording; elapsed time excludes the pause.
+  Future<void> pause() async {
+    if (state != VoiceNoteState.recording || !_isOwnerCurrent()) return;
+    final generation = _generation;
+    try {
+      await _recorder.pause().timeout(const Duration(seconds: 5));
+      if (!_current(generation) || state != VoiceNoteState.recording) return;
+      _clock.stop();
+      _set(VoiceNoteState.paused);
+    } catch (_) {
+      error = 'Could not pause recording. Stop and review it.';
+      notifyListeners();
+    }
+  }
+
+  Future<void> resume() async {
+    if (state != VoiceNoteState.paused || !_isOwnerCurrent()) return;
+    final generation = _generation;
+    try {
+      await _recorder.resume().timeout(const Duration(seconds: 5));
+      if (!_current(generation) || state != VoiceNoteState.paused) return;
+      _clock.start();
+      _set(VoiceNoteState.recording);
+    } catch (_) {
+      error = 'Could not resume recording. Stop and review it.';
+      notifyListeners();
+    }
   }
   int _generation = 0;
   Future<void>? _opening;
@@ -183,7 +213,8 @@ class VoiceNoteRecorder extends ChangeNotifier with WidgetsBindingObserver {
   Future<ChatAttachment?> stop() async {
     if (_stopping != null) return _stopping!;
     if (state == VoiceNoteState.ready) return note;
-    if (state != VoiceNoteState.recording) return null;
+    if (state != VoiceNoteState.recording &&
+        state != VoiceNoteState.paused) return null;
     final generation = _generation;
     _stopClock();
     _set(VoiceNoteState.stopping);

@@ -12,6 +12,8 @@ export interface FanInboxItem {
   readonly lastMessage: string;
   readonly lastActivityAt: string;
   readonly pinned: boolean;
+  readonly archived: boolean;
+  readonly customTitle: string | null;
   readonly unreadCount: number;
   readonly revision: number;
 }
@@ -51,6 +53,8 @@ function mapped(row: Row): FanInboxItem {
     lastMessage: String(row.last_message ?? "").slice(0, 240),
     lastActivityAt: String(row.last_activity_at),
     pinned: row.pinned === true,
+    archived: row.archived === true,
+    customTitle: typeof row.custom_title === "string" ? row.custom_title : null,
     unreadCount: Math.min(99, unread),
     revision: n,
   };
@@ -73,7 +77,8 @@ export function createMasanaInboxRepository(
               WHERE h.tenant_id=t.tenant_id AND h.fan_user_id=t.user_id
                 AND h.character_id=t.character_id AND h.request_id=t.request_id)` : "";
   return Object.freeze({
-    async list(scope: FanInboxScope, query = "", page?: FanInboxPageOptions): Promise<readonly FanInboxItem[]> {
+    async list(scope: FanInboxScope, query = "", page?: FanInboxPageOptions,
+      archived = false): Promise<readonly FanInboxItem[]> {
       boundedScope(scope);
       if (query.length > 80) throw new TypeError("invalid_inbox_query");
       if (page && (!Number.isSafeInteger(page.limit) || page.limit < 1 || page.limit > 31 ||
@@ -95,6 +100,8 @@ export function createMasanaInboxRepository(
           COALESCE(t.reply, t.user_text, '') AS last_message,
           COALESCE(t.updated_at, l.session_at)::text AS last_activity_at,
           COALESCE(p.pinned, false) AS pinned,
+          COALESCE(p.archived, false) AS archived,
+          p.custom_title,
           COALESCE(p.revision, 0)::text AS revision,
           (SELECT count(*) FROM agents.mobile_turn_commands u
             WHERE u.tenant_id=$1 AND u.user_id=$2
@@ -124,8 +131,11 @@ ${previewHideFence}
           LIMIT 1
         ) t ON TRUE
         WHERE lower(r.profile->>'handle') <> 'gwani'
+          AND COALESCE(p.archived,false)=${archived ? "true" : "false"}
           AND ($3='' OR position(lower($3) in
-            lower(COALESCE(r.profile->>'displayName','') || ' ' || COALESCE(r.profile->>'profession','')))>0)
+            lower(COALESCE(r.profile->>'displayName','') || ' ' ||
+              COALESCE(r.profile->>'profession','') || ' ' ||
+              COALESCE(p.custom_title,'')))>0)
           ${page ? `AND ($4::timestamptz IS NULL OR
             COALESCE(t.updated_at,l.session_at) < $4::timestamptz OR
             (COALESCE(t.updated_at,l.session_at) = $4::timestamptz
@@ -163,6 +173,60 @@ ${previewHideFence}
       const result = await db.query<{revision: string}>(sql, expectedRevision === 0 ? params.slice(0, 4) : params);
       const value = result.rows[0]?.revision;
       return value === undefined ? null : Number(value);
+    },
+    /** Revision-CAS archive; neither history nor an active AI turn is deleted. */
+    async setArchived(scope: FanInboxScope, characterId: string,
+      archived: boolean, expectedRevision: number): Promise<number | null> {
+      boundedScope(scope);
+      if (!/^character_[0-9a-f-]{36}$/i.test(characterId) ||
+          typeof archived !== "boolean" || !Number.isSafeInteger(expectedRevision) ||
+          expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER)
+        throw new TypeError("invalid_inbox_archive");
+      const insert = expectedRevision === 0;
+      const sql = insert
+        ? `INSERT INTO masana.fan_chat_preferences
+             (tenant_id,fan_user_id,character_id,archived)
+           SELECT $1,$2,$3,$4 WHERE ${eligibleSession}
+           ON CONFLICT (tenant_id,fan_user_id,character_id) DO NOTHING
+           RETURNING revision::text AS revision`
+        : `UPDATE masana.fan_chat_preferences p
+           SET archived=$4, revision=p.revision+1, updated_at=clock_timestamp()
+           WHERE p.tenant_id=$1 AND p.fan_user_id=$2 AND p.character_id=$3
+             AND p.revision=$5 AND ${eligibleSession}
+           RETURNING p.revision::text AS revision`;
+      const params = [scope.tenantId, scope.fanUserId, characterId, archived];
+      const result = await db.query<{revision:string}>(sql,
+        insert ? params : [...params, expectedRevision]);
+      return result.rows[0]?.revision === undefined ? null
+        : Number(result.rows[0]!.revision);
+    },
+    /** A private display title must never alter the canonical Masana identity. */
+    async setTitle(scope: FanInboxScope, characterId: string,
+      title: string | null, expectedRevision: number): Promise<number | null> {
+      boundedScope(scope);
+      if (!/^character_[0-9a-f-]{36}$/i.test(characterId) ||
+          (title !== null && (typeof title !== "string" ||
+            title.length < 1 || title.length > 80 || /[\x00-\x1f\x7f]/.test(title))) ||
+          !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 ||
+          expectedRevision >= Number.MAX_SAFE_INTEGER)
+        throw new TypeError("invalid_inbox_title");
+      const insert = expectedRevision === 0;
+      const sql = insert
+        ? `INSERT INTO masana.fan_chat_preferences
+             (tenant_id,fan_user_id,character_id,custom_title)
+           SELECT $1,$2,$3,$4 WHERE ${eligibleSession}
+           ON CONFLICT (tenant_id,fan_user_id,character_id) DO NOTHING
+           RETURNING revision::text AS revision`
+        : `UPDATE masana.fan_chat_preferences p
+           SET custom_title=$4, revision=p.revision+1, updated_at=clock_timestamp()
+           WHERE p.tenant_id=$1 AND p.fan_user_id=$2 AND p.character_id=$3
+             AND p.revision=$5 AND ${eligibleSession}
+           RETURNING p.revision::text AS revision`;
+      const params = [scope.tenantId, scope.fanUserId, characterId, title];
+      const result = await db.query<{revision:string}>(sql,
+        insert ? params : [...params, expectedRevision]);
+      return result.rows[0]?.revision === undefined ? null
+        : Number(result.rows[0]!.revision);
     },
     async markRead(scope: FanInboxScope, characterId: string): Promise<number | null> {
       boundedScope(scope);
