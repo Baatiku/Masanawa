@@ -994,8 +994,9 @@ class _SelectableDataBundle extends StatelessWidget {
       selected: selected,
       button: true,
       label:
-          '${bundle.network}, ${bundle.allowanceLabel}, '
-          '${bundle.costMb} MB, ${bundle.validityDays} days',
+          '${bundle.network}: receive ${bundle.allowanceLabel}, '
+          'debit ${bundle.costMb} purchased MB, '
+          'valid for ${bundle.validityDays} days',
       child: Material(
         color: selected ? colors.surfaceMuted : colors.surfaceCard,
         shape: RoundedRectangleBorder(

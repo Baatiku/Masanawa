@@ -44,9 +44,9 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
     if(item.details?.rateVersion!=null)('Rate version',item.details!.rateVersion!),
     if(item.details?.reversesOperationId!=null)('Reverses operation',item.details!.reversesOperationId!),
   ];
-  ui.Paragraph paragraph(String text,double size,{bool bold=false,ui.Color? color}) {
+  ui.Paragraph paragraph(String text,double size,{bool bold=false,ui.Color? color,ui.TextAlign align=ui.TextAlign.start}) {
     final builder=ui.ParagraphBuilder(ui.ParagraphStyle(textDirection:ui.TextDirection.ltr,
-      fontSize:size,fontFamily:'Roboto',height:1.35))
+      textAlign:align,fontSize:size,fontFamily:'Roboto',height:1.35))
       ..pushStyle(ui.TextStyle(fontSize:size,fontWeight:bold?ui.FontWeight.w700:ui.FontWeight.w400,
         color:color??_receiptColor(MasanawaTokens.light.textPrimary)))..addText(text);
     return builder.build()..layout(const ui.ParagraphConstraints(width:515));
@@ -63,10 +63,11 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
     canvas.drawParagraph(paragraph('Masanawa',28,bold:true,color:_receiptColor(MasanawaTokens.light.brandStrong)),const ui.Offset(120,36));
     canvas.drawParagraph(paragraph('Wallet receipt',16),const ui.Offset(120,72));
     canvas.drawLine(const ui.Offset(40,114),const ui.Offset(555,114),ui.Paint()..color=_receiptColor(MasanawaTokens.light.structuralBorder));
-    canvas.drawParagraph(paragraph(item.amountLabel,26,bold:true),
+    canvas.drawParagraph(paragraph(item.amountLabel,26,bold:true,align:ui.TextAlign.center),
       const ui.Offset(40,140));
     canvas.drawParagraph(paragraph(
-      item.status=='reversed'?'Reversed wallet entry':'Posted to wallet',13),
+      item.status=='reversed'?'Reversed wallet entry':'Posted to wallet',13,
+      align:ui.TextAlign.center),
       const ui.Offset(40,180));
     canvas.drawLine(const ui.Offset(40,212),const ui.Offset(555,212),
       ui.Paint()..color=_receiptColor(MasanawaTokens.light.structuralBorder));
