@@ -519,6 +519,31 @@ void main() {
     },
   );
 
+  testWidgets('filter draft closes without changing live Activity', (tester) async {
+    final fake = _Activity()
+      ..responses[null] = GbActivityPage([item('mb:draft', -200)], null);
+    await mount(tester, fake);
+    final initialRequests = fake.requests.length;
+    await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('activity-direction-outgoing')));
+    await tester.pumpAndSettle();
+    expect(fake.requests.length, initialRequests);
+    await tester.tap(find.byTooltip('Close review'));
+    await tester.pumpAndSettle();
+    expect(fake.requests.length, initialRequests);
+    expect(fake.filters.last.direction, 'all');
+    await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('activity-direction-outgoing')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show transactions'));
+    await tester.pumpAndSettle();
+    expect(fake.filters.last.direction, 'outgoing');
+    expect(fake.requests.length, greaterThan(initialRequests));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'exact reference Search is explicit and invalid input never makes a read',
     (tester) async {
