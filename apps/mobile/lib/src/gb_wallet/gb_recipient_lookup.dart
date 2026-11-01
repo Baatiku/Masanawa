@@ -259,6 +259,8 @@ class _GbRecipientFieldState extends ConsumerState<GbRecipientField> {
     required bool selected,
   }) => ListTile(
     key: ValueKey('recipient-${recipient.id}'),
+    dense: selected,
+    visualDensity: VisualDensity.compact,
     onTap: selected || !widget.enabled ? null : () => _select(recipient),
     leading: CircleAvatar(
       foregroundImage: recipient.avatarUrl == null

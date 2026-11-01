@@ -19,6 +19,12 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
   final _last = TextEditingController();
   final _contact = TextEditingController();
   bool _busy = false;
+  bool get _nameReady =>
+      _first.text.trim().length >= 2 && _last.text.trim().length >= 2;
+  bool get _phoneReady => RegExp(
+    r'^(?:0[789][0-9]{9}|[+]234[789][0-9]{9})$',
+  ).hasMatch(_contact.text.replaceAll(RegExp(r'[\s()-]'), ''));
+  void _applicantChanged(String _) => setState(() => _error = null);
   String? _error;
   ({String accountId, int authorizationEpoch})? _owner;
   @override
@@ -133,26 +139,35 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
               style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             TextField(controller:_first, enabled:!_busy,
+              onChanged: _applicantChanged,
               textCapitalization:TextCapitalization.words,
               textInputAction:TextInputAction.next,
-              decoration:const InputDecoration(labelText:'First name',
-                border:OutlineInputBorder(), isDense:true)),
+              decoration: InputDecoration(labelText:'First name',
+                errorText: _first.text.isNotEmpty && _first.text.trim().length < 2
+                  ? 'Enter first name' : null,
+                border: const OutlineInputBorder(), isDense:true)),
             const SizedBox(height: 10),
             TextField(controller:_last, enabled:!_busy,
+              onChanged: _applicantChanged,
               textCapitalization:TextCapitalization.words,
               textInputAction:TextInputAction.next,
-              decoration:const InputDecoration(labelText:'Last name',
-                border:OutlineInputBorder(), isDense:true)),
+              decoration: InputDecoration(labelText:'Last name',
+                errorText: _last.text.isNotEmpty && _last.text.trim().length < 2
+                  ? 'Enter last name' : null,
+                border: const OutlineInputBorder(), isDense:true)),
             const SizedBox(height: 10),
             TextField(controller:_contact, enabled:!_busy,
+              onChanged: _applicantChanged,
               keyboardType:TextInputType.phone,
               textInputAction:TextInputAction.done,
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
-              decoration:const InputDecoration(labelText:'Contact phone',
+              decoration: InputDecoration(labelText:'Contact phone',
                 hintText:'08012345678', helperText:'Nigerian phone number',
-                border:OutlineInputBorder(), isDense:true)),
+                errorText: _contact.text.isNotEmpty && !_phoneReady
+                  ? 'Enter a valid Nigerian mobile number' : null,
+                border: const OutlineInputBorder(), isDense:true)),
             const SizedBox(height: 10),
-            FilledButton(onPressed:_busy?null:() async {
+            FilledButton(onPressed:_busy || !_nameReady || !_phoneReady ? null : () async {
               if(owner==null)return;
               setState(() { _busy=true;_error=null; });
               try {

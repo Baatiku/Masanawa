@@ -912,6 +912,11 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               ),
             ),
           if (_showingResult && !_purchaseLocked)
+            const GbWalletResultSummary(
+              title: 'Wallet purchase recorded',
+              detail: 'Check Activity for the wallet entry. Network delivery is verified separately.',
+            ),
+          if (_showingResult && !_purchaseLocked)
             Row(
               children: [
                 Expanded(
@@ -1054,7 +1059,7 @@ class _SelectableDataBundle extends StatelessWidget {
                   ),
                 ),
                 if (bundle.extrasLabel?.isNotEmpty == true)
-                  Text(bundle.extrasLabel!,
+                  Text('Extra: ${bundle.extrasLabel!}',
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.labelSmall),
