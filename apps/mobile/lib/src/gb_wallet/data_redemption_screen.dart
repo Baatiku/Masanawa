@@ -546,7 +546,11 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                             _manualNetwork = true;
                             if (!bundles.any((b) => gbBundleMatchesSelection(b,
                                 network: value, period: _validity))) {
-                              _validity = GbDataValidityPeriod.values.firstWhere(
+                              _validity = const [
+                                GbDataValidityPeriod.daily,
+                                GbDataValidityPeriod.weekly,
+                                GbDataValidityPeriod.monthly,
+                              ].firstWhere(
                                 (period) => bundles.any((b) => gbBundleMatchesSelection(b,
                                   network: value, period: period)),
                                 orElse: () => GbDataValidityPeriod.daily);
