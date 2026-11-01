@@ -662,8 +662,6 @@ class _GbWalletActivityScreenState
                   decoration: InputDecoration(
                     labelText: 'Exact operation reference',
                     hintText: 'Paste original reference',
-                    errorText: draftBadReference
-                        ? 'Use letters, numbers, _, ., : or -' : null,
                     border: const OutlineInputBorder(),
                     isDense: true,
                     suffixIcon: IconButton.filledTonal(
