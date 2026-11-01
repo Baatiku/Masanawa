@@ -196,7 +196,10 @@ class GbActivityTile extends StatelessWidget {
                       height: 36,
                       decoration: BoxDecoration(
                         color: colors.brand.withValues(alpha: .09),
-                        shape: BoxShape.circle,
+                        shape: item.status == 'reversed'
+                            ? BoxShape.rectangle : BoxShape.circle,
+                        borderRadius: item.status == 'reversed'
+                            ? BorderRadius.circular(10) : null,
                       ),
                       child: Icon(icon,
                     color: item.status == 'reversed'
