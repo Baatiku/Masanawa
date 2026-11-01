@@ -442,6 +442,20 @@ class _RechargePackagesScreenState
                                       ref.invalidate(ngnWalletBalanceProvider(owner));
                                   },
                                 ),
+                              if (verifiedCash != null && !verifiedCash.frozen &&
+                                  verifiedCash.balanceKobo > 0 &&
+                                  selectedPackage.isNotEmpty &&
+                                  verifiedCash.balanceKobo < selectedPackage.first.kobo)
+                                GbWalletInlineNotice(
+                                  message: 'Not enough NGN for this package.',
+                                  actionLabel: 'Fund NGN',
+                                  onAction: () async {
+                                    await context.push('/wallet/fund');
+                                    if (mounted && _owner == owner) {
+                                      ref.invalidate(ngnWalletBalanceProvider(owner));
+                                    }
+                                  },
+                                ),
                               const SizedBox(height: 12),
                               if (!_enabled && !_loading)
                                 const GbWalletInlineNotice(

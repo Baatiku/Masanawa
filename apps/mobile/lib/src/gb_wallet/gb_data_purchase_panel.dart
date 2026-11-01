@@ -510,7 +510,13 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
                   if (_receiptDetails != null) ...[
                     const SizedBox(height: 6),
                     Text('Recipient: ${_receiptDetails!.recipientPhone}'),
-                    Text('Bundle reference: ${_receiptDetails!.bundleId}'),
+                    Text('Bundle: ${widget.quote?.bundle.id == _receiptDetails!.bundleId
+                        ? widget.quote!.bundle.allowanceLabel
+                        : 'Verified data plan'}'),
+                    ExpansionTile(
+                      title: const Text('Technical bundle reference'),
+                      children: [SelectableText(_receiptDetails!.bundleId)],
+                    ),
                     Text('Cost: ${groupedMb(_receiptDetails!.costMb)} MB'),
                   ],
                   TextButton.icon(

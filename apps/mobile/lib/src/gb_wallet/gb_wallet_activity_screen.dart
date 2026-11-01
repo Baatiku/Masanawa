@@ -776,7 +776,7 @@ class _GbWalletActivityScreenState
         _direction == 'all' && _reference.isEmpty;
     final periodData = exactPeriodOnly
         ? ref.watch(gbActivitySummaryProvider((
-            owner: owner!, days: int.parse(_period),
+            owner: owner, days: int.parse(_period),
           )))
         : null;
     final periodSummary = periodData?.valueOrNull;

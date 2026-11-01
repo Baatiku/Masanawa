@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers.dart';
 import '../state/session_state.dart';
 import 'ngn_wallet.dart';
+import 'gb_wallet_flow_components.dart';
 
 class NgnFundingScreen extends ConsumerStatefulWidget {
   const NgnFundingScreen({super.key});

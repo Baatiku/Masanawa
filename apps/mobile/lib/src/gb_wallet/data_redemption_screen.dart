@@ -690,10 +690,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 4,
                   children: [
-                    TextButton.icon(
-                      onPressed: _startOver,
-                      icon: const Icon(Icons.restart_alt_rounded, size: 19),
-                      label: const Text('Start over'),
+                    Tooltip(
+                      message: 'Reset draft only; pending original purchases remain protected',
+                      child: TextButton.icon(
+                        onPressed: _startOver,
+                        icon: const Icon(Icons.restart_alt_rounded, size: 19),
+                        label: const Text('Start over'),
+                      ),
                     ),
                     if (owner != null)
                       IconButton(
