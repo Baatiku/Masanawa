@@ -449,6 +449,8 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('activity-unit-NGN')));
       await tester.pump();
+      await tester.tap(find.text('Show transactions'));
+      await tester.pump();
       fake.pending!.complete(GbActivityPage([item('mb:stale', 999)], null));
       await tester.pumpAndSettle();
       expect(fake.units, contains('NGN'));
@@ -814,7 +816,7 @@ void main() {
       await tester.tap(find.text('Technical details'));
       await tester.pumpAndSettle();
       expect(find.text('original_ngn:fund_1'), findsOneWidget);
-      expect(find.text('Copy reference'), findsOneWidget);
+      expect(find.byTooltip('Copy operation reference'), findsOneWidget);
       await tester.dragUntilVisible(
         find.textContaining('not proof of external bank settlement'),
         find.byType(ListView),
@@ -853,7 +855,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('View / share receipt'));
+      await tester.scrollUntilVisible(
+        find.text('View / share receipt'), 160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('View / share receipt'));
       await tester.pump();
@@ -911,7 +916,10 @@ void main() {
         160,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.ensureVisible(find.text('View / share receipt'));
+      await tester.scrollUntilVisible(
+        find.text('View / share receipt'), 160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('View / share receipt'));
       await tester.pumpAndSettle();
@@ -952,7 +960,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       fake.fail = true;
-      await tester.ensureVisible(find.text('View / share receipt'));
+      await tester.scrollUntilVisible(
+        find.text('View / share receipt'), 160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('View / share receipt'));
       await tester.pumpAndSettle();
