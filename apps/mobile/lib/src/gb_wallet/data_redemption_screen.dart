@@ -40,6 +40,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   String? _bundleId;
   GbReadOnlyQuote? _quote;
   String? _error;
+  String? _phoneError;
   CancelToken? _cancel;
   bool _loadingQuote = false;
   bool _purchaseLocked = false;
@@ -71,6 +72,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     setState(() {
       _clearQuote();
       _phone.clear();
+      _phoneError = null;
       _network = null;
       _manualNetwork = false;
       _validity = GbDataValidityPeriod.daily;
@@ -92,16 +94,15 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
     if (!mounted || !_isOwner(owner)) return;
     final value = data?.text?.trim();
     if (value == null || normalizeNigerianDataPhone(value) == null) {
-      setState(
-        () =>
-            _error = 'Copy a valid Nigerian phone number, then paste it here.',
-      );
+      setState(() =>
+        _phoneError = 'Copy a valid Nigerian phone number, then paste it here.');
       return;
     }
     setState(() {
       _clearQuote();
       _bundleId = null;
       _phone.text = value;
+      _phoneError = null;
       if (!_manualNetwork) _network = guessGbNetworkForNigerianPhone(value);
     });
   }
@@ -565,6 +566,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                   enabled: owner != null,
                   keyboardType: TextInputType.phone,
                   onChanged: (value) => setState(() {
+                    _phoneError = null;
                     _clearQuote();
                     _bundleId = null;
                     // Number portability means a deliberate operator choice must
@@ -585,6 +587,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                             tooltip: 'Clear mobile number',
                             onPressed: () => setState(() {
                               _phone.clear();
+                              _phoneError = null;
                               _clearQuote();
                               _bundleId = null;
                               if (!_manualNetwork) _network = null;
@@ -611,9 +614,10 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                       ),
                       borderRadius: BorderRadius.circular(13),
                     ),
-                    errorText: phone.isNotEmpty && !validPhone
-                        ? 'Enter a valid Nigerian mobile number'
-                        : null,
+                    errorText: _phoneError ??
+                        (phone.isNotEmpty && !validPhone
+                            ? 'Enter a valid Nigerian mobile number'
+                            : null),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(13),
                     ),
