@@ -818,12 +818,12 @@ void main() {
       expect(find.text('original_ngn:fund_1'), findsOneWidget);
       expect(find.byTooltip('Copy operation reference'), findsOneWidget);
       await tester.dragUntilVisible(
-        find.textContaining('not proof of external bank settlement'),
+        find.textContaining('External bank settlement'),
         find.byType(ListView),
         const Offset(0, -150),
       );
       expect(
-        find.textContaining('not proof of external bank settlement'),
+        find.textContaining('External bank settlement'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
