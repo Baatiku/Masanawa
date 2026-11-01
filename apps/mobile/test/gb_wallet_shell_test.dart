@@ -256,7 +256,7 @@ void main() {
       container.invalidate(ngnWalletBalanceProvider(owner));
       container.invalidate(ngnBankAccountProvider(owner));
       await tester.pumpAndSettle();
-      expect(find.text('₦3,500'), findsOneWidget);
+      expect(find.text('Last verified: ₦3,500'), findsOneWidget);
       expect(find.text('1234567890'), findsOneWidget);
       expect(find.textContaining('Check your connection'), findsWidgets);
       expect(tester.takeException(), isNull);
