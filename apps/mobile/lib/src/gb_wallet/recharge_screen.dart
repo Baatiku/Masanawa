@@ -431,8 +431,8 @@ class _RechargePackagesScreenState
                                   ),
                                 ],
                               ),
-                              if (owner != null && verifiedCash != null &&
-                                  !verifiedCash.frozen && verifiedCash.balanceKobo == 0)
+                              if (verifiedCash != null && !verifiedCash.frozen &&
+                                  verifiedCash.balanceKobo == 0)
                                 GbWalletInlineNotice(
                                   message: 'No NGN available to buy Data.',
                                   actionLabel: 'Fund NGN',
