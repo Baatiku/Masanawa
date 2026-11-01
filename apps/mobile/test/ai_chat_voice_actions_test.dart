@@ -144,7 +144,7 @@ void main() {
   expect(find.text('Recording voice note'),findsNothing);
   expect(tester.takeException(),isNull);
  });
- testWidgets('hold recording releases to preview and re-record keeps the note unsent at phone width',(tester)async{
+ testWidgets('held microphone release sends directly at phone width',(tester)async{
   tester.view.physicalSize=const Size(360,800);tester.view.devicePixelRatio=1;
   addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
   final recorder=_Recorder(),chats=_Chats();
@@ -154,9 +154,9 @@ void main() {
   await tester.pump(const Duration(milliseconds:600));await tester.pump();
   expect(recorder.state,VoiceNoteState.recording);
   await gesture.up();await tester.pumpAndSettle();
-  expect(recorder.state,VoiceNoteState.ready);expect(find.byTooltip('Play preview'),findsOneWidget);expect(chats.sent,isEmpty);
-  await tester.tap(find.byTooltip('Record again'));await tester.pumpAndSettle();
-  expect(recorder.state,VoiceNoteState.recording);expect(chats.sent,isEmpty);expect(tester.takeException(),isNull);
+  expect(chats.sent,hasLength(1));expect(chats.sent.single.kind,'voice');
+  expect(recorder.retained,isTrue);expect(find.byTooltip('Play preview'),findsNothing);
+  expect(tester.takeException(),isNull);
  });
  testWidgets('reference-sized recording panel stays usable at 320dp and large text',(tester)async{
   tester.view.physicalSize=const Size(320,720);tester.view.devicePixelRatio=1;

@@ -29,6 +29,16 @@ import '../chat/shell_secure_storage.dart';
 import 'session_state.dart';
 import 'agent_directory_state.dart';
 
+/// Private media backup is auxiliary. Never prevent the canonical AI turn or
+/// repeat a charged request merely because the backup endpoint is unavailable.
+void startOptionalChatMediaBackup(Future<void> Function() upload) {
+  try {
+    unawaited(upload().catchError((Object _) {}));
+  } catch (_) {
+    // The local encrypted chat record and canonical inference request remain.
+  }
+}
+
 const String _kThreadsFile = 'masanawa_threads_v2.json';
 const _draftVault=FlutterSecureStorage(
   aOptions:AndroidOptions(),
@@ -2013,7 +2023,7 @@ class AiChatController extends Notifier<AiChatState> {
     final transport = ref.read(agentTransportProvider);
     checkOwner();
     if (transport is MasanawaAgentTransport && requestId != null) {
-      await transport.savePrivateChatMedia(
+      startOptionalChatMediaBackup(() => transport.savePrivateChatMedia(
         characterId: characterId,
         requestId: requestId,
         slot: 0,
@@ -2021,10 +2031,7 @@ class AiChatController extends Notifier<AiChatState> {
         mimeType: mimeType,
         name: attachment.name,
         bytes: bytes,
-      );
-      if (!current()) {
-        throw const ApiException('Account changed before media was sent');
-      }
+      ));
     }
     final hadCachedBinding = _bindings.containsKey(characterId);
     var binding = await _bindingFor(characterId, transport);
@@ -2108,7 +2115,7 @@ class AiChatController extends Notifier<AiChatState> {
     if (transport is MasanawaAgentTransport && requestId != null) {
       for (var index = 0; index < media.length; index++) {
         final part = media[index];
-        await transport.savePrivateChatMedia(
+        startOptionalChatMediaBackup(() => transport.savePrivateChatMedia(
           characterId: characterId,
           requestId: requestId,
           slot: index,
@@ -2116,10 +2123,7 @@ class AiChatController extends Notifier<AiChatState> {
           mimeType: part.mimeType,
           name: part.name,
           bytes: part.bytes,
-        );
-        if (!current()) {
-          throw const ApiException('Account changed before media was sent');
-        }
+        ));
       }
     }
     final binding = await _bindingFor(characterId, transport);

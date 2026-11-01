@@ -49,6 +49,7 @@ class _GatewayClient {
         onError: (error, handler) async {
           if (error.response?.statusCode == 401 &&
               refreshAccessToken != null &&
+              error.requestOptions.extra['masanawaMediaBackup'] != true &&
               error.requestOptions.extra['masanawaAuthRetried'] != true) {
             try {
               final token = await refreshAccessToken!();
@@ -81,8 +82,11 @@ class _GatewayClient {
     return Options(
       followRedirects: false,
       receiveTimeout: turn
-          ? const Duration(seconds: 75)
+          ? const Duration(seconds: 120)
           : const Duration(seconds: 15),
+      sendTimeout: turn
+          ? const Duration(seconds: 90)
+          : const Duration(seconds: 10),
       headers: {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
         if (requestId != null && requestId.isNotEmpty) 'x-request-id': requestId,
@@ -107,7 +111,9 @@ class _GatewayClient {
               path.endsWith('/media-set-turn') ||
               path.startsWith('/agent/media/'),
           requestId: requestId,
-        ),
+        ).copyWith(extra: {if (path.startsWith('/agent/media/') &&
+              path != '/agent/media/list')
+          'masanawaMediaBackup': true}),
         cancelToken: cancelToken,
         onSendProgress: onSendProgress,
       );
