@@ -25,6 +25,13 @@ describe('news RSS original-source ingestion',()=>{
   expect(records[0]?.title).toBe('Africa & world');
   expect(records[0]?.summary).toBe('Regional talks continue after a new agreement');
  });
+ it('upgrades only Africanews own HTTP article links from its HTTPS RSS feed',()=>{
+  const article='https://www.africanews.com/2026/10/31/regional-talks-resume/';
+  expect(parseNewsFeed(rss(item(article.replace('https://','http://'))),'africanews')[0]?.url)
+   .toBe(article);
+  expect(parseNewsFeed(rss(item('http://www.africanews.com.evil.example/story')),'africanews')).toEqual([]);
+  expect(parseNewsFeed(rss(item('http://www.bbc.com/news/articles/abc')),'bbc')).toEqual([]);
+ });
  it('does not admit other publishers, malformed XML, duplicates, or fake dates',()=>{
   const valid=item('https://www.bbc.com/news/articles/abc');
   const wrong=item('https://www.aljazeera.com/news/abc');

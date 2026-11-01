@@ -35,7 +35,13 @@ export function parseNewsFeed(xml:string,publisherId:string):ParsedNews[]{
   const description=plain(xmlElement(block,'description')||xmlElement(block,'summary')).slice(0,520);
   const atomLink=/<link\b[^>]*\bhref=["']([^"']+)["']/i.exec(block)?.[1]??'';
   const link=plain(xmlElement(block,'link'))||atomLink;
-  const url=safeNewsArticleUrl(entry,decodeEntities(link));
+  const decoded=decodeEntities(link);
+  // Africanews currently advertises http://www.africanews.com article links
+  // inside its HTTPS RSS response. Upgrade only that pinned host to HTTPS;
+  // all other insecure, off-host, or credential-bearing URLs stay rejected.
+  const secureLink=entry.id==='africanews'&&/^http:\/\/(?:www\.)?africanews\.com\//i.test(decoded)
+   ?'https://'+decoded.slice('http://'.length):decoded;
+  const url=safeNewsArticleUrl(entry,secureLink);
   const date=plain(xmlElement(block,'pubDate')||xmlElement(block,'published')||xmlElement(block,'updated'));
   const time=Date.parse(date);
   if(!url||seen.has(url)||title.length<3||description.length<15||!Number.isFinite(time))continue;
