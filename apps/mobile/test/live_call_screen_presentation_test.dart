@@ -12,7 +12,7 @@ import 'package:masanawa/src/theme/masanawa_theme.dart';
 
 class _Session extends Mock implements LiveVoiceSession {}
 
-Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool official=false,Future<void>? readiness}) async {
+Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool official=false,Future<void>? readiness, bool failStart = false}) async {
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   const toneChannel = MethodChannel('masanawa/call_tone');
   messenger.setMockMethodCallHandler(toneChannel, (_) async => true);
@@ -22,7 +22,9 @@ Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool off
   when(() => session.errors).thenAnswer((_) => const Stream<String>.empty());
   when(() => session.states).thenAnswer((_) => Stream.value(LiveVoiceState.listening));
   when(() => session.ready).thenAnswer((_) => readiness ?? Future<void>.value());
-  when(() => session.start()).thenAnswer((_) async {});
+  when(() => session.start()).thenAnswer((_) async {
+    if (failStart) throw StateError('Simulated connection error');
+  });
   when(() => session.close()).thenAnswer((_) async {});
   when(() => session.mute(any())).thenAnswer((_) async {});
   when(() => session.setSpeaker(any())).thenAnswer((_) async {});
@@ -81,6 +83,20 @@ void main() {
     expect(find.text('AI simulation · Not the official or their office'),findsOneWidget);
     expect(tester.takeException(),isNull);
     await tester.tap(find.text('End call'));await tester.pump();await tester.pump(const Duration(milliseconds:400));
+  });
+
+  testWidgets('failed call stays visible with a clear reason and a working Close action', (tester) async {
+    final session = await _openCall(tester, failStart: true);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('masanawa-live-call-screen')), findsOneWidget);
+    expect(find.text('Unable to connect. Return to chat and try again.'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+    expect(find.text('Mute'), findsNothing);
+    await tester.tap(find.text('Close'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Open call'), findsOneWidget);
+    verify(() => session.close()).called(greaterThanOrEqualTo(1));
   });
 
   testWidgets('call fills the viewport and End closes the session and route', (tester) async {

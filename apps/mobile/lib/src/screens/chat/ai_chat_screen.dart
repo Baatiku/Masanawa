@@ -1573,6 +1573,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                 recorder: _inlineRecorder,
                 onCancelRecording: _cancelInlineRecording,
                 onStopRecording: _stopInlineRecordingToPreview,
+                onHoldRelease: _sendInlineVoiceNote,
                 onSendVoiceNote: _sendInlineVoiceNote,
                 onTogglePreview: _toggleInlinePreview,
                 previewPlaying: _inlinePreviewPlaying,
@@ -2370,6 +2371,8 @@ class MasanaLiveCallScreen extends StatefulWidget {
 class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   final _tone = CallSignalingTone();
   bool _ringing = true;
+  bool _callFailed = false;
+  bool _ending = false;
   bool _muted = false;
   bool _speaker = true;
   String? _error;
@@ -2432,9 +2435,10 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
       await widget.session.close();
       if (!mounted) return;
       setState(() {
-        _error ??= 'Voice session could not be verified.';
+        _callFailed = true;
+        _ringing = false;
+        _error ??= 'Unable to connect. Return to chat and try again.';
       });
-      Navigator.of(context).pop();
     }
   }
 
@@ -2452,6 +2456,7 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
   }
 
   String _label(LiveVoiceState state) {
+    if (_callFailed) return 'Call failed';
     if (_ringing) return 'Calling…';
     if (widget.session.audioInterrupted) return 'Audio paused';
     if (state==LiveVoiceState.connecting && widget.session.reconnecting) return 'Reconnecting…';
@@ -2479,16 +2484,19 @@ class _MasanaLiveCallScreenState extends State<MasanaLiveCallScreen> {
           decoration: BoxDecoration(color:u.surfaceCard,
             borderRadius:const BorderRadius.vertical(top:Radius.circular(28))),
           child: Wrap(alignment:WrapAlignment.center,spacing:20,runSpacing:12,children:[
-            _CallControl(label:_speaker?'Speaker':'Earpiece',
+            if (!_callFailed) _CallControl(label:_speaker?'Speaker':'Earpiece',
               icon:_speaker?Icons.volume_up:Icons.hearing,selected:_speaker,
               onTap:() async {final next=!_speaker;await widget.session.setSpeaker(next);
                 if(mounted)setState(()=>_speaker=next);}),
-            _CallControl(label:_muted?'Unmute':'Mute',
+            if (!_callFailed) _CallControl(label:_muted?'Unmute':'Mute',
               icon:_muted?Icons.mic_off:Icons.mic,selected:_muted,
               onTap:() async {final next=!_muted;await widget.session.mute(next);
                 if(mounted)setState(()=>_muted=next);}),
-            _CallControl(key:const ValueKey('live-call-end-action'),label:'End call',
+            _CallControl(key:const ValueKey('live-call-end-action'),
+              label:_callFailed?'Close':'End call',
               icon:Icons.call_end_rounded,danger:true,onTap:() async {
+                if (_ending) return;
+                _ending = true;
                 widget.session.endReason??=CallEndReason.userEnded;
                 await widget.session.close();
                 if(context.mounted)Navigator.of(context).pop();}),
@@ -2804,6 +2812,7 @@ class _Composer extends StatelessWidget {
     this.recorder,
     this.onCancelRecording,
     this.onStopRecording,
+    this.onHoldRelease,
     this.onSendVoiceNote,
     this.onTogglePreview,
     this.previewPlaying = false,
@@ -2827,6 +2836,7 @@ class _Composer extends StatelessWidget {
   final VoiceNoteRecorder? recorder;
   final Future<void> Function()? onCancelRecording;
   final Future<void> Function()? onStopRecording;
+  final Future<void> Function()? onHoldRelease;
   final VoidCallback? onSendVoiceNote;
   final VoidCallback? onTogglePreview;
   final bool previewPlaying;
@@ -2862,7 +2872,7 @@ class _Composer extends StatelessWidget {
               label: hasText ? 'Send message' : 'Record voice note',
               child: VoiceNoteHoldRegion(
                 enabled:!sending&&!hasText&&onHoldStart!=null,
-                onStart:onHoldStart??()async{},onPreview:onStopRecording??()async{},
+                onStart:onHoldStart??()async{},onPreview:onHoldRelease??()async{},
                 onCancel:onCancelRecording??()async{},onLock:onHoldLock??(){},
                 child: Material(
                 color: u.brand,

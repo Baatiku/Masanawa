@@ -758,6 +758,31 @@ void main() {
     },
   );
 
+  test('unauthorized private-media backup never refreshes into another login', () async {
+    final adapter = RotatingAuthAdapter();
+    final dio = Dio()..httpClientAdapter = adapter;
+    var refreshes = 0;
+    final transport = MasanawaAgentTransport(
+      dio: dio,
+      baseUrl: 'https://gateway.test',
+      readAccessToken: () => 'expired-token',
+      refreshAccessToken: () async { refreshes++; return 'fresh-token'; },
+    );
+    await expectLater(
+      transport.savePrivateChatMedia(
+        characterId: 'character-1',
+        requestId: 'request-1',
+        slot: 0,
+        kind: 'voice',
+        mimeType: 'audio/mp4',
+        bytes: Uint8List.fromList([1, 2, 3]),
+      ),
+      throwsA(isA<ApiException>()),
+    );
+    expect(adapter.authorizations, ['Bearer expired-token']);
+    expect(refreshes, 0);
+  });
+
   test(
     'chat transport keeps production authorization and waits for server deadline',
     () async {
@@ -781,7 +806,8 @@ void main() {
         'https://gateway.test/agent/sessions/session-1/turn',
       );
       expect(adapter.request!.headers['Authorization'], 'Bearer private-token');
-      expect(adapter.request!.receiveTimeout, const Duration(seconds: 75));
+      expect(adapter.request!.receiveTimeout, const Duration(seconds: 120));
+      expect(adapter.request!.sendTimeout, const Duration(seconds: 90));
       expect(adapter.request!.followRedirects, isFalse);
     },
   );
@@ -815,3 +841,4 @@ class _StaleAfterSwitchTransport extends RecoveringShellTransport {
     turns++;return turns==2?old.future:Future.value(const AgentTurnResult(text:'Confirmed reply',agentRunId:'run-original'));
   }
 }
+
