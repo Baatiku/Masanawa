@@ -606,7 +606,7 @@ void main() {
       150,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('1,000,000 MB'), findsOneWidget);
+    expect(find.textContaining('Debit: 1,000,000 MB'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
