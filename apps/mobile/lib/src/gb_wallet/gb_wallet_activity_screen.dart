@@ -823,13 +823,15 @@ class _GbWalletActivityScreenState
                   key: const PageStorageKey('gb-wallet-activity-all'),
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            LayoutBuilder(
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _WalletFacetHeader(
+                        height: MediaQuery.sizeOf(context).width < 332 ||
+                            MediaQuery.textScalerOf(context).scale(1) > 1.4
+                            ? 152 : 80,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: LayoutBuilder(
                               builder: (context, size) {
                                 final category = _HistoryFilter(
                                   value: _purpose,
@@ -853,7 +855,7 @@ class _GbWalletActivityScreenState
                                   label: 'Status',
                                   choices: const {
                                     'all': 'All statuses',
-                                    'completed': 'Successful',
+                                    'completed': 'Posted to wallet',
                                     'reversed': 'Reversed',
                                   },
                                   onChanged: (v) => setState(() {
@@ -882,6 +884,16 @@ class _GbWalletActivityScreenState
                                       );
                               },
                             ),
+                        ),
+                      ),
+                    ),
+
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                             const SizedBox(height: 8),
                             Align(
                               alignment: AlignmentDirectional.centerStart,
@@ -901,8 +913,15 @@ class _GbWalletActivityScreenState
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
+                                  if (_purpose != 'all')
+                                    InputChip(label: Text('Category: $_purpose'),
+                                      onDeleted: () => setState(() { _reset(); _purpose = 'all'; })),
+                                  if (_status != 'all')
+                                    InputChip(label: Text('Status: $_status'),
+                                      onDeleted: () => setState(() { _reset(); _status = 'all'; })),
                                   if (_unit != 'all')
-                                    Chip(label: Text('Balance: $_unit')),
+                                    InputChip(label: Text('Balance: $_unit'),
+                                      onDeleted: () => setState(() { _reset(); _unit = 'all'; })),
                                   if (_direction != 'all')
                                     Chip(
                                       label: Text(
@@ -1068,6 +1087,23 @@ class _GbWalletActivityScreenState
             ),
     );
   }
+}
+
+class _WalletFacetHeader extends SliverPersistentHeaderDelegate {
+  const _WalletFacetHeader({required this.height, required this.child});
+  final double height;
+  final Widget child;
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      Material(color: Theme.of(context).scaffoldBackgroundColor,
+        child: SizedBox.expand(child: child));
+  @override
+  bool shouldRebuild(covariant _WalletFacetHeader oldDelegate) =>
+      height != oldDelegate.height || child != oldDelegate.child;
 }
 
 class _HistoryFilter extends StatelessWidget {
