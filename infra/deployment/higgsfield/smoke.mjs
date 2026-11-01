@@ -60,7 +60,7 @@ try {
   );
 
   const results = [await fetchFeed('http://127.0.0.1:3000', access)];
-  const publicUrl = process.env.MASANAWA_HF_PUBLIC_URL?.trim();
+  const publicUrl = process.argv[2]?.trim();
   if (publicUrl) {
     if (!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/u.test(publicUrl)) {
       throw new Error('Only an ephemeral trycloudflare.com staging URL is allowed');

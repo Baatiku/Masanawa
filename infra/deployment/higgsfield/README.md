@@ -76,9 +76,9 @@ bearer tokens. Supply the actual temporary tunnel URL to verify external HTTPS:
 
 ```bash
 cd /home/user/masanawa-staging
-MASANAWA_HF_PUBLIC_URL=https://YOUR-TEMPORARY-HOST.trycloudflare.com \
-  /home/user/masanawa-toolchains/node-v24.22.2-linux-x64/bin/node \
-  --conditions=production infra/deployment/higgsfield/smoke.mjs
+/home/user/masanawa-toolchains/node-v24.22.2-linux-x64/bin/node \
+  --conditions=production infra/deployment/higgsfield/smoke.mjs \
+  https://YOUR-TEMPORARY-HOST.trycloudflare.com
 ```
 
 ## What survives, and what does not
