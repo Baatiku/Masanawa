@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       build_apk:
-        description: Compile debug APK only on explicit owner request
+        description: Compile a debug APK on manual workflow dispatch (PR communication changes build automatically)
         type: boolean
         default: false
   pull_request:
     paths:
+      - "apps/mobile/android/app/src/main/kotlin/**"
       - "apps/mobile/lib/src/screens/chat/**"
       - "apps/mobile/lib/src/core/voice_note_recorder.dart"
       - "apps/mobile/lib/src/core/agent_audio_attachment.dart"
@@ -32,6 +33,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "apps/mobile/android/app/src/main/kotlin/**"
       - "apps/mobile/lib/src/screens/chat/**"
       - "apps/mobile/lib/src/core/voice_note_recorder.dart"
       - "apps/mobile/lib/src/core/live_voice_session.dart"
@@ -136,7 +138,7 @@ jobs:
           test/ai_chat_voice_actions_test.dart
 
   android-debug-apk:
-    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.build_apk == true)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     defaults:
