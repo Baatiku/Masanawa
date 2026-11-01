@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,12 +45,14 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   bool _purchaseLocked = false;
   bool _showingResult = false;
   bool _reviewOpen = false;
+  Timer? _redeemQuoteTimer;
   int _generation = 0;
 
   @override
   void dispose() {
     _generation++;
     _cancel?.cancel();
+    _redeemQuoteTimer?.cancel();
     _phone.dispose();
     super.dispose();
   }
@@ -193,6 +197,7 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
   ) async {
     if (_reviewOpen) return;
     setState(() => _reviewOpen = true);
+    _redeemQuoteTimer?.cancel();
     var submitting = false;
     try {
       await showModalBottomSheet<void>(
@@ -206,7 +211,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (sheetContext) => StatefulBuilder(
-          builder: (sheetContext, updateSheet) => Consumer(
+          builder: (sheetContext, updateSheet) {
+            final delay = quote.expiresAt.difference(DateTime.now().toUtc());
+            _redeemQuoteTimer ??= Timer(
+              delay.isNegative ? Duration.zero : delay + const Duration(milliseconds: 50),
+              () { if (sheetContext.mounted) updateSheet(() {}); },
+            );
+            return Consumer(
             builder: (context, sheetRef, _) {
               final session = sheetRef.watch(sessionProvider);
               if (session is! SessionSignedIn ||
@@ -341,10 +352,13 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 ),
               );
             },
-          ),
+          );
+          },
         ),
       );
     } finally {
+      _redeemQuoteTimer?.cancel();
+      _redeemQuoteTimer = null;
       if (mounted) setState(() => _reviewOpen = false);
     }
   }
@@ -611,6 +625,21 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
                 );
               },
             ),
+            if (_manualNetwork && owner != null)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton.icon(
+                  key: const ValueKey('data-detect-network-again'),
+                  onPressed: () => setState(() {
+                    _manualNetwork = false;
+                    _network = guessGbNetworkForNigerianPhone(_phone.text);
+                    _bundleId = null;
+                    _clearQuote();
+                  }),
+                  icon: const Icon(Icons.autorenew_rounded, size: 18),
+                  label: const Text('Detect network again'),
+                ),
+              ),
             if (validPhone && _network != null && !_manualNetwork)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -802,10 +831,33 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               ),
           ],
           if (_quote != null && !_purchaseLocked && !_showingResult)
-            TextButton.icon(
-              onPressed: () => setState(_clearQuote),
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text('Back to plans'),
+            Card(
+              key: const ValueKey('data-selected-review-summary'),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Selected: ${_quote!.bundle.allowanceLabel}',
+                      style: theme.textTheme.titleSmall),
+                    Text('${_quote!.bundle.network} · ${_quote!.recipientPhone} · '
+                      '${groupedMb(_quote!.bundle.costMb)} MB debit'),
+                    Wrap(spacing: 8, children: [
+                      TextButton.icon(
+                        onPressed: () => setState(_clearQuote),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Edit choice'),
+                      ),
+                      if (owner != null)
+                        FilledButton.tonalIcon(
+                          onPressed: () => _showPurchaseReview(owner, _quote!),
+                          icon: const Icon(Icons.fact_check_outlined),
+                          label: const Text('Reopen review'),
+                        ),
+                    ]),
+                  ],
+                ),
+              ),
             ),
           if (_showingResult && !_purchaseLocked)
             Row(
