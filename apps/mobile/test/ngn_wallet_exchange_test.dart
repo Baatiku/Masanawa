@@ -344,8 +344,7 @@ void main() {
       );
       expect(first.dx, lessThan(fourth.dx));
       await tester.tap(find.text('10 GB'));
-      await tester.pump();
-      await tester.tap(find.text('Continue to review'));
+      // Preset tap fetches a signed quote; financial confirmation is separate.
       await tester.pumpAndSettle();
       expect(find.text('Review exchange'), findsOneWidget);
       expect(f.posts, isEmpty);
@@ -353,7 +352,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Choose a package'), findsOneWidget);
       expect(find.byKey(const ValueKey('gb-package-10')), findsOneWidget);
-      await tester.tap(find.text('Continue to review'));
+      await tester.tap(find.byKey(const ValueKey('gb-package-10')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm exchange'));
       await tester.pumpAndSettle();
@@ -371,8 +370,7 @@ void main() {
       await tester.pumpWidget(f.app(const RechargePackagesScreen()));
       await tester.pumpAndSettle();
       await tester.tap(find.text('10 GB'));
-      await tester.pump();
-      await tester.tap(find.text('Continue to review'));
+      // Preset tap fetches a signed quote; financial confirmation is separate.
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm exchange'));
       await tester.pumpAndSettle();
@@ -398,8 +396,6 @@ void main() {
     await tester.pumpWidget(f.app(const RechargePackagesScreen()));
     await tester.pumpAndSettle();
     await tester.tap(find.text('10 GB'));
-    await tester.pump();
-    await tester.tap(find.text('Continue to review'));
     await tester.pump();
     final container = ProviderScope.containerOf(
       tester.element(find.byType(RechargePackagesScreen)),
