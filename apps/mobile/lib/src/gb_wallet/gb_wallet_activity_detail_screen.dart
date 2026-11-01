@@ -257,8 +257,8 @@ class GbWalletActivityDetailScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'This is an authorized posted ledger entry. '
-                'It is not proof of external bank settlement or data delivery.',
+                'Wallet posting verified. External bank settlement or '
+                'mobile-network delivery must be checked separately.',
               ),
             ),
             TextButton.icon(
