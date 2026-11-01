@@ -1024,8 +1024,8 @@ class _SelectableDataBundle extends StatelessWidget {
                     color: colors.brandStrong,
                   ),
                 ),
-                if (bundle.extrasLabel.isNotEmpty)
-                  Text(bundle.extrasLabel,
+                if (bundle.extrasLabel?.isNotEmpty == true)
+                  Text(bundle.extrasLabel!,
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.labelSmall),
