@@ -441,7 +441,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Complete your funding details'), findsOneWidget);
+    expect(find.text('Complete funding details'), findsOneWidget);
     expect(find.text('Get funding account'), findsNothing);
     expect(find.byType(TextField), findsNWidgets(3));
     expect(tester.takeException(), isNull);
@@ -494,7 +494,7 @@ void main() {
       await tester.tap(find.text('Get funding account'));
       await tester.pumpAndSettle();
       expect(posts, 1);
-      expect(find.text('Complete your funding details'), findsOneWidget);
+      expect(find.text('Complete funding details'), findsOneWidget);
       expect(
         find.text(
           'Check your funding details and Nigerian contact phone. No account assignment was started.',
