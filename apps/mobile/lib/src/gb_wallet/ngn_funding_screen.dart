@@ -70,19 +70,44 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
           if (state?.isLoading == true || _busy)
             const LinearProgressIndicator(),
           if (bank?.state == 'assigned' && bank!.fundingEnabled) ...[
-            Text(bank.bank!),
-            Text(bank.name!),
-            SelectableText(
-              bank.number!,
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            OutlinedButton.icon(
-              onPressed: () =>
-                  Clipboard.setData(ClipboardData(text: bank.number!)),
-              icon: const Icon(Icons.copy_outlined),
-              label: const Text('Copy account number'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Ready for deposit',
+                      style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 10),
+                    Text(bank.bank!, style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 8),
+                    Text(bank.name!, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 10),
+                    SelectableText(bank.number!,
+                      style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: bank.number!));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Account number copied')));
+                        }
+                      },
+                      icon: const Icon(Icons.copy_outlined),
+                      label: const Text('Copy account number'),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const Text('Only verified deposits appear in your NGN balance.'),
+            if (Navigator.canPop(context))
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Back to Buy Data'),
+              ),
           ] else
             Text(switch (bank?.state) {
               'pending' =>
