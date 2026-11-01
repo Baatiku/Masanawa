@@ -134,6 +134,12 @@ class _GbReceiptActionsState extends ConsumerState<GbReceiptActions> {
                           children: [
                             for (final format in GbReceiptFormat.values)
                               FilledButton.icon(
+                                style: format == GbReceiptFormat.pdf
+                                    ? null
+                                    : FilledButton.styleFrom(
+                                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                        foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                      ),
                                 onPressed: sharing
                                     ? null
                                     : () async {

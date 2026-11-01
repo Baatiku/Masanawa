@@ -486,7 +486,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               ),
               label: Text(
                 sheetBusy
-                    ? 'Checking…'
+                    ? (_uncertain ? 'Checking original…' : 'Sending MB…')
                     : _receipt != null
                     ? 'Done'
                     : _uncertain

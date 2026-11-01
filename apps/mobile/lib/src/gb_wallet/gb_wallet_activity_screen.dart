@@ -26,6 +26,12 @@ GbWalletOwner? _ownerFor(WidgetRef ref) {
       : null;
 }
 
+String _formatPostedSummaryMb(int amount) =>
+    '${amount < 0 ? '−' : '+'}${groupActivityAmount(amount.abs())} MB';
+String _formatPostedSummaryNgn(int amount) =>
+    '${amount < 0 ? '−' : '+'}₦${groupActivityAmount(amount.abs() ~/ 100)}.'
+    '${(amount.abs() % 100).toString().padLeft(2, '0')}';
+
 String _amountText(GbActivityItem row) {
   final sign = row.amount > 0 ? '+' : '−';
   final absolute = row.amount.abs();
@@ -764,6 +770,16 @@ class _GbWalletActivityScreenState
     final byId = <String, GbActivityItem>{};
     for (final entry in entries) byId.putIfAbsent(entry.id, () => entry);
     final cursor = _loadedMore ? _next : initial?.nextCursor;
+    final exactPeriodOnly = owner != null &&
+        (_period == '7' || _period == '30') &&
+        _purpose == 'all' && _status == 'all' &&
+        _direction == 'all' && _reference.isEmpty;
+    final periodData = exactPeriodOnly
+        ? ref.watch(gbActivitySummaryProvider((
+            owner: owner, days: int.parse(_period),
+          )))
+        : null;
+    final periodSummary = periodData?.valueOrNull;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transactions'),
@@ -895,6 +911,19 @@ class _GbWalletActivityScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            if (periodSummary != null)
+                              Semantics(
+                                label: 'Verified period totals',
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Wrap(spacing: 12, runSpacing: 4,
+                                    children: [
+                                      Text('Last ${periodSummary.days} days · MB net: '
+                                        '${_formatPostedSummaryMb(periodSummary.mb.net)}'),
+                                      Text('NGN net: ${_formatPostedSummaryNgn(periodSummary.ngn.net)}'),
+                                    ]),
+                                ),
+                              ),
                             const SizedBox(height: 8),
                             Align(
                               alignment: AlignmentDirectional.centerStart,
