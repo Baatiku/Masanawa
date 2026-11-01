@@ -719,6 +719,18 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
             ),
             GbDataValidityChoices(
               period: _validity,
+              counts: currentBundles == null || _network == null
+                ? const {}
+                : {
+                    for (final p in const [
+                      GbDataValidityPeriod.daily,
+                      GbDataValidityPeriod.weekly,
+                      GbDataValidityPeriod.monthly,
+                    ])
+                      p: currentBundles.where((b) =>
+                        b.network == _network &&
+                        gbDataValidityPeriod(b.validityDays) == p).length,
+                  },
               enabled: owner != null && _network != null,
               onChanged: (choice) {
                 if (choice == _validity) return;

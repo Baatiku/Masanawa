@@ -46,7 +46,9 @@ class GbDataValidityChoices extends StatelessWidget {
     required this.period,
     required this.onChanged,
     this.enabled = true,
+    this.counts = const {},
   });
+  final Map<GbDataValidityPeriod, int> counts;
   final GbDataValidityPeriod? period;
   final ValueChanged<GbDataValidityPeriod?> onChanged;
   final bool enabled;
@@ -59,18 +61,21 @@ class GbDataValidityChoices extends StatelessWidget {
         constraints: BoxConstraints(minWidth: size.maxWidth),
         child: SegmentedButton<GbDataValidityPeriod>(
           showSelectedIcon: false,
-          segments: const [
+          segments: [
             ButtonSegment(
               value: GbDataValidityPeriod.daily,
-              label: Text('Daily'),
+              label: Text(counts.containsKey(GbDataValidityPeriod.daily)
+                ? 'Daily · ${counts[GbDataValidityPeriod.daily]}' : 'Daily'),
             ),
             ButtonSegment(
               value: GbDataValidityPeriod.weekly,
-              label: Text('Weekly'),
+              label: Text(counts.containsKey(GbDataValidityPeriod.weekly)
+                ? 'Weekly · ${counts[GbDataValidityPeriod.weekly]}' : 'Weekly'),
             ),
             ButtonSegment(
               value: GbDataValidityPeriod.monthly,
-              label: Text('Monthly'),
+              label: Text(counts.containsKey(GbDataValidityPeriod.monthly)
+                ? 'Monthly · ${counts[GbDataValidityPeriod.monthly]}' : 'Monthly'),
             ),
           ],
           selected: period == null ? const {} : {period!},
