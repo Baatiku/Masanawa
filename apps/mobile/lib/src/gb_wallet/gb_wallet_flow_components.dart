@@ -178,7 +178,9 @@ class GbWalletInlineNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.masanawa;
     final theme = Theme.of(context);
-    return Container(
+    return Semantics(
+      liveRegion: true,
+      child: Container(
       padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: colors.fieldSurface,
@@ -210,6 +212,7 @@ class GbWalletInlineNotice extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }
