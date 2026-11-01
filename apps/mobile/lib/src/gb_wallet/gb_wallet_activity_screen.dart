@@ -674,6 +674,11 @@ class _GbWalletActivityScreenState
                     ),
                   ),
                 ),
+                if (draftBadReference)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text('Use letters, numbers, _, ., : or -'),
+                  ),
                 TextButton.icon(
                   onPressed: () => update(() {
                     unit = 'all';
