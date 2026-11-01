@@ -190,11 +190,13 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
   String? _quickSelection;
   int? _reviewBalanceMb;
   int _request = 0;
+  Timer? _sendQuoteExpiryTimer;
 
   @override
   void dispose() {
     _request++;
     _cancel?.cancel();
+    _sendQuoteExpiryTimer?.cancel();
     _username.dispose();
     _mb.dispose();
     super.dispose();
@@ -350,7 +352,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
 
   Future<void> _showSendReview(GbWalletOwner owner, GbSendQuote quote) async {
     var sheetBusy = false;
-    Timer? quoteExpiryTimer;
+    _sendQuoteExpiryTimer?.cancel();
     try {
     await showModalBottomSheet<void>(
       context: context,
@@ -360,7 +362,7 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       useSafeArea: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, refreshSheet) {
-          quoteExpiryTimer ??= Timer(
+          _sendQuoteExpiryTimer ??= Timer(
             quote.expiresAt.difference(DateTime.now().toUtc()).isNegative
                 ? Duration.zero
                 : quote.expiresAt.difference(DateTime.now().toUtc()) +
@@ -500,7 +502,8 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
       ),
     );
     } finally {
-      quoteExpiryTimer?.cancel();
+      _sendQuoteExpiryTimer?.cancel();
+      _sendQuoteExpiryTimer = null;
     }
   }
 
