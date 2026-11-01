@@ -43,7 +43,7 @@ case "${1:-}" in
   gateway)
     umask 077
     if [[ ! -s "$STATE_DIR/otp-pepper" ]]; then
-      openssl rand -hex 32 -out "$STATE_DIR/otp-pepper"
+      openssl rand -hex -out "$STATE_DIR/otp-pepper" 32
     fi
     export MASANAWA_AUTH_OTP_PEPPER="$(< "$STATE_DIR/otp-pepper")"
     # Intentional invalid key permits news/API staging without exposing a real
