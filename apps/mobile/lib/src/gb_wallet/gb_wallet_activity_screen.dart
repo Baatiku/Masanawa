@@ -383,7 +383,7 @@ class _GbWalletActivityScreenState
       _direction = 'all',
       _period = 'all',
       _reference = '';
-  bool _badReference = false, _exporting = false;
+  bool _exporting = false;
   final _referenceInput = TextEditingController();
 
   GbActivityFilters get _facets => (
@@ -410,24 +410,10 @@ class _GbWalletActivityScreenState
       _direction = 'all';
       _period = 'all';
       _reference = '';
-      _badReference = false;
       _referenceInput.clear();
     });
   }
 
-  void _submitReference() {
-    final text = _referenceInput.text.trim();
-    if (!validGbActivityReference(text)) {
-      setState(() => _badReference = true);
-      return;
-    }
-    if (text == _reference) return;
-    setState(() {
-      _reset();
-      _badReference = false;
-      _reference = text;
-    });
-  }
 
   void _reset() {
     ++_request;
@@ -643,8 +629,7 @@ class _GbWalletActivityScreenState
                   _direction = direction;
                   _period = period;
                   _reference = reference;
-                  _badReference = false;
-                });
+                            });
               }
               Navigator.pop(sheetContext);
             }
@@ -726,7 +711,6 @@ class _GbWalletActivityScreenState
       _direction = 'all';
       _period = 'all';
       _reference = '';
-      _badReference = false;
       _referenceInput.clear();
     }
     final request = owner == null
