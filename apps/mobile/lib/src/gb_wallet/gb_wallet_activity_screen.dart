@@ -618,101 +618,101 @@ class _GbWalletActivityScreenState
     ],
   );
 
-  Future<void> _openFilterSheet() => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (sheetContext, refreshSheet) {
-        void change(VoidCallback update) {
-          setState(() {
-            _reset();
-            update();
-          });
-          refreshSheet(() {});
-        }
-
-        return GbWalletReviewSheet(
-          title: 'Filter transactions',
-          onClose: () => Navigator.pop(sheetContext),
-          children: [
-            _sheetChoices('Balance', _unit, const {
-              'all': 'All',
-              'MB': 'Data MB',
-              'NGN': 'Naira NGN',
-            }, (v) => change(() => _unit = v)),
-            const SizedBox(height: 16),
-            _sheetChoices('Direction', _direction, const {
-              'all': 'In & out',
-              'incoming': 'Received',
-              'outgoing': 'Spent',
-            }, (v) => change(() => _direction = v)),
-            const SizedBox(height: 16),
-            _sheetChoices('History period', _period, const {
-              'all': 'All dates',
-              '7': 'Last 7 days',
-              '30': 'Last 30 days',
-            }, (v) => change(() => _period = v)),
-            const SizedBox(height: 16),
-            TextField(
-              key: const ValueKey('activity-reference-input'),
-              controller: _referenceInput,
-              maxLength: 160,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                labelText: 'Exact operation reference',
-                hintText: 'Paste original reference',
-                errorText: _badReference
-                    ? 'Use letters, numbers, _, ., : or -'
-                    : null,
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: IconButton.filledTonal(
-                  key: const ValueKey('activity-reference-submit'),
-                  tooltip: 'Find exact operation',
-                  onPressed: () {
-                    _submitReference();
-                    refreshSheet(() {});
+  Future<void> _openFilterSheet() async {
+    var unit = _unit, direction = _direction, period = _period;
+    var draftBadReference = false;
+    _referenceInput.text = _reference;
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (sheetContext, update) {
+            void apply() {
+              final reference = _referenceInput.text.trim();
+              if (!validGbActivityReference(reference)) {
+                update(() => draftBadReference = true);
+                return;
+              }
+              if (mounted && (unit != _unit || direction != _direction ||
+                  period != _period || reference != _reference)) {
+                setState(() {
+                  _reset();
+                  _unit = unit;
+                  _direction = direction;
+                  _period = period;
+                  _reference = reference;
+                  _badReference = false;
+                });
+              }
+              Navigator.pop(sheetContext);
+            }
+            return GbWalletReviewSheet(
+              title: 'Filter transactions',
+              onClose: () => Navigator.pop(sheetContext),
+              children: [
+                _sheetChoices('Balance', unit, const {
+                  'all': 'All', 'MB': 'Data MB', 'NGN': 'Naira NGN',
+                }, (v) => update(() => unit = v)),
+                const SizedBox(height: 16),
+                _sheetChoices('Direction', direction, const {
+                  'all': 'In & out',
+                  'incoming': 'Received', 'outgoing': 'Spent',
+                }, (v) => update(() => direction = v)),
+                const SizedBox(height: 16),
+                _sheetChoices('History period', period, const {
+                  'all': 'All dates', '7': 'Last 7 days', '30': 'Last 30 days',
+                }, (v) => update(() => period = v)),
+                const SizedBox(height: 16),
+                TextField(
+                  key: const ValueKey('activity-reference-input'),
+                  controller: _referenceInput,
+                  maxLength: 160,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => apply(),
+                  onChanged: (_) {
+                    if (draftBadReference) update(() => draftBadReference = false);
                   },
-                  icon: const Icon(Icons.search_rounded),
+                  decoration: InputDecoration(
+                    labelText: 'Exact operation reference',
+                    hintText: 'Paste original reference',
+                    errorText: draftBadReference
+                        ? 'Use letters, numbers, _, ., : or -' : null,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: IconButton.filledTonal(
+                      key: const ValueKey('activity-reference-submit'),
+                      tooltip: 'Find exact operation',
+                      onPressed: apply,
+                      icon: const Icon(Icons.search_rounded),
+                    ),
+                  ),
                 ),
+                TextButton.icon(
+                  onPressed: () => update(() {
+                    unit = 'all';
+                    direction = 'all';
+                    period = 'all';
+                    _referenceInput.clear();
+                    draftBadReference = false;
+                  }),
+                  icon: const Icon(Icons.filter_alt_off_rounded),
+                  label: const Text('Reset draft filters'),
+                ),
+              ],
+              action: FilledButton(
+                onPressed: apply,
+                child: const Text('Show transactions'),
               ),
-              onChanged: (_) {
-                if (_badReference) {
-                  setState(() => _badReference = false);
-                  refreshSheet(() {});
-                }
-              },
-              onSubmitted: (_) {
-                _submitReference();
-                refreshSheet(() {});
-              },
-            ),
-            if (_filtered)
-              TextButton.icon(
-                onPressed: () {
-                  _clearFilters();
-                  refreshSheet(() {});
-                },
-                icon: const Icon(Icons.filter_alt_off_rounded),
-                label: const Text('Clear filters'),
-              ),
-          ],
-          action: FilledButton(
-            onPressed: () {
-              if (_referenceInput.text.trim() != _reference) _submitReference();
-              refreshSheet(() {});
-              if (!_badReference) Navigator.pop(sheetContext);
-            },
-            child: const Text('Show transactions'),
-          ),
-        );
-      },
-    ),
-  );
+            );
+          },
+        ),
+      );
+    } finally {
+      if (mounted) _referenceInput.text = _reference;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
