@@ -483,25 +483,30 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
               padding: const EdgeInsets.all(14),
               child: Column(
                 children: [
-                  Text(
-                    switch (_status) {
-                      'delivered' => 'Data delivered',
-                      'failed' => 'Purchase unsuccessful',
-                      _ => 'Purchase pending',
-                    },
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
                   Icon(
                     _status == 'delivered'
                       ? Icons.check_circle_outline_rounded
                       : _status == 'failed'
                           ? Icons.info_outline_rounded
                           : Icons.hourglass_empty_rounded,
-                    size: 25, color: colors.brandStrong),
-                  const SizedBox(height: 6),
+                    size: 30,
+                    color: _status == 'failed'
+                      ? theme.colorScheme.error : colors.brandStrong),
+                  const SizedBox(height: 8),
+                  Text(
+                    switch (_status) {
+                      'delivered' => 'Data delivered',
+                      'failed' => 'Purchase unsuccessful',
+                      _ => 'Purchase pending',
+                    },
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Original operation reference'),
+                  const SizedBox(height: 4),
                   SelectableText(
                     _operationId!,
                     textAlign: TextAlign.center,

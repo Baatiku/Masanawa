@@ -912,11 +912,6 @@ class _DataRedemptionScreenState extends ConsumerState<DataRedemptionScreen> {
               ),
             ),
           if (_showingResult && !_purchaseLocked)
-            const GbWalletResultSummary(
-              title: 'Wallet purchase recorded',
-              detail: 'Check Activity for the wallet entry. Network delivery is verified separately.',
-            ),
-          if (_showingResult && !_purchaseLocked)
             Row(
               children: [
                 Expanded(
