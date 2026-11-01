@@ -820,12 +820,12 @@ void main() {
       expect(find.text('original_ngn:fund_1'), findsOneWidget);
       expect(find.byTooltip('Copy operation reference'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.textContaining('External bank settlement'),
+        find.textContaining('external bank settlement'),
         160,
         scrollable: find.byType(Scrollable).first,
       );
       expect(
-        find.textContaining('External bank settlement'),
+        find.textContaining('external bank settlement'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
