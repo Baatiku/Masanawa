@@ -764,7 +764,7 @@ class _GbWalletActivityScreenState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.ios_share_rounded),
-            label: const Text('Export'),
+            label: Text(_exporting ? 'Preparing…' : 'Export'),
           ),
         ],
       ),
@@ -1052,6 +1052,11 @@ class _GbWalletActivityScreenState
                               const LinearProgressIndicator(
                                 semanticsLabel: 'Loading more wallet activity',
                               ),
+                            if (!_loadingMore && !_pageError && cursor == null &&
+                                 initial != null && byId.isNotEmpty)
+                               Text('You have reached the end of your activity.',
+                                 textAlign: TextAlign.center,
+                                 style: Theme.of(context).textTheme.bodySmall),
                             if (!_loadingMore &&
                                 !_pageError &&
                                 cursor != null &&
