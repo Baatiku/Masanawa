@@ -572,7 +572,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('activity-toggle-more-filters')));
       await tester.pumpAndSettle();
       await tester.enterText(input, "evil' OR 1=1");
-      await tester.tap(find.byKey(const ValueKey('activity-reference-submit')));
+      // Keyboard covers the trailing icon in a compact modal; Search is the
+      // accessible submission path and must validate without refetching.
+      await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
       expect(fake.filters.last.reference, 'refer_42');
       expect(find.textContaining('Use letters, numbers'), findsOneWidget);
