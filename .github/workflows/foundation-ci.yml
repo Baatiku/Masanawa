@@ -47,6 +47,10 @@ jobs:
         # PostgreSQL integration suites share a disposable schema; concurrent
         # migration and teardown races cause false failures (42P07/42P01).
         run: pnpm exec vitest run --no-file-parallelism
+      - name: Cloudflare news gateway persistence and public API tests
+        run: |
+          pnpm exec tsc -p infra/deployment/news-gateway/tsconfig.json
+          node --test infra/deployment/news-gateway/test/gateway.test.mjs
       - name: Provider qualification tooling tests
         run: >-
           node --test

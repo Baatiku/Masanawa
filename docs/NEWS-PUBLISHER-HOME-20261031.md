@@ -21,3 +21,13 @@ The old persona feed remains an internal historical API for saved/deep-link comp
 ## Release gates
 
 Combined workspace typecheck/tests, Flutter analyzer/widgets, migration/real PostgreSQL checks and CI must pass before merging. Live importer activation, provider rights, and handset verification are separate deployment qualifications. Do not misrepresent a CI test run as a compiled APK or verified live news.
+
+## Cloudflare continuation, 3 November 2026
+
+The standalone gateway and canonical social-post bridge are documented in
+[CLOUDFLARE-NEWS-ACTIVATION-20261103.md](CLOUDFLARE-NEWS-ACTIVATION-20261103.md).
+After verifying its public endpoint, configure `MASANAWA_NEWS_GATEWAY_ORIGIN` on
+the existing importer. Flutter remains on the canonical Masanawa API for
+account-safe news and working likes/comments. Live activation is currently
+blocked by Cloudflare sign-in and Railway trial expiry; source merge alone
+does not resolve either condition.

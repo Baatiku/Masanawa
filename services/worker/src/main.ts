@@ -166,7 +166,7 @@ export async function startWorkerService(
       });
     }
     const newsTenantId=env.MASANAWA_PLATFORM_TENANT_ID?.trim();
-    const newsPoller=createNewsFeedPoller(database.pool,fetch,newsTenantId);
+    const newsPoller=createNewsFeedPoller(database.pool,fetch,newsTenantId,env.MASANAWA_NEWS_GATEWAY_ORIGIN?.trim());
     newsImporter=createJobScheduler({
       runOnce:async()=>{
         const result=await newsPoller.runOnce();

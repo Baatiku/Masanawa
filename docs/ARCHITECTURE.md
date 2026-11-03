@@ -434,3 +434,12 @@ The following documents refine this architecture into implementation-ready contr
 - `GOLDEN-JOURNEYS.md`.
 
 If a Phase 2 implementation choice conflicts with these boundaries, update the architecture/ADR first rather than introducing an implicit exception.
+
+## Public news edge deployment, 3 November 2026
+
+The owner's public news ingestion Worker is an external-source adapter under
+`infra/deployment/news-gateway`, not a new core service or financial authority.
+Cloudflare D1 owns a persistent source-metadata index; the canonical worker
+imports verified-origin metadata into PostgreSQL `feed.posts` before Flutter
+uses social interactions. Canonical service topology and domain ownership stay
+Gateway/Worker/Presence/Ops. No account token or private data crosses this edge.

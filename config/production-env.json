@@ -1257,6 +1257,27 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_NEWS_GATEWAY_ORIGIN",
+      "owner": "worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Verified public workers.dev news origin. When set, canonical news ingestion reads Cloudflare metadata instead of publisher RSS directly."
+    },
+    {
+      "name": "CLOUDFLARE_ACCOUNT_ID",
+      "owner": "news-gateway deployment",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit Cloudflare account selected by the standalone news deployment tool; not a Node service runtime requirement."
+    },
+    {
+      "name": "CLOUDFLARE_API_TOKEN",
+      "owner": "news-gateway deployment",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Scoped Workers Scripts and D1 deployment credential supplied securely outside Git; never sent to public news clients."
     }
   ]
 }
