@@ -78,4 +78,21 @@ describe('news RSS original-source ingestion',()=>{
   expect(await poller.runOnce()).toEqual({checked:0,imported:0,failed:0,enrolled:0});
   expect(query).not.toHaveBeenCalled();
  });
+ it('uses only the configured Cloudflare source when composing canonical app posts',async()=>{
+  let claimed=0;
+  const query=vi.fn(async(sql:string)=>{
+   if(sql.includes('INSERT INTO feed.news_publishers'))return {rowCount:0,rows:[]};
+   if(sql.includes('UPDATE feed.news_publishers p SET lease_until')){
+    const source=newsCatalog[claimed++];
+    return {rows:source?[{tenant_id:'tenant_platform',publisher_id:source.id,display_name:source.name,feed_url:source.feed}]:[]};
+   }
+   return {rows:[]};
+  });
+  const fetcher=vi.fn().mockImplementation(async()=>new Response(JSON.stringify({items:[],nextCursor:null})));
+  const poller=createNewsFeedPoller({query} as unknown as Pool,fetcher,'tenant_platform','https://news.test.workers.dev');
+  expect(await poller.runOnce()).toEqual({checked:7,imported:0,failed:0,enrolled:0});
+  expect(fetcher.mock.calls).toHaveLength(7);
+  expect(fetcher.mock.calls.every(([url])=>new URL(String(url)).origin==='https://news.test.workers.dev')).toBe(true);
+ });
+
 });

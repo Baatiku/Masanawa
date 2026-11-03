@@ -1,3 +1,4 @@
+import {fetchGatewayNews,newsGatewayOrigin} from './news_gateway.js';
 import {createHash} from 'node:crypto';
 import {withTransaction,type Pool} from '@masanawa/postgres';
 import {newsCatalog,safeNewsArticleUrl} from './news_catalog.js';
@@ -83,7 +84,8 @@ export async function ensurePlatformNewsPublishers(pool:Pool,tenantId:string):Pr
    RETURNING publisher_id`,[tenantId,...newsCatalog.flatMap(source=>[source.id,source.name,source.feed])]);
  return result.rowCount??result.rows.length;
 }
-export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,platformTenantId?:string){
+export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,platformTenantId?:string,gatewayOrigin?:string){
+ const upstream=gatewayOrigin?newsGatewayOrigin(gatewayOrigin):undefined;
  async function pollOne(){
   const leased=await pool.query(`UPDATE feed.news_publishers p SET lease_until=clock_timestamp()+interval '2 minutes',
      next_poll_at=clock_timestamp()+interval '15 minutes'
@@ -98,8 +100,8 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
   let imported=0;
   try{
    if(!canonical)throw Error('unapproved_news_feed_url');
-   const xml=await boundedFeedFetch(canonical.feed,fetchImpl);
-   const stories=parseNewsFeed(xml,canonical.id);
+   const stories=upstream?await fetchGatewayNews(upstream,canonical.id,fetchImpl)
+    :parseNewsFeed(await boundedFeedFetch(canonical.feed,fetchImpl),canonical.id);
    for(const story of stories){
     const hash=createHash('sha256').update(story.title+'\n'+story.summary).digest('hex');
     await withTransaction(pool,async client=>{
