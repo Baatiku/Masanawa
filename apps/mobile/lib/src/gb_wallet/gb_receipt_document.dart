@@ -30,7 +30,7 @@ Future<GbReceiptDocument> buildGbReceiptDocument(GbActivityItem item) async {
     ('Status',item.status=='reversed'?'Reversed posted entry':'Posted journal entry'),
     ('Purpose',item.title),
     if(item.unit=='MB')('Data equivalent',item.gbLabel),
-    if(item.kind=='redeem')('Data delivery','Check the provider order separately; wallet posting is not proof of network delivery'),
+    if((item.kind=='redeem'||item.kind=='data'))('Data delivery','Check the provider order separately; wallet posting is not proof of network delivery'),
     ('Recorded (device local time)',item.createdAt.toLocal().toString()),
     ('Recorded (UTC)',item.createdAt.toUtc().toIso8601String()),
     ('Operation reference',item.operationId),('Entry reference',item.id),

@@ -1,3 +1,6 @@
+import {createNgnSpending,createNgnCallAdmissions,createNgnDataJournal,createPostgresNgnTransferRepository,createPostgresNgnRequestRepository} from '@masanawa/postgres';
+import {createNgnCallRelay} from './ngn_calls/relay.js';
+import {NgnCallReviewError,type NgnCallPorts} from './ngn_calls/review.js';
 import {createOfficialSocialSync} from './official_social_store.js';
 import {createOfficialSocialFetcher,createOfficialSocialInspector} from './official_social_import.js';
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
@@ -438,7 +441,7 @@ function createDefaultDatabaseDependency(
     crypto: createPostgresCryptoRepository(database.pool),
     cryptoChatActions: createPostgresCryptoChatActionRepository(database.pool),
     ownerships: createPostgresCharacterOwnershipReader(database.pool),
-    mobileShell: createPostgresMobileShellRepository(database.pool, {billReplies: env.MASANAWA_MB_REPLIES_ENABLED === "true"}),
+    mobileShell: createPostgresMobileShellRepository(database.pool, {billReplies: true}),
     mobilePush: createPostgresMobilePushRepository(database.pool),
     mobileActivity: createPostgresMobileAgentActivityRepository(database.pool),
     billingQuotes: createPostgresBillingQuoteRepository(database.pool),
@@ -1526,10 +1529,10 @@ export async function startGatewayService(
           runs: database.agentRuns,
           authorizer: conversationAuthorizer,
           strategy,
-          ...(env.MASANAWA_MB_REPLIES_ENABLED==='true'?{beforeTurn:async(authorizationHeader:string|undefined)=>{
+          ...({beforeTurn:async(authorizationHeader:string|undefined)=>{
             if(!customerAuth)throw Object.assign(new Error('Reply accounting authority is unavailable'),{statusCode:503});
             await customerAuth.authorizeSensitiveMutation({authorizationHeader});
-          }}:{}),
+          }}),
           ...(nativeAudio ? { nativeAudio } : {}),
           voiceForCharacter: async (scope) => {
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
@@ -1746,19 +1749,13 @@ export async function startGatewayService(
   // One signed-in fan and tenant authority for retained Status, Masana and MB services.
   const featurePool = database.featurePool;
   const featureTenant = platformTenantId;
-  const universalWelcomeRepository = featurePool
-    ? createPostgresGbWalletRepository(featurePool) : undefined;
   const resolveFeatureFan = async (authorizationHeader: string | undefined) => {
     if (!authorizationHeader || !sessions || !featureTenant)
       throw new CustomerAuthError("UNAUTHORIZED", 401);
     const session = await sessions.authorize({ authorizationHeader });
     if (session.tenantId !== featureTenant)
       throw new CustomerAuthError("FORBIDDEN", 403);
-    // Every authenticated existing/new customer receives the same once-only,
-    // restricted 500 MB entitlement. The durable claim prevents re-login and
-    // multi-instance double credit; this is never a client balance mutation.
-    await universalWelcomeRepository?.ensureUniversalWelcome({
-      tenantId:session.tenantId,userId:session.userId});
+    // No implicit replacement cash welcome bonus is authorized.
     return { tenantId: session.tenantId, userId: session.userId };
   };
   const masana: GatewayAppOptions["masana"] = options.appOptions?.masana ??
@@ -1866,6 +1863,87 @@ export async function startGatewayService(
         throw new Error('gb.call.masana_unavailable');},
     });
   }
+  let ngnRelay:ReturnType<typeof createNgnCallRelay>|undefined;
+  const ngnCallJournal=featurePool?createNgnCallAdmissions(featurePool):undefined;
+  const approvedNgnCallMasana=async(actor:{tenantId:string;userId:string},characterId:string)=>{
+    if(!featurePool)return null;
+    const result=await featurePool.query<{revision:number}>(`
+      SELECT r.revision FROM masana.character_revisions r
+      JOIN identity.characters c ON c.tenant_id=r.tenant_id
+        AND c.character_id=r.character_id AND c.state='active'
+      JOIN identity.character_ownership o ON o.tenant_id=r.tenant_id
+        AND o.character_id=r.character_id AND o.kind='platform'
+      WHERE r.tenant_id=$1 AND r.character_id=$2 AND r.state='approved'
+      LIMIT 1`,[actor.tenantId,characterId]);
+    const revision=result.rows[0]?.revision;
+    return typeof revision==='number'&&Number.isSafeInteger(revision)&&revision>0
+      ?{version:String(revision)}:null;
+  };
+  const ngnCallSecret=env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
+  if((env.MASANAWA_NGN_CALLS_ENABLED??env.MASANAWA_MB_CALLS_ENABLED)==='true' &&
+     (!ngnCallJournal||!sessions||!featureTenant||!ngnCallSecret||
+      Buffer.byteLength(ngnCallSecret)<32||!mbLiveVoiceTokens||
+      !conversationAuthorizer||!publicBaseUrl))
+    throw new TypeError('MB calls enabled without authorized journal, live provider, review key and public relay origin');
+  const ngnCalls:NgnCallPorts|undefined=options.appOptions?.ngnCalls ??
+    ((env.MASANAWA_NGN_CALLS_ENABLED??env.MASANAWA_MB_CALLS_ENABLED)==='true' && ngnCallJournal && sessions && featureTenant &&
+     ngnCallSecret && Buffer.byteLength(ngnCallSecret)>=32 && mbLiveVoiceTokens &&
+     conversationAuthorizer && publicBaseUrl ? {
+      authorize:resolveFeatureFan,approved:approvedNgnCallMasana,
+      balance:createNgnSpending(featurePool!).balance,
+      journal:ngnCallJournal,reviewSecret:ngnCallSecret,
+      ready:()=>ngnRelay?.ready()===true,
+      grant:async(actor,authorizationHeader,id)=>{
+        const admission=await ngnCallJournal.read(actor,id);
+        if(!admission)throw new NgnCallReviewError('ngn.call.not_found',404);
+        if(admission.state!=='reserved')
+          throw new NgnCallReviewError('ngn.call.not_reserved',409);
+        if(!await approvedNgnCallMasana(actor,admission.characterId))
+          throw new NgnCallReviewError('ngn.call.masana_unavailable',404);
+        const initial=await conversationAuthorizer!.authorize({authorizationHeader,characterId:parseCanonicalId('character',admission.characterId)});
+        const authorizeOwner=async(query?:string)=>{
+          const current=await conversationAuthorizer!.authorize({authorizationHeader,
+            characterId:parseCanonicalId('character',admission.characterId),...(query?{evidenceQuery:query.slice(0,500)}:{})});
+          if(current.scope.tenantId!==actor.tenantId||current.scope.userId!==actor.userId||
+            current.characterVersionId!==initial.characterVersionId)throw new Error('ngn.call.unauthorized');
+          return current;
+        };
+        const validateOwner=async()=>{await authorizeOwner();};
+        await validateOwner();
+        const readOfficialEvidence=initial.presentation.narrative?.publicOfficial?async(query:string)=>{
+          const current=await authorizeOwner(query);
+          if(!current.presentation.narrative?.publicOfficial)throw Error('official_evidence_unavailable');
+          return current.presentation.narrative.publicOfficial;
+        }:undefined;
+        const provider=await mbLiveVoiceTokens!.mint({authorizationHeader,
+          characterId:admission.characterId});
+        // One history identity per durable admission, including grant retries.
+        const history=await featurePool!.query<{call_id:string}>(`INSERT INTO agents.masana_call_history
+          (tenant_id,user_id,call_id,character_id,display_name,expires_at,ngn_admission_id)
+          SELECT p.tenant_id,$2,$3::uuid,p.character_id,a.display_name,$5,$6
+          FROM agents.platform_agent_profiles p
+          JOIN agents.agent_presentations a USING(tenant_id,character_id)
+          WHERE p.tenant_id=$1 AND p.character_id=$4 AND a.visible_in_user_app
+          ON CONFLICT (tenant_id,user_id,ngn_admission_id) WHERE ngn_admission_id IS NOT NULL
+          DO UPDATE SET expires_at=EXCLUDED.expires_at
+          RETURNING call_id`,[actor.tenantId,actor.userId,
+            createCanonicalId('request').slice('request_'.length),admission.characterId,admission.expiresAt,id]);
+        const callId=history.rows[0]?.call_id;
+        if(!callId)throw new NgnCallReviewError('ngn.call.masana_unavailable',404);
+        return ngnRelay!.issue(actor,admission.characterId,id,{...provider,callId},validateOwner,readOfficialEvidence);
+      },
+      finish:(actor,id)=>ngnRelay!.finish(actor,id),
+    }:undefined);
+  if((env.MASANAWA_NGN_CALLS_ENABLED??env.MASANAWA_MB_CALLS_ENABLED)==='true' && ngnCalls &&
+     !options.appOptions?.ngnCallRelay && ngnCallJournal && publicBaseUrl){
+    ngnRelay=createNgnCallRelay({store:ngnCallJournal,publicOrigin:publicBaseUrl,
+      report:event=>console.error(JSON.stringify({event:'agent.ngn_call_relay_failed',...event,
+        ...( /^[a-f0-9]{40}$/.test(env.RAILWAY_GIT_COMMIT_SHA??'') ? {sourceSha:env.RAILWAY_GIT_COMMIT_SHA}:{}),
+      })),
+      validate:async(actor,id)=>{if(!await approvedNgnCallMasana(actor,id))
+        throw new Error('ngn.call.masana_unavailable');},
+    });
+  }
   const gbActivityStorage=featurePool?createGbWalletActivityRepository(featurePool):undefined;
   const gbWalletActivity: GbActivityPorts | undefined = options.appOptions?.gbWalletActivity ??
     (featurePool && sessions && featureTenant ? {
@@ -1887,8 +1965,7 @@ export async function startGatewayService(
       receipt:ngnStorage.readReceipt,reviewSecret:mbSendReviewSecret,
       // Explicit operator gates follow provider/cost/limits qualification; no
       // new live price or cash flow is activated by merely merging source.
-      ready:()=>env.MASANAWA_NGN_EXCHANGE_ENABLED==="true" &&
-        qualifiedNgnExchange(env.MASANAWA_NGN_EXCHANGE_QUALIFICATION),
+      ready:()=>false,
     }:undefined);
   const gbSendReview: GbSendPorts | undefined =
     options.appOptions?.gbSendReview ??
@@ -1904,6 +1981,22 @@ export async function startGatewayService(
           reviewSecret: mbSendReviewSecret,
         }
       : undefined);
+  const ngnSpending=featurePool?createNgnSpending(featurePool):undefined;
+  const ngnTransfers=featurePool?createPostgresNgnTransferRepository(featurePool):undefined;
+  const directNgnWallet:GatewayAppOptions['directNgnWallet']=options.appOptions?.directNgnWallet??
+    (ngnSpending&&featurePool&&sessions&&featureTenant?{
+      authorize:resolveFeatureFan,balance:ngnSpending.balance,
+      holds:async(actor,id)=>{
+        const result=await featurePool.query(`SELECT * FROM gb_wallet.ngn_spends WHERE tenant_id=$1 AND user_id=$2 AND ($3::text IS NULL OR operation_id=$3) ORDER BY created_at DESC,operation_id DESC LIMIT 75`,[actor.tenantId,actor.userId,id??null]);
+        return result.rows.map(r=>({operationId:r.operation_id,kind:r.purpose,operationState:r.state,currency:'NGN',unit:'kobo',state:r.state==='reserved'?'reserved':r.state==='completed'?'captured':'released',reservedKobo:Number(r.amount_kobo),heldKobo:r.state==='reserved'?Number(r.amount_kobo):0,chargedKobo:Number(r.captured_kobo),releasedKobo:r.state==='reserved'?0:Number(r.amount_kobo)-Number(r.captured_kobo),createdAt:new Date(r.created_at).toISOString(),resolvedAt:r.resolved_at?new Date(r.resolved_at).toISOString():null,entryIds:r.state==='completed'?['ngn:'+r.operation_id]:[]}));
+      },
+    }:undefined);
+  const ngnSendReview:GatewayAppOptions['ngnSendReview']=options.appOptions?.ngnSendReview??
+    (ngnSpending&&ngnTransfers&&featurePool&&sessions&&featureTenant&&mbSendReviewSecret&&Buffer.byteLength(mbSendReviewSecret)>=32?{
+      authorize:resolveFeatureFan,resolveRecipient:createGbRecipientDirectory(featurePool).resolve,searchRecipients:createGbRecipientDirectory(featurePool).search,balance:ngnSpending.balance,transfer:ngnTransfers.transfer,readTransfer:ngnTransfers.readTransfer,reviewSecret:mbSendReviewSecret,
+    }:undefined);
+  const ngnRequests:GatewayAppOptions['ngnRequests']=options.appOptions?.ngnRequests??
+    (ngnSendReview&&featurePool?{authorize:resolveFeatureFan,resolveRecipient:ngnSendReview.resolveRecipient,store:createPostgresNgnRequestRepository(featurePool)}:undefined);
   // Reviewed Status tips are a separate, opt-in MB money movement.
   // Published posts and their approved platform Masana are rechecked at
   // review, confirmation and inside the serializable ledger debit.
@@ -2099,12 +2192,24 @@ export async function startGatewayService(
           },
         };
       })();
+    const ngnDataCatalogue=options.appOptions?.ngnDataCatalogue??gbDataCatalogue;
+    const ngnDataPurchases:GatewayAppOptions['ngnDataPurchases']=options.appOptions?.ngnDataPurchases??
+      (gbDataPurchases&&ngnDataCatalogue&&featurePool&&flutterwaveBills?(()=>{
+        const spending=createNgnSpending(featurePool),journal=createNgnDataJournal(featurePool);
+        return {authorize:ngnDataCatalogue.authorize,service:{approved:ngnDataCatalogue.approved,liveItems:ngnDataCatalogue.liveItems,reserve:spending.reserve,capture:spending.capture,release:spending.release,
+          admit:(actor,entry,hash)=>withTransaction(featurePool,async client=>{
+            await createNgnSpending(featurePool,client).reserve({...actor,operationId:entry.operationId,idempotencyKey:entry.operationId,purpose:'data',amountKobo:entry.costKobo});
+            return createNgnDataJournal(featurePool,client).claim(actor,entry,hash);
+          }),claim:journal.claim,read:journal.read,resolve:journal.resolve,pay:(input:Parameters<typeof flutterwaveBills.createPayment>[0])=>flutterwaveBills.createPayment(input),status:(reference:string)=>flutterwaveBills.getStatus(reference)}};
+      })():undefined);
     app = appFactory({
       ...(status ? {status} : {}),
       ...(masana ? {masana} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
       productScope,
+      directNgn:true,
+      ...(directNgnWallet?{directNgnWallet}:{}),...(ngnSendReview?{ngnSendReview}:{}),...(ngnRequests?{ngnRequests}:{}),...(ngnCalls?{ngnCalls}:{}),...(ngnRelay?{ngnCallRelay:ngnRelay}:{}),...(ngnDataCatalogue?{ngnDataCatalogue}:{}),...(ngnDataPurchases?{ngnDataPurchases}:{}),
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(gbDataPurchases ? { gbDataPurchases } : {}),
       ...(billstackFunding ? { billstackFunding } : {}),
@@ -2147,7 +2252,7 @@ export async function startGatewayService(
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
       ...(gbWalletActivity ? { gbWalletActivity } : {}),
       ...(gbCalls ? {gbCalls} : {}),
-      ...(mbRelay ? {gbCallRelay:mbRelay} : {}),
+      // Only the NGN websocket listener is installed after cutover.
       ...(gbSendReview ? { gbSendReview } : {}),
       ...(gbStatusTips ? { gbStatusTips } : {}),
       ...(gbRequests ? { gbRequests } : {}),
@@ -2187,7 +2292,7 @@ export async function startGatewayService(
   const recoverReplies=async()=>{
     if(replyRecoveryRunning||drain.isDraining()||!database.featurePool)return;
     replyRecoveryRunning=true;
-    try { await recoverExpiredMbReplies(database.featurePool); }
+    try { await recoverExpiredMbReplies(database.featurePool); await createGbCallAdmissions(database.featurePool).recover(); await createNgnCallAdmissions(database.featurePool).recover(); }
     catch { console.error(JSON.stringify({event:"agent.mb_reply_recovery_failed",code:"unavailable"})); }
     finally { replyRecoveryRunning=false; }
   };

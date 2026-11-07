@@ -24,6 +24,7 @@ export interface CallRecord {
   readonly endReason?: CallEndReason | null;
   readonly groupId?: string | null;
   readonly connectionEvidence: "client_report" | "server_relay" | null;
+  readonly ngnUsage?: {readonly currency:'NGN';readonly admissionId:string;readonly verifiedConnectedMs:number;readonly chargedKobo:number|null;readonly state:string};
   readonly mbUsage?: {readonly admissionId:string;readonly verifiedConnectedMs:number;
     readonly chargedMb:number|null;readonly state:string};
 }
@@ -32,7 +33,7 @@ export type CallConnectionFilter = "all" | "connected" | "not_connected";
 export type CallPeriodFilter = "all" | "7" | "30";
 export interface CallHistorySummary {
   readonly calls:number; readonly verifiedConnectedMs:number; readonly chargedMb:number;
-  readonly unverifiedCalls:number; readonly pendingUsageCalls:number;
+  readonly unverifiedCalls:number; readonly pendingUsageCalls:number;readonly chargedKobo?:number;
 }
 export interface CallHistoryRepository {
   list(input: CallScope & { readonly limit: number; readonly cursor: CallCursor | null; readonly query?: string;

@@ -18,7 +18,8 @@ export function requiresFinancialCustomerState(
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return false;
   const path = requestUrl.split("?")[0] ?? "";
   if (signedProviderCallbacks.has(path)) return false;
-  return path === "/v1/gb/wallet/virtual-account" ||
+  return path.startsWith("/v1/ngn/wallet/send/") || path.startsWith("/v1/ngn/wallet/requests") || path.startsWith("/v1/ngn/calls/") || path.startsWith("/v1/ngn/data/") ||
+    path === "/v1/gb/wallet/virtual-account" ||
     path === "/v1/gb/data/redeem" ||
     path.startsWith("/v1/gb/calls/") ||
     path.startsWith("/v1/gb/data/purchases/") ||

@@ -131,5 +131,11 @@
   "passwordSignIn": "Sign in",
   "@passwordSignIn": {
     "description": "Password entry submit button"
-  }
+  },
+  "addMoneyLabel": "Ajouter de l’argent",
+  "buyMobileDataLabel": "Acheter des données",
+  "sendMoneyLabel": "Envoyer",
+  "requestMoneyLabel": "Demander des NGN",
+  "onHoldLabel": "En attente",
+  "pendingPaymentsLabel": "Paiements en attente"
 }

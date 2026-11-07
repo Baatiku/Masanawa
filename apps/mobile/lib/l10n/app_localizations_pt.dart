@@ -334,4 +334,17 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+  @override
+  String get addMoneyLabel => "Adicionar dinheiro";
+  @override
+  String get buyMobileDataLabel => "Comprar dados";
+  @override
+  String get sendMoneyLabel => "Enviar";
+  @override
+  String get requestMoneyLabel => "Solicitar NGN";
+  @override
+  String get onHoldLabel => "Reservado";
+  @override
+  String get pendingPaymentsLabel => "Pagamentos pendentes";
+
 }

@@ -14,29 +14,29 @@ class AgentFeedback {
     AgentRecovery.retry => 'Try again',
     AgentRecovery.signIn => 'Sign in',
     AgentRecovery.reconnect => 'Reconnect',
-    AgentRecovery.addMb => 'Add MB',
+    AgentRecovery.addMb => 'Add Money',
     AgentRecovery.microphone => 'Microphone settings',
   };
 
   factory AgentFeedback.fromError(Object error, {bool conversation = false}) {
     if (error is ApiException) {
-      if (const {'gb.wallet.insufficient_mb', 'gb.call.insufficient_mb'}
+      if (const {'ngn.insufficient_balance','ngn.call.insufficient_balance','gb.wallet.insufficient_mb', 'gb.call.insufficient_mb'}
           .contains(error.code)) {
         return const AgentFeedback(
-          'Not enough MB for this conversation. Add MB to continue.',
+          'Not enough money. Add Money to continue.',
           recovery: AgentRecovery.addMb,
         );
       }
-      if (error.code == 'gb.call.balance_unavailable' ||
+      if (error.code == 'ngn.call.balance_unavailable' || error.code == 'gb.call.balance_unavailable' ||
           error.code == 'gb.wallet.not_ready') {
         return const AgentFeedback(
-          'Your MB balance could not be verified. Check your connection and retry.',
+          'Your balance could not be verified. Check your connection and retry.',
         );
       }
-      if (error.code == 'gb.call.account_restricted' ||
+      if (error.code == 'ngn.call.account_restricted' || error.code == 'ngn.account_frozen' || error.code == 'gb.call.account_restricted' ||
           error.code == 'gb.wallet.account_frozen') {
         return const AgentFeedback(
-          'This MB wallet is restricted. Contact support to continue.',
+          'This wallet is restricted. Contact support to continue.',
         );
       }
       if (error.statusCode == 401) {
@@ -48,7 +48,7 @@ class AgentFeedback {
       if (error.code == 'NETWORK_UNREACHABLE') {
         return const AgentFeedback('Check your connection and try again.');
       }
-      if (error.code == 'gb.call.unavailable') {
+      if (error.code == 'ngn.call.unavailable' || error.code == 'gb.call.unavailable') {
         return const AgentFeedback('The voice service is unavailable right now. Please retry shortly.');
       }
       if (error.statusCode == 403 || error.statusCode == 404) {

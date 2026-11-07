@@ -493,7 +493,6 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
         api: feed,
         ownerName: session.user.name,
         promotions:null,
-        statusTips:null,
         accountKey: account,
         authorDirectory: authorDirectory,
         searchExpanded: _searchExpanded,

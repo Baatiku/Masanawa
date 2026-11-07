@@ -1,4 +1,4 @@
-name: Retained Status, MB Ledger and Historical Escrow PostgreSQL
+name: Retained Status, NGN and Historical Finance PostgreSQL
 on:
   pull_request:
     paths:
@@ -6,6 +6,11 @@ on:
       - "services/gateway/src/modules/home_feed/**"
       - "services/gateway/src/modules/masana_chat/**"
       - "services/gateway/src/gb_wallet/**"
+      - "services/gateway/src/ngn_wallet/**"
+      - "services/gateway/src/ngn_calls/**"
+      - "services/gateway/src/ngn_data/**"
+      - "adapters/storage/postgres/src/agents/**"
+      - "packages/agents/migrations/**"
       - "adapters/storage/postgres/src/home_feed/**"
       - "adapters/storage/postgres/src/gb_wallet/**"
       - "adapters/storage/postgres/src/commerce/**"
@@ -19,6 +24,11 @@ on:
       - "services/gateway/src/modules/home_feed/**"
       - "services/gateway/src/modules/masana_chat/**"
       - "services/gateway/src/gb_wallet/**"
+      - "services/gateway/src/ngn_wallet/**"
+      - "services/gateway/src/ngn_calls/**"
+      - "services/gateway/src/ngn_data/**"
+      - "adapters/storage/postgres/src/agents/**"
+      - "packages/agents/migrations/**"
       - "adapters/storage/postgres/src/home_feed/**"
       - "adapters/storage/postgres/src/gb_wallet/**"
       - "adapters/storage/postgres/src/commerce/**"
@@ -79,6 +89,14 @@ jobs:
           adapters/storage/postgres/src/gb_wallet/gb_wallet.integration.test.ts
           adapters/storage/postgres/src/gb_wallet/reservations.integration.test.ts
           adapters/storage/postgres/src/gb_wallet/tip.integration.test.ts
+      - name: Direct NGN wallet and communication accounting
+        run: >-
+          pnpm exec vitest run --no-file-parallelism
+          services/gateway/src/ngn_wallet services/gateway/src/ngn_data services/gateway/src/ngn_calls
+          adapters/storage/postgres/src/gb_wallet/ngn_spending.integration.test.ts
+          adapters/storage/postgres/src/gb_wallet/ngn_call_admissions.integration.test.ts
+          adapters/storage/postgres/src/gb_wallet/ngn_request_repository.integration.test.ts
+          adapters/storage/postgres/src/agents/mb-reply-billing.integration.test.ts
       - name: Preserve historic custody and P2P escrow liabilities
         run: >-
           pnpm exec vitest run --no-file-parallelism

@@ -84,7 +84,7 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
   }
   const rawLink = data.deepLink;
   if (typeof rawLink === "string" && rawLink.length <= 300 &&
-      /^masanawa:\/\/(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}$/u.test(rawLink)) {
+      /^masanawa:\/\/(?:(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}|wallet\/requests\/ngnreq_[A-Za-z0-9_-]{1,128}|wallet\/activity(?:\/(?:mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160}))?)$/u.test(rawLink)) {
     try {
       const link = new URL(rawLink);
       if (link.protocol === "masanawa:" && link.hostname && !link.username &&

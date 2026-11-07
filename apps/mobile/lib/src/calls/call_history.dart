@@ -21,6 +21,7 @@ class CallHistoryItem {
     this.mbAdmissionId,
     this.verifiedConnectedMs,
     this.chargedMb,
+    this.ngnAdmissionId,this.chargedKobo,
   });
   final String callId;
   final String characterId;
@@ -33,7 +34,8 @@ class CallHistoryItem {
   final DateTime? connectedAt, endedAt, expiresAt;
   final CallEndReason? endReason;
   final String? groupId, mbAdmissionId;
-  final int? verifiedConnectedMs, chargedMb;
+  final int? verifiedConnectedMs, chargedMb,chargedKobo;
+  final String? ngnAdmissionId;
   bool get isGroupCall => groupId != null;
   Duration? get duration {
     if (verifiedConnectedMs != null)
@@ -110,6 +112,9 @@ class CallHistoryItem {
     final groupId = json['groupId'];
     if (groupId != null && (groupId is! String || groupId.isEmpty))
       throw const FormatException('Invalid call group');
+    final ngn=json['ngnUsage'];
+    if(ngn!=null&&(ngn is! Map||ngn['currency']!='NGN'||ngn['admissionId'] is! String||ngn['verifiedConnectedMs'] is! int||(ngn['verifiedConnectedMs'] as int)<0||(ngn['chargedKobo']!=null&&(ngn['chargedKobo'] is! int||(ngn['chargedKobo'] as int)<0))))throw const FormatException('Invalid NGN call usage');
+    if(ngn!=null&&json['mbUsage']!=null)throw const FormatException('Ambiguous call currency');
     final usage = json['mbUsage'];
     if (usage != null &&
         (usage is! Map ||
@@ -122,8 +127,10 @@ class CallHistoryItem {
       throw const FormatException('Invalid authoritative MB call usage');
     }
     return CallHistoryItem(
+      ngnAdmissionId:ngn is Map?ngn['admissionId'] as String:null,
+      chargedKobo:ngn is Map?ngn['chargedKobo'] as int?:null,
       mbAdmissionId: usage is Map ? usage['admissionId'] as String : null,
-      verifiedConnectedMs: usage is Map
+      verifiedConnectedMs: ngn is Map?ngn['verifiedConnectedMs'] as int:usage is Map
           ? usage['verifiedConnectedMs'] as int
           : null,
       chargedMb: usage is Map ? usage['chargedMb'] as int? : null,
@@ -151,8 +158,8 @@ class CallHistoryPage {
 
 class CallHistorySummary {
   const CallHistorySummary({required this.calls,required this.verifiedConnectedMs,
-    required this.chargedMb,required this.unverifiedCalls,required this.pendingUsageCalls});
-  final int calls,verifiedConnectedMs,chargedMb,unverifiedCalls,pendingUsageCalls;
+    required this.chargedMb,required this.unverifiedCalls,required this.pendingUsageCalls,this.chargedKobo=0});
+  final int calls,verifiedConnectedMs,chargedMb,unverifiedCalls,pendingUsageCalls,chargedKobo;
   factory CallHistorySummary.read(Object? raw) {
     if(raw is! Map)throw const FormatException('Invalid call totals');
     final keys=['calls','verifiedConnectedMs','chargedMb','unverifiedCalls','pendingUsageCalls'];
@@ -160,13 +167,14 @@ class CallHistorySummary {
       if(raw[key] is! int || (raw[key] as int)<0)
         throw const FormatException('Invalid call totals');
     }
+    final ngn=raw['chargedKobo']??0;if(ngn is! int||ngn<0)throw const FormatException('Invalid NGN call totals');
     final count=raw['calls'] as int,unknown=raw['unverifiedCalls'] as int,
       pending=raw['pendingUsageCalls'] as int;
     if(unknown+pending>count || (count==0 &&
        ((raw['verifiedConnectedMs'] as int)!=0 || (raw['chargedMb'] as int)!=0)))
       throw const FormatException('Inconsistent call totals');
     return CallHistorySummary(calls:count,verifiedConnectedMs:raw['verifiedConnectedMs'] as int,
-      chargedMb:raw['chargedMb'] as int,unverifiedCalls:unknown,pendingUsageCalls:pending);
+      chargedKobo:ngn,chargedMb:raw['chargedMb'] as int,unverifiedCalls:unknown,pendingUsageCalls:pending);
   }
 }
 

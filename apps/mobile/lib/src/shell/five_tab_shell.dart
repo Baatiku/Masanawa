@@ -8,7 +8,7 @@ import '../screens/chat/chat_list_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../ui/components/current_account_avatar.dart';
 import '../screens/status/status_screen.dart';
-import '../gb_wallet/gb_wallet_screen.dart';
+import '../ngn_wallet/gb_wallet_screen.dart';
 import '../screens/twin/shell_tab.dart';
 import '../ui/components/masanawa_main_header.dart';
 import '../theme/masanawa_theme.dart';

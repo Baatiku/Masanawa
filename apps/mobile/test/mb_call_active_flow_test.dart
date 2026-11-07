@@ -32,7 +32,7 @@ ResponseBody _ok(Object value) => ResponseBody.fromString(jsonEncode(value), 200
 void main() {
   test('active inline and fullscreen paths cannot issue retired Credits admission', () async {
     final screen = await File('lib/src/screens/chat/ai_chat_screen.dart').readAsString();
-    expect(screen, contains('MbCallFlow _captureMbCallFlow('));
+    expect(screen, contains('NgnCallFlow _captureNgnCallFlow('));
     expect(screen, contains('Future<void> _startInlineLiveVoice('));
     expect(screen, contains('Future<void> _openLiveVoice('));
     expect(RegExp(r'flow\.transport\.grant\(admission\)').allMatches(screen).length, 2);

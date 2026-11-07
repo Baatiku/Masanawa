@@ -333,4 +333,17 @@ class AppLocalizationsHa extends AppLocalizations {
     );
     return '$_temp0';
   }
+  @override
+  String get addMoneyLabel => "Ƙara kuɗi";
+  @override
+  String get buyMobileDataLabel => "Sayi data";
+  @override
+  String get sendMoneyLabel => "Aika";
+  @override
+  String get requestMoneyLabel => "Nemi Naira";
+  @override
+  String get onHoldLabel => "Ana riƙe da shi";
+  @override
+  String get pendingPaymentsLabel => "Biyan kuɗin da ke jira";
+
 }

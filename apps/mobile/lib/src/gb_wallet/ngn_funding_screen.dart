@@ -61,7 +61,7 @@ class _NgnFundingScreenState extends ConsumerState<NgnFundingScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Fund NGN wallet')),
+      appBar: AppBar(title: const Text('Add Money wallet')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [

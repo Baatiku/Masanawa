@@ -28,12 +28,14 @@ describe.skipIf(!databaseUrl)("Masana call history on PostgreSQL", () => {
     const sql = await readFile(new URL("../../../../packages/agents/migrations/0007_masana_call_history.sql", import.meta.url), "utf8");
     await writeFile(path.join(migrationDirectory, "0007_masana_call_history.sql"), sql);
     expect(await runMigrations(pool, [{ owner: "agents", directory: migrationDirectory }])).toEqual(["agents/0007_masana_call_history.sql"]);
-    for (const file of ["0008_masana_group_calls.sql","0009_masana_incoming_calls.sql","0013_masana_call_outcomes.sql","0016_masana_mb_call_history.sql"]) {
+    for (const file of ["0008_masana_group_calls.sql","0009_masana_incoming_calls.sql","0013_masana_call_outcomes.sql","0016_masana_mb_call_history.sql","0019_ngn_call_history.sql"]) {
       await pool.query(await readFile(new URL(`../../../../packages/agents/migrations/${file}`, import.meta.url), "utf8"));
     }
     await pool.query(`CREATE SCHEMA gb_wallet;
       CREATE TABLE gb_wallet.call_admissions(tenant_id text,user_id text,character_id text,
-      admission_id text,state text,verified_connected_ms bigint,charged_mb integer,updated_at timestamptz)`);
+      admission_id text,state text,verified_connected_ms bigint,charged_mb integer,updated_at timestamptz);
+      CREATE TABLE gb_wallet.ngn_call_admissions(tenant_id text,user_id text,character_id text,
+      admission_id text,state text,verified_connected_ms bigint,charged_kobo integer,updated_at timestamptz)`);
     await pool.query(`INSERT INTO agents.agent_presentations
       (tenant_id,character_id,character_version_id,display_name,role_label)
       VALUES ('tenant-a','masana-a','version-a','Amina','Masana'),

@@ -1,3 +1,13 @@
+import {registerDirectNgnWalletRoutes,type DirectNgnWalletPorts} from './ngn_wallet/routes.js';
+import {registerNgnSendReviewRoutes} from './ngn_wallet/send_routes.js';
+import type {NgnSendPorts} from './ngn_wallet/send_review.js';
+import {registerNgnRequestRoutes,type NgnRequestPorts} from './ngn_wallet/request_routes.js';
+import {registerNgnCallRoutes} from './ngn_calls/routes.js';
+import type {NgnCallPorts} from './ngn_calls/review.js';
+import {installNgnCallRelay,createNgnCallRelay} from './ngn_calls/relay.js';
+import {NgnCallRelayError} from './ngn_calls/errors.js';
+import {registerNgnDataCatalogueRoutes,type NgnDataCataloguePorts} from './ngn_data/data_catalogue_routes.js';
+import {registerNgnDataPurchaseRoutes,type NgnDataPurchaseRoutes} from './ngn_data/data_purchase_routes.js';
 import {registerOfficialMediaRoutes} from './official_media.js';
 import {registerGbRetainedFinanceRoutes,type GbRetainedFinancePorts} from './gb_wallet/retained_finance_routes.js';
 import {registerUsernameRoutes,type UsernamePorts} from './usernames.js';
@@ -114,6 +124,14 @@ export interface GatewayAppOptions {
   /** Independently versioned MB package prices; never authorizes deposit credit. */
   readonly gbRechargeRateBook?: RechargeRateBook;
   readonly ngnWallet?: NgnWalletPorts;
+  readonly directNgn?: boolean;
+  readonly directNgnWallet?: DirectNgnWalletPorts;
+  readonly ngnSendReview?: NgnSendPorts;
+  readonly ngnRequests?: NgnRequestPorts;
+  readonly ngnCalls?: NgnCallPorts;
+  readonly ngnCallRelay?: ReturnType<typeof createNgnCallRelay>;
+  readonly ngnDataCatalogue?: NgnDataCataloguePorts;
+  readonly ngnDataPurchases?: NgnDataPurchaseRoutes;
   readonly gbWalletSummary?: GbWalletSummaryPorts;
   readonly gbWalletActivity?: GbActivityPorts;
   readonly gbRetainedFinance?:GbRetainedFinancePorts;
@@ -307,7 +325,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       void reply.code(error.statusCode).send({error:{code:error.code,message:error.code}});
       return;
     }
-    if (error instanceof GbCallRelayError) {
+    if (error instanceof GbCallRelayError || error instanceof NgnCallRelayError) {
       void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
       return;
     }
@@ -350,6 +368,16 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   });
 
   registerGatewayRequestCorrelation(app);
+  if(options.directNgn)app.addHook('onRequest',async(request,reply)=>{
+    const path=request.url.split('?')[0]!;
+    const retiredRead=/^\/v1\/gb\/(?:recharge\/(?:packages|preview)|wallet\/exchange\/packages)$/.test(path);
+    const retiredWrite=request.method!=='GET'&&(
+      /^\/v1\/gb\/wallet\/(?:exchange\/(?:quote|confirm)|send\/(?:quote|confirm)|tips\/(?:review|confirm))$/.test(path)||
+      /^\/v1\/gb\/wallet\/requests(?:\/[^/]+\/pay)?$/.test(path)||
+      /^\/v1\/gb\/data\/redeem$/.test(path)||
+      /^\/v1\/gb\/calls\/(?:review|admissions(?:\/[^/]+\/grant)?)$/.test(path));
+    if(retiredRead||retiredWrite)return reply.code(410).send({error:{code:'ngn_update_required',message:'Update the app to use your Naira wallet.'}});
+  });
   registerHistoricalFinancialCallbacks(app, options);
   // Apply to all money-affecting HTTP writes regardless of the individual
   // service's route registration. Reads and non-financial account recovery
@@ -408,6 +436,13 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
   }
 
+  if(options.directNgnWallet)registerDirectNgnWalletRoutes(app,options.directNgnWallet);
+  if(options.ngnSendReview)registerNgnSendReviewRoutes(app,options.ngnSendReview);
+  if(options.ngnRequests)registerNgnRequestRoutes(app,options.ngnRequests);
+  if(options.ngnCalls)registerNgnCallRoutes(app,options.ngnCalls);
+  if(options.ngnCallRelay)installNgnCallRelay(app,options.ngnCallRelay);
+  if(options.ngnDataCatalogue)registerNgnDataCatalogueRoutes(app,options.ngnDataCatalogue);
+  if(options.ngnDataPurchases)registerNgnDataPurchaseRoutes(app,options.ngnDataPurchases);
   if (options.gbDataPurchases) registerGbDataPurchaseRoutes(app, options.gbDataPurchases);
   if (options.ngnWallet) registerNgnWalletRoutes(app, options.ngnWallet);
   if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);

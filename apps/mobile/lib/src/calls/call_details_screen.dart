@@ -113,6 +113,7 @@ class _DetailsState extends ConsumerState<CallDetailsScreen>{
      decoration:BoxDecoration(color:u.surfaceMuted,borderRadius:BorderRadius.circular(24)),
      child:Text(item.outcomeLabel,style:TextStyle(color:item.missed?u.emergency:u.textPrimary,fontWeight:FontWeight.w700)),
     )),
+    if(item.ngnAdmissionId!=null)detailField(Icons.account_balance_wallet_outlined,'Call charge',item.chargedKobo==null?'Settlement pending':'₦${(item.chargedKobo! / 100).toStringAsFixed(2)}'),
     const SizedBox(height:22),
     Wrap(alignment:WrapAlignment.center,spacing:10,runSpacing:10,children:[
        FilledButton.icon(onPressed:LiveCallForeground.active?null:(){if(current)context.push(masanaLiveVoiceRoute(item.characterId));},icon:const Icon(Icons.call_outlined),label:const Text('Call again')),

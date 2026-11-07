@@ -331,4 +331,17 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+  @override
+  String get addMoneyLabel => "Add Money";
+  @override
+  String get buyMobileDataLabel => "Buy Data";
+  @override
+  String get sendMoneyLabel => "Send";
+  @override
+  String get requestMoneyLabel => "Request NGN";
+  @override
+  String get onHoldLabel => "On hold";
+  @override
+  String get pendingPaymentsLabel => "Pending payments";
+
 }
