@@ -1,0 +1,22 @@
+[Unit]
+Description=Masanawa Flutterwave fixed IPv4 egress relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=masanawa-relay
+Group=masanawa-relay
+WorkingDirectory=/opt/masanawa/flutterwave-ip-relay
+EnvironmentFile=/etc/masanawa/flutterwave-relay.env
+ExecStart=/usr/bin/node /opt/masanawa/flutterwave-ip-relay/relay.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target
