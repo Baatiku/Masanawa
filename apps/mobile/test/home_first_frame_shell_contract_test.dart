@@ -121,7 +121,8 @@ void main(){
     addTearDown(()=>dio.close(force:true));
     final router=GoRouter(initialLocation:'/home',routes:[
       GoRoute(path:'/home',builder:(_,state)=>FiveTabShell(initialIndex:MasanawaRootTab.fromQuery(state.uri.queryParameters['tab']).index)),
-      GoRoute(path:'/wallet/redeem',builder:(_,_)=>const Scaffold(body:Text('Data redemption route'))),
+      GoRoute(path:'/wallet/redeem',redirect:(_,__)=>'/wallet/buy-data'),
+      GoRoute(path:'/wallet/buy-data',builder:(_,_)=>const Scaffold(body:Text('Data purchase route'))),
       GoRoute(path:'/notifications',builder:(_,__)=>
         const NotificationPreferencesScreen()),
     ]);
@@ -155,8 +156,8 @@ void main(){
     await tester.tap(find.descendant(of:find.byType(NavigationBar),matching:find.text('Walati')));
     await tester.pumpAndSettle();
     expect(find.text('Wallet'),findsNothing,reason:'Wallet has no redundant root heading');
-    await tester.ensureVisible(find.text('Redeem Data'));await tester.tap(find.text('Redeem Data'));
-    await tester.pumpAndSettle();expect(find.text('Data redemption route'),findsOneWidget);
+    await tester.ensureVisible(find.text('Sayi data'));await tester.tap(find.text('Sayi data'));
+    await tester.pumpAndSettle();expect(find.text('Data purchase route'),findsOneWidget);
     expect(router.canPop(),isTrue);
     expect(tester.takeException(),isNull);
     } finally {semantics.dispose();}

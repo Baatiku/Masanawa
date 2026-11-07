@@ -33,10 +33,10 @@ describe('NGN request and transfer actual SQL invariants',()=>{
   const declined=await repo.create(actor(alice),{payerId:carol,amountKobo:100,idempotencyKey:'request_declined_abcdefghijkl'});await repo.decline(actor(carol),declined.requestId);await expect(repo.pay(actor(carol),declined.requestId)).rejects.toMatchObject({code:'request_already_closed'});
   expect((await pool.query('SELECT count(*)::int AS n FROM gb_wallet.ngn_spends WHERE tenant_id=$1 AND user_id=$2',[tenant,carol])).rows[0].n).toBe(0);
  });
- it('binds original recipient and rechecks party suspension inside the cash transaction',async()=>{
+ it('binds original recipient and rechecks party deactivation inside the cash transaction',async()=>{
   const repo=createPostgresNgnTransferRepository(pool),input={...actor(bob),recipientId:alice,amountKobo:101,operationId:'send_abcdefghijklmnopqrstuvwx',idempotencyKey:'send_abcdefghijklmnopqrstuvwx'};
   expect(await repo.transfer(input)).toEqual(await repo.transfer(input));await expect(repo.transfer({...input,recipientId:carol})).rejects.toThrow('ngn.idempotency_conflict');
-  await pool.query("UPDATE identity.users SET state='suspended' WHERE tenant_id=$1 AND user_id=$2",[tenant,carol]);await expect(repo.transfer({...input,recipientId:carol,operationId:input.operationId+'y',idempotencyKey:input.idempotencyKey+'y'})).rejects.toThrow('ngn.parties_unavailable');
+  await pool.query("UPDATE identity.users SET state='disabled' WHERE tenant_id=$1 AND user_id=$2",[tenant,carol]);await expect(repo.transfer({...input,recipientId:carol,operationId:input.operationId+'y',idempotencyKey:input.idempotencyKey+'y'})).rejects.toThrow('ngn.parties_unavailable');
   expect(await repo.readTransfer(actor(alice),input.operationId)).toBeNull();
  });
 });

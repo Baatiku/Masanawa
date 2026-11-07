@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:masanawa/src/features/home_feed/feed_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_media_api.dart';
 import 'package:masanawa/src/features/home_feed/feed_screen.dart';
-import 'package:masanawa/src/features/home_feed/status_tip_flow.dart';
 import 'package:masanawa/src/features/home_feed/feed_post_detail_screen.dart';
 import 'package:masanawa/src/features/home_feed/status_post_action_row.dart';
 
@@ -135,11 +132,6 @@ FeedMediaGrant inlineGrant(String id) => FeedMediaGrant(
   url: Uri.parse('https://example.test/original?signature=short-lived'),
   expiresAt: DateTime.now().add(const Duration(minutes: 2)),
 );
-class TipWidgetStore implements StatusTipStore {
-  String? value;
-  @override Future<String?> read() async=>value;
-  @override Future<void> write(String? next) async { value=next; }
-}
 void main() {
   testWidgets('official Status source filter applies before pagination with no For You tabs',
     (tester)async{
@@ -173,63 +165,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(api.filterCalls.last,'for_you:null:-:-:masana_one');
     });
-  testWidgets('Status tip requires an explicit reviewed confirmation and shows receipt',
-      (tester) async {
-    final store=TipWidgetStore();
-    var confirmations=0, reviews=0;
-    final dio=Dio(BaseOptions(baseUrl:'https://gateway.example'));
-    dio.interceptors.add(InterceptorsWrapper(onRequest:(options,handler){
-      if(options.path.endsWith('/tips/review')){
-        reviews++;
-        handler.resolve(Response(requestOptions:options,statusCode:200,data:{'review':{
-          'postId':'381026c2-9d56-47b1-b73d-1784e24e41e2',
-          'characterId':'masana_one','displayName':'Approved Masana',
-          'amountMb':50,'operationId':'tip_12345678901234567890123456789012',
-          'reviewToken':'signed_token_123456789012345678901234567890123456789',
-          'expiresAt':DateTime.now().add(const Duration(minutes:5)).toUtc().toIso8601String(),
-        }}));
-      }else if(options.path.endsWith('/tips/confirm')){
-        confirmations++;
-        expect(jsonDecode(store.value!)['submitted'],true);
-        handler.resolve(Response(requestOptions:options,statusCode:200,data:{'receipt':{
-          'operationId':'tip_12345678901234567890123456789012',
-          'postId':'381026c2-9d56-47b1-b73d-1784e24e41e2',
-          'characterId':'masana_one','amountMb':50,'state':'completed',
-        }}));
-      }else{
-        handler.reject(DioException(requestOptions:options,
-          type:DioExceptionType.badResponse));
-      }
-    }));
-    addTearDown(()=>dio.close(force:true));
-    final flow=StatusTipFlow(dio:dio,accountId:'owner',accessToken:'pinned',
-      currentAccountId:()=>'owner',store:store);
-    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MasanaFeedScreen(
-      api:StubFeed('Original status'),accountKey:'owner',statusTips:flow))));
+  testWidgets('Home has no tip action or payment controls', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MasanaFeedScreen(
+      api: StubFeed('Original news update'), accountKey: 'owner'))));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Save post'), findsNothing);
-    expect(find.byTooltip('Post options'), findsNothing);
-    await tester.tap(find.byTooltip('Tip MB'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('50 MB').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Review MB tip'),findsOneWidget);
-    expect(find.textContaining('Approved Masana'),findsOneWidget);
-    expect(confirmations,0);
-    await tester.tap(find.text('Not now'));
-    await tester.pumpAndSettle();
-    expect(confirmations,0);
-    expect(store.value,isNull);
-    await tester.tap(find.byTooltip('Tip MB'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('50 MB').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Confirm tip'));
-    await tester.pumpAndSettle();
-    expect(reviews,2);
-    expect(confirmations,1);
-    expect(store.value,isNull);
-    expect(find.textContaining('Tip confirmed: 50 MB'),findsOneWidget);
+    expect(find.byTooltip('Tip MB'), findsNothing);
+    expect(find.text('Confirm tip'), findsNothing);
+    expect(find.text('Review MB tip'), findsNothing);
+    expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.mode_comment_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
   });
 
   testWidgets('Home removes card Save and top Saved while retaining three actions', (tester) async {

@@ -517,12 +517,16 @@ void main() {
     );
   });
 
-  test('MB shortage and unavailable voice service have actionable feedback', () {
+  test('legacy shortage is explained as NGN and unavailable voice has actionable feedback', () {
     final shortage = AgentFeedback.fromError(const ApiException(
       'unsafe upstream error', statusCode: 402, code: 'gb.wallet.insufficient_mb'));
     expect(shortage.recovery, AgentRecovery.addMb);
     expect(shortage.actionLabel, 'Add Money');
-    expect(shortage.message, contains('Not enough MB'));
+    expect(shortage.message, 'Not enough money. Add Money to continue.');
+    final ngnShortage = AgentFeedback.fromError(const ApiException(
+      'unsafe upstream error', statusCode: 402, code: 'ngn.insufficient_balance'));
+    expect(ngnShortage.recovery, AgentRecovery.addMb);
+    expect(ngnShortage.message, shortage.message);
     final provider = AgentFeedback.fromError(const ApiException(
       'upstream secret', statusCode: 503, code: 'gb.call.unavailable'));
     expect(provider.message, contains('voice service is unavailable'));
