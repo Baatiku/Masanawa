@@ -131,5 +131,11 @@
   "passwordSignIn": "Sign in",
   "@passwordSignIn": {
     "description": "Password entry submit button"
-  }
+  },
+  "addMoneyLabel": "Ƙara kuɗi",
+  "buyMobileDataLabel": "Sayi data",
+  "sendMoneyLabel": "Aika",
+  "requestMoneyLabel": "Nemi Naira",
+  "onHoldLabel": "Ana riƙe da shi",
+  "pendingPaymentsLabel": "Biyan kuɗin da ke jira"
 }

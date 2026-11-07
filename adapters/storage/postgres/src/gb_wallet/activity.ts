@@ -121,6 +121,13 @@ const ngnDetails=`jsonb_strip_nulls(jsonb_build_object(
   'exchangeKobo',CASE WHEN n.kind='exchange' THEN abs(n.delta_kobo)::text END,
   'rateVersion',to_jsonb(n)->>'rate_version',
   'reversesOperationId',to_jsonb(n)->>'reverses_operation_id')) AS receipt_metadata`;
+const spendDetails=`jsonb_strip_nulls(jsonb_build_object(
+  'counterpartyKind',CASE WHEN o.recipient_id IS NULL THEN 'service' ELSE 'human' END,
+  'counterpartyId',CASE WHEN n.delta_kobo>0 THEN o.user_id ELSE o.recipient_id END,
+  'counterpartyName',p.display_name,'counterpartyHandle',p.handle)) AS receipt_metadata`;
+const spendJoin=`JOIN gb_wallet.ngn_spends o ON o.tenant_id=n.tenant_id AND o.operation_id=n.operation_id
+  LEFT JOIN talks.public_profiles p ON p.tenant_id=n.tenant_id AND p.user_id=
+    CASE WHEN n.delta_kobo>0 THEN o.user_id ELSE o.recipient_id END`;
 const exchangeJoin=`LEFT JOIN gb_wallet.ngn_entries x ON x.tenant_id=m.tenant_id
   AND x.operation_id=m.operation_id AND x.account_id=$2 AND x.kind='exchange'
   LEFT JOIN talks.public_profiles p ON p.tenant_id=m.tenant_id AND p.user_id=
@@ -176,6 +183,9 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           UNION ALL
           SELECT 'NGN'::text,n.delta_kobo,n.created_at FROM gb_wallet.ngn_entries n
           WHERE n.tenant_id=$1 AND n.account_id=$2
+          UNION ALL
+          SELECT 'NGN'::text,n.delta_kobo,n.created_at FROM gb_wallet.ngn_spend_entries n
+          WHERE n.tenant_id=$1 AND n.account_id=$2
         ), flows AS (
           SELECT u.unit,b.from_at,b.to_at,
             COALESCE(SUM(p.amount) FILTER(WHERE p.created_at<b.from_at),0)::text AS opening,
@@ -193,9 +203,9 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           CASE WHEN f.unit='MB' THEN a.purchased_mb::numeric+a.welcome_mb
             ELSE n.balance_kobo::numeric-n.debt_kobo END::text AS recorded_balance,
           CASE WHEN f.unit='MB' THEN a.reserved_purchased_mb::numeric+a.reserved_welcome_mb
-            WHEN n.account_id IS NOT NULL THEN 0 END::text AS reserved,
+            WHEN n.account_id IS NOT NULL THEN n.held_kobo END::text AS reserved,
           CASE WHEN f.unit='MB' THEN a.purchased_mb::numeric+a.welcome_mb-a.reserved_purchased_mb-a.reserved_welcome_mb
-            ELSE n.balance_kobo END::text AS available,
+            ELSE GREATEST(n.balance_kobo-n.held_kobo,0) END::text AS available,
           CASE WHEN f.unit='NGN' THEN n.debt_kobo WHEN a.account_id IS NOT NULL THEN 0 END::text AS debt
         FROM flows f
         LEFT JOIN gb_wallet.accounts a ON f.unit='MB' AND a.tenant_id=$1 AND a.account_kind='human' AND a.account_id=$2
@@ -232,8 +242,14 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
         if(row.account_exists){
           recordedBalance=integer(row.recorded_balance);reserved=integer(row.reserved,true);
           available=integer(row.available,true);debt=integer(row.debt,true);
-          if(closing===recordedBalance&&BigInt(available)+BigInt(reserved)-BigInt(debt)===BigInt(recordedBalance)&&
-            (row.unit!=="MB"||debt===0)&&(row.unit!=="NGN"||(reserved===0&&(available===0||debt===0))))state="matched";
+          // A deposit reversal can leave an original hold larger than the
+          // remaining cash. That is a traced liability, not a ledger mismatch.
+          const cash=BigInt(recordedBalance)+BigInt(debt);
+          const expectedAvailable=cash>BigInt(reserved)?cash-BigInt(reserved):0n;
+          const consistent=row.unit==='NGN'
+            ? cash>=0n&&BigInt(available)===expectedAvailable&&(cash===0n||debt===0)
+            : BigInt(available)+BigInt(reserved)===BigInt(recordedBalance)&&debt===0;
+          if(closing===recordedBalance&&consistent)state="matched";
         }else{
           if([row.recorded_balance,row.reserved,row.available,row.debt].some(v=>v!==null))
             throw new TypeError("invalid_activity_summary_row");
@@ -295,13 +311,20 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
             n.created_at,${ngnDetails}
           FROM gb_wallet.ngn_entries n
           WHERE n.tenant_id=$1 AND n.account_id=$2
+          UNION ALL
+          SELECT 'ngn:' || n.operation_id AS entry_id,n.operation_id,'NGN'::text AS unit,
+            n.delta_kobo::text AS signed_amount,n.purpose AS kind,'completed'::text AS status,
+            n.created_at,${spendDetails}
+          FROM gb_wallet.ngn_spend_entries n
+          ${spendJoin}
+          WHERE n.tenant_id=$1 AND n.account_id=$2
         )
         ,classified AS (
           SELECT *, CASE
             WHEN kind IN ('welcome_grant','verified_deposit','ngn_exchange','deposit') THEN 'funding'
             WHEN kind IN ('send','request_pay') THEN 'transfers'
             WHEN kind IN ('tip','reply','connected_call') THEN 'masana'
-            WHEN kind IN ('redeem','exchange') THEN 'data'
+            WHEN kind IN ('redeem','data','exchange') THEN 'data'
             WHEN kind IN ('reversal','deposit_reversal') THEN 'reversals'
             ELSE 'other' END AS purpose
           FROM posted
@@ -361,6 +384,13 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
         FROM gb_wallet.ngn_entries n
         WHERE n.tenant_id=$1 AND n.account_id=$2
           AND 'ngn:' || n.operation_id=$3
+        UNION ALL
+        SELECT 'ngn:' || n.operation_id AS entry_id,n.operation_id,'NGN'::text AS unit,
+          n.delta_kobo::text AS signed_amount,n.purpose AS kind,'completed'::text AS status,
+          n.created_at::text AS created_at,${spendDetails}
+        FROM gb_wallet.ngn_spend_entries n
+        ${spendJoin}
+        WHERE n.tenant_id=$1 AND n.account_id=$2 AND 'ngn:' || n.operation_id=$3
         LIMIT 1
       `, [actor.tenantId, actor.userId, entryId]);
       return result.rows[0] ? project(result.rows[0]) : null;

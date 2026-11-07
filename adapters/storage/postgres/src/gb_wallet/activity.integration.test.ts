@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+import {createNgnSpending} from "./ngn_spending.js";
 import { describe, expect, it } from "vitest";
 import { createGbWalletActivityRepository } from "./activity.js";
 
@@ -19,13 +20,15 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
           ('b','fan_b','Other tenant name','private_other_tenant');
         CREATE TABLE gb_wallet.accounts(tenant_id text,account_kind text,account_id text,
           purchased_mb bigint,welcome_mb bigint,reserved_purchased_mb bigint,reserved_welcome_mb bigint);
-        CREATE TABLE gb_wallet.ngn_accounts(tenant_id text,account_id text,balance_kobo bigint,debt_kobo bigint);
+        CREATE TABLE gb_wallet.ngn_accounts(tenant_id text,account_id text,balance_kobo bigint,debt_kobo bigint,held_kobo bigint NOT NULL DEFAULT 0);
         CREATE TABLE gb_wallet.operations(
           tenant_id text,operation_id text,operation_kind text,state text);
         CREATE TABLE gb_wallet.movements(
           movement_id bigint GENERATED ALWAYS AS IDENTITY,
           tenant_id text,operation_id text,from_kind text,from_id text,
           to_kind text,to_id text,amount_mb bigint,created_at timestamptz);
+        CREATE TABLE gb_wallet.ngn_spends(tenant_id text,operation_id text,user_id text,recipient_id text);
+        CREATE TABLE gb_wallet.ngn_spend_entries(tenant_id text,operation_id text,account_id text,delta_kobo bigint,purpose text,created_at timestamptz);
         CREATE TABLE gb_wallet.ngn_entries(
           tenant_id text,account_id text,operation_id text,kind text,
           delta_kobo bigint,created_at timestamptz);
@@ -120,7 +123,7 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
   it("reconciles one PostgreSQL snapshot including held MB, releases and reversal debt",async()=>{
     const db=new PGlite();
     try{
-      for(const file of ["0200_gb_wallet_foundation.sql","0205_ngn_funding_wallet.sql"])
+      for(const file of ["0200_gb_wallet_foundation.sql","0205_ngn_funding_wallet.sql","0212_direct_ngn_spending.sql"])
         await db.exec(await readFile(new URL(`../../../../../packages/commerce/migrations/${file}`,import.meta.url),"utf8"));
       const hash="a".repeat(64);
       await db.exec(`
@@ -177,4 +180,58 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
     }finally{await db.close();}
   },30000);
 
+});
+
+
+describe('direct NGN activity from the current migration and repository',()=>{
+  it('posts only captured kobo, scopes both sides of transfers and reconciles reversal debt with original holds',async()=>{
+    const db=new PGlite();
+    try{
+      for(const name of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql'])
+        await db.exec(await readFile(new URL('../../../../../packages/commerce/migrations/'+name,import.meta.url),'utf8'));
+      await db.exec(`CREATE SCHEMA talks;CREATE SCHEMA agents;
+        CREATE TABLE talks.public_profiles(tenant_id text,user_id text,display_name text,handle text);
+        CREATE TABLE agents.agent_presentations(tenant_id text,character_id text,display_name text,visible_in_user_app boolean);
+        INSERT INTO talks.public_profiles VALUES('direct','alice','Alice','alice'),('direct','bob','Bob','bob');
+        INSERT INTO gb_wallet.ngn_accounts(tenant_id,account_id,balance_kobo) VALUES('direct','alice',10000),('direct','bob',0);
+        INSERT INTO gb_wallet.ngn_entries(tenant_id,operation_id,account_id,kind,delta_kobo,request_sha256)
+          VALUES('direct','funding','alice','deposit',10000,repeat('a',64));`);
+      // Embedded PostgreSQL serializes this fixture's transactions; hosted
+      // PostgreSQL independently exercises multi-connection lock acceptance.
+      let tail=Promise.resolve();
+      const pool={query:(sql:string,params:unknown[]=[])=>db.query(sql,params),connect:async()=>{
+        const previous=tail;let release!:()=>void;tail=new Promise<void>(resolve=>{release=resolve;});await previous;
+        return {query:(sql:string,params:unknown[]=[])=>db.query(sql,params),release} as unknown as PoolClient;
+      }} as unknown as Pool;
+      const wallet=createNgnSpending(pool),history=createGbWalletActivityRepository(pool),alice={tenantId:'direct',userId:'alice'},bob={tenantId:'direct',userId:'bob'};
+      const reply={...alice,operationId:'reply_one',idempotencyKey:'reply_one',purpose:'reply' as const,amountKobo:200};
+      await wallet.reserve(reply);
+      expect((await history.list(alice,20,null)).map(r=>r.operationId)).toEqual(['funding']);
+      await wallet.capture(reply,200);
+      const send={...alice,operationId:'send_one',idempotencyKey:'send_one',purpose:'send' as const,amountKobo:1000,recipientId:'bob'};
+      await wallet.reserve(send);await wallet.capture(send,1000);
+      const data={...alice,operationId:'data_one',idempotencyKey:'data_one',purpose:'data' as const,amountKobo:3000};
+      await wallet.reserve(data);await wallet.capture(data,3000);
+      const call={...alice,operationId:'call_pending',idempotencyKey:'call_pending',purpose:'connected_call' as const,amountKobo:5000};
+      await wallet.reserve(call);
+      const snapshot=new Date(Date.now()+1000),facets={purpose:'data' as const,status:'all' as const,direction:'all' as const,days:'all' as const,reference:'',snapshotAt:snapshot.toISOString()};
+      const rows=await history.list(alice,20,null,'NGN');
+      expect(rows.map(r=>r.operationId)).not.toContain('call_pending');
+      expect(rows.find(r=>r.operationId==='reply_one')).toMatchObject({unit:'NGN',amount:-200,kind:'reply'});
+      expect((await history.list(alice,20,null,'NGN',facets)).map(r=>r.operationId)).toEqual(['data_one']);
+      expect(await history.find(alice,'ngn:send_one')).toMatchObject({amount:-1000,details:{counterpartyId:'bob',counterpartyName:'Bob'}});
+      expect(await history.find(bob,'ngn:send_one')).toMatchObject({amount:1000,details:{counterpartyId:'alice',counterpartyName:'Alice'}});
+      expect(await history.find({...alice,tenantId:'other'},'ngn:send_one')).toBeNull();
+      const summary=await history.summary(alice,7,snapshot);
+      expect(summary.NGN).toEqual({received:10000,spent:4200,net:5800});
+      expect(summary.reconciliation?.NGN).toMatchObject({state:'matched',recordedBalance:5800,reserved:5000,available:800,debt:0});
+      await db.exec(`UPDATE gb_wallet.ngn_accounts SET balance_kobo=0,debt_kobo=4200,frozen=true WHERE tenant_id='direct' AND account_id='alice';
+        INSERT INTO gb_wallet.ngn_entries(tenant_id,operation_id,account_id,kind,delta_kobo,request_sha256,reverses_operation_id)
+          VALUES('direct','reversed_funding','alice','deposit_reversal',-10000,repeat('b',64),'funding');`);
+      expect((await history.summary(alice,7,new Date(Date.now()+1000))).reconciliation?.NGN).toMatchObject({state:'matched',recordedBalance:-4200,reserved:5000,available:0,debt:4200});
+      await wallet.release(call);
+      expect((await history.summary(alice,7,new Date(Date.now()+1000))).reconciliation?.NGN).toMatchObject({state:'matched',recordedBalance:-4200,reserved:0,available:0,debt:4200});
+      expect(await history.find(alice,'ngn:call_pending')).toBeNull();
+    }finally{await db.close();}
+  },30000);
 });

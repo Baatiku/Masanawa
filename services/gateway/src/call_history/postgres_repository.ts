@@ -10,7 +10,11 @@ interface Row extends Record<string, unknown> {
   end_reason?: CallEndReason | null; group_id?: string | null;
   expired: boolean; direction?: "incoming" | "outgoing"; incoming_outcome?: string | null;
 }
-const selection = `h.*, (h.expires_at <= clock_timestamp()) AS expired,
+const selection = `h.*,
+  (SELECT jsonb_build_object('currency','NGN','state',c.state,'verifiedConnectedMs',c.verified_connected_ms,
+     'chargedKobo',c.charged_kobo,'admissionId',c.admission_id,'updatedAt',c.updated_at)
+   FROM gb_wallet.ngn_call_admissions c WHERE c.tenant_id=h.tenant_id AND c.user_id=h.user_id
+     AND c.admission_id=h.ngn_admission_id AND c.character_id=h.character_id) AS ngn_usage, (h.expires_at <= clock_timestamp()) AS expired,
   (SELECT jsonb_build_object('state',c.state,'verifiedConnectedMs',c.verified_connected_ms,
      'chargedMb',c.charged_mb,'admissionId',c.admission_id,'updatedAt',c.updated_at)
    FROM gb_wallet.call_admissions c WHERE c.tenant_id=h.tenant_id AND c.user_id=h.user_id
@@ -27,16 +31,24 @@ const roster = `EXISTS (SELECT 1 FROM agents.platform_agent_profiles p
     AND a.visible_in_user_app)`;
 const singleCall = `NOT EXISTS (SELECT 1 FROM agents.masana_call_group_participants g
   WHERE g.tenant_id=h.tenant_id AND g.user_id=h.user_id AND g.call_id=h.call_id)`;
-const connectedCall = `((h.mb_admission_id IS NULL AND h.connected_at IS NOT NULL) OR EXISTS
+const connectedCall = `((h.mb_admission_id IS NULL AND h.ngn_admission_id IS NULL AND h.connected_at IS NOT NULL) OR EXISTS
   (SELECT 1 FROM gb_wallet.call_admissions usage WHERE usage.tenant_id=h.tenant_id
     AND usage.user_id=h.user_id AND usage.character_id=h.character_id
-    AND usage.admission_id=h.mb_admission_id AND usage.verified_connected_ms>0))`;
+    AND usage.admission_id=h.mb_admission_id AND usage.verified_connected_ms>0) OR EXISTS
+  (SELECT 1 FROM gb_wallet.ngn_call_admissions usage WHERE usage.tenant_id=h.tenant_id
+    AND usage.user_id=h.user_id AND usage.character_id=h.character_id
+    AND usage.admission_id=h.ngn_admission_id AND usage.verified_connected_ms>0))`;
 function matching(query:string,connection:string,days:string):string {
   return `AND (${query}::text='' OR position(${query} in lower(h.display_name))>0
             OR position(${query} in lower(h.character_id))>0
             OR position(${query} in lower(h.call_id::text))>0
             OR position(${query} in lower(COALESCE(to_jsonb(h)->>'direction','outgoing')))>0
             OR position(${query} in lower(CASE
+              WHEN h.ngn_admission_id IS NOT NULL THEN (SELECT CASE c.state
+                WHEN 'completed' THEN 'ended' WHEN 'failed' THEN 'ended'
+                WHEN 'connected' THEN 'active' ELSE 'connecting' END
+                FROM gb_wallet.ngn_call_admissions c WHERE c.tenant_id=h.tenant_id AND c.user_id=h.user_id
+                  AND c.admission_id=h.ngn_admission_id)
               WHEN h.mb_admission_id IS NOT NULL THEN (SELECT CASE c.state
                 WHEN 'completed' THEN 'ended' WHEN 'failed' THEN 'ended'
                 WHEN 'connected' THEN 'active' ELSE 'connecting' END
@@ -59,16 +71,19 @@ function exactTotal(value:unknown):number {
 }
 function record(row: Row): CallRecord {
   const mb=row.mb_usage as {state:string;verifiedConnectedMs:number|string;chargedMb:number|null;admissionId:string;updatedAt:string}|null|undefined;
-  const terminal=mb?.state==='completed'||mb?.state==='failed';
-  const mbState=terminal?'ended':mb?.state==='connected'?'active':'connecting';
+  const ngn=row.ngn_usage as {currency:'NGN';state:string;verifiedConnectedMs:number|string;chargedKobo:number|null;admissionId:string}|null|undefined;
+  const usage=ngn??mb;
+  const terminal=usage?.state==='completed'||usage?.state==='failed';
+  const mbState=terminal?'ended':usage?.state==='connected'?'active':'connecting';
   return {
     callId: row.call_id, characterId: row.character_id, displayName: row.display_name,
     direction: row.direction ?? "outgoing", kind: "audio",
-    state: mb ? mbState : row.incoming_outcome === "missed" ? "missed" : row.incoming_outcome === "declined" ? "declined" : row.incoming_outcome === "cancelled" ? "cancelled" : row.ended_at ? "ended" : row.connected_at ? "active" : row.expired ? "expired" : "connecting",
+    state: usage ? mbState : row.incoming_outcome === "missed" ? "missed" : row.incoming_outcome === "declined" ? "declined" : row.incoming_outcome === "cancelled" ? "cancelled" : row.ended_at ? "ended" : row.connected_at ? "active" : row.expired ? "expired" : "connecting",
     createdAt: row.created_at.toISOString(), connectedAt: row.connected_at?.toISOString() ?? null,
     endedAt: row.ended_at?.toISOString() ?? null, expiresAt: row.expires_at.toISOString(),
     endReason: row.end_reason ?? null,groupId:row.group_id ?? null,
-    connectionEvidence: mb ? "server_relay" : row.connected_at ? "client_report" : null,
+    connectionEvidence: usage ? "server_relay" : row.connected_at ? "client_report" : null,
+    ...(ngn ? {ngnUsage:{currency:'NGN' as const,admissionId:ngn.admissionId,verifiedConnectedMs:Number(ngn.verifiedConnectedMs),chargedKobo:ngn.chargedKobo,state:ngn.state}}:{}),
     ...(mb ? {mbUsage:{admissionId:mb.admissionId,verifiedConnectedMs:Number(mb.verifiedConnectedMs),
       chargedMb:mb.chargedMb,state:mb.state}} : {}),
   };
@@ -103,19 +118,21 @@ export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): C
         ORDER BY h.created_at DESC,h.call_id DESC LIMIT $7`,
       [input.tenantId,input.userId,input.characterIds,input.cursor?.createdAt ?? null,input.cursor?.callId ?? null,input.query ?? "",input.limit+1,input.connection??"all",input.days??"all"]);
       const totals=await pool.query(`SELECT count(*)::text AS calls,
-        COALESCE(sum(c.verified_connected_ms),0)::text AS verified_connected_ms,
+        COALESCE(sum(COALESCE(n.verified_connected_ms,c.verified_connected_ms)),0)::text AS verified_connected_ms,
         COALESCE(sum(CASE WHEN c.state IN ('completed','failed') THEN c.charged_mb ELSE 0 END),0)::text AS charged_mb,
-        count(*) FILTER(WHERE c.admission_id IS NULL)::text AS unverified_calls,
-        count(*) FILTER(WHERE c.admission_id IS NOT NULL AND
-          (c.state NOT IN ('completed','failed') OR c.charged_mb IS NULL))::text AS pending_usage_calls
+        COALESCE(sum(CASE WHEN n.state IN ('completed','failed') THEN n.charged_kobo ELSE 0 END),0)::text AS charged_kobo,
+        count(*) FILTER(WHERE c.admission_id IS NULL AND n.admission_id IS NULL)::text AS unverified_calls,
+        count(*) FILTER(WHERE (c.admission_id IS NOT NULL AND (c.state NOT IN ('completed','failed') OR c.charged_mb IS NULL)) OR (n.admission_id IS NOT NULL AND (n.state NOT IN ('completed','failed') OR n.charged_kobo IS NULL)))::text AS pending_usage_calls
         FROM agents.masana_call_history h LEFT JOIN gb_wallet.call_admissions c
           ON c.tenant_id=h.tenant_id AND c.user_id=h.user_id
           AND c.character_id=h.character_id AND c.admission_id=h.mb_admission_id
+        LEFT JOIN gb_wallet.ngn_call_admissions n ON n.tenant_id=h.tenant_id AND n.user_id=h.user_id
+          AND n.character_id=h.character_id AND n.admission_id=h.ngn_admission_id
         WHERE ${scope} AND ${roster} AND ${singleCall} ${matching("$4","$5","$6")}`,
         [input.tenantId,input.userId,input.characterIds,input.query??"",input.connection??"all",input.days??"all"]);
       const total=totals.rows[0]!;
       const summary={calls:exactTotal(total.calls),verifiedConnectedMs:exactTotal(total.verified_connected_ms),
-        chargedMb:exactTotal(total.charged_mb),unverifiedCalls:exactTotal(total.unverified_calls),
+        ...(exactTotal(total.charged_kobo??0)>0?{chargedKobo:exactTotal(total.charged_kobo)}:{}),chargedMb:exactTotal(total.charged_mb),unverifiedCalls:exactTotal(total.unverified_calls),
         pendingUsageCalls:exactTotal(total.pending_usage_calls)};
       const calls = result.rows.slice(0,input.limit).map(record);
       const last = calls.at(-1);
@@ -137,7 +154,7 @@ export function createPostgresCallHistoryRepository(pool: CallHistorySqlPool): C
           THEN COALESCE(h.connected_at,clock_timestamp()) ELSE h.connected_at END,
         ended_at=CASE WHEN $5='ended' THEN COALESCE(h.ended_at,clock_timestamp()) ELSE h.ended_at END,
         end_reason=CASE WHEN $5='ended' THEN COALESCE(h.end_reason,$6::text) ELSE h.end_reason END
-        WHERE ${scope} AND ${roster} AND h.call_id=$4::uuid AND h.mb_admission_id IS NULL RETURNING ${selection}`,
+        WHERE ${scope} AND ${roster} AND h.call_id=$4::uuid AND h.mb_admission_id IS NULL AND h.ngn_admission_id IS NULL RETURNING ${selection}`,
       [input.tenantId,input.userId,input.characterIds,input.callId,input.event,input.endReason??null]);
       return result.rows[0] ? record(result.rows[0]) : null;
     },

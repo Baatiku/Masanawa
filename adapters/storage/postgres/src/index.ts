@@ -66,3 +66,7 @@ export {PgPostSafetyRepository} from './home_feed/safety_repository.js';
 
 export {PgRetainedFinanceRepository,readLegacyGroup,legacyGroupId} from './gb_wallet/retained_finance.js';
 export type {LegacyGroup,LegacyCursor,LegacyKind,EventCursor,CaseTarget} from './gb_wallet/retained_finance.js';
+export * from './gb_wallet/ngn_spending.js';
+export * from './gb_wallet/ngn_call_admissions.js';
+export * from './gb_wallet/ngn_data_journal.js';
+export * from './gb_wallet/ngn_request_repository.js';

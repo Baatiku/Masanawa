@@ -19,7 +19,7 @@ export async function setupRetainedFinance(db:FixtureDb){
   CREATE TABLE agents.masana_incoming_calls(tenant_id text,user_id text,call_id uuid,state text);`);
  await db.exec(migration('agents/migrations/0014_mobile_notification_policy.sql'));
  await db.exec(migration('agents/migrations/0015_notification_read_at.sql'));
- for(const name of ['0200_gb_wallet_foundation.sql','0202_gb_data_redemptions.sql','0205_ngn_funding_wallet.sql'])
+ for(const name of ['0200_gb_wallet_foundation.sql','0202_gb_data_redemptions.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql'])
   await db.exec(migration('commerce/migrations/'+name));
  await db.exec(`ALTER TABLE gb_wallet.operations DROP CONSTRAINT operations_operation_kind_check;
   ALTER TABLE gb_wallet.operations ADD CHECK(operation_kind IN('welcome_grant','verified_deposit','send','request_pay','tip',

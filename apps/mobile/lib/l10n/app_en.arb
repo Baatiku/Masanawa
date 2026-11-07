@@ -413,5 +413,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "addMoneyLabel": "Add Money",
+  "buyMobileDataLabel": "Buy Data",
+  "sendMoneyLabel": "Send",
+  "requestMoneyLabel": "Request NGN",
+  "onHoldLabel": "On hold",
+  "pendingPaymentsLabel": "Pending payments"
 }

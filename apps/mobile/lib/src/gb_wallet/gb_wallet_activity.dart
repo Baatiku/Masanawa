@@ -16,10 +16,10 @@ class GbActivityItem {
   final GbActivityDetails? details;
   String get title => switch(kind) {
     'welcome_grant'=>'Welcome data','verified_deposit'=>'Data funding credit',
-    'ngn_exchange'=>'Data exchange credit','send'=>amount>0?'Received MB':'Sent MB',
+    'ngn_exchange'=>'Data exchange credit','send'=>unit=='NGN'?(amount>0?'NGN received':'NGN sent'):(amount>0?'Received MB':'Sent MB'),
     'request_pay'=>amount>0?'Request payment received':'Paid request',
     'tip'=>'Masana tip','reply'=>'Masana reply usage','connected_call'=>'Masana call usage',
-    'redeem'=>'Data redemption','reversal'=>'Reversal','deposit'=>'NGN deposit',
+    'data'=>'Data purchase','redeem'=>'Data redemption','reversal'=>'Reversal','deposit'=>'NGN deposit',
     'exchange'=>'NGN data exchange','deposit_reversal'=>'Deposit reversal',_=>'Wallet movement',
   };
   String get amountLabel {

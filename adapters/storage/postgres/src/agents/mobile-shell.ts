@@ -1,3 +1,4 @@
+import {createNgnSpending} from '../gb_wallet/ngn_spending.js';
 import { createHash } from "node:crypto";
 import { createGbUsageReservations } from "../gb_wallet/reservations.js";
 import type { Pool } from "pg";
@@ -89,9 +90,9 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
         if (result.rows[0]) {
           if (options.billReplies) {
             const actor = chargeActor(input);
-            await createGbUsageReservations(pool, client).reserve({...actor,
-              idempotencyKey: actor.operationId, use: "reply", amountMb: 1});
-            await client.query(`UPDATE agents.mobile_turn_commands SET mb_reply_operation_id=$3
+            await createNgnSpending(pool, client).reserve({...actor,
+              idempotencyKey: actor.operationId, purpose: "reply", amountKobo: 200});
+            await client.query(`UPDATE agents.mobile_turn_commands SET ngn_reply_operation_id=$3
               WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,input.requestId,actor.operationId]);
           }
           return Object.freeze({ state: "created" as const, command: command(result.rows[0]) });
@@ -143,6 +144,10 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
         if (current?.state === "completed" && current.agentRunId === input.agentRunId) return current;
         throw new Error("mobile turn completion conflict");
       }
+      if (result.rows[0].ngn_reply_operation_id) {
+        const actor={...chargeActor(input),operationId:result.rows[0].ngn_reply_operation_id as string};
+        await createNgnSpending(pool, client).capture(actor, 200);
+      }
       if (result.rows[0].mb_reply_operation_id) {
       const wallet = createGbUsageReservations(pool, client);
       const actor = {...chargeActor(input),operationId:result.rows[0].mb_reply_operation_id as string};
@@ -178,6 +183,10 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
         const current = replay.rows[0] ? command(replay.rows[0]) : null;
         if (current?.state === "failed") return current;
         throw new Error("mobile turn failure conflict");
+      }
+      if (result.rows[0].ngn_reply_operation_id) {
+        const actor={...chargeActor(input),operationId:result.rows[0].ngn_reply_operation_id as string};
+        await createNgnSpending(pool, client).release(actor);
       }
       if (result.rows[0].mb_reply_operation_id) {
       const wallet = createGbUsageReservations(pool, client);
@@ -581,15 +590,15 @@ export function createPostgresMobileAgentActivityRepository(
 export async function recoverExpiredMbReplies(pool: Pool, limit = 100): Promise<number> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new RangeError("Invalid recovery limit");
   const rows = await pool.query(`SELECT c.* FROM agents.mobile_turn_commands c
-    WHERE c.state='pending' AND c.mb_reply_operation_id IS NOT NULL AND c.created_at < clock_timestamp()-interval '15 minutes'
+    WHERE c.state='pending' AND (c.mb_reply_operation_id IS NOT NULL OR c.ngn_reply_operation_id IS NOT NULL) AND c.created_at < clock_timestamp()-interval '15 minutes'
     ORDER BY c.created_at LIMIT $1`, [limit]);
   const repository = createPostgresMobileShellRepository(pool, {billReplies: true});
   let recovered=0;
   for (const row of rows.rows) {
     const turn=command(row);
     // Recovery is intentionally bounded to turns admitted by the new MB policy.
-    const operationId=row.mb_reply_operation_id as string;
-    const hold=await createGbUsageReservations(pool).read(turn.scope.tenantId,operationId,turn.scope.userId);
+    const operationId=(row.ngn_reply_operation_id??row.mb_reply_operation_id) as string;
+    const hold=await (row.ngn_reply_operation_id?createNgnSpending(pool):createGbUsageReservations(pool)).read(turn.scope.tenantId,operationId,turn.scope.userId);
     if (!hold || hold.state!=="reserved") continue;
     try {
       await repository.failTurn({scope:turn.scope,requestId:turn.requestId,

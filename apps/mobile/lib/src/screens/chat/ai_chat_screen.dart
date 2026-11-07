@@ -1,3 +1,6 @@
+import '../../calls/mb_call_flow.dart';
+import '../../calls/mb_call_intent.dart';
+import '../../calls/mb_call_transport.dart';
 import '../../tokens/feature_colors.dart';
 import '../../core/call_signaling_tone.dart';
 import 'dart:async';
@@ -32,10 +35,9 @@ import '../../chat/message_parts_view.dart';
 import '../../chat/shell_document.dart';
 import '../../calls/call_lifecycle_reporter.dart';
 import '../../calls/call_outcome.dart';
-import '../../calls/call_lifecycle_limits.dart';
-import '../../calls/mb_call_transport.dart';
-import '../../calls/mb_call_intent.dart';
-import '../../calls/mb_call_flow.dart';
+import '../../calls/ngn_call_transport.dart';
+import '../../calls/ngn_call_intent.dart';
+import '../../calls/ngn_call_flow.dart';
 import '../../core/live_pcm_audio.dart';
 import '../../core/live_call_foreground.dart';
 import '../../core/live_voice_session.dart';
@@ -115,9 +117,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   ProviderSubscription<SessionState>? _voiceAccountSubscription;
   int _voiceAuthorizationEpoch = 0;
   StreamSubscription<LiveVoiceState>? _inlineVoiceStateSub;
-  MbCallAdmission? _inlineMbAdmission;
-  MbCallFlow? _inlineMbFlow;
-  bool _mbCallStarting = false;
+  NgnCallAdmission? _inlineNgnAdmission;
+  NgnCallFlow? _inlineNgnFlow;
+  bool _ngnCallStarting = false;
   AgentShellTransport? _inlineShellTransport;
   String? _inlineVoiceCharacterId;
   LiveVoiceState _inlineVoiceState = LiveVoiceState.idle;
@@ -1387,8 +1389,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                                   onRetry: failure == null || sending
                                       ? null
                                       : () async {
-                                          if (failure.actionLabel == 'Add MB') {
-                                            context.push('/wallet/add');
+                                          if (failure.actionLabel == 'Add Money') {
+                                            context.push('/wallet/fund');
                                           } else if (failure.actionLabel == 'Sign in') {
                                             await ref
                                                 .read(sessionProvider.notifier)
@@ -1827,14 +1829,19 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       const SnackBar(content: Text('Masana report submitted.')),
     );
   }
-  MbCallFlow _captureMbCallFlow(
+  NgnCallFlow _captureNgnCallFlow(
     CallLifecycleOwner owner, CallLifecycleReporter reporter,
   ) {
     final api = ref.read(apiClientProvider);
-    return MbCallFlow(
+    return NgnCallFlow(
       ownerId: owner.accountId,
-      journal: MbCallIntentJournal(SecureMbCallIntentStore(ownerId: owner.accountId)),
-      transport: MbCallTransport(
+      recoverLegacy:()=>MbCallFlow(ownerId:owner.accountId,
+        journal:MbCallIntentJournal(SecureMbCallIntentStore(ownerId:owner.accountId)),
+        transport:MbCallTransport(dio:api.dio,baseUrl:api.dio.options.baseUrl,
+          accessToken:owner.accessToken,accountId:owner.accountId,
+          currentAccountId:()=>reporter.captureOwner()?.accountId)).recover(),
+      journal: NgnCallIntentJournal(SecureNgnCallIntentStore(ownerId: owner.accountId)),
+      transport: NgnCallTransport(
         dio: api.dio,
         baseUrl: api.dio.options.baseUrl,
         accessToken: owner.accessToken,
@@ -1869,8 +1876,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           if (feedback.recovery == AgentRecovery.addMb)
             FilledButton(onPressed: () {
               Navigator.pop(dialogContext);
-              context.push('/wallet/add');
-            }, child: const Text('Add MB')),
+              context.push('/wallet/fund');
+            }, child: const Text('Add Money')),
         ],
       ),
     );
@@ -1880,7 +1887,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     if (!mounted) return;
     final permission = reason.toLowerCase().contains('permission') ||
         reason.toLowerCase().contains('microphone access');
-    final shortage = reason.toLowerCase().contains('not enough mb');
+    final shortage = reason.toLowerCase().contains('not enough money');
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1900,18 +1907,18 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           if (shortage) FilledButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              context.push('/wallet/add');
-            }, child: const Text('Add MB')),
+              context.push('/wallet/fund');
+            }, child: const Text('Add Money')),
         ],
       ),
     );
   }
 
-  Future<MbCallAdmission?> _reviewAndAdmitMbCall(
-    AgentDirectoryEntry agent, MbCallFlow flow, bool Function() stillOwner,
+  Future<NgnCallAdmission?> _reviewAndAdmitNgnCall(
+    AgentDirectoryEntry agent, NgnCallFlow flow, bool Function() stillOwner,
   ) async {
     // The one-to-one server review is the only authority for purchased and
-    // restricted welcome MB. Even support Masana uses the reviewed MB rail.
+    // cash wallet. Even support Masana uses the reviewed NGN rail.
     final review = await flow.review(agent.characterId);
     if (!stillOwner()) {
       await flow.decline(review);
@@ -1922,10 +1929,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       builder: (dialogContext) => AlertDialog(
         title: Text('Voice with ${agent.displayName}'),
         content: Text(
-          'Reserve up to ${review.budgetMb} MB for this call. '
-          'Only server-confirmed connected seconds are charged at 1 MB '
-          'per started second. Ringing and setup do not cost MB. '
-          'Unused reserved MB is released.',
+          'Reserve up to ₦${review.budgetKobo ~/ 100} for this call. '
+          '₦1 per connected second. Ringing and setup are free. '
+          'Unused money is released.',
         ),
         actions: [
           TextButton(
@@ -1934,7 +1940,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Reserve MB & call'),
+            child: const Text('Confirm & call'),
           ),
         ],
       ),
@@ -1950,8 +1956,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     return admission;
   }
 
-  Future<AgentLiveVoiceGrant> _renewMbGrant(
-    MbCallFlow flow, MbCallAdmission original, bool Function() stillOwner,
+  Future<AgentLiveVoiceGrant> _renewNgnGrant(
+    NgnCallFlow flow, NgnCallAdmission original, bool Function() stillOwner,
   ) async {
     if (!stillOwner()) {
       throw StateError('The signed-in call account changed.');
@@ -1959,13 +1965,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final current = await flow.transport.read(original.id);
     if (!stillOwner() || current.id != original.id ||
         current.characterId != original.characterId || !current.active) {
-      throw StateError('The original MB call admission is no longer active.');
+      throw StateError('The original NGN call admission is no longer active.');
     }
     return flow.transport.grant(current);
   }
 
-  Future<void> _finishMbAdmission(
-    MbCallFlow flow, MbCallAdmission admission,
+  Future<void> _finishNgnAdmission(
+    NgnCallFlow flow, NgnCallAdmission admission,
   ) async {
     bool sameOwner() {
       final current=ref.read(sessionProvider);
@@ -1997,8 +2003,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final session = _inlineVoiceSession;
     if (session == null) return;
     _inlineVoiceClosing = true;
-    final admission = _inlineMbAdmission;
-    final flow = _inlineMbFlow;
+    final admission = _inlineNgnAdmission;
+    final flow = _inlineNgnFlow;
     final shellTransport = _inlineShellTransport;
     final characterId = _inlineVoiceCharacterId;
     try {
@@ -2006,7 +2012,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       _inlineVoiceStateSub = null;
       await session.close();
       if (admission != null && flow != null) {
-        await _finishMbAdmission(flow, admission);
+        await _finishNgnAdmission(flow, admission);
       }
       if (shellTransport != null && characterId != null) {
         await shellTransport.setPresence(
@@ -2017,8 +2023,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       }
     } finally {
       _inlineVoiceSession = null;
-      _inlineMbAdmission = null;
-      _inlineMbFlow = null;
+      _inlineNgnAdmission = null;
+      _inlineNgnFlow = null;
       _inlineShellTransport = null;
       _inlineVoiceCharacterId = null;
       _inlineVoiceClosing = false;
@@ -2026,12 +2032,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   }
 
   Future<void> _startInlineLiveVoice(AgentDirectoryEntry agent) async {
-    if (_mbCallStarting) return;
+    if (_ngnCallStarting) return;
     if (_inlineVoiceSession != null) {
       await _stopInlineLiveVoice(outcome: 'completed');
       return;
     }
-    _mbCallStarting = true;
+    _ngnCallStarting = true;
     try {
       await _prepareCallAudio();
       if (!mounted || !await _ensurePermission(AppPermission.microphone, 'Microphone')) {
@@ -2049,8 +2055,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       bool stillOwner() => mounted &&
           reporter.captureOwner()?.accountId == owner.accountId &&
           ref.read(sessionProvider.notifier).authorizationEpoch == epoch;
-      final flow = _captureMbCallFlow(owner, reporter);
-      final admission = await _reviewAndAdmitMbCall(agent, flow, stillOwner);
+      final flow = _captureNgnCallFlow(owner, reporter);
+      final admission = await _reviewAndAdmitNgnCall(agent, flow, stillOwner);
       if (admission == null) return;
       LiveVoiceSession? session;
       CallLifecycleBinding? history;
@@ -2064,23 +2070,20 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         );
         if (!stillOwner()) throw StateError('Call account changed before grant.');
         final grant = await flow.transport.grant(admission);
-        // The trusted MB relay owns connection evidence and history timestamps.
+        // The trusted NGN relay owns connection evidence and history timestamps.
         // Legacy lifecycle outbox writes must not use an admission as a UUID.
         history = reporter.bind(owner, null);
         if (!stillOwner()) throw StateError('Call account changed before connection.');
         session = LiveVoiceSession(
           grant: grant,
           characterName: agent.displayName,
-          renewConnectionGrant: () => _renewMbGrant(flow, admission, stillOwner),
+          renewConnectionGrant: () => _renewNgnGrant(flow, admission, stillOwner),
           onConnected: history.connected,
           onClosed: () => history!.closed(reason: session?.endReason),
           captureInputTranscription: false,
-          endAt: admission.expiresAt,
-          maxDuration: paidNativeCallMaxDuration(
-            estimatedSeconds: admission.budgetMb,
-            admissionExpiresAt: admission.expiresAt,
-            now: DateTime.now(),
-          ),
+          // Admission expiry is a connection lease, not a paid duration.
+          // The relay enforces the authoritative funded connected deadline.
+          maxDuration: Duration(seconds: admission.budgetKobo ~/ 100),
         );
         _inlineVoiceStateSub?.cancel();
         _inlineVoiceStateSub = session.states.listen((state) {
@@ -2092,8 +2095,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         });
         setState(() {
           _inlineVoiceSession = session;
-          _inlineMbAdmission = admission;
-          _inlineMbFlow = flow;
+          _inlineNgnAdmission = admission;
+          _inlineNgnFlow = flow;
           _inlineShellTransport = shellTransport;
           _inlineVoiceCharacterId = agent.characterId;
           _inlineVoiceState = LiveVoiceState.connecting;
@@ -2110,12 +2113,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
           await _inlineVoiceStateSub?.cancel();
           _inlineVoiceStateSub = null;
           _inlineVoiceSession = null;
-          _inlineMbAdmission = null;
-          _inlineMbFlow = null;
+          _inlineNgnAdmission = null;
+          _inlineNgnFlow = null;
           _inlineShellTransport = null;
           _inlineVoiceCharacterId = null;
         }
-        await _finishMbAdmission(flow, admission);
+        await _finishNgnAdmission(flow, admission);
         await shellTransport.setPresence(characterId: agent.characterId,
           state: 'available', durationMs: 60 * 1000).catchError((_) {});
         rethrow;
@@ -2126,7 +2129,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         await _showVoiceStartFailure(error);
       }
     } finally {
-      _mbCallStarting = false;
+      _ngnCallStarting = false;
     }
   }
 
@@ -2135,8 +2138,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
     final session = _inlineVoiceSession;
     if (session == null) return;
     _inlineVoiceClosing = true;
-    final admission = _inlineMbAdmission;
-    final flow = _inlineMbFlow;
+    final admission = _inlineNgnAdmission;
+    final flow = _inlineNgnFlow;
     final shellTransport = _inlineShellTransport;
     final characterId = _inlineVoiceCharacterId;
     try {
@@ -2145,7 +2148,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       session.endReason ??= CallEndReason.userEnded;
       await session.close();
       if (admission != null && flow != null) {
-        await _finishMbAdmission(flow, admission);
+        await _finishNgnAdmission(flow, admission);
       }
       if (shellTransport != null && characterId != null) {
         await shellTransport.setPresence(characterId: characterId,
@@ -2155,8 +2158,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       if (mounted) {
         setState(() {
           _inlineVoiceSession = null;
-          _inlineMbAdmission = null;
-          _inlineMbFlow = null;
+          _inlineNgnAdmission = null;
+          _inlineNgnFlow = null;
           _inlineShellTransport = null;
           _inlineVoiceCharacterId = null;
           _inlineVoiceState = LiveVoiceState.idle;
@@ -2167,8 +2170,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
   }
 
   Future<void> _openLiveVoice(AgentDirectoryEntry agent) async {
-    if (_mbCallStarting) return;
-    _mbCallStarting = true;
+    if (_ngnCallStarting) return;
+    _ngnCallStarting = true;
     try {
       await _prepareCallAudio();
       if (!mounted || !await _ensurePermission(AppPermission.microphone, 'Microphone')) {
@@ -2186,8 +2189,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
       bool stillOwner() => mounted &&
           reporter.captureOwner()?.accountId == owner.accountId &&
           ref.read(sessionProvider.notifier).authorizationEpoch == epoch;
-      final flow = _captureMbCallFlow(owner, reporter);
-      final admission = await _reviewAndAdmitMbCall(agent, flow, stillOwner);
+      final flow = _captureNgnCallFlow(owner, reporter);
+      final admission = await _reviewAndAdmitNgnCall(agent, flow, stillOwner);
       if (admission == null) return;
       LiveVoiceSession? session;
       CallLifecycleBinding? history;
@@ -2199,22 +2202,19 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         unawaited(ref.read(agentDirectoryProvider.notifier).refresh());
         if (!stillOwner()) throw StateError('Call account changed before grant.');
         final grant = await flow.transport.grant(admission);
-        // The trusted MB relay owns connection evidence and history timestamps.
+        // The trusted NGN relay owns connection evidence and history timestamps.
         // Legacy lifecycle outbox writes must not use an admission as a UUID.
         history = reporter.bind(owner, null);
         if (!stillOwner()) throw StateError('Call account changed before connection.');
         session = LiveVoiceSession(
           grant: grant,
           characterName: agent.displayName,
-          renewConnectionGrant: () => _renewMbGrant(flow, admission, stillOwner),
+          renewConnectionGrant: () => _renewNgnGrant(flow, admission, stillOwner),
           onConnected: history.connected,
           onClosed: () => history!.closed(reason: session?.endReason),
-          endAt: admission.expiresAt,
-          maxDuration: paidNativeCallMaxDuration(
-            estimatedSeconds: admission.budgetMb,
-            admissionExpiresAt: admission.expiresAt,
-            now: DateTime.now(),
-          ),
+          // Admission expiry is a connection lease, not a paid duration.
+          // The relay enforces the authoritative funded connected deadline.
+          maxDuration: Duration(seconds: admission.budgetKobo ~/ 100),
         );
         _modalVoiceSession = session;
         await Navigator.of(context).push<void>(MaterialPageRoute<void>(
@@ -2230,14 +2230,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
                   current.user.id == owner.accountId &&
                   ref.read(sessionProvider.notifier).authorizationEpoch == epoch;
             },
-            maxDuration: Duration(seconds: admission.budgetMb),
+            maxDuration: Duration(seconds: admission.budgetKobo ~/ 100),
           ),
         ));
       } finally {
         await session?.close();
         await history?.closed();
         if (identical(_modalVoiceSession, session)) _modalVoiceSession = null;
-        await _finishMbAdmission(flow, admission);
+        await _finishNgnAdmission(flow, admission);
         await shellTransport.setPresence(characterId: agent.characterId,
           state: 'available', durationMs: 60 * 1000).catchError((_) {});
         if (mounted) {
@@ -2249,7 +2249,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> with WidgetsBinding
         await _showVoiceStartFailure(error);
       }
     } finally {
-      _mbCallStarting = false;
+      _ngnCallStarting = false;
     }
   }
   Future<void> _runAgentAction(AiChatMessage message, String action) async {

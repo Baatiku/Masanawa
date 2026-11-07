@@ -131,5 +131,11 @@
   "passwordSignIn": "Sign in",
   "@passwordSignIn": {
     "description": "Password entry submit button"
-  }
+  },
+  "addMoneyLabel": "إضافة أموال",
+  "buyMobileDataLabel": "شراء بيانات",
+  "sendMoneyLabel": "إرسال",
+  "requestMoneyLabel": "طلب نيرة",
+  "onHoldLabel": "مبلغ محجوز",
+  "pendingPaymentsLabel": "مدفوعات معلقة"
 }

@@ -1044,17 +1044,6 @@ class _MasanaFeedScreenState extends State<MasanaFeedScreen> {
                                       api:widget.api is FeedSafetyApi?widget.api as FeedSafetyApi:null,
                                       isCurrent:()=>mounted&&widget.enabled,
                                       onHidden:()=>hideWithUndo(post)),
-                                    if (widget.statusTips != null && !post.isHuman && !post.isNews && !widget.newsMode)
-                                      IconButton(
-                                        tooltip: t('Tip MB', 'Kyautar MB'),
-                                        style: IconButton.styleFrom(
-                                          foregroundColor: context.masanawa.brandStrong,
-                                          backgroundColor: context.masanawa.surfaceMuted),
-                                        onPressed: pendingActions.contains(post.id)
-                                            ? null : () => tipPost(post),
-                                        icon: const Icon(Icons.volunteer_activism_outlined),
-                                        constraints: const BoxConstraints(minWidth:48,minHeight:48),
-                                      ),
                                   ],
                                 ),
                               ),

@@ -5,7 +5,7 @@ import 'feed_api.dart';
 
 /// Shared three-action Status strip. Home, original detail and historical
 /// Saved supply their own authenticated operations and the same semantics.
-/// Tip remains separate; sharing never creates a paid referral.
+/// Sharing never creates a paid referral.
 class StatusPostActionRow extends StatelessWidget {
   const StatusPostActionRow({
     super.key,

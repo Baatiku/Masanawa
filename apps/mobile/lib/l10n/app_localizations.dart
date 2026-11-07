@@ -669,6 +669,13 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Working · 1 task} other{Working · {count} tasks}}'**
   String statusWorkingTasks(int count);
+  String get addMoneyLabel;
+  String get buyMobileDataLabel;
+  String get sendMoneyLabel;
+  String get requestMoneyLabel;
+  String get onHoldLabel;
+  String get pendingPaymentsLabel;
+
 }
 
 class _AppLocalizationsDelegate

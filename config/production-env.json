@@ -1278,6 +1278,13 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Scoped Workers Scripts and D1 deployment credential supplied securely outside Git; never sent to public news clients."
+    },
+    {
+      "name": "MASANAWA_NGN_CALLS_ENABLED",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Enable reviewed NGN connected-call admissions and trusted relay; falls back to existing MB call enablement during direct-NGN cutover. Does not enable new MB charges."
     }
   ]
 }

@@ -97,6 +97,7 @@ String? shellDeepLinkRoute(Uri uri) {
   // Current-ledger links are navigation only; each destination reauthorizes the original record.
   if(uri.scheme=='masanawa'&&uri.host=='wallet'&&uri.queryParameters.isEmpty){
     final parts=uri.pathSegments;
+    if(parts.length==2&&parts.first=='requests'&&RegExp(r'^ngnreq_[A-Za-z0-9_-]{1,128}$').hasMatch(parts.last))return '/wallet/requests/${Uri.encodeComponent(parts.last)}';
     if(parts.length==1&&parts.single=='activity')return '/wallet/activity';
     if(parts.length==2&&parts.first=='activity'&&
       RegExp(r'^(mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160})$').hasMatch(parts.last)){

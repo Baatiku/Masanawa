@@ -332,4 +332,17 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+  @override
+  String get addMoneyLabel => "إضافة أموال";
+  @override
+  String get buyMobileDataLabel => "شراء بيانات";
+  @override
+  String get sendMoneyLabel => "إرسال";
+  @override
+  String get requestMoneyLabel => "طلب نيرة";
+  @override
+  String get onHoldLabel => "مبلغ محجوز";
+  @override
+  String get pendingPaymentsLabel => "مدفوعات معلقة";
+
 }

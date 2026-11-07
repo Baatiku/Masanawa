@@ -1,9 +1,10 @@
+import '../ngn_wallet/ngn_holds.dart';
+import '../ngn_wallet/ngn_request_detail.dart';
 import 'package:flutter/material.dart';
-import '../gb_wallet/data_redemption_screen.dart';
+import '../ngn_wallet/data_redemption_screen.dart';
 import '../gb_wallet/ngn_funding_screen.dart';
-import '../gb_wallet/recharge_screen.dart';
-import '../gb_wallet/gb_send_screen.dart';
-import '../gb_wallet/gb_request_screen.dart';
+import '../ngn_wallet/gb_send_screen.dart';
+import '../ngn_wallet/gb_request_screen.dart';
 import '../gb_wallet/gb_wallet_activity_screen.dart';
 import '../gb_wallet/gb_wallet_activity_detail_screen.dart';
 import '../screens/profile/person_profile_screen.dart';
@@ -220,27 +221,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/wallet/fund',
         builder: (_, __) => const NgnFundingScreen(),
       ),
-      GoRoute(
-        path: '/wallet/add',
-        pageBuilder: (_, state) => CustomTransitionPage<void>(
-          key: state.pageKey,
-          opaque: false,
-          barrierDismissible: false,
-          barrierColor: Colors.black54,
-          transitionDuration: const Duration(milliseconds: 250),
-          reverseTransitionDuration: const Duration(milliseconds: 180),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            if (MediaQuery.disableAnimationsOf(context)) return child;
-            return SlideTransition(
-              position: Tween<Offset>(begin: const Offset(0, 1),
-                end: Offset.zero).animate(CurvedAnimation(
-                  parent: animation, curve: Curves.easeOutCubic)),
-              child: child,
-            );
-          },
-          child: const RechargePackagesScreen(),
-        ),
-      ),
+      GoRoute(path:'/wallet/add',redirect:(_,__)=>'/wallet/fund'),
+      GoRoute(path:'/wallet/holds/:id',builder:(_,state)=>NgnHoldDetailScreen(operationId:state.pathParameters['id']!)),
+      GoRoute(path:'/wallet/requests/:requestId',builder:(_,state)=>NgnRequestDetailScreen(requestId:state.pathParameters['requestId']!)),
       GoRoute(
         path: '/wallet/request',
         builder: (_, __) => const GbRequestScreen(),
@@ -298,7 +281,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/human/requests', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/billing', redirect: (_, __) => '/wallet/redeem'),
-      GoRoute(path: '/wallet/redeem', builder: (context, _) => Scaffold(
+      GoRoute(path:'/wallet/redeem',redirect:(_,__)=>'/wallet/buy-data'),
+      GoRoute(path: '/wallet/buy-data', builder: (context, _) => Scaffold(
         appBar: AppBar(title: const Text('Redeem Data'),leading:BackButton(
           onPressed:()=>context.canPop()?context.pop():context.go('/home?tab=wallet'))),
         body: const DataRedemptionScreen())),

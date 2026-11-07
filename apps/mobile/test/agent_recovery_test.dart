@@ -521,7 +521,7 @@ void main() {
     final shortage = AgentFeedback.fromError(const ApiException(
       'unsafe upstream error', statusCode: 402, code: 'gb.wallet.insufficient_mb'));
     expect(shortage.recovery, AgentRecovery.addMb);
-    expect(shortage.actionLabel, 'Add MB');
+    expect(shortage.actionLabel, 'Add Money');
     expect(shortage.message, contains('Not enough MB'));
     final provider = AgentFeedback.fromError(const ApiException(
       'upstream secret', statusCode: 503, code: 'gb.call.unavailable'));
