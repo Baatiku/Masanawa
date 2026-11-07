@@ -419,5 +419,23 @@
   "sendMoneyLabel": "Send",
   "requestMoneyLabel": "Request NGN",
   "onHoldLabel": "On hold",
-  "pendingPaymentsLabel": "Pending payments"
+  "pendingPaymentsLabel": "Pending payments",
+  "@addMoneyLabel": {
+    "description": "Wallet action that opens bank account instructions for adding money directly to the NGN balance."
+  },
+  "@buyMobileDataLabel": {
+    "description": "Wallet action for purchasing a mobile network data bundle directly from the NGN balance."
+  },
+  "@sendMoneyLabel": {
+    "description": "Wallet action for sending NGN to another verified Masanawa user."
+  },
+  "@requestMoneyLabel": {
+    "description": "Wallet action for requesting NGN from another Masanawa user."
+  },
+  "@onHoldLabel": {
+    "description": "Label for NGN funds reserved for an original payment awaiting settlement."
+  },
+  "@pendingPaymentsLabel": {
+    "description": "Heading for original wallet payments that are awaiting confirmation."
+  }
 }

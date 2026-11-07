@@ -48,9 +48,12 @@ describe('durable direct NGN reply settlement and historical MB recovery',()=>{
  });
  it('rolls back stored reply when original hold settlement conflicts',async()=>{
   const f=await fixture();await f.repo.claimTurn(f.request);
-  await pool.query("UPDATE gb_wallet.ngn_spends SET state='failed' WHERE tenant_id=$1",[f.scope.tenantId]);
+  // Simulate a terminal original operation while preserving its state/time
+  // constraint; completion must roll back rather than create another charge.
+  await pool.query("UPDATE gb_wallet.ngn_spends SET state='failed',resolved_at=clock_timestamp() WHERE tenant_id=$1",[f.scope.tenantId]);
   await expect(f.repo.completeTurn(f.finish)).rejects.toThrow('ngn.settlement_conflict');expect((await f.repo.readTurn(f.request))?.state).toBe('pending');
-  await pool.query("UPDATE gb_wallet.ngn_spends SET state='reserved' WHERE tenant_id=$1",[f.scope.tenantId]);await f.repo.completeTurn(f.finish);expect(await f.balance()).toMatchObject({balanceKobo:800,heldKobo:0});
+  expect(await f.balance()).toMatchObject({balanceKobo:1000,heldKobo:200});
+  await pool.query("UPDATE gb_wallet.ngn_spends SET state='reserved',resolved_at=NULL WHERE tenant_id=$1",[f.scope.tenantId]);await f.repo.completeTurn(f.finish);expect(await f.balance()).toMatchObject({balanceKobo:800,heldKobo:0});
  });
  it('recovers expired NGN work across restart and fences late provider results',async()=>{
   const f=await fixture();await f.repo.claimTurn(f.request);await pool.query("UPDATE agents.mobile_turn_commands SET created_at=clock_timestamp()-interval '16 minutes' WHERE tenant_id=$1",[f.scope.tenantId]);

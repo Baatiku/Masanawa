@@ -101,6 +101,11 @@ describe("real PostgreSQL activity chronology and fan isolation",()=>{
         ["MB",300,"received"],
       ]);
       expect(await repository.list({tenantId:"x",userId:"fan_a"},20,null)).toEqual([]);
+      const absent=await repository.summary({tenantId:"x",userId:"fan_a"},7,new Date("2026-10-26T00:00:00.000Z"));
+      expect(absent.reconciliation?.NGN).toEqual({state:'uninitialized',opening:0,closing:0,
+        recordedBalance:null,reserved:null,available:null,debt:null});
+      expect(absent.reconciliation?.MB).toEqual({state:'uninitialized',opening:0,closing:0,
+        recordedBalance:null,reserved:null,available:null,debt:null});
       expect((await repository.find(actor,first[1]!.entryId))?.details)
         .toMatchObject({counterpartyKind:"human",counterpartyId:"fan_b",counterpartyName:'Public Fan B',counterpartyHandle:'fan_b'});
       expect(JSON.stringify(first)).not.toContain('Other tenant name');

@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import {createHmac} from 'node:crypto';
 import {afterEach,describe,it,expect,vi} from 'vitest';
 import {registerNgnSendReviewRoutes} from './send_routes.js';
 import {NgnSendError,type NgnSendPorts} from './send_review.js';
@@ -28,6 +29,13 @@ describe('NGN signed Send transport',()=>{
   const {app,transfer}=setup();expect((await app.inject({method:'POST',url:'/v1/ngn/wallet/send/quote',payload:{username:'bob.user',amountKobo:123}})).statusCode).toBe(401);
   for(const payload of [{username:'bob.user',amountMb:123},{username:'bob.user',amountKobo:123,userId:'victim'}])expect((await app.inject({method:'POST',url:'/v1/ngn/wallet/send/quote',headers:{authorization:'Bearer test'},payload})).statusCode).toBeGreaterThanOrEqual(400);
   expect(transfer).not.toHaveBeenCalled();
+ });
+ it('rejects an old MB signed token even when rails share a server secret',async()=>{
+  const {app,ports,transfer}=setup();
+  const payload=Buffer.from(JSON.stringify({tenantId:sender.tenantId,actorId:sender.userId,recipientId:recipient.userId,username:recipient.username,amountMb:100,nonce:'abcdefghijklmnopqrstuvwx',expiresAt:new Date(Date.now()+60000).toISOString()})).toString('base64url');
+  const oldToken=payload+'.'+createHmac('sha256',ports.reviewSecret).update(payload).digest('base64url');
+  const res=await app.inject({method:'POST',url:'/v1/ngn/wallet/send/confirm',headers:{authorization:'Bearer test'},payload:{reviewToken:oldToken,reviewAccepted:true}});
+  expect(res.statusCode).toBe(403);expect(transfer).not.toHaveBeenCalled();
  });
  it('rejects insufficient available cash and changed recipient at confirmation',async()=>{
   const {app,ports,transfer}=setup(),headers={authorization:'Bearer test'};

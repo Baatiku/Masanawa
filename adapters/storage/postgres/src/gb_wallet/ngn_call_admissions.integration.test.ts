@@ -18,7 +18,7 @@ describe('NGN call accounting on production SQL',()=>{
    db=new PGlite();let tail=Promise.resolve();
    pool={query:(sql:string,p:unknown[]=[])=>db!.query(sql,p),connect:async()=>{const old=tail;let release!:()=>void;tail=new Promise<void>(r=>{release=r});await old;return {query:(sql:string,p:unknown[]=[])=>db!.query(sql,p),release} as unknown as PoolClient;}} as unknown as Pool;
   }
-  for(const file of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql'])await pool.query(await readFile(new URL('../../../../../packages/commerce/migrations/'+file,import.meta.url),'utf8'));
+  for(const file of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql']){const sql=await readFile(new URL('../../../../../packages/commerce/migrations/'+file,import.meta.url),'utf8');if(db)await db.exec(sql);else await pool.query(sql);}
  },30000);
  afterAll(async()=>{if(db)await db.close();else await pool?.end();if(admin){await admin.query('DROP DATABASE IF EXISTS "'+dbName+'"');await admin.end();}});
  async function fixture(){

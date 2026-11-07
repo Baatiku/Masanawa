@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../calls/call_history.dart';
+import '../../ngn_wallet/gb_wallet_summary.dart' show ngnMoney;
 import '../../calls/call_details_screen.dart';
 import '../../calls/call_lifecycle_reporter.dart';
 import '../../calls/masana_voice_route.dart';
@@ -258,7 +259,7 @@ class _PrivateMasanaCallHistoryState
                 ? Theme.of(context).colorScheme.error
                 : context.masanawa.brand),
           const SizedBox(width: 5),
-          Expanded(child: Text('${call.outcomeLabel} · ${_time(call.createdAt)}',
+          Expanded(child: Text('${call.outcomeLabel} · ${_time(call.createdAt)}${call.chargedKobo==null?'':' · ${ngnMoney(call.chargedKobo!)}'}',
             maxLines: 1, overflow: TextOverflow.ellipsis)),
         ]),
         onTap: () {

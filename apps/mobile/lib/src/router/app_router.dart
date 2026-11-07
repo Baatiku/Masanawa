@@ -283,7 +283,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/billing', redirect: (_, __) => '/wallet/redeem'),
       GoRoute(path:'/wallet/redeem',redirect:(_,__)=>'/wallet/buy-data'),
       GoRoute(path: '/wallet/buy-data', builder: (context, _) => Scaffold(
-        appBar: AppBar(title: const Text('Redeem Data'),leading:BackButton(
+        appBar: AppBar(title: const Text('Buy Data'),leading:BackButton(
           onPressed:()=>context.canPop()?context.pop():context.go('/home?tab=wallet'))),
         body: const DataRedemptionScreen())),
       GoRoute(path: '/crypto', redirect: (_, __) => '/home?tab=wallet'),

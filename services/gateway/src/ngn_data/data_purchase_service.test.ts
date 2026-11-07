@@ -14,8 +14,8 @@ function fixture(){
   reserve:vi.fn(async()=>{}),capture:vi.fn(async()=>{}),release:vi.fn(async()=>{}),
   claim:vi.fn(async(_a,row)=>{if(journal)return false;journal=row;return true;}),
   read:vi.fn(async()=>journal),resolve:vi.fn(async(_a,_id,state)=>{if(journal)journal={...journal,state};}),
-  pay:vi.fn(async(v)=>({reference:v.reference,providerReference:'dispatch-ack',status:'pending',amount:'500.25',currency:'NGN',customerId:'+2348012345678',itemCode:'DT001',product:null,productName:null,extra:null})),
-  status:vi.fn(async(id)=>({reference:id,providerReference:'verified-provider-ref',status:'successful',amount:'500.25',currency:'NGN',customerId:'+2348012345678',itemCode:'DT001',product:null,productName:null,extra:null,...result})),
+  pay:vi.fn(async(v):Promise<FlutterwaveBillReceipt>=>({reference:v.reference,providerReference:'dispatch-ack',status:'pending',amount:'500.25',currency:'NGN',customerId:'+2348012345678',itemCode:'DT001',product:null,productName:null,extra:null})),
+  status:vi.fn(async(id):Promise<FlutterwaveBillReceipt>=>({reference:id,providerReference:'verified-provider-ref',status:'successful',amount:'500.25',currency:'NGN',customerId:'+2348012345678',itemCode:'DT001',product:null,productName:null,extra:null,...result})),
   now:()=>new Date('2026-10-25T00:00:00Z'),
  };
  return {ports,service:createNgnDataPurchaseService(ports),setStatus:(value:Partial<FlutterwaveBillReceipt>)=>{result=value;},row:()=>journal};

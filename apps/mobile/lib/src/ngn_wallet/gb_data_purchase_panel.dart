@@ -143,7 +143,7 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     final body = error.response?.data;
     if (body is! Map) return false;
     final detail = body['error'];
-    return detail is Map && detail['code'] == 'insufficient_balance';
+    return detail is Map && const {'insufficient_balance','price_changed'}.contains(detail['code']);
   }
 
   Future<void> _restore() async {
@@ -187,9 +187,9 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
     bool originalLookup = false,
   }) async {
     if (raw is! Map<String, dynamic> ||
-        raw['operationId'] is! String ||
+        raw['currency']!='NGN'||raw['unit']!='kobo'||raw['operationId'] is! String ||
         !RegExp(
-          r'^data_[a-f0-9]{48}$',
+          r'^ngndata_[a-f0-9]{48}$',
         ).hasMatch(raw['operationId'] as String) ||
         (expectedId != null && raw['operationId'] != expectedId) ||
         !const ['pending', 'delivered', 'failed'].contains(raw['state'])) {
@@ -344,7 +344,7 @@ class GbDataPurchasePanelState extends ConsumerState<GbDataPurchasePanel> {
           setState(() {
             _pending = null;
             _busy = false;
-            _error = null;
+            _error = 'Balance or bundle price changed. Refresh and review again.';
           });
           ref.invalidate(gbWalletSummaryProvider(widget.owner));
           widget.onInsufficientBalance?.call();

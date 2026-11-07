@@ -17,8 +17,14 @@ class _LegacyFinancialRecoveryState extends ConsumerState<LegacyFinancialRecover
   try{
    final send=await const legacy.SecureGbSendPendingStore().read(user);final data=await const olddata.GbDataPendingStore().read(user);final api=ref.read(apiClientProvider);
    if(!current())return;
-   if(send!=null){final r=await api.dio.get<Object?>('/v1/gb/wallet/send/receipt/${Uri.encodeComponent(send.operationId)}');if(!current())return;final raw=r.data;if(raw is Map&&raw['receipt'] is Map&&(raw['receipt'] as Map)['state']=='completed')await const legacy.SecureGbSendPendingStore().clear(user);}
-   if(data!=null){final r=await api.dio.get<Object?>('/v1/gb/data/purchases/intent/${Uri.encodeComponent(data.idempotencyKey)}');if(!current())return;final raw=r.data;if(raw is Map&&const ['delivered','failed'].contains(raw['state']))await const olddata.GbDataPendingStore().clear(user);}
+   if(send!=null){final r=await api.dio.get<Object?>('/v1/gb/wallet/send/receipt/${Uri.encodeComponent(send.operationId)}');if(!current())return;legacy.GbSendReceipt.fromJson(r.data,send);await const legacy.SecureGbSendPendingStore().clear(user);}
+   if(data!=null){
+    final r=await api.dio.get<Object?>('/v1/gb/data/purchases/intent/${Uri.encodeComponent(data.idempotencyKey)}');if(!current())return;final raw=r.data;
+    if(raw is! Map||raw['bundleId']!=data.bundleId||raw['version']!=data.version||raw['recipientPhone']!=data.recipientPhone||raw['costMb']!=data.costMb||raw['operationId'] is! String||!RegExp(r'^data_[a-f0-9]{48}$').hasMatch(raw['operationId'] as String))throw const FormatException('Original data purchase differs');
+    String? state=raw['state'] as String?;
+    if(state=='pending'){final result=await api.dio.post<Object?>('/v1/gb/data/purchases/${Uri.encodeComponent(raw['operationId'] as String)}/reconcile');if(!current())return;final resultRaw=result.data;if(resultRaw is! Map||resultRaw['operationId']!=raw['operationId'])throw const FormatException('Original data receipt differs');state=resultRaw['state'] as String?;}
+    if(const ['delivered','failed'].contains(state))await const olddata.GbDataPendingStore().clear(user);
+   }
    if(current())setState(()=>_status=send==null&&data==null?'No earlier payment pending.':'Original payment checked. Historical MB amounts remain unchanged.');
   }catch(_){if(current())setState(()=>_status='Earlier payment remains unconfirmed. Check again; no new payment was sent.');}
   finally{if(current())setState(()=>_busy=false);}

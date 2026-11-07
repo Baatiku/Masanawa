@@ -846,12 +846,12 @@ class _GbSendScreenState extends ConsumerState<GbSendScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               onChanged: (value) => setState(() {
                 _quickSelection = const <String>{'100', '500', '1000', '5000', '10000'}.contains(value.trim())
-                    ? value.trim() : null;
+                    ? '${parseNgnInput(value)??0}' : null;
                 _clearReview();
               }),
               decoration: InputDecoration(
                 labelText: 'Amount (NGN)',
-                hintText: 'Enter',
+                hintText: 'Enter Naira',
                 helperText: 'Up to ₦10,000,000',
                 errorText: _mb.text.trim().isNotEmpty && chosenKobo == null
                     ? 'Enter a Naira amount within the transfer limit'

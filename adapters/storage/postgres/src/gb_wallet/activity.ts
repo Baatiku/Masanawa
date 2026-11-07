@@ -205,7 +205,7 @@ export function createGbWalletActivityRepository(db: Pick<Pool, "query">) {
           CASE WHEN f.unit='MB' THEN a.reserved_purchased_mb::numeric+a.reserved_welcome_mb
             WHEN n.account_id IS NOT NULL THEN n.held_kobo END::text AS reserved,
           CASE WHEN f.unit='MB' THEN a.purchased_mb::numeric+a.welcome_mb-a.reserved_purchased_mb-a.reserved_welcome_mb
-            ELSE GREATEST(n.balance_kobo-n.held_kobo,0) END::text AS available,
+            WHEN n.account_id IS NOT NULL THEN GREATEST(n.balance_kobo-n.held_kobo,0) END::text AS available,
           CASE WHEN f.unit='NGN' THEN n.debt_kobo WHEN a.account_id IS NOT NULL THEN 0 END::text AS debt
         FROM flows f
         LEFT JOIN gb_wallet.accounts a ON f.unit='MB' AND a.tenant_id=$1 AND a.account_kind='human' AND a.account_id=$2
