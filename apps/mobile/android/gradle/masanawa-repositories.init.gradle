@@ -2,6 +2,9 @@
 // artifacts; the plugin portal alone does not host every BOM/runtime artifact.
 settingsEvaluated { settings ->
     settings.pluginManagement.repositories {
+        // Google Cloud's documented Maven Central mirror avoids the CI
+        // network's intermittent GitHub release redirect gateway failures.
+        maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }
         mavenCentral()
         google()
         gradlePluginPortal()
@@ -10,6 +13,7 @@ settingsEvaluated { settings ->
 allprojects {
     buildscript {
         repositories {
+            maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }
             mavenCentral()
             google()
             gradlePluginPortal()
