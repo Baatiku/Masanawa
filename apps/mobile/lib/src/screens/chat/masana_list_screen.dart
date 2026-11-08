@@ -130,6 +130,28 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                 _query = '';
               }),
             ),
+            if (!widget.callPicker)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                child: Column(children: [
+                  ListTile(
+                    dense:true,
+                    visualDensity:VisualDensity.compact,
+                    leading: Icon(Icons.account_balance_outlined,color:u.brand),
+                    title:const Text('Explore Nigeria',style:TextStyle(fontWeight:FontWeight.w700)),
+                    subtitle:const Text('Public servants, agencies and government'),
+                    trailing:const Icon(Icons.chevron_right),
+                    onTap:()=>context.push('/civic'),
+                  ),
+                  SingleChildScrollView(scrollDirection:Axis.horizontal,child:Row(children:[
+                    for(final category in const ['People','Agencies','Government','Directorates','History'])
+                      Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ActionChip(
+                        label:Text(category),
+                        onPressed:()=>context.push('/civic?category=$category'),
+                      )),
+                  ])),
+                ]),
+              ),
             Expanded(child: _body(context, directory, accountId)),
           ],
         ),
@@ -346,6 +368,10 @@ class _MasanaListScreenState extends ConsumerState<MasanaListScreen> {
                           ),
                         ),
                         onTap: () {
+                          if (!widget.callPicker && agent.civicAgencyId != null) {
+                            context.push('/civic/${agent.civicAgencyId}');
+                            return;
+                          }
                           if (widget.callPicker) {
                             final active = ref.read(sessionProvider);
                             if (active is! SessionSignedIn ||

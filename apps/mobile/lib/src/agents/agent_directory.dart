@@ -270,10 +270,13 @@ class AgentDirectoryEntry {
     this.countryName,
     this.publicOfficial,
     this.publicOfficialSimulation = false,
+    this.civicAgencyId,
   });
 
   final PublicOfficialIdentity? publicOfficial;
   final bool publicOfficialSimulation;
+  /// Server-reviewed independent AI guide identity, never an official account.
+  final String? civicAgencyId;
   final String characterId;
   final String characterVersionId;
   final String displayName;
@@ -341,6 +344,8 @@ class AgentDirectoryEntry {
     countryCode: countryCode,
     countryName: countryName,
     publicOfficialSimulation: publicOfficialSimulation,
+    // Cached records do not prove a civic guide is still admitted.
+    civicAgencyId: null,
   );
 
   String get initial =>
@@ -358,6 +363,7 @@ class AgentDirectoryEntry {
     'characterVersionId': characterVersionId,
     'displayName': displayName,
     if (publicOfficialSimulation) 'publicOfficialSimulation': true,
+    if (civicAgencyId != null) 'civicAgencyId': civicAgencyId,
     'roleLabel': roleLabel,
     'about': about,
     'presence': switch (presence) {
@@ -398,6 +404,9 @@ class AgentDirectoryEntry {
       publicOfficialSimulation:
           json['publicOfficialSimulation'] == true ||
           json['publicOfficial'] is Map,
+      civicAgencyId: json['civicAgencyId'] is String &&
+          RegExp(r'^[a-z][a-z0-9-]{1,39}$').hasMatch(json['civicAgencyId'] as String)
+          ? json['civicAgencyId'] as String : null,
       characterId: requiredString('characterId'),
       characterVersionId: requiredString('characterVersionId'),
       displayName: requiredString('displayName'),
