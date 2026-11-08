@@ -9,6 +9,23 @@ afterEach(async () => {
 });
 
 describe("agent directory route", () => {
+  it('retains a reviewed civic agency ID through the HTTP response schema', async () => {
+    const app=createGatewayApp({agentDirectory:{
+      async list(){return [{
+        characterId:'character_00000000-0000-4000-8000-000000000002',
+        characterVersionId:'character-version_00000000-0000-4000-8000-000000000003',
+        displayName:'NIMC · AI Guide',roleLabel:'Civic AI guide',about:'Independent guide',
+        greeting:'Hello',presence:'unknown' as const,activeWorkCount:0,
+        supportAgent:false,defaultPlatformAgent:false,voiceProvider:'gemini',voiceName:'Bodi',
+        civicAgencyId:'nimc',
+      }];},
+      async setDefaultPlatformAgent(){throw new Error('Not a support agent');},
+    }});
+    apps.push(app);
+    const response=await app.inject({url:'/agent/directory',headers:{authorization:'Bearer test'}});
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agents[0].civicAgencyId).toBe('nimc');
+  });
   it("forwards authorization and omits Skill assignment", async () => {
     let seen: string | undefined;
     const directory: AgentDirectoryService = {

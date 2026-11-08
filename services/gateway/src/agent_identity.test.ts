@@ -27,6 +27,16 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
      userId:createCanonicalId("user"),characterIds:[character]});
    expect(result.get(character)).toEqual({portraitKey:null,following:false,socialChannels:[]});
  });
+ it('projects independent civic guide only from canonical platform-approved agency binding',async()=>{
+   const character=createCanonicalId('character');
+   const reader=(approval:string)=>createPgAgentMasanaIdentityReader({query:async()=>({rows:[{
+     character_id:character,portrait_media_id:null,following:false,
+     civic_agency_id:'nimc',profile_approved_by:approval,
+   }]})} as never);
+   const input={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user'),characterIds:[character]};
+   expect((await reader('masanawa-civic-seed-v1').read(input)).get(character)?.civicAgencyId).toBe('nimc');
+   expect((await reader('staff').read(input)).get(character)?.civicAgencyId).toBeUndefined();
+ });
  it("retains a portrait when a Masana's approved display handle changes",async()=>{
    const character=createCanonicalId("character");
    const port=createPgAgentMasanaIdentityReader({query:async()=>({rows:[{

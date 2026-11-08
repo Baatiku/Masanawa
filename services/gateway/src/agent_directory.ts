@@ -38,6 +38,7 @@ export interface MobileAgentDirectoryEntry {
   readonly voiceProvider: string | null;
   readonly voiceName: string | null;
   readonly publicOfficialSimulation?:boolean;
+  readonly civicAgencyId?:string;
   readonly publicOfficial?:import('./agent_identity.js').ApprovedMasanaDirectoryIdentity['publicOfficial'];
   readonly portraitKey?: string;
   readonly avatarUrl?:string;
@@ -159,6 +160,7 @@ export function createAgentDirectoryService(input: {
             voiceProvider: profile?.voiceProvider ?? null,
             voiceName: profile?.voiceName ?? null,
             ...(identity?.publicOfficialSimulation?{publicOfficialSimulation:true}:{}),
+            ...(identity?.civicAgencyId?{civicAgencyId:identity.civicAgencyId}:{}),
             ...(identity?.publicOfficial?{publicOfficial:identity.publicOfficial}:{}),
             ...(identity?.avatarUrl?{avatarUrl:identity.avatarUrl}:{}),
             ...(identity?.portraitKey ? {portraitKey:identity.portraitKey} : {}),

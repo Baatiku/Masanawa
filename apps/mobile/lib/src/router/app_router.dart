@@ -21,6 +21,8 @@ import '../screens/settings/settings_screen.dart';
 import '../screens/settings/notification_preferences_screen.dart';
 import '../core/startup_metrics.dart';
 import '../screens/chat/masana_list_screen.dart';
+import '../civic/civic_directory_screen.dart';
+import '../civic/civic_profile_screen.dart';
 import '../screens/search/unified_search_screen.dart';
 import '../screens/search/resource_link_screens.dart';
 import '../screens/status/status_screen.dart';
@@ -259,6 +261,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/agents', redirect: (_, __) => '/home?tab=chats'),
       GoRoute(path: '/masana', builder: (_, _) => const MasanaListScreen()),
+      GoRoute(path: '/civic', builder: (_, state) => CivicDirectoryScreen(initialCategory:state.uri.queryParameters['category'] ?? 'All')),
+      GoRoute(path: '/civic/:id', builder: (_, state) => CivicProfileScreen(id:state.pathParameters['id']!)),
       GoRoute(
         path: '/masana/:id',
         builder: (_, state) =>

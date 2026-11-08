@@ -1,5 +1,12 @@
 name: Masana Android APK Compilation
 on:
+  # Owner-requested civic build: compile the exact PR head without a separate
+  # manual Actions approval. Branch guard below prevents unrelated APK jobs.
+  pull_request:
+    paths:
+      - 'apps/mobile/lib/src/civic/**'
+      - 'apps/mobile/lib/src/screens/chat/masana_list_screen.dart'
+      - '.github/workflows/masana-android-apk.yml'
   workflow_dispatch:
     inputs:
       build_apk:
@@ -14,7 +21,7 @@ permissions:
   contents: read
 jobs:
   compile-android:
-    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk == true) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/civic-directory-'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:

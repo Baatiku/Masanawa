@@ -4,9 +4,11 @@ import {OFFICIAL_PARTIES,partyEmblemUrl,publicOfficialMediaUrl} from './official
 import { validateMasanaBiographicalFacts, validateMasanaSocialChannels, type MasanaSocialChannel } from "@masanawa/masana";
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
 import type { CharacterId } from "@masanawa/contracts";
+import {approvedCivicAgencyId} from './civic_agency_bootstrap.js';
 /** Tenant and user-scoped approved identity and follow preferences. Identity
  * is looked up through the canonical server character ID, never by display name. */
 export interface ApprovedMasanaDirectoryIdentity {
+  readonly civicAgencyId?:string;
   readonly publicOfficialSimulation?:boolean;
   readonly avatarUrl?:string;
   readonly publicOfficial?:{portrait?:{url:string;sourceUrl:string;credit:string;licenseLabel:string;licenseUrl?:string};party?:{code:string;name:string;emblemUrl:string;sourceUrl:string;checkedAt:string};officialName:string;office:string;identitySourceUrl:string;reviewedAt:string;reviewExpiresAt:string;verification:'source_reviewed';representation:'ai_simulation';biography?:string;biographicalFacts?:import('@masanawa/masana').MasanaBiographicalFacts};
@@ -34,6 +36,8 @@ export function createPgAgentMasanaIdentityReader(
           revision.profile->'socialChannels' AS social_channels,
           revision.profile->'biographicalFacts' AS biographical_facts,
           revision.profile->>'lifeStory' AS public_biography,
+          revision.profile->>'civicAgencyId' AS civic_agency_id,
+          revision.approved_by AS profile_approved_by,
           EXISTS(SELECT 1 FROM masana.follows following
             WHERE following.tenant_id=revision.tenant_id
               AND following.character_id=revision.character_id
@@ -55,7 +59,7 @@ export function createPgAgentMasanaIdentityReader(
       const simulations=await officials?.simulations(tenantId,characterIds);
       const result=new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       for(const raw of found.rows) {
-        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown;requested_portrait?:unknown};
+        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown;requested_portrait?:unknown;civic_agency_id?:unknown;profile_approved_by?:unknown};
         if(typeof row.character_id!=="string" ||
            !characterIds.includes(row.character_id as CharacterId)) {
           throw new Error("invalid_masana_identity_projection");
@@ -71,8 +75,10 @@ export function createPgAgentMasanaIdentityReader(
         const subject=reviewed?OFFICIAL_ROSTER_MANIFEST.find(p=>p.characterId===row.character_id&&p.officialName===reviewed.officialName):undefined;
         const portrait=photo?{url:publicOfficialMediaUrl(photo.assetKey),sourceUrl:photo.sourceUrl,credit:photo.credit,licenseLabel:photo.licenseLabel,...(photo.licenseUrl?{licenseUrl:photo.licenseUrl}:{})}:undefined;
         const party=subject?{code:subject.party,name:OFFICIAL_PARTIES[subject.party].name,emblemUrl:partyEmblemUrl(subject.party),sourceUrl:subject.rosterSourceUrl,checkedAt:subject.rosterCheckedAt}:undefined;
+        const civicAgencyId=row.profile_approved_by==='masanawa-civic-seed-v1'
+          ? approvedCivicAgencyId(row.civic_agency_id) : null;
         result.set(row.character_id as CharacterId,
-          Object.freeze({...(portrait?{avatarUrl:portrait.url}:{}),...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(portrait?{portrait}:{}),...(party?{party}:{}),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
+          Object.freeze({...(civicAgencyId?{civicAgencyId}:{}),...(portrait?{avatarUrl:portrait.url}:{}),...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(portrait?{portrait}:{}),...(party?{party}:{}),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
             socialChannels:validateMasanaSocialChannels(row.social_channels)}));
       }
       return result;

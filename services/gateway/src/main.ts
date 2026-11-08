@@ -51,6 +51,7 @@ import {
   ensureMasanaCatalogProfiles,withCatalogProvisionLock,
 } from "@masanawa/postgres";
 import {ensureOfficialPlatformAgents} from './official_roster_bootstrap.js';
+import {ensureCivicAgencyAgents} from './civic_agency_bootstrap.js';
 import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import {createGbCallRelay} from "./gb_calls/relay.js";
 import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
@@ -763,6 +764,13 @@ export async function startGatewayService(
             tenantId:activePlatformTenantId,
             catalog:roster.catalog,
           });
+          const civicGuides=await ensureCivicAgencyAgents({
+            tenantId:activePlatformTenantId,pool:database.featurePool!,
+            identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
+            profiles:database.platformAgentProfiles!,skillAssignments:database.characterSkillAssignments!,
+            skillDistribution:database.skillDistribution!,
+          });
+          process.stdout.write(JSON.stringify({event:'civic_ai_guides_ready',...civicGuides})+'\n');
           const officialRoster=await ensureOfficialPlatformAgents({
             tenantId:activePlatformTenantId,pool:database.featurePool!,
             identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
