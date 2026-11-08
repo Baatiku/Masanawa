@@ -92,7 +92,7 @@ class CivicProfileScreen extends ConsumerWidget {
                 ]),
               ),
             ]),
-          ))),
+          )),
           SliverPersistentHeader(pinned:true,delegate:_CivicTabsDelegate(
             color:theme.colorScheme.surface,tabBar:const TabBar(tabs:[
               Tab(text:'About'),Tab(text:'Work & history'),Tab(text:'Sources'),
