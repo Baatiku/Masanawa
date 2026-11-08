@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../tokens/feature_colors.dart';
 import 'package:intl/intl.dart';
 import '../../agents/agent_directory.dart';
+import '../../civic/civic_catalog.dart';
+import '../../civic/civic_leader_dossiers.dart';
 
 /// Displays only published directory facts. Missing dates, parties and career
 /// milestones are never inferred from a name, office or model knowledge.
@@ -26,6 +28,17 @@ class PersonaBiography extends StatelessWidget {
     final official = agent.publicOfficial;
     final simulation = agent.publicOfficialSimulation;
     final biography = official?.biography ?? agent.about;
+    CivicLeaderDossier? historicalDossier;
+    if (official != null && simulation) {
+      // Match only the published, reviewed identity, never a candidate alias,
+      // role label or fuzzy display name. Other legacy personas remain intact.
+      for (final head in civicHeadsOfGovernment) {
+        if (head.name.toLowerCase() == official.officialName.toLowerCase()) {
+          historicalDossier = civicLeaderDossiers[head.id];
+          break;
+        }
+      }
+    }
     Widget section(String title, Widget child) => Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
@@ -163,6 +176,32 @@ class PersonaBiography extends StatelessWidget {
                   style: theme.textTheme.bodyLarge?.copyWith(height: 1.65),
                 ),
         ),
+        if (historicalDossier case final CivicLeaderDossier dossier) ...[
+          section('Public service timeline and background',Column(
+            crossAxisAlignment:CrossAxisAlignment.start,children:[
+              for(final item in dossier.background) ListTile(
+                contentPadding:EdgeInsets.zero,dense:true,
+                leading:const Icon(Icons.history_edu_outlined),title:Text(item)),
+            ])),
+          section('Documented public actions',Column(children:[
+            for(final item in dossier.governmentRecord) ListTile(
+              contentPadding:EdgeInsets.zero,dense:true,
+              leading:const Icon(Icons.fact_check_outlined),title:Text(item)),
+          ])),
+          section('Public priorities',Column(children:[
+            for(final item in dossier.publicAgenda) ListTile(
+              contentPadding:EdgeInsets.zero,dense:true,
+              leading:const Icon(Icons.flag_outlined),title:Text(item)),
+          ])),
+          section('Historical scrutiny',Column(children:[
+            for(final item in dossier.historicalDebates) ListTile(
+              contentPadding:EdgeInsets.zero,dense:true,
+              leading:const Icon(Icons.balance_outlined),title:Text(item)),
+          ])),
+          TextButton.icon(onPressed:()=>onSource(dossier.sourceUrl),
+            icon:const Icon(Icons.open_in_new,size:18),
+            label:const Text('Independent biographical reference')),
+        ],
         if (agent.conversationStarters.isNotEmpty)
           section(
             'Start a conversation',
