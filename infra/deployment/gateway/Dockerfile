@@ -1,5 +1,9 @@
 FROM node:24-bookworm-slim
 
+# Link newly published GHCR packages to the repository before the first push,
+# so repository Actions GITHUB_TOKEN inherits package publication permissions.
+LABEL org.opencontainers.image.source="https://github.com/Baatiku/Masanawa"
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv \
  && rm -rf /var/lib/apt/lists/*

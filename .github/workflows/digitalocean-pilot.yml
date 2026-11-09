@@ -75,8 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          gateway="ghcr.io/$owner/masanawa-gateway:$GITHUB_SHA"
-          worker="ghcr.io/$owner/masanawa-worker:$GITHUB_SHA"
+          # Dedicated package names avoid previously-created, unlinked GHCR
+          # packages whose ACLs cannot be repaired by GITHUB_TOKEN alone.
+          gateway="ghcr.io/$owner/masanawa-do-pilot-gateway:$GITHUB_SHA"
+          worker="ghcr.io/$owner/masanawa-do-pilot-worker:$GITHUB_SHA"
           docker tag masanawa-gateway:pilot "$gateway"
           docker tag masanawa-worker:pilot "$worker"
           docker push "$gateway"
