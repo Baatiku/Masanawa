@@ -122,7 +122,7 @@ For each item keep: `ID | requirement | impacted files/routes | status | impleme
 | --- | --- | --- |
 | Decision + portability design | **DECIDED / DOCUMENTED** | This ADR and both checklists retain exact scope |
 | DigitalOcean account and $12 Droplet | **NOT PROVISIONED** | Owner billing/account; inspected plan/region/server ID |
-| Dockerized Gateway/worker/PostgreSQL | **NOT VERIFIED** | Exact source, build, clean Compose boot and migrations |
+| Dockerized Gateway/worker/PostgreSQL | **SOURCE CANDIDATE / HOST NOT VERIFIED** | `infra/deployment/digitalocean/` Compose, preflight, CI image build then clean host boot and migrations |
 | Shared Flutter/web auth + history | **OPEN** | Real two-user cross-device Gateway contract/e2e |
 | Safe NGN wallet, provider receipts | **OPEN / PROVIDER-GATED** | Live verified settlement and reversal tests, not mock |
 | Cross-channel media/Live/memory | **OPEN** | Persisted, deduped calls/voice and scoped memory acceptance |
@@ -132,6 +132,8 @@ For each item keep: `ID | requirement | impacted files/routes | status | impleme
 | Complete release | **NOT APPROVED** | Exact green commit, deployed smoke, qualified payment/provider gates |
 
 **Important:** This decision intentionally removes **prelaunch Railway data migration** from the work. It does **not** waive future customer-data retention, immutable transactions, secure deletion/account export or backups once Masanawa has users. The immediate deliverable is a single source-controlled plan and preserved 189-item checklist; deployment/feature work must be verified separately.
+
+**9 November implementation addendum (source-only):** The shared backend now has a proposed DigitalOcean Compose stack, separate private config-file contract and fail-closed preflight tests, GitHub OCI image build/publish workflow, Caddy proxy profile, gated legacy worker, encrypted PostgreSQL backup script and restore runbook. Flutter API/Agent URL defaults and OTP helper no longer point at Railway; the Gateway has explicit HTTPS browser-origin CORS (with no credentialed wildcard). These are *implementation candidates*, not a claim of successful GitHub Actions image build, account provisioning, public TLS, real provider/wallet acceptance, shared Site identity or any additional completed checklist ID. See [`infra/deployment/digitalocean/README.md`](../infra/deployment/digitalocean/README.md); keep the 189-ID web register at 36 source-checked/153 open until separately evidenced.
 
 ## 8. Canonical references and handoff
 

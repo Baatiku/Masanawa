@@ -39,13 +39,13 @@ called a successful production run.
 
 ## Connect the actual app
 
-After the live smoke test passes, set these existing Railway worker variables:
+After the live smoke test passes **and** the optional canonical worker has been separately refactored and qualified for the DigitalOcean pilot, set these backend worker variables (not on Cloudflare Pages and not in the Flutter/web bundles):
 
 - `MASANAWA_NEWS_GATEWAY_ORIGIN`: the exact returned workers.dev HTTPS origin.
 - `MASANAWA_NEWS_INGEST_ENABLED=true`.
 - `MASANAWA_PLATFORM_TENANT_ID`: the existing gateway platform tenant ID.
 
-The worker imports public Cloudflare metadata into existing `feed.posts` and
+The optional DigitalOcean worker imports public Cloudflare metadata into existing `feed.posts` and
 `feed.news_articles`. It uses canonical source URLs and database locks to retain
 stable post IDs, reactions, comments, reports and sharing across refreshes.
 The Flutter Home already calls `/v1/news` through its account-bound Masanawa
@@ -54,6 +54,8 @@ whole Flutter API origin with Cloudflare would break auth, wallet and comments.
 The Cloudflare IDs are public metadata IDs, not Masanawa social-post IDs.
 No user token or personal data is forwarded to Cloudflare. When configured,
 upstream errors never silently fall back to a different RSS path.
+
+**DigitalOcean migration gate (9 November 2026):** Railway is no longer the canonical backend or scheduler. The one-Droplet pilot intentionally does **not** start `services/worker` by default: that binary still contains retired jobs. Do not enable `MASANAWA_NEWS_INGEST_ENABLED` or the `worker` Compose profile merely to repair news freshness until job isolation, bounded scheduling, leases, memory and source-rights tests pass. The independent Cloudflare public news Worker can continue serving its own source catalogue, but that alone does not make the authenticated Masanawa Home ingest live. See `../digitalocean/README.md`.
 
 ## Content and verification
 

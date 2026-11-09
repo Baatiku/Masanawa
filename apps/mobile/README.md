@@ -1,5 +1,7 @@
 # apps/mobile — Masanawa Voice-First Agent Shell (Flutter)
 
+**9 November 2026 current deployment decision:** The intended shared API origin is `https://api.masanawa.com` on DigitalOcean, serving both Flutter and web from one authenticated Gateway/PostgreSQL. It is a **target, not a verified live endpoint**. Railway URL instructions further down this historical README are superseded by [`../../docs/DIGITALOCEAN-SHARED-PLATFORM-DECISION-20261109.md`](../../docs/DIGITALOCEAN-SHARED-PLATFORM-DECISION-20261109.md) and [`../../infra/deployment/digitalocean/README.md`](../../infra/deployment/digitalocean/README.md). No APK/live-service claim follows merely from changing defaults.
+
 ## Canonical Flutter + remote update strategy (2026-10-08)
 
 **Stay with Flutter:** the React Native parallel plan was cancelled (PR #504 closed/unmerged). Once independently integrated and qualified, versioned Gateway shell documents/config handle safe server-owned UI data, Shorebird handles **eligible signed Dart-code patches** of **previously Shorebird-built** releases, and Android/iOS stores remain required for new native/asset/engine changes. A standard existing Flutter APK is not OTA-capable retroactively. **No Shorebird setup or patch evidence exists yet.** First read [`../../docs/FLUTTER-RELEASE-AND-SHOREBIRD-POLICY.md`](../../docs/FLUTTER-RELEASE-AND-SHOREBIRD-POLICY.md), [`docs/SHOREBIRD-QUALIFICATION-RUNBOOK.md`](docs/SHOREBIRD-QUALIFICATION-RUNBOOK.md), and [`docs/BUILDS.md`](docs/BUILDS.md). Work #497 consolidation and the local Firebase-values build handoff precede first signed production release.
@@ -64,10 +66,10 @@ The mobile app has one authentication path: normal OTP sign-in through the
 Masanawa Gateway. There is no Developer screen, debug test user, Alpha access
 token, runtime-enable switch or user-configurable Gateway credential.
 
-The checked-in production defaults point to:
+The checked-in target defaults now point to the **not-yet-cut-over** custom API domain:
 
-- API + authentication: `https://nurainworker-production.up.railway.app`
-- Agent/creator shell: `https://nurainworker-production.up.railway.app`
+- API + authentication: `https://api.masanawa.com`
+- Agent/creator shell: `https://api.masanawa.com`
 
 A normal local build therefore needs no secret Dart defines:
 
@@ -79,7 +81,7 @@ flutter test
 flutter build apk --debug
 ```
 
-Install the APK and sign in with a verified phone/email OTP. The resulting
+Only after DigitalOcean deployment, DNS/TLS and end-to-end account qualification should an APK be installed for authenticated tests. The resulting
 encrypted app session automatically authorizes the Agent directory, chat, live
 voice token minting, clone setup, creator economy/Float and clone Skills. Access
 tokens refresh from the stored refresh token; users never copy or type platform

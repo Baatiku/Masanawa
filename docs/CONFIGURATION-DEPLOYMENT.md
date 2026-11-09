@@ -1,5 +1,7 @@
 # Production Configuration and Deployment Contracts
 
+**Current provider decision (9 November 2026):** DigitalOcean's private PostgreSQL/Gateway pilot is now the target, with Cloudflare as public frontend/news edge. New deployment files, preflight and protected runtime environments are in [`../infra/deployment/digitalocean/README.md`](../infra/deployment/digitalocean/README.md). Railway material below is retained as *historical engineering context*, not instructions to restore expired Railway volumes, copy former secrets or direct newly built clients to Railway. No actual DigitalOcean deployment is asserted.
+
 ## Provider-neutral account redeployment verification — 2026-10-08
 
 **Supplemental audit:** read `BACKEND-DATABASE-PORTABILITY-AUDIT-20261008.md`, `DATABASE-REDEPLOYMENT-AND-RESTORE-RUNBOOK.md`, and `BACKEND-FEATURE-TRACEABILITY-20261008.md` before claiming a new cloud/account deployment is portable. Current Railway production uses a PG18/pgvector Docker image and a legacy-labelled database service with persistent volume; the most recent Gateway deployments observed `NEEDS_APPROVAL`, while the deployed successful SHA lags `main`. Do not infer production source parity from GitHub commits.

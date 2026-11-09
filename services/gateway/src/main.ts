@@ -10,6 +10,7 @@ import {flutterwaveTransportConfiguration} from "./gb_data/transport_configurati
 import {reviewedMbCallRequired} from "./gb_calls/public_token_policy.js";
 import {qualifiedNgnExchange} from "./gb_wallet/ngn_qualification.js";
 import {createCanonicalId} from "@masanawa/contracts";
+import {parseWebAllowedOrigins} from "./web_cors.js";
 import {createNgnWalletRepository} from "@masanawa/postgres";
 import type {NgnWalletPorts} from "./gb_wallet/ngn_exchange.js";
 import { PgSavedLibraryRepository } from "@masanawa/postgres";
@@ -823,7 +824,7 @@ export async function startGatewayService(
               emailDelivery: createResendOtpDelivery({
                 apiKey: resendApiKey,
                 from: resendFrom,
-                publicBaseUrl: env.MASANAWA_AUTH_PUBLIC_BASE_URL?.trim() || "https://masanawa-gateway-production-338f.up.railway.app",
+                publicBaseUrl: env.MASANAWA_AUTH_PUBLIC_BASE_URL?.trim() || "https://api.masanawa.com",
               }),
             }
           : {}),
@@ -2285,6 +2286,7 @@ export async function startGatewayService(
         ...(options.appOptions?.readinessChecks ?? []),
         database.readinessCheck,
       ],
+      webAllowedOrigins: parseWebAllowedOrigins(env.MASANAWA_WEB_ALLOWED_ORIGINS),
       isDraining: drain.isDraining,
     });
   } catch (error) {

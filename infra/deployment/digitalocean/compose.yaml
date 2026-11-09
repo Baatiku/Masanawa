@@ -1,0 +1,166 @@
+# Canonical DigitalOcean pilot. Production credentials stay in an external 0600 file.
+# Default: PostgreSQL -> one-shot migrations -> Gateway bound to host loopback.
+# `public` and `worker` profiles require separate operator qualification.
+name: masanawa
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg18
+    restart: unless-stopped
+    init: true
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the external env file}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the external env file}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the external env file}
+    volumes:
+      # PostgreSQL 18 images keep versioned data under /var/lib/postgresql.
+      - postgres_data:/var/lib/postgresql
+    shm_size: 128mb
+    mem_limit: 640m
+    pids_limit: 128
+    stop_grace_period: 90s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: ${MASANAWA_GATEWAY_IMAGE:-masanawa-gateway:pilot}
+    build:
+      context: ../../..
+      dockerfile: infra/deployment/gateway/Dockerfile
+    command: ["pnpm", "--filter", "@masanawa/gateway-service", "migrate"]
+    env_file:
+      - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+    networks:
+      - database
+      - edge
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    user: "1000:1000"
+    mem_limit: 896m
+    pids_limit: 256
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
+  gateway:
+    image: ${MASANAWA_GATEWAY_IMAGE:-masanawa-gateway:pilot}
+    build:
+      context: ../../..
+      dockerfile: infra/deployment/gateway/Dockerfile
+    # Do not cohost the optional Python LiveKit process or re-run migrations
+    # from the Railway startup script; those have independent release gates.
+    command: ["pnpm", "--filter", "@masanawa/gateway-service", "start"]
+    env_file:
+      - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_OPTIONS: --max-old-space-size=640
+      MASANAWA_GATEWAY_HOST: 0.0.0.0
+      MASANAWA_GATEWAY_PORT: "3000"
+    ports:
+      - "127.0.0.1:${MASANAWA_GATEWAY_LOOPBACK_PORT:-3100}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - database
+      - edge
+    init: true
+    user: "1000:1000"
+    mem_limit: 896m
+    pids_limit: 256
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/readyz', {signal: AbortSignal.timeout(4000)}).then(async r => {const x = await r.json(); if (!r.ok || x.status !== 'ready' || (Array.isArray(x.checks) && x.checks.some(c => c.ready !== true))) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 90s
+
+  # Must be explicitly enabled only after retiring legacy jobs and qualifying
+  # financial and publisher schedulers. It is NOT part of default pilot startup.
+  worker:
+    profiles: ["worker"]
+    image: ${MASANAWA_WORKER_IMAGE:-masanawa-worker:pilot}
+    build:
+      context: ../../..
+      dockerfile: infra/deployment/worker/Dockerfile
+    command: ["pnpm", "--filter", "@masanawa/worker-service", "start"]
+    env_file:
+      - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      MASANAWA_WORKER_HOST: 0.0.0.0
+      MASANAWA_WORKER_PORT: "3001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - database
+      - edge
+    init: true
+    user: "1000:1000"
+    mem_limit: 384m
+    pids_limit: 128
+    restart: unless-stopped
+    mem_limit: 128m
+    pids_limit: 64
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  # Explicitly opt in only AFTER Cloudflare DNS, TLS, CORS and provider
+  # webhook callbacks have been reviewed. Never expose the Gateway directly.
+  proxy:
+    profiles: ["public"]
+    image: caddy:2.10
+    environment:
+      MASANAWA_API_HOST: ${MASANAWA_API_HOST:-not-configured.invalid}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - edge
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  database:
+    internal: true
+  edge: {}
+
+volumes:
+  postgres_data: {}
+  caddy_data: {}
+  caddy_config: {}

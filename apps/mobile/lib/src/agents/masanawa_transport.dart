@@ -13,7 +13,7 @@ import '../chat/shell_document.dart';
 
 const String kAgentBaseUrl = String.fromEnvironment(
   'AGENT_BASE_URL',
-  defaultValue: 'https://masanawa-gateway-production-338f.up.railway.app',
+  defaultValue: 'https://api.masanawa.com',
 );
 
 ApiException _replyStreamFailure(Map<String, dynamic> event) {
