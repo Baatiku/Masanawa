@@ -34,10 +34,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "24"
       - name: Reject unsafe pilot configuration
+        # This script uses Node built-ins only; ubuntu-latest already ships
+        # a modern Node runtime, so no setup-node download is necessary.
         run: node --test infra/deployment/digitalocean/preflight.test.mjs
       - name: Validate backup script syntax
         run: bash -n infra/deployment/digitalocean/backup.sh
