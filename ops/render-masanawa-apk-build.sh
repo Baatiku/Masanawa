@@ -9,7 +9,7 @@ ANDROID_SDK_ROOT="${ANDROID_HOME}"
 FLUTTER_HOME="${TOOLS}/flutter"
 JDK_HOME="${TOOLS}/jdk17"
 ARTIFACT_DIR="${ROOT}/build-artifacts"
-API_BASE_URL="https://masanawa-gateway-production.up.railway.app"
+API_BASE_URL="${MASANAWA_API_BASE_URL:-https://api.masanawa.com}"
 mkdir -p "${TOOLS}" "${ANDROID_HOME}/cmdline-tools" "${ARTIFACT_DIR}"
 
 echo "==> Full workspace gate"
@@ -27,7 +27,7 @@ curl -fsS "${API_BASE_URL}/readyz" | tee /tmp/masanawa-readyz.json
 echo
 curl -fsS "${API_BASE_URL}/auth/capabilities" | tee /tmp/masanawa-auth-capabilities.json
 echo
-for path in /agent/directory /creator/onboarding /offers /v1/financial/capabilities /v1/financial/crypto/routes; do
+for path in /agent/directory /agent/history /v1/news /v1/ngn/wallet/summary; do
   code="$(curl -sS -o /tmp/masanawa-route-body -w '%{http_code}' "${API_BASE_URL}${path}")"
   echo "${path} -> ${code}"
   test "${code}" != "000"

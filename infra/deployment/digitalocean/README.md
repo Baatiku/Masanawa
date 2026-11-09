@@ -20,7 +20,7 @@ The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+Postgre
 
 1. DigitalOcean account, billing, chosen region and SSH key require an authenticated operator. None are asserted to exist. Do not provision or pay without this.
 2. Review the **exact green GitHub commit** and its immutable image tag in GHCR; pull using approved package permissions if private. The release pipeline must never push a `latest` image.
-3. Verify that `api.masanawa.com` is a domain you control; reserve it for a real Gateway TLS target. **Do not point Cloudflare DNS to an empty Droplet**. Verify Cloudflare TLS mode is Full (strict) once Caddy has a valid origin certificate; never Flexible.
+3. Verify that `api.masanawa.com` is a domain you control; reserve it for a real Gateway TLS target. An older Billstack DNS audit records a **Railway CNAME for this same hostname**; inspect the *live* Cloudflare DNS record before cutting over and replace the retired origin only once DigitalOcean TLS/health tests pass. **Do not point Cloudflare DNS to an empty Droplet**. Verify Cloudflare TLS mode is Full (strict) once Caddy has a valid origin certificate; never Flexible.
 4. Obtain provider-scoped Gemini key (server only), a verified OTP email/SMS route, and private recipient for encrypted off-Droplet backups. Rotate any historic keys exposed in chat; do not reuse expired Railway variables as a secret source.
 5. No previously used Railway/Postgres/D1 history is to be migrated. Start with an empty PostgreSQL volume, but **never erase an existing later deployment** under this rule.
 

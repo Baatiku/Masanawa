@@ -8,8 +8,8 @@ RUN apt-get update \
 WORKDIR /workspace
 COPY apps/mobile ./apps/mobile
 
-ARG API_BASE_URL=https://masanawa-gateway-production.up.railway.app
-ARG AGENT_BASE_URL=https://masanawa-gateway-production.up.railway.app
+ARG API_BASE_URL=https://api.masanawa.com
+ARG AGENT_BASE_URL=https://api.masanawa.com
 
 # Independent, non-charge production Gateway smoke. Protected routes must exist
 # (401/403 are acceptable); a 404 means the deployed composition is incomplete.
@@ -19,10 +19,9 @@ RUN set -eux; \
     curl -fsS "$base/auth/capabilities" | tee /tmp/auth-capabilities.json; \
     for path in \
       /agent/directory \
-      /creator/onboarding \
-      /offers \
-      /v1/financial/capabilities \
-      /v1/financial/crypto/routes; do \
+      /agent/history \
+      /v1/news \
+      /v1/ngn/wallet/summary; do \
         code="$(curl -sS -o /tmp/route-body -w '%{http_code}' "$base$path")"; \
         echo "$path -> $code"; \
         test "$code" != "000"; \

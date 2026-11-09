@@ -37,7 +37,7 @@ jobs:
       - name: Reject unsafe pilot configuration
         # This script uses Node built-ins only; ubuntu-latest already ships
         # a modern Node runtime, so no setup-node download is necessary.
-        run: node --test infra/deployment/digitalocean/preflight.test.mjs
+        run: node --test infra/deployment/digitalocean/preflight.test.mjs infra/deployment/digitalocean/release-origins.test.mjs
       - name: Validate backup script syntax
         run: bash -n infra/deployment/digitalocean/backup.sh
       - name: Normalize all Compose profiles without secrets

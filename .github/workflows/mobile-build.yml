@@ -77,7 +77,7 @@ jobs:
           fi
       - name: Phone (production APK)
         if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
-        run: flutter build apk --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+        run: flutter build apk --release --dart-define=API_BASE_URL=https://api.masanawa.com --dart-define=AGENT_BASE_URL=https://api.masanawa.com
       - name: Verify provenance script contracts
         run: node --test ../../scripts/reliability/release-provenance.test.mjs
       - name: Record signed APK identity and checksum
@@ -95,7 +95,7 @@ jobs:
           (cd build/app/outputs/flutter-apk && sha256sum app-release.apk > app-release.apk.sha256)
       - name: Web (release)
         if: github.event_name == 'workflow_dispatch' && inputs.build_web == true
-        run: flutter build web --release --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+        run: flutter build web --release --dart-define=API_BASE_URL=https://api.masanawa.com --dart-define=AGENT_BASE_URL=https://api.masanawa.com
       - name: Upload APK
         if: github.event_name == 'workflow_dispatch' && inputs.build_apk == true
         uses: actions/upload-artifact@v4
