@@ -2,6 +2,8 @@
 # Build context is the monorepo root, as for the Gateway Dockerfile.
 FROM node:24-bookworm-slim
 
+LABEL org.opencontainers.image.source="https://github.com/Baatiku/Masanawa"
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@12.8.2 --activate

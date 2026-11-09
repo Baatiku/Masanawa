@@ -11,7 +11,7 @@ function goodConfig() {
     compose: new Map(Object.entries({
       MASANAWA_RUNTIME_ENV_FILE: "/etc/masanawa/runtime.env",
       POSTGRES_DB: "masanawa", POSTGRES_USER: "masanawa", POSTGRES_PASSWORD: secret,
-      MASANAWA_GATEWAY_IMAGE: `ghcr.io/baatiku/masanawa-gateway:${"a".repeat(40)}`,
+      MASANAWA_GATEWAY_IMAGE: `ghcr.io/baatiku/masanawa-do-pilot-gateway:${"a".repeat(40)}`,
       MASANAWA_API_HOST: "api.masanawa.com",
     })),
     runtime: new Map(Object.entries({
