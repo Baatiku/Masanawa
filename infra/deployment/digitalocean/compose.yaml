@@ -126,8 +126,6 @@ services:
     mem_limit: 384m
     pids_limit: 128
     restart: unless-stopped
-    mem_limit: 128m
-    pids_limit: 64
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
@@ -152,6 +150,8 @@ services:
     networks:
       - edge
     restart: unless-stopped
+    mem_limit: 128m
+    pids_limit: 64
     security_opt:
       - no-new-privileges:true
 
