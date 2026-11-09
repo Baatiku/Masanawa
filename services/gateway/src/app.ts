@@ -45,7 +45,7 @@ import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
 import { registerMasanaInboxRoutes, type MasanaInboxRoutesDeps } from "./modules/masana_chat/inbox_routes.js";
 import {registerMasanaRoutes} from "./modules/masana/service.js";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
 import type { AgentDirectoryService } from "./agent_directory.js";
@@ -83,6 +83,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Type from "typebox";
 import { registerCallHistoryRoutes } from "./call_history/routes.js";
 import type { CallHistoryService } from "./call_history/service.js";
+import { parseWebAllowedOrigins } from "./web_cors.js";
 
 export interface ReadinessCheck {
   readonly name: string;
@@ -90,6 +91,8 @@ export interface ReadinessCheck {
 }
 
 export interface GatewayAppOptions {
+  /** Exact HTTPS browser origins; no wildcard and no implicit cookie access. */
+  readonly webAllowedOrigins?: readonly string[];
   /** Staged product-gate; enable only after all retained MB routes qualify. */
   readonly productScope?: "legacy" | "masana-lite";
   readonly status?: StatusRuntime;
@@ -307,6 +310,38 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     bodyLimit: 1_048_576,
     requestTimeout: 30_000,
   }).withTypeProvider<TypeBoxTypeProvider>();
+
+  const browserOrigins = new Set(parseWebAllowedOrigins(options.webAllowedOrigins?.join(",")));
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (!origin) return;
+    reply.header("Vary", "Origin");
+    if (!browserOrigins.has(origin)) {
+      return reply.code(403).send({ error: { code: "web.origin_denied", message: "Origin not allowed" } });
+    }
+    reply.header("Access-Control-Allow-Origin", origin);
+    // Never set Access-Control-Allow-Credentials. The browser uses bearer
+    // auth; any future cookie session needs a separate CSRF review.
+  });
+  const browserPreflight = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.headers.origin || !request.headers["access-control-request-method"]) {
+      return reply.code(400).send({ error: { code: "web.preflight_invalid" } });
+    }
+    const method = request.headers["access-control-request-method"].toUpperCase();
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      return reply.code(405).send({ error: { code: "web.method_not_allowed" } });
+    }
+    return reply
+      .header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE")
+      .header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-Masanawa-Client-Platform, Idempotency-Key, X-Idempotency-Key")
+      .header("Access-Control-Max-Age", "600")
+      .code(204).send();
+  };
+  // Only the documented versioned and compatibility API families accept
+  // browser preflight. A global /* route would violate public API lifecycle.
+  app.options("/v1/*", browserPreflight);
+  app.options("/agent/*", browserPreflight);
+  app.options("/auth/*", browserPreflight);
 
   registerOfficialMediaRoutes(app);
   const now = options.now ?? nowInstant;

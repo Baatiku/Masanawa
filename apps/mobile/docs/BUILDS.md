@@ -1,5 +1,7 @@
 # Builds — phone + web
 
+**Current hosting target, 9 November 2026:** Flutter and the browser companion share the **planned** DigitalOcean Gateway at `https://api.masanawa.com`. DNS, real Gateway readiness, account/browser parity and provider qualifications remain release gates; a successful build does not establish an available API. See [`../../../infra/deployment/digitalocean/README.md`](../../../infra/deployment/digitalocean/README.md).
+
 ## Flutter production distribution and future Shorebird (policy adopted 2026-10-08)
 
 **Existing commands on this page are for normal development/manual Flutter artifacts**; a plain `flutter build` output is **not** a Shorebird patchable production baseline. Once explicitly implemented/verified, consumer `apps/mobile` will build its first signed patchable base through `shorebird release android` or `shorebird release ios` (with owner-controlled patch public-key embedding) and later distribute eligible, signed, version-specific Dart patches after staging and two-launch testing. Play/App Store artifact submission and native/plugin/asset/engine updates still require new signed releases; old ordinary/debug-signed APKs cannot automatically receive Shorebird patches. **Do not change signing/build scripts or use the sample commands for production before release qualification.** Full [canonical policy](../../../docs/FLUTTER-RELEASE-AND-SHOREBIRD-POLICY.md) and [qualification procedure](SHOREBIRD-QUALIFICATION-RUNBOOK.md). Current Work #497, CI #457 and Firebase local compilation/device acceptance remain outstanding.
@@ -11,13 +13,13 @@ All commands run from `apps/mobile`.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `API_BASE_URL` | `https://masanawa-gateway-production.up.railway.app` | Masanawa API and OTP/session Gateway. |
-| `AGENT_BASE_URL` | `https://masanawa-gateway-production.up.railway.app` | Masanawa Agent/creator Gateway. |
+| `API_BASE_URL` | `https://api.masanawa.com` | Planned shared Masanawa API and OTP/session Gateway. |
+| `AGENT_BASE_URL` | `https://api.masanawa.com` | Same planned Gateway for the Agent shell. |
 
 Example:
 
 ```sh
-# Production defaults use the verified Railway Gateway and need no Dart defines.
+# Current source defaults use the not-yet-cut-over Masanawa API domain.
 flutter run
 
 # Optional staging-origin override:
@@ -90,7 +92,7 @@ The script deliberately runs the full mobile qualification path before producing
 4. `dart format --output=none --set-exit-if-changed lib test`
 5. `flutter analyze`
 6. `flutter test`
-7. release APK build against the Railway production gateway
+7. release APK build against the canonical API domain (publish only after it is live and verified)
 
 Expected output:
 

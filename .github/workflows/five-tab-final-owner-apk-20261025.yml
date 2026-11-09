@@ -31,8 +31,8 @@ jobs:
       - name: Build requested test APK
         run: >-
           flutter build apk --release
-          --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
-          --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app
+          --dart-define=API_BASE_URL=https://api.masanawa.com
+          --dart-define=AGENT_BASE_URL=https://api.masanawa.com
       - name: Record exact source and checksum
         shell: bash
         run: |

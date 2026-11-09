@@ -728,8 +728,8 @@ void main() {
     },
   );
 
-  test('hosted Gateway is the default local connection address', () {
-    expect(kAgentBaseUrl, 'https://masanawa-gateway-production-338f.up.railway.app');
+  test('hosted Gateway defaults to the provider-independent API domain', () {
+    expect(kAgentBaseUrl, 'https://api.masanawa.com');
   });
 
   test(

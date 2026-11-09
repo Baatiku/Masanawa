@@ -1,4 +1,6 @@
-const DEFAULT_PUBLIC_URL="https://masanawa-gateway-production-338f.up.railway.app";
+// Stable, provider-independent Gateway origin. Production OTP delivery should
+// explicitly supply MASANAWA_AUTH_PUBLIC_BASE_URL after DNS/TLS qualification.
+const DEFAULT_PUBLIC_URL="https://api.masanawa.com";
 function baseUrl(value=DEFAULT_PUBLIC_URL):string {
   const url=new URL(value);
   if(url.protocol!=="https:" || url.username || url.password)throw new TypeError("auth.email_public_url_invalid");

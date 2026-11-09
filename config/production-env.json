@@ -219,6 +219,13 @@
       "description": "Development-only canonical UserId used by the Alpha bootstrap/runtime."
     },
     {
+      "name": "MASANAWA_API_HOST",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Exact DigitalOcean origin hostname for Caddy TLS; do not use a placeholder or a wildcard."
+    },
+    {
       "name": "MASANAWA_AUTH_EMAIL_FROM",
       "owner": "gateway",
       "classification": "public",
@@ -252,6 +259,27 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "OTP delivery authorization secret."
+    },
+    {
+      "name": "MASANAWA_BACKUP_AGE_RECIPIENT",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Public age encryption recipient for off-Droplet PostgreSQL dump backups; private identity is never installed on the server."
+    },
+    {
+      "name": "MASANAWA_BACKUP_LOCK_FILE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional host-path lock file for nonoverlapping encrypted backup runs."
+    },
+    {
+      "name": "MASANAWA_BACKUP_REMOTE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Private off-host rclone destination path; its access credentials remain outside source control."
     },
     {
       "name": "MASANAWA_BILLING_ACTION_SECRET",
@@ -347,6 +375,13 @@
       "description": "Opt-in read-only IPv4 and Mobile Data catalogue startup observations using existing Railway-held credentials; never submits a payment or logs secrets/customer details."
     },
     {
+      "name": "MASANAWA_DEPLOY_ENV_FILE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Absolute host path to the mode-0600 Compose bootstrap interpolation file consumed by the backup script."
+    },
+    {
       "name": "MASANAWA_FLUTTERWAVE_RELAY_TOKEN",
       "owner": "gateway/billing",
       "classification": "secret",
@@ -366,6 +401,20 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Gateway bind address override."
+    },
+    {
+      "name": "MASANAWA_GATEWAY_IMAGE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Immutable release-tagged Gateway OCI image chosen by the pilot Compose operator."
+    },
+    {
+      "name": "MASANAWA_GATEWAY_LOOPBACK_PORT",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Host loopback-only diagnostic port for Gateway; never opened publicly in the firewall."
     },
     {
       "name": "MASANAWA_GATEWAY_PORT",
@@ -676,6 +725,13 @@
       "description": "Production configuration for MASANAWA_PUBLIC_BASE_URL."
     },
     {
+      "name": "MASANAWA_RUNTIME_ENV_FILE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Absolute path of private mode-0600 runtime environment file mounted into Gateway/migration containers."
+    },
+    {
       "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
       "owner": "services/worker",
       "classification": "public",
@@ -888,6 +944,13 @@
       "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MASANAWA_WEB_ALLOWED_ORIGINS",
+      "owner": "gateway/web-security",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Comma-separated exact HTTPS browser origins allowed to call the canonical Gateway with bearer auth; no wildcard, cookies or path components."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_ADMIN_TOKEN",
       "owner": "gateway/channels",
       "classification": "secret",
@@ -921,6 +984,13 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Worker bind address override."
+    },
+    {
+      "name": "MASANAWA_WORKER_IMAGE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Pinned separately gated worker image; never enables the optional Compose worker profile by itself."
     },
     {
       "name": "MASANAWA_WORKER_PORT",
@@ -1208,6 +1278,27 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Deployment-host compatibility listen port."
+    },
+    {
+      "name": "POSTGRES_DB",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Fresh dedicated PostgreSQL database name, read by the official pgvector entrypoint."
+    },
+    {
+      "name": "POSTGRES_PASSWORD",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Private PostgreSQL initialization password, injected only into the database container."
+    },
+    {
+      "name": "POSTGRES_USER",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Fresh dedicated PostgreSQL role name, read by the official pgvector entrypoint."
     },
     {
       "name": "RAILWAY_GIT_COMMIT_SHA",

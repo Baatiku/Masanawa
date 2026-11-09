@@ -77,8 +77,8 @@ jobs:
           set +e
           # Regenerate release plugin registrants after tests; --no-pub leaves dev-only Patrol registered.
           flutter build apk --release \
-            --dart-define=API_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app \
-            --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production-338f.up.railway.app > "$RUNNER_TEMP/flutter-build.log" 2>&1
+            --dart-define=API_BASE_URL=https://api.masanawa.com \
+            --dart-define=AGENT_BASE_URL=https://api.masanawa.com > "$RUNNER_TEMP/flutter-build.log" 2>&1
           result=$?
           set -e
           cat "$RUNNER_TEMP/flutter-build.log"

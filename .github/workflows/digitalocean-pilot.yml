@@ -1,0 +1,83 @@
+name: DigitalOcean portable pilot
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/digitalocean-pilot.yml
+      - infra/deployment/digitalocean/**
+      - infra/deployment/gateway/**
+      - infra/deployment/worker/**
+      - packages/**
+      - services/**
+      - adapters/**
+      - pnpm-lock.yaml
+      - package.json
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/digitalocean-pilot.yml
+      - infra/deployment/digitalocean/**
+      - infra/deployment/gateway/**
+      - infra/deployment/worker/**
+      - packages/**
+      - services/**
+      - adapters/**
+      - pnpm-lock.yaml
+      - package.json
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Reject unsafe pilot configuration
+        # This script uses Node built-ins only; ubuntu-latest already ships
+        # a modern Node runtime, so no setup-node download is necessary.
+        run: node --test infra/deployment/digitalocean/preflight.test.mjs infra/deployment/digitalocean/release-origins.test.mjs
+      - name: Validate backup script syntax
+        run: bash -n infra/deployment/digitalocean/backup.sh
+      - name: Normalize all Compose profiles without secrets
+        run: >-
+          docker compose
+          --env-file infra/deployment/digitalocean/.env.example
+          --file infra/deployment/digitalocean/compose.yaml
+          --profile public --profile worker
+          config --quiet
+
+  container-build:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build exactly the Gateway and optional Worker Dockerfiles
+        run: >-
+          docker compose
+          --env-file infra/deployment/digitalocean/.env.example
+          --file infra/deployment/digitalocean/compose.yaml
+          build gateway worker
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable main-commit images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          gateway="ghcr.io/$owner/masanawa-gateway:$GITHUB_SHA"
+          worker="ghcr.io/$owner/masanawa-worker:$GITHUB_SHA"
+          docker tag masanawa-gateway:pilot "$gateway"
+          docker tag masanawa-worker:pilot "$worker"
+          docker push "$gateway"
+          docker push "$worker"

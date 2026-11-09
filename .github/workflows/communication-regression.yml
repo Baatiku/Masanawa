@@ -154,7 +154,7 @@ jobs:
       - name: Compile real Android debug APK from production Gateway wiring
         run: >-
           flutter build apk --debug --no-pub
-          --dart-define=API_BASE_URL=https://masanawa-gateway-production.up.railway.app
-          --dart-define=AGENT_BASE_URL=https://masanawa-gateway-production.up.railway.app
+          --dart-define=API_BASE_URL=https://api.masanawa.com
+          --dart-define=AGENT_BASE_URL=https://api.masanawa.com
       - name: Assert the compiled APK exists and is not empty
         run: test -s build/app/outputs/flutter-apk/app-debug.apk

@@ -11,6 +11,11 @@ describe('branded account emails',()=>{
   expect(()=>renderMasanawaOtpEmail('<html>')).toThrow();
   expect(()=>renderMasanawaOtpEmail('123456','http://bad.test')).toThrow();
  });
+ it('defaults to the canonical provider-independent HTTPS origin',()=>{
+  const message=renderMasanawaOtpEmail('123456');
+  expect(message.text).toContain('https://api.masanawa.com/auth/code#123456');
+  expect(message.html).not.toContain('railway.app');
+ });
  it('escapes welcome names and displays the assigned username',()=>{
   const message=renderMasanawaWelcomeEmail({name:'<img onerror=alert(1)>',username:'amina_123'});
   expect(message.html).not.toContain('<img onerror');expect(message.html).toContain('&lt;img');expect(message.html).toContain('@amina_123');
