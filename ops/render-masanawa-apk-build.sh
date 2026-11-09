@@ -9,7 +9,7 @@ ANDROID_SDK_ROOT="${ANDROID_HOME}"
 FLUTTER_HOME="${TOOLS}/flutter"
 JDK_HOME="${TOOLS}/jdk17"
 ARTIFACT_DIR="${ROOT}/build-artifacts"
-API_BASE_URL="${MASANAWA_API_BASE_URL:-https://api.masanawa.com}"
+API_BASE_URL="https://api.masanawa.com"
 mkdir -p "${TOOLS}" "${ANDROID_HOME}/cmdline-tools" "${ARTIFACT_DIR}"
 
 echo "==> Full workspace gate"
