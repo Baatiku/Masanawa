@@ -27,6 +27,16 @@ describe("shared mobile/web Gateway origin boundary", () => {
       expect(preflight.headers["access-control-allow-origin"]).toBe("https://web.masanawa.com");
       expect(preflight.headers["access-control-allow-headers"]).toContain("Authorization");
       expect(preflight.headers["access-control-allow-credentials"]).toBeUndefined();
+      for (const path of ["/auth/capabilities", "/v1/ngn/wallet/summary"]) {
+        const otherPreflight = await app.inject({ method: "OPTIONS", url: path, headers: {
+          origin: "https://web.masanawa.com", "access-control-request-method": "GET",
+        } });
+        expect(otherPreflight.statusCode, path).toBe(204);
+      }
+      const unversioned = await app.inject({ method: "OPTIONS", url: "/totally-new-unversioned-api", headers: {
+        origin: "https://web.masanawa.com", "access-control-request-method": "GET",
+      } });
+      expect(unversioned.statusCode).toBe(404);
       const health = await app.inject({ url: "/healthz", headers: { origin: "https://web.masanawa.com" } });
       expect(health.statusCode).toBe(200);
       expect(health.headers["access-control-allow-origin"]).toBe("https://web.masanawa.com");

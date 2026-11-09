@@ -45,7 +45,7 @@ import { GeminiProviderError } from "./gemini_failure.js";
 import { registerStatusRuntime, type StatusRuntime } from "./modules/home_feed/runtime.js";
 import { registerMasanaInboxRoutes, type MasanaInboxRoutesDeps } from "./modules/masana_chat/inbox_routes.js";
 import {registerMasanaRoutes} from "./modules/masana/service.js";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
 import type { AgentDirectoryService } from "./agent_directory.js";
@@ -323,7 +323,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     // Never set Access-Control-Allow-Credentials. The browser uses bearer
     // auth; any future cookie session needs a separate CSRF review.
   });
-  app.options("/*", async (request, reply) => {
+  const browserPreflight = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.headers.origin || !request.headers["access-control-request-method"]) {
       return reply.code(400).send({ error: { code: "web.preflight_invalid" } });
     }
@@ -336,7 +336,12 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       .header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-Masanawa-Client-Platform, Idempotency-Key, X-Idempotency-Key")
       .header("Access-Control-Max-Age", "600")
       .code(204).send();
-  });
+  };
+  // Only the documented versioned and compatibility API families accept
+  // browser preflight. A global /* route would violate public API lifecycle.
+  app.options("/v1/*", browserPreflight);
+  app.options("/agent/*", browserPreflight);
+  app.options("/auth/*", browserPreflight);
 
   registerOfficialMediaRoutes(app);
   const now = options.now ?? nowInstant;
