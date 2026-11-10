@@ -95,6 +95,8 @@ export function validatePilotConfig(compose, runtime) {
   if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(image)) fail("gateway_image.not_commit_pinned");
   const workerImage = required(compose, "MASANAWA_WORKER_IMAGE");
   if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(workerImage)) fail("worker_image.not_commit_pinned");
+  const opsImage = required(compose, "MASANAWA_OPS_IMAGE");
+  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(opsImage)) fail("ops_image.not_commit_pinned");
   let dbUrl;
   try {
     dbUrl = new URL(required(runtime, "MASANAWA_DATABASE_URL"));

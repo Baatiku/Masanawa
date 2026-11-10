@@ -7,6 +7,7 @@ on:
       - infra/deployment/digitalocean/**
       - infra/deployment/gateway/**
       - infra/deployment/worker/**
+      - infra/deployment/ops/**
       - packages/**
       - services/**
       - adapters/**
@@ -19,6 +20,7 @@ on:
       - infra/deployment/digitalocean/**
       - infra/deployment/gateway/**
       - infra/deployment/worker/**
+      - infra/deployment/ops/**
       - packages/**
       - services/**
       - adapters/**
@@ -45,7 +47,7 @@ jobs:
           docker compose
           --env-file infra/deployment/digitalocean/.env.example
           --file infra/deployment/digitalocean/compose.yaml
-          --profile public --profile worker
+          --profile public --profile worker --profile ops
           config --quiet
 
   container-build:
@@ -57,12 +59,12 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
-      - name: Build exactly the Gateway and optional Worker Dockerfiles
+      - name: Build Gateway, Worker and optional web Ops Dockerfiles
         run: >-
           docker compose
           --env-file infra/deployment/digitalocean/.env.example
           --file infra/deployment/digitalocean/compose.yaml
-          build gateway worker
+          build gateway worker ops
       - uses: docker/login-action@v3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
@@ -79,7 +81,10 @@ jobs:
           # packages whose ACLs cannot be repaired by GITHUB_TOKEN alone.
           gateway="ghcr.io/$owner/masanawa-do-pilot-gateway:$GITHUB_SHA"
           worker="ghcr.io/$owner/masanawa-do-pilot-worker:$GITHUB_SHA"
+          ops="ghcr.io/$owner/masanawa-do-pilot-ops:$GITHUB_SHA"
           docker tag masanawa-gateway:pilot "$gateway"
           docker tag masanawa-worker:pilot "$worker"
+          docker tag masanawa-ops:pilot "$ops"
           docker push "$gateway"
           docker push "$worker"
+          docker push "$ops"

@@ -98,6 +98,43 @@ services:
       retries: 3
       start_period: 90s
 
+  # Optional web-only control plane. No browser-visible Ops key or second
+  # identity store: it validates canonical Gateway sessions against PostgreSQL.
+  # Enable with --profile ops after a real owner grant has been configured.
+  ops:
+    profiles: ["ops"]
+    image: ${MASANAWA_OPS_IMAGE:-masanawa-ops:pilot}
+    build:
+      context: ../../..
+      dockerfile: infra/deployment/ops/Dockerfile
+    env_file:
+      - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=160
+      HOST: 0.0.0.0
+      PORT: "3002"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - database
+      - edge
+    init: true
+    user: "1000:1000"
+    mem_limit: 256m
+    pids_limit: 128
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/readyz',{signal:AbortSignal.timeout(4000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 45s
+
   # Launch with --profile worker for canonical stale-turn recovery, verified
   # account deletion, and optionally the reviewed publisher RSS feed. Lite-mode
   # scheduling excludes retired MSNW/P2P/paid-Status jobs.
