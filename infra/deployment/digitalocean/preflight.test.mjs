@@ -13,6 +13,7 @@ function goodConfig() {
       POSTGRES_DB: "masanawa", POSTGRES_USER: "masanawa", POSTGRES_PASSWORD: secret,
       MASANAWA_GATEWAY_IMAGE: `ghcr.io/baatiku/masanawa-do-pilot-gateway:${"a".repeat(40)}`,
       MASANAWA_WORKER_IMAGE: `ghcr.io/baatiku/masanawa-do-pilot-worker:${"a".repeat(40)}`,
+      MASANAWA_OPS_IMAGE: `ghcr.io/baatiku/masanawa-do-pilot-ops:${"a".repeat(40)}`,
       MASANAWA_API_HOST: "api.masanawa.com",
     })),
     runtime: new Map(Object.entries({
@@ -52,6 +53,7 @@ test("never admits placeholders, cross-linked databases, permissive CORS or earl
     ["compose", "POSTGRES_PASSWORD", "short"],
     ["compose", "MASANAWA_GATEWAY_IMAGE", "masanawa-gateway:latest"],
     ["compose", "MASANAWA_WORKER_IMAGE", "masanawa-worker:latest"],
+    ["compose", "MASANAWA_OPS_IMAGE", "masanawa-ops:latest"],
     ["compose", "MASANAWA_RUNTIME_ENV_FILE", ".env.example"],
     ["runtime", "MASANAWA_DATABASE_URL", "postgres://masanawa:wrong@postgres:5432/masanawa"],
     ["runtime", "MASANAWA_PUBLIC_BASE_URL", "https://other.example.org"],

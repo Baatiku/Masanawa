@@ -9,12 +9,13 @@
 | PostgreSQL 18 + pgvector | Yes; internal Docker network only | 640 MiB memory / 128 PID cap | Canonical accounts, sessions, chat, memory, NGN financial records |
 | One-shot canonical migration | Yes, only after healthy PostgreSQL | 896 MiB; exits on success | Forward-only, checksum-locked production migrations; **no Alpha seed, no Railway import** |
 | Canonical Fastify Gateway | Yes, after successful migration; host loopback `127.0.0.1:3100` | 896 MiB / Node 640 MiB heap limit | One REST/streaming API for Flutter and web |
+| Web-only Ops API | **Explicit `ops` profile** after migration and owner grant | 256 MiB / Node 160 MiB heap limit | Same canonical PostgreSQL and Gateway session authority |
 | Caddy HTTPS proxy | **Explicit `public` profile**, only after DNS/TLS checks | 128 MiB | Reverse proxy; never authenticates as a second app |
 | Canonical Worker | **Explicit `worker` profile; not pilot-approved** | 384 MiB if started | **Must remain off** until legacy jobs are retired and resource/lease/job safety qualified |
 | Cloudflare news gateway | External existing Worker+D1 | External free/paid provider allowance | Public article metadata only; not chat, accounts, Wallet or memory |
 | Cloudflare Site frontend | External existing Site | External provider allowance | Non-authoritative browser UI; uses the same Gateway |
 
-The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Upgrade to a larger Droplet if measured memory/CPU requires background jobs or LiveKit presence. Docker `mem_limit` is not a promise of performance or no OOM.
+The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. Upgrade to a larger Droplet if measured memory/CPU requires background jobs or LiveKit presence. Docker `mem_limit` is not a promise of performance or no OOM.
 
 ### Step 0 — gates, before creating resources
 
@@ -41,6 +42,7 @@ POSTGRES_USER=...
 POSTGRES_PASSWORD=...
 MASANAWA_GATEWAY_IMAGE=ghcr.io/baatiku/masanawa-do-pilot-gateway:<40-character-commit-sha>
 MASANAWA_WORKER_IMAGE=ghcr.io/baatiku/masanawa-do-pilot-worker:<same-commit-sha>
+MASANAWA_OPS_IMAGE=ghcr.io/baatiku/masanawa-do-pilot-ops:<same-commit-sha>
 MASANAWA_GATEWAY_LOOPBACK_PORT=3100
 MASANAWA_API_HOST=api.masanawa.com
 ```
@@ -56,11 +58,12 @@ MASANAWA_PLATFORM_TENANT_ID=tenant_<UUIDv7>
 MASANAWA_AUTH_OTP_PEPPER=<new-secret-at-least-32-characters>
 MASANAWA_GEMINI_API_KEY=<server-key>
 MASANAWA_PRODUCT_SCOPE=masana-lite
+MASANAWA_OPS_ADMIN_GRANTS_JSON=<reviewed-server-only-grants-or-unset-for-deny-all>
 ```
 
 Leave retired Alpha, MB/GB, MSNW and paid-Status flags disabled. The pilot preflight now permits the separately implemented **NGN Calls**, **NGN Buy Data** and **publisher-only news** paths when explicitly configured and qualified. For NGN Calls, use `MASANAWA_NGN_CALLS_ENABLED=true` plus a private review secret of at least 32 characters, real Gemini credentials and an approved live relay. For Buy Data, set both NGN data flags, an operator-reviewed approvals JSON array, Flutterwave billing and its complete webhook/provider/action credentials, with `MASANAWA_FLUTTERWAVE_VERIFY_ON_START=true`. Gateway startup independently rejects incomplete provider, DB, ledger or session prerequisites. For news, set `MASANAWA_NEWS_INGEST_ENABLED=true` only after validating publisher feed access, the approved sources and worker logs. No source flag itself proves live-provider qualification. OTP delivery additionally needs a real `RESEND_API_KEY` and verified `MASANAWA_AUTH_EMAIL_FROM`, or reviewed SMS provider credentials. `MASANAWA_WEB_ALLOWED_ORIGINS` is an exact HTTPS origin allowlist: no `*`, HTTP, subpaths or duplicate entries. Flutter mobile uses the same Gateway without a browser Origin.
 
-`compose.env` must include **both** exact-commit images (`MASANAWA_GATEWAY_IMAGE` and `MASANAWA_WORKER_IMAGE`) produced by the DigitalOcean CI workflow. On the $12/2-GB pilot, the steady-state container limits total 1,760 MiB before host overhead; inspect OOM and PostgreSQL pressure and reduce workload before increasing concurrency.
+`compose.env` must include **all three** exact-commit images (`MASANAWA_GATEWAY_IMAGE`, `MASANAWA_WORKER_IMAGE` and `MASANAWA_OPS_IMAGE`) produced by the DigitalOcean CI workflow. The reviewed Ops grant must name the actual tenant and authenticated owner identity; never grant `*` to an arbitrary public account. The service denies requests without an explicit grant. After HTTPS is verified, configure the existing web Site's server-only `MASANAWA_OPS_BASE_URL=https://api.masanawa.com`; Caddy forwards only `/v1/admin/*`, `/v1/agents/*` and `/v1/skills/*` to Ops on a private Docker network. Confirm admin success and ordinary-account denial using real sessions.
 
 Generate a fresh tenant UUIDv7 **once**, in a trusted local checkout with dependencies installed:
 
@@ -82,6 +85,8 @@ docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile wo
 curl --fail http://127.0.0.1:3100/healthz
 curl --fail http://127.0.0.1:3100/readyz
 ```
+
+For web administration on the same Droplet, once Gateway is healthy and a vetted owner grant exists, run `docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile ops up -d --no-build ops` and check the Ops container's Docker-internal `/readyz` endpoint. Ops exposes **no host port**. Launch Caddy with both `--profile public --profile ops` once TLS and DNS are ready; its admin routes require the Ops upstream. On the 2 GiB pilot, prefer the Ops profile *instead of* the worker until memory and scheduler safety are measured. Do not claim background ingestion/deletion are operational with the worker stopped.
 
 The `worker` profile runs canonical pending-turn recovery and the verified account-deletion worker; it runs publisher ingestion only when the reviewed news flag is enabled. Lite-mode filtering stops old P2P, MSNW and paid-Status jobs. Check `/readyz` on the worker's private Docker network and its scheduler health before claiming deletion or news is operational. `--profile public` starts the Caddy HTTP/HTTPS listener *only* when DNS, Cloudflare proxy mode, certificates, origin firewall and user-client settings are ready. The Gateway loopback port **must not** be opened to the internet; PostgreSQL has **no host-published port**. PostgreSQL and worker share the private database network; Caddy has only the edge network. Verify TLS and `https://api.masanawa.com/readyz` before switching client API origin.
 
