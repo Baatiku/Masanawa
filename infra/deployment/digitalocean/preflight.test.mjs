@@ -12,6 +12,7 @@ function goodConfig() {
       MASANAWA_RUNTIME_ENV_FILE: "/etc/masanawa/runtime.env",
       POSTGRES_DB: "masanawa", POSTGRES_USER: "masanawa", POSTGRES_PASSWORD: secret,
       MASANAWA_GATEWAY_IMAGE: `ghcr.io/baatiku/masanawa-do-pilot-gateway:${"a".repeat(40)}`,
+      MASANAWA_WORKER_IMAGE: `ghcr.io/baatiku/masanawa-do-pilot-worker:${"a".repeat(40)}`,
       MASANAWA_API_HOST: "api.masanawa.com",
     })),
     runtime: new Map(Object.entries({
@@ -41,6 +42,7 @@ test("pilot schema validates one canonical Postgres, HTTPS API, pinned image and
   const { compose, runtime } = goodConfig();
   assert.deepEqual(validatePilotConfig(compose, runtime), {
     apiOrigin: "https://api.masanawa.com", imagePinned: true, workerDisabledByDefault: true,
+    qualifiedFeatures: { ngnCalls: false, ngnCatalog: false, ngnData: false, flutterwave: false, news: false },
   });
 });
 
@@ -49,6 +51,7 @@ test("never admits placeholders, cross-linked databases, permissive CORS or earl
     ["compose", "MASANAWA_API_HOST", "not-configured.invalid"],
     ["compose", "POSTGRES_PASSWORD", "short"],
     ["compose", "MASANAWA_GATEWAY_IMAGE", "masanawa-gateway:latest"],
+    ["compose", "MASANAWA_WORKER_IMAGE", "masanawa-worker:latest"],
     ["compose", "MASANAWA_RUNTIME_ENV_FILE", ".env.example"],
     ["runtime", "MASANAWA_DATABASE_URL", "postgres://masanawa:wrong@postgres:5432/masanawa"],
     ["runtime", "MASANAWA_PUBLIC_BASE_URL", "https://other.example.org"],
@@ -56,7 +59,6 @@ test("never admits placeholders, cross-linked databases, permissive CORS or earl
     ["runtime", "MASANAWA_WEB_ALLOWED_ORIGINS", "http://web.masanawa.com"],
     ["runtime", "MASANAWA_NGN_CALLS_ENABLED", "true"],
     ["runtime", "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED", "true"],
-    ["runtime", "MASANAWA_NEWS_INGEST_ENABLED", "true"],
     ["runtime", "MASANAWA_AUTH_OTP_PEPPER", "weak"],
     ["runtime", "MASANAWA_PLATFORM_TENANT_ID", "tenant_invalid"],
     ["runtime", "MASANAWA_GEMINI_API_KEY", ""],
@@ -66,6 +68,40 @@ test("never admits placeholders, cross-linked databases, permissive CORS or earl
     (scope === "compose" ? compose : runtime).set(key, value);
     assert.throws(() => validatePilotConfig(compose, runtime), /digitalocean\./u, `${scope}.${key}`);
   }
+});
+
+test("approved new NGN calls and publisher-only news can run on the pilot without reviving legacy switches", () => {
+  const { compose, runtime } = goodConfig();
+  runtime.set("MASANAWA_NGN_CALLS_ENABLED", "true");
+  runtime.set("MASANAWA_GB_SEND_REVIEW_SECRET", "ngn-call-review-secret-with-at-least-32-characters");
+  runtime.set("MASANAWA_NEWS_INGEST_ENABLED", "true");
+  const result = validatePilotConfig(compose, runtime);
+  assert.equal(result.workerDisabledByDefault, false);
+  assert.equal(result.qualifiedFeatures.ngnCalls, true);
+  assert.equal(result.qualifiedFeatures.news, true);
+  runtime.set("MASANAWA_MB_CALLS_ENABLED", "true");
+  assert.throws(() => validatePilotConfig(compose, runtime), /mb_calls_enabled_must_be_disabled/u);
+});
+
+test("live NGN Buy Data can pass preflight only with reviewed mapping and provider startup qualification", () => {
+  const { compose, runtime } = goodConfig();
+  runtime.set("MASANAWA_NGN_DATA_CATALOG_ENABLED", "true");
+  runtime.set("MASANAWA_NGN_DATA_PURCHASE_ENABLED", "true");
+  runtime.set("FLUTTERWAVE_BILLS_ENABLED", "true");
+  for(const [key,value] of [
+    ["MASANAWA_NGN_DATA_APPROVALS_JSON", '[{"id":"operator-reviewed-catalog"}]'],
+    ["FLUTTERWAVE_SECRET_KEY", "provider-auth-token"],
+    ["FLUTTERWAVE_WEBHOOK_SECRET_HASH", "provider-auth-hash"],
+    ["FLUTTERWAVE_WEBHOOK_URL", "https://api.masanawa.com/billing/webhook"],
+    ["MASANAWA_BILLING_ACTION_SECRET", "signed-billing-action-secret-longer-than-32"],
+    ["MASANAWA_FLUTTERWAVE_VERIFY_ON_START", "true"],
+  ]) runtime.set(key,value);
+  assert.equal(validatePilotConfig(compose, runtime).qualifiedFeatures.ngnData, true);
+  runtime.delete("FLUTTERWAVE_SECRET_KEY");
+  assert.throws(() => validatePilotConfig(compose, runtime), /flutterwave_secret_key_missing/u);
+  runtime.set("FLUTTERWAVE_SECRET_KEY", "provider-auth-token");
+  runtime.set("MASANAWA_NGN_DATA_CATALOG_ENABLED", "false");
+  assert.throws(() => validatePilotConfig(compose, runtime), /ngn_data.catalog_or_provider_missing/u);
 });
 
 test("env parser refuses duplicate keys or shell syntax", () => {

@@ -58,7 +58,9 @@ MASANAWA_GEMINI_API_KEY=<server-key>
 MASANAWA_PRODUCT_SCOPE=masana-lite
 ```
 
-Set every disabled financial/legacy/news/worker flag exactly as in `runtime.env.example` to `false`; this is enforced by preflight. OTP delivery additionally needs a real `RESEND_API_KEY` and verified `MASANAWA_AUTH_EMAIL_FROM`, or the separately reviewed SMS provider credentials. A Gateway that responds at `/healthz` is **not** proof that customers can sign in or generate real replies. `MASANAWA_WEB_ALLOWED_ORIGINS` is an exact HTTPS origin allowlist: no `*`, HTTP, subpaths or duplicate entries. Flutter mobile does not send browser Origin and uses the same authenticated API.
+Leave retired Alpha, MB/GB, MSNW and paid-Status flags disabled. The pilot preflight now permits the separately implemented **NGN Calls**, **NGN Buy Data** and **publisher-only news** paths when explicitly configured and qualified. For NGN Calls, use `MASANAWA_NGN_CALLS_ENABLED=true` plus a private review secret of at least 32 characters, real Gemini credentials and an approved live relay. For Buy Data, set both NGN data flags, an operator-reviewed approvals JSON array, Flutterwave billing and its complete webhook/provider/action credentials, with `MASANAWA_FLUTTERWAVE_VERIFY_ON_START=true`. Gateway startup independently rejects incomplete provider, DB, ledger or session prerequisites. For news, set `MASANAWA_NEWS_INGEST_ENABLED=true` only after validating publisher feed access, the approved sources and worker logs. No source flag itself proves live-provider qualification. OTP delivery additionally needs a real `RESEND_API_KEY` and verified `MASANAWA_AUTH_EMAIL_FROM`, or reviewed SMS provider credentials. `MASANAWA_WEB_ALLOWED_ORIGINS` is an exact HTTPS origin allowlist: no `*`, HTTP, subpaths or duplicate entries. Flutter mobile uses the same Gateway without a browser Origin.
+
+`compose.env` must include **both** exact-commit images (`MASANAWA_GATEWAY_IMAGE` and `MASANAWA_WORKER_IMAGE`) produced by the DigitalOcean CI workflow. On the $12/2-GB pilot, the steady-state container limits total 1,760 MiB before host overhead; inspect OOM and PostgreSQL pressure and reduce workload before increasing concurrency.
 
 Generate a fresh tenant UUIDv7 **once**, in a trusted local checkout with dependencies installed:
 
@@ -75,13 +77,13 @@ From this directory in a checkout of the **exact deployed Git commit**:
 ```sh
 node preflight.mjs /etc/masanawa/compose.env /etc/masanawa/runtime.env
 docker compose --env-file /etc/masanawa/compose.env -f compose.yaml config --quiet
-docker compose --env-file /etc/masanawa/compose.env -f compose.yaml pull postgres gateway
-docker compose --env-file /etc/masanawa/compose.env -f compose.yaml up -d --no-build postgres migrate gateway
+docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile worker pull postgres gateway worker
+docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile worker up -d --no-build postgres migrate gateway worker
 curl --fail http://127.0.0.1:3100/healthz
 curl --fail http://127.0.0.1:3100/readyz
 ```
 
-Never pass `--profile worker` on this pilot. `--profile public` starts the Caddy HTTP/HTTPS listener *only* when the DNS, Cloudflare proxy mode, certificates, origin firewall and user-client settings are ready. The Gateway loopback port **must not** be opened to the internet; PostgreSQL has **no host-published port**. The two containers share the DB Docker network while Caddy has only the edge network. Use Caddy's HTTPS certificate issuance/renewal status and `https://api.masanawa.com/readyz` before updating mobile build configuration or deploying the Site with this API origin.
+The `worker` profile runs canonical pending-turn recovery and the verified account-deletion worker; it runs publisher ingestion only when the reviewed news flag is enabled. Lite-mode filtering stops old P2P, MSNW and paid-Status jobs. Check `/readyz` on the worker's private Docker network and its scheduler health before claiming deletion or news is operational. `--profile public` starts the Caddy HTTP/HTTPS listener *only* when DNS, Cloudflare proxy mode, certificates, origin firewall and user-client settings are ready. The Gateway loopback port **must not** be opened to the internet; PostgreSQL has **no host-published port**. PostgreSQL and worker share the private database network; Caddy has only the edge network. Verify TLS and `https://api.masanawa.com/readyz` before switching client API origin.
 
 Note: a normal migration step is safe to run repeatedly; a failed migration **blocks Gateway start**. Do not bypass it or start Gateway against a partial schema. Verify image digest and logs after pull. The release default uses non-root process UID 1000; the PostgreSQL image retains its own dedicated user.
 
@@ -91,7 +93,7 @@ Note: a normal migration step is safe to run repeatedly; a failed migration **bl
 2. Confirm one PostgreSQL tenant/session: authenticate user A on Flutter and on web; repeat user B, logout, refresh, account switch, old requests, history/cursor and stream reconnect. Web BFF `GET /api/account` must read canonical `GET /auth/session`, never trust a display-name cookie; the response must be private/no-store, and guest D1/IndexedDB identity must not authorize account data. This remains an **open** acceptance requirement until the Site and both clients pass real checks.
 3. Verify both Flutter `API_BASE_URL` and `AGENT_BASE_URL` are the exact HTTPS Gateway origin (their source default is the intended `https://api.masanawa.com`); web bundles must use an approved configurable target and never embed a provider key.
 4. Reconcile new NGN account, transaction, Buy Data, billed reply, connected-second calls and voice/model provider tests **before enabling any real-money flag**. The first-source release deliberately leaves these disabled. All 189 web items remain tied to their original Site checklist IDs and receipts.
-5. Web/mobile share one canonical authenticated Gateway. Only public news/article metadata is sourced from Cloudflare D1; enable news ingest only after the dormant worker jobs are refactored/qualified. A live homepage is not evidence that publisher auto-publish is operating.
+5. Web/mobile share one canonical authenticated Gateway. Publisher RSS import writes canonical PostgreSQL article metadata; the separate Cloudflare news gateway is optional and must not be mistaken for a second authenticated account store. Confirm `news_ingest.batch` contains successful provider checks and imported rows before declaring publisher auto-publish ready. A live homepage alone is not evidence of ongoing ingestion.
 
 ### Backups, restore and security before live users
 

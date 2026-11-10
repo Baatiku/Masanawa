@@ -16,7 +16,7 @@ services:
       # PostgreSQL 18 images keep versioned data under /var/lib/postgresql.
       - postgres_data:/var/lib/postgresql
     shm_size: 128mb
-    mem_limit: 640m
+    mem_limit: 576m
     pids_limit: 128
     stop_grace_period: 90s
     security_opt:
@@ -68,7 +68,7 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3000"
-      NODE_OPTIONS: --max-old-space-size=640
+      NODE_OPTIONS: --max-old-space-size=512
       MASANAWA_GATEWAY_HOST: 0.0.0.0
       MASANAWA_GATEWAY_PORT: "3000"
     ports:
@@ -81,7 +81,7 @@ services:
       - edge
     init: true
     user: "1000:1000"
-    mem_limit: 896m
+    mem_limit: 768m
     pids_limit: 256
     restart: unless-stopped
     stop_grace_period: 30s
@@ -98,8 +98,9 @@ services:
       retries: 3
       start_period: 90s
 
-  # Must be explicitly enabled only after retiring legacy jobs and qualifying
-  # financial and publisher schedulers. It is NOT part of default pilot startup.
+  # Launch with --profile worker for canonical stale-turn recovery, verified
+  # account deletion, and optionally the reviewed publisher RSS feed. Lite-mode
+  # scheduling excludes retired MSNW/P2P/paid-Status jobs.
   worker:
     profiles: ["worker"]
     image: ${MASANAWA_WORKER_IMAGE:-masanawa-worker:pilot}
@@ -111,6 +112,7 @@ services:
       - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=224
       HOST: 0.0.0.0
       PORT: "3001"
       MASANAWA_WORKER_HOST: 0.0.0.0
@@ -123,7 +125,7 @@ services:
       - edge
     init: true
     user: "1000:1000"
-    mem_limit: 384m
+    mem_limit: 320m
     pids_limit: 128
     restart: unless-stopped
     stop_grace_period: 30s
@@ -150,7 +152,7 @@ services:
     networks:
       - edge
     restart: unless-stopped
-    mem_limit: 128m
+    mem_limit: 96m
     pids_limit: 64
     security_opt:
       - no-new-privileges:true

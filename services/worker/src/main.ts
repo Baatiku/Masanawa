@@ -1,4 +1,5 @@
 import {createNewsFeedPoller} from './jobs/home_feed/news_import.js';
+import {workerProductJobs} from './product_jobs.js';
 import {createConfiguredStatusObjectStore} from "@masanawa/providers";
 import {createCreatorMediaCleanup} from "./jobs/creator/media_deletions.js";
 import { pathToFileURL } from "node:url";
@@ -108,6 +109,9 @@ export async function startWorkerService(
   options: StartWorkerServiceOptions = {},
 ): Promise<WorkerServiceRuntime> {
   const env = options.env ?? process.env;
+  // Run the canonical chat/privacy/news jobs without reviving retired MSNW,
+  // P2P or paid-Status processors in the shared NGN Masanawa pilot.
+  const liteMode = !workerProductJobs(env).legacyFinanceAndStatus;
   const config = parseWorkerServiceConfig(env);
   const processRef = options.processRef ?? (process as ServiceProcess);
   const drain = createDrainState();
@@ -157,7 +161,7 @@ export async function startWorkerService(
       }) + "\n"),
     });
     const creatorObjects=createConfiguredStatusObjectStore(env)?.objects;
-    if(creatorObjects?.statObject){
+    if(!liteMode && creatorObjects?.statObject){
       const cleanup=createCreatorMediaCleanup({pool:database.pool,enabled:()=>!drain.isDraining(),
         objects:{deleteObject:creatorObjects.deleteObject,statObject:creatorObjects.statObject}});
       creatorMediaCleanup=createJobScheduler({runOnce:cleanup.runOnce,
@@ -173,40 +177,44 @@ export async function startWorkerService(
         if(result.checked||result.enrolled)
           process.stdout.write(JSON.stringify({event:'news_ingest.batch',...result})+'\n');
       },
-      enabled:()=>!drain.isDraining()&&Boolean(newsTenantId)&&env.MASANAWA_NEWS_INGEST_ENABLED==='true',
+      enabled:()=>!drain.isDraining()&&Boolean(newsTenantId)&&workerProductJobs(env).publisherNews,
       intervalMs:5*60_000,
       onError:()=>process.stderr.write(JSON.stringify({event:'news_ingest.retry',reason:'feed_unavailable'})+'\n'),
     });
     // Durable scheduled posts use the canonical feed editorial CAS and audit.
     // Polling needs no new queue or manual feature enablement.
-    const feed = createScheduledFeedRuntime({
-      pool: database.pool,
-      enabled: () => !drain.isDraining(),
-    });
-    feedPublisher = createJobScheduler({
-      runOnce: feed.runOnce,
-      enabled: () => !drain.isDraining(),
-      intervalMs: 15_000,
-      onError: () => {
-        process.stderr.write(JSON.stringify({
-          event: "status_scheduled.retry", reason: "batch_failed",
-        }) + "\n");
-      },
-    });
+    if (!liteMode) {
+      const feed = createScheduledFeedRuntime({
+        pool: database.pool,
+        enabled: () => !drain.isDraining(),
+      });
+      feedPublisher = createJobScheduler({
+        runOnce: feed.runOnce,
+        enabled: () => !drain.isDraining(),
+        intervalMs: 15_000,
+        onError: () => {
+          process.stderr.write(JSON.stringify({
+            event: "status_scheduled.retry", reason: "batch_failed",
+          }) + "\n");
+        },
+      });
+    }
     // Missing immutable funding obligations are recovered from independently
     // Paystack-verified fiat evidence. This job never mints or spends MSNW.
-    const obligationRecovery = createMsnwFundingObligationRecovery(database.pool);
-    msnwObligationRecovery = createJobScheduler({
-      runOnce: obligationRecovery.runOnce,
-      enabled: () => !drain.isDraining(),
-      intervalMs: 30_000,
-      onError: () => process.stderr.write(JSON.stringify({
-        event: "msnw_funding_obligations.retry", reason: "batch_failed",
-      }) + "\n"),
-    });
+    if (!liteMode) {
+      const obligationRecovery = createMsnwFundingObligationRecovery(database.pool);
+      msnwObligationRecovery = createJobScheduler({
+        runOnce: obligationRecovery.runOnce,
+        enabled: () => !drain.isDraining(),
+        intervalMs: 30_000,
+        onError: () => process.stderr.write(JSON.stringify({
+          event: "msnw_funding_obligations.retry", reason: "batch_failed",
+        }) + "\n"),
+      });
+    }
     // Paystack merchant-payout proof is separate from initial user payment.
     // Confirming that Paystack settled a payment does NOT mint an MSNW token.
-    if (env.PAYSTACK_SECRET_KEY?.trim()) {
+    if (!liteMode && env.PAYSTACK_SECRET_KEY?.trim()) {
       const paystackSettlement = createMsnwMerchantSettlementRuntime({
         pool: database.pool,paystackSecretKey: env.PAYSTACK_SECRET_KEY,
       });
@@ -223,7 +231,7 @@ export async function startWorkerService(
     const msnwChainSettings = [env.MSNW_CHAIN_ID,env.MSNW_TOKEN_CONTRACT,
       env.MSNW_RPC_URL,env.MSNW_CUSTODY_ADDRESS,
       env.MSNW_TOKEN_BYTECODE_SHA256];
-    if (msnwChainSettings.every(value => value?.trim())) {
+    if (!liteMode && msnwChainSettings.every(value => value?.trim())) {
       const verifier = createMsnwFinalityVerifier({
         chainId: env.MSNW_CHAIN_ID!,contract: env.MSNW_TOKEN_CONTRACT!,
         custody: env.MSNW_CUSTODY_ADDRESS!,rpcUrl: env.MSNW_RPC_URL!,
@@ -267,33 +275,35 @@ export async function startWorkerService(
     // No separate escrow scheduler authority: the canonical PG function
     // takes bounded SKIP LOCKED order claims and performs refund+event
     // postings in the same transaction. No backend feature flag.
-    const expiry=createP2pExpiryRuntime(database.pool);
-    p2pExpiry=createJobScheduler({
-      runOnce:expiry.runOnce,enabled:()=>!drain.isDraining(),
-      intervalMs:20000,
-      onError:()=>process.stderr.write(JSON.stringify({
-        event:"p2p.expiry.retry",reason:"batch_failed",
-      })+"\n"),
-    });
-    // A financial mismatch must be visible to operations, never silently
-    // repaired by creating balances or retrying completed payouts.
-    const audit=createP2pCustodyReconciliation(database.pool);
-    p2pAudit=createJobScheduler({
-      runOnce:async()=>{
-        const result=await audit.runOnce();
-        if(result.inconsistentOrders>0 || result.underReservedSellers>0 ||
-            result.undeliveredDeadLetters>0){
-          process.stderr.write(JSON.stringify({
-            event:"p2p.custody_reconciliation.alert",...result,
-          })+"\\n");
-        }
-      },
-      enabled:()=>!drain.isDraining(),
-      intervalMs:60000,
-      onError:()=>process.stderr.write(JSON.stringify({
-        event:"p2p.custody_reconciliation.retry",reason:"audit_unavailable",
-      })+"\\n"),
-    });
+    if (!liteMode) {
+      const expiry=createP2pExpiryRuntime(database.pool);
+      p2pExpiry=createJobScheduler({
+        runOnce:expiry.runOnce,enabled:()=>!drain.isDraining(),
+        intervalMs:20000,
+        onError:()=>process.stderr.write(JSON.stringify({
+          event:"p2p.expiry.retry",reason:"batch_failed",
+        })+"\n"),
+      });
+      // A financial mismatch must be visible to operations, never silently
+      // repaired by creating balances or retrying completed payouts.
+      const audit=createP2pCustodyReconciliation(database.pool);
+      p2pAudit=createJobScheduler({
+        runOnce:async()=>{
+          const result=await audit.runOnce();
+          if(result.inconsistentOrders>0 || result.underReservedSellers>0 ||
+              result.undeliveredDeadLetters>0){
+            process.stderr.write(JSON.stringify({
+              event:"p2p.custody_reconciliation.alert",...result,
+            })+"\\n");
+          }
+        },
+        enabled:()=>!drain.isDraining(),
+        intervalMs:60000,
+        onError:()=>process.stderr.write(JSON.stringify({
+          event:"p2p.custody_reconciliation.retry",reason:"audit_unavailable",
+        })+"\\n"),
+      });
+    }
     const schedulerHealth = (
       name: string,
       scheduler: ReturnType<typeof createJobScheduler> | undefined,
