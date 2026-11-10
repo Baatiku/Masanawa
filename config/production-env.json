@@ -396,6 +396,13 @@
       "description": "When true, verifies the live Flutterwave bills catalog during Gateway startup."
     },
     {
+      "name": "MASANAWA_GATEWAY_API_URL",
+      "owner": "apps/ops",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Server-only HTTPS Gateway origin for the optional standalone admin web BFF; never embedded in browser code."
+    },
+    {
       "name": "MASANAWA_GATEWAY_HOST",
       "owner": "gateway",
       "classification": "public",
@@ -646,6 +653,20 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Server-only X API read bearer for reviewed public-official account posts. Never exposed to mobile or logs."
+    },
+    {
+      "name": "MASANAWA_OPS_ADMIN_GRANTS_JSON",
+      "owner": "services/ops",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Explicit tenant-and-identity-scoped web administrator grants; private server configuration only, with no default superuser or runtime bypass."
+    },
+    {
+      "name": "MASANAWA_OPS_API_URL",
+      "owner": "apps/ops",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Server-only HTTPS Ops origin used by the optional standalone admin web BFF; do not expose administrator bearer to the browser."
     },
     {
       "name": "MASANAWA_OPS_HOST",
