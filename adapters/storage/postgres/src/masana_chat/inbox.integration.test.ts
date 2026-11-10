@@ -49,6 +49,12 @@ describe("C10 PostgreSQL 18 private Masana inbox integration", () => {
           await query(await readFile(root + migration, "utf8"));
         }
       }
+      const hasArchive = await query<{present:boolean}>(`SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_schema='masana'
+          AND table_name='fan_chat_preferences' AND column_name='archived'
+      ) AS present`);
+      if (!hasArchive.rows[0]?.present)
+        await query(await readFile(root + "packages/masana/migrations/0016_chat_archive.sql", "utf8"));
       const slug = randomUUID().replace(/-/g, "").slice(0, 16);
       const tenant = "tenant_c10_test_" + slug;
       const fan = "fan_c10_" + slug;
@@ -119,6 +125,21 @@ describe("C10 PostgreSQL 18 private Masana inbox integration", () => {
       expect((await inbox.list(scope))[0]?.pinned).toBe(true);
       expect(await inbox.markRead(scope,character)).toBe(2);
       expect((await inbox.list(scope))[0]?.unreadCount).toBe(0);
+      expect(await inbox.setArchived(scope,human,true,0)).toBeNull();
+      expect(await inbox.setArchived(scope,character,true,2)).toBe(3);
+      expect(await inbox.list(scope)).toEqual([]);
+      const archived=await inbox.list(scope,"",undefined,true);
+      expect(archived).toHaveLength(1);
+      expect(archived[0]?.characterId).toBe(character);
+      expect(archived[0]?.archived).toBe(true);
+      expect(archived[0]?.lastMessage).toBe("Teacher reply");
+      expect(await inbox.setTitle(scope,character,"Private study",3)).toBe(4);
+      expect((await inbox.list(scope,"",undefined,true))[0]?.customTitle).toBe("Private study");
+      expect(await inbox.list({tenantId:tenant,fanUserId:other},"",undefined,true)).toEqual([]);
+      expect(await inbox.setArchived(scope,character,false,2)).toBeNull();
+      expect(await inbox.setArchived(scope,character,false,4)).toBe(5);
+      expect((await inbox.list(scope))[0]?.archived).toBe(false);
+      expect((await inbox.list(scope))[0]?.customTitle).toBe("Private study");
       await query(`UPDATE masana.character_revisions SET state='retired'
         WHERE tenant_id=$1 AND character_id=$2 AND revision=1`,[tenant,character]);
       expect(await inbox.list(scope)).toEqual([]);

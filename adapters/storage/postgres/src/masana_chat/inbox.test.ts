@@ -50,7 +50,8 @@ describe("C10 tenant-private canonical chat inbox", () => {
     expect(sql).toContain("r.state='approved'");
     expect(sql).toContain("o.kind='platform'");
     expect(sql).toContain("u.state='active'");
-    expect(values).toEqual(["tenant-a","fan-a","teacher"]);
+    expect(sql).toContain("COALESCE(p.archived, false) = $4");
+    expect(values).toEqual(["tenant-a","fan-a","teacher",false]);
   });
   it("pages by confirmed message chronology, not pinned rank, and scopes cursor predicates",async()=>{
     const {inbox,query}=repository();
@@ -58,16 +59,16 @@ describe("C10 tenant-private canonical chat inbox", () => {
       lastActivityAt:"2026-10-11T12:00:00.000Z",characterId:character,
     }});
     const [sql,values]=query.mock.calls[0] as unknown as [string,unknown[]];
-    expect(sql).toContain("COALESCE(t.updated_at,l.session_at) < $4::timestamptz");
-    expect(sql).toContain("l.character_id > $5");
+    expect(sql).toContain("COALESCE(t.updated_at,l.session_at) < $5::timestamptz");
+    expect(sql).toContain("l.character_id > $6");
     expect(sql).toContain("ORDER BY COALESCE(t.updated_at,l.session_at) DESC, l.character_id");
     expect(sql).not.toContain("ORDER BY COALESCE(p.pinned,false)");
-    expect(sql).toContain("LIMIT $6");
-    expect(values).toEqual(["tenant-a","fan-a","teacher","2026-10-11T12:00:00.000Z",character,16]);
+    expect(sql).toContain("LIMIT $7");
+    expect(values).toEqual(["tenant-a","fan-a","teacher",false,"2026-10-11T12:00:00.000Z",character,16]);
     query.mockClear();
     await inbox.list(scope,"",{limit:2,cursor:null});
     expect((query.mock.calls[0] as unknown as [string,unknown[]])[1])
-      .toEqual(["tenant-a","fan-a","",null,null,2]);
+      .toEqual(["tenant-a","fan-a","",false,null,null,2]);
   });
   it("rejects bad page and cursor before touching the database",async()=>{
     const {inbox,query}=repository();
@@ -108,6 +109,34 @@ describe("C10 tenant-private canonical chat inbox", () => {
     query.mockClear();
     expect(await inbox.setPinned(scope,character,false,1)).toBe(1);
     expect(String(query.mock.calls[0]?.[0])).toContain("p.revision=$5");
+  });
+  it("archives and restores only scoped approved sessions, without deleting messages",async()=>{
+    const {inbox,query}=repository([{revision:"1"}]);
+    expect(await inbox.setArchived(scope,character,true,0)).toBe(1);
+    const [insertSql,values]=query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(insertSql).toContain("FROM agents.character_sessions");
+    expect(insertSql).toContain("archived");
+    expect(values).toEqual(["tenant-a","fan-a",character,true]);
+    query.mockClear();
+    expect(await inbox.setArchived(scope,character,false,1)).toBe(1);
+    expect(String(query.mock.calls[0]?.[0])).toContain("p.revision=$5");
+    query.mockClear();
+    await inbox.list(scope,"",undefined,true);
+    expect(String(query.mock.calls[0]?.[0])).toContain("COALESCE(p.archived, false) = $4");
+    expect((query.mock.calls[0] as unknown as [string,unknown[]])[1]).toEqual(["tenant-a","fan-a","",true]);
+    await expect(inbox.setArchived(scope,"bad",true,0)).rejects.toThrow();
+  });
+  it("allows scoped private rename only with valid titles and correct CAS",async()=>{
+    const {inbox,query}=repository([{revision:"2"}]);
+    expect(await inbox.setTitle(scope,character,"Study notes",1)).toBe(2);
+    const [sql,params]=query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("SET custom_title=$4");
+    expect(sql).toContain("p.revision=$5");
+    expect(params).toEqual(["tenant-a","fan-a",character,"Study notes",1]);
+    for(const title of ["", "x".repeat(81), "bad\nname"]){
+      await expect(inbox.setTitle(scope,character,title,1)).rejects.toThrow();
+    }
+    expect(query).toHaveBeenCalledTimes(1);
   });
   it("never invents success after CAS loss or forbidden character",async()=>{
     const {inbox,query}=repository([]);
