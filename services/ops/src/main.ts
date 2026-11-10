@@ -6,6 +6,8 @@ import type {
 import type { CharacterVersionReferenceReader } from "@masanawa/identity";
 import type { SkillRepository } from "@masanawa/skills";
 import { readRequiredEnv } from "@masanawa/contracts";
+import { createPostgresPlatformSessionRepository } from "@masanawa/postgres";
+import { createOpsAdminDashboardService, parseOpsAdminGrants } from "./admin_dashboard.js";
 import {
   createDrainState,
   readNodeServiceRuntimeConfig,
@@ -45,6 +47,7 @@ export interface ServiceDatabaseDependency {
   readonly characterSkillAssignments?: CharacterSkillAssignmentRepository;
   readonly characterVersions?: CharacterVersionReferenceReader;
   readonly skills?: SkillRepository;
+  readonly adminDashboard?: ReturnType<typeof createOpsAdminDashboardService>;
   close(): Promise<void>;
 }
 
@@ -106,6 +109,11 @@ function createDefaultDatabaseDependency(
   });
   return Object.freeze({
     readinessCheck: database.readinessCheck,
+    adminDashboard: createOpsAdminDashboardService({
+      sessions: createPostgresPlatformSessionRepository(database.pool),
+      pool: database.pool,
+      grants: parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),
+    }),
     agentPresentations: createPostgresAgentPresentationRepository(database.pool),
     characterSkillAssignments:
       createPostgresCharacterSkillAssignmentRepository(database.pool),
@@ -130,7 +138,7 @@ export async function startOpsService(
 
   const composedAgentAdmin =
     options.appOptions?.agentAdmin ??
-    (options.agentAdminAuthorizer &&
+    ((options.agentAdminAuthorizer || database.adminDashboard) &&
     database.agentPresentations &&
     database.characterSkillAssignments &&
     database.characterVersions &&
@@ -140,7 +148,12 @@ export async function startOpsService(
           skillAssignments: database.characterSkillAssignments,
           characterVersions: database.characterVersions,
           skills: database.skills,
-          authorizer: options.agentAdminAuthorizer,
+          authorizer: options.agentAdminAuthorizer ?? {
+            authorize: async (request) => {
+              const actor = await database.adminDashboard!.authorize(request);
+              return { tenantId: actor.tenantId as import("@masanawa/contracts").TenantId };
+            },
+          },
         })
       : undefined);
 
@@ -149,6 +162,7 @@ export async function startOpsService(
     app = appFactory({
       ...(options.appOptions ?? {}),
       ...(composedAgentAdmin ? { agentAdmin: composedAgentAdmin } : {}),
+      ...(database.adminDashboard ? { adminDashboard: database.adminDashboard } : {}),
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
         database.readinessCheck,

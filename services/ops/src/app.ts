@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
 import type { AgentAdminService } from "./agent_admin.js";
+import { OpsAdminAccessError, type OpsAdminDashboardService } from "./admin_dashboard.js";
 import {
   admitTelemetryCorrelation,
   injectCorrelationHeaders,
@@ -19,6 +20,7 @@ export interface OpsAppOptions {
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
   readonly agentAdmin?: AgentAdminService;
+  readonly adminDashboard?: OpsAdminDashboardService;
 }
 
 const HealthResponseSchema = Type.Object(
@@ -164,6 +166,58 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     request.headers["x-correlation-id"] = headers["x-correlation-id"];
     reply.headers(headers);
   });
+
+  if (options.adminDashboard) {
+    const admin = options.adminDashboard;
+    const handle = async <T>(reply: { code(status: number): unknown }, action: () => Promise<T>) => {
+      try { return await action(); }
+      catch (error) {
+        const status = error instanceof OpsAdminAccessError ? error.statusCode : 503;
+        reply.code(status);
+        return { code: status === 401 ? "UNAUTHORIZED" : status === 403 ? "FORBIDDEN" : "ADMIN_UNAVAILABLE" };
+      }
+    };
+    const Pagination = Type.Object({
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+      offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 10000 })),
+    }, { additionalProperties: false });
+    const Filtered = Type.Object({
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+      offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 10000 })),
+      state: Type.Optional(Type.String({ maxLength: 32, pattern: "^[a-z_-]+$" })),
+    }, { additionalProperties: false });
+    app.get("/v1/admin/me", async (request, reply) =>
+      handle(reply, () => admin.me({ authorizationHeader: request.headers.authorization })));
+    app.get("/v1/admin/summary", async (request, reply) =>
+      handle(reply, () => admin.summary({ authorizationHeader: request.headers.authorization })));
+    app.get("/v1/admin/users", { schema: { querystring: Filtered } }, async (request, reply) =>
+      handle(reply, () => admin.users({ authorizationHeader: request.headers.authorization, ...request.query,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/agent-runs", { schema: { querystring: Filtered } }, async (request, reply) =>
+      handle(reply, () => admin.runs({ authorizationHeader: request.headers.authorization, ...request.query,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/operations", { schema: { querystring: Filtered } }, async (request, reply) =>
+      handle(reply, () => admin.operations({ authorizationHeader: request.headers.authorization, ...request.query,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/audit", { schema: { querystring: Pagination } }, async (request, reply) =>
+      handle(reply, () => admin.audit({ authorizationHeader: request.headers.authorization,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/news", { schema: { querystring: Filtered } }, async (request, reply) =>
+      handle(reply, () => admin.news({ authorizationHeader: request.headers.authorization, ...request.query,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/wallet", { schema: { querystring: Pagination } }, async (request, reply) =>
+      handle(reply, () => admin.wallet({ authorizationHeader: request.headers.authorization,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/data", { schema: { querystring: Filtered } }, async (request, reply) =>
+      handle(reply, () => admin.data({ authorizationHeader: request.headers.authorization, ...request.query,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/calls", { schema: { querystring: Filtered } }, async (request, reply) =>
+      handle(reply, () => admin.calls({ authorizationHeader: request.headers.authorization, ...request.query,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+    app.get("/v1/admin/moderation", { schema: { querystring: Pagination } }, async (request, reply) =>
+      handle(reply, () => admin.moderation({ authorizationHeader: request.headers.authorization,
+        limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
+  }
 
 
   if (options.agentAdmin) {
