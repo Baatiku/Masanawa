@@ -21,7 +21,8 @@ final _serverSearch = FutureProvider.autoDispose
       final parts = jsonDecode(key) as List;
       return ref
           .watch(masanaInboxSearchProvider)
-          .searchPage(bearer: parts[1] as String, query: parts[2] as String);
+          .searchPage(bearer: parts[1] as String, query: parts[2] as String,
+              archived: parts[4] as bool);
     });
 
 /// Account-scoped Masana conversations.
@@ -42,11 +43,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
   final _search = TextEditingController();
   String _query = '', _remoteQuery = '';
   Timer? _searchDebounce;
-  final Map<String, MasanaInboxSearchItem> _confirmedPinUpdates = {};
+  final Map<String, MasanaInboxSearchItem> _confirmedRemoteUpdates = {};
   final List<MasanaInboxSearchItem> _additionalResults = [];
   final Set<String> _seenCursors = {};
   String? _additionalResultsKey, _nextCursor;
   bool _loadedMore = false, _loadingMore = false, _pageError = false;
+  bool _showArchived = false;
   ProviderSubscription<SessionState>? _sessionSubscription;
   String? _sessionOwnerId;
   int _authorizationEpoch = 0;
@@ -68,7 +70,8 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       if (!mounted) return;
       setState(() {
         _query = _remoteQuery = '';
-        _confirmedPinUpdates.clear();
+        _showArchived = false;
+        _confirmedRemoteUpdates.clear();
         _resetPages();
       });
     });
@@ -94,7 +97,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     setState(() {
       _query = raw.trim().toLowerCase();
       _remoteQuery = '';
-      _confirmedPinUpdates.clear();
+      _confirmedRemoteUpdates.clear();
       _resetPages();
     });
     if (_query.isNotEmpty && _query.length <= 80)
@@ -107,12 +110,13 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     final owner = ref.read(sessionProvider);
     await ref.read(agentDirectoryProvider.notifier).refresh();
     if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
-        owner is! SessionSignedIn || _remoteQuery.isEmpty ||
+        owner is! SessionSignedIn ||
         _remoteQuery != _query || !ref.read(aiChatProvider).online) return;
     setState(_resetPages);
     ref.invalidate(_serverSearch(jsonEncode([
       owner.user.id, owner.tokens.accessToken, _remoteQuery,
       ref.read(sessionProvider.notifier).authorizationEpoch,
+      _showArchived,
     ])));
   }
 
@@ -121,18 +125,18 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     final owner = ref.read(sessionProvider);
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     if (owner is! SessionSignedIn || !ref.read(aiChatProvider).online ||
-        _remoteQuery != _query || _remoteQuery.isEmpty ||
-        jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch]) != key) return;
+        _remoteQuery != _query ||
+        jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch, _showArchived]) != key) return;
     setState(() { _loadingMore = true; _pageError = false; });
     try {
       final page = await ref.read(masanaInboxSearchProvider).searchPage(
         bearer: owner.tokens.accessToken, query: _remoteQuery,
-        cursor: cursor,
+        cursor: cursor, archived: _showArchived,
       );
       if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
           epoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
           _remoteQuery != _query || !ref.read(aiChatProvider).online ||
-          jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch]) != key) return;
+          jsonEncode([owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch, _showArchived]) != key) return;
       setState(() {
         _additionalResultsKey = key;
         _loadedMore = true;
@@ -152,6 +156,110 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     }
   }
 
+  Future<void> _changeArchive(MasanaInboxSearchItem row) async {
+    final owner = ref.read(sessionProvider);
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (owner is! SessionSignedIn || !ref.read(aiChatProvider).online) return;
+    try {
+      final revision = await ref.read(masanaInboxSearchProvider).setArchived(
+        bearer: owner.tokens.accessToken, characterId: row.characterId,
+        archived: !row.archived, expectedRevision: row.revision,
+      );
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      setState(() => _confirmedRemoteUpdates[row.characterId] =
+          row.withArchive(!row.archived, revision));
+      ref.invalidate(_serverSearch(jsonEncode([
+        owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch,
+        _showArchived,
+      ])));
+    } catch (_) {
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Archive status changed or could not be saved. Refresh conversations.'),
+      ));
+      await _refresh();
+    }
+  }
+
+  Future<void> _renameRemote(MasanaInboxSearchItem row) async {
+    final owner = ref.read(sessionProvider);
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    if (owner is! SessionSignedIn) return;
+    final editor = TextEditingController(text: row.customTitle ?? '');
+    final selection = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Private conversation name'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Only you see this label. Public persona: ${row.displayName}'),
+          TextField(controller: editor, maxLength: 80, autofocus: true,
+            decoration: const InputDecoration(hintText: 'Conversation title')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, '\u0000'),
+              child: const Text('Use original')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, editor.text.trim()),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    editor.dispose();
+    if (!mounted || selection == null || selection.isEmpty ||
+        !identical(owner, ref.read(sessionProvider)) ||
+        epoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
+        !ref.read(aiChatProvider).online) return;
+    final title = selection == '\u0000' ? null : selection;
+    try {
+      final revision = await ref.read(masanaInboxSearchProvider).setTitle(
+        bearer: owner.tokens.accessToken, characterId: row.characterId,
+        title: title, expectedRevision: row.revision,
+      );
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      setState(() => _confirmedRemoteUpdates[row.characterId] =
+          row.withTitle(title, revision));
+      ref.invalidate(_serverSearch(jsonEncode([
+        owner.user.id, owner.tokens.accessToken, _remoteQuery, epoch,
+        _showArchived,
+      ])));
+    } catch (_) {
+      if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+          epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Conversation title changed or could not be saved. Refresh.'),
+      ));
+      await _refresh();
+    }
+  }
+
+  Future<void> _remoteOptions(MasanaInboxSearchItem row) async {
+    final owner = ref.read(sessionProvider);
+    final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(leading: Icon(row.archived ? Icons.unarchive_outlined : Icons.archive_outlined),
+            title: Text(row.archived ? 'Restore conversation' : 'Archive conversation'),
+            onTap: () => Navigator.pop(sheetContext, 'archive')),
+          ListTile(leading: const Icon(Icons.edit_outlined),
+            title: const Text('Rename conversation privately'),
+            onTap: () => Navigator.pop(sheetContext, 'title')),
+        ],
+      )),
+    );
+    if (!mounted || !identical(owner, ref.read(sessionProvider)) ||
+        epoch != ref.read(sessionProvider.notifier).authorizationEpoch) return;
+    if (selected == 'archive') await _changeArchive(row);
+    if (selected == 'title') await _renameRemote(row);
+  }
+
   @override
   Widget build(BuildContext context) {
     final signedIn = ref.watch(sessionProvider) is SessionSignedIn;
@@ -163,6 +271,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       session.tokens.accessToken,
       _remoteQuery,
       ref.read(sessionProvider.notifier).authorizationEpoch,
+      _showArchived,
     ]);
     final localState = ref.watch(aiChatProvider);
     final offline = !localState.online;
@@ -171,7 +280,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     final archivedIds = localState.threads.values
         .where((thread) => thread.archived)
         .map((thread) => thread.characterId).toSet();
-    final server = !offline && _remoteQuery.isNotEmpty &&
+    final server = !offline &&
             _remoteQuery == _query
         ? ref.watch(_serverSearch(serverKey))
         : null;
@@ -185,10 +294,11 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
         ..._additionalResults,
     ];
     for (final incoming in resultPages) {
-      final confirmed = _confirmedPinUpdates[incoming.characterId];
+      final confirmed = _confirmedRemoteUpdates[incoming.characterId];
       final result = confirmed != null && confirmed.revision > incoming.revision
           ? confirmed : incoming;
       final previous = serverById[result.characterId];
+      if (result.archived != _showArchived) continue;
       if (previous == null || result.revision > previous.revision ||
           (result.revision == previous.revision &&
               (result.lastActivityAt ?? DateTime.utc(1970)).isAfter(
@@ -197,9 +307,9 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
       }
     }
     final rows = <({DateTime at, String id, bool pinned, Widget row})>[];
-    final localIds = <String>{...archivedIds};
+    final localIds = <String>{if (!_showArchived) ...archivedIds};
     for (final t in widget.masanaThreads) {
-        if (t.archived || !localIds.add(t.characterId)) continue;
+        if (t.archived != _showArchived || !localIds.add(t.characterId)) continue;
         final agent = ref.watch(agentDirectoryProvider).find(t.characterId);
         if (_query.isNotEmpty &&
             !'${agent?.displayName ?? ''} ${t.characterId} ${t.title ?? ''} ${t.draft} ${t.messages.map((m) => m.text).join(' ')}'
@@ -228,7 +338,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
             displayName: result.displayName,
             size: 52,
           ),
-          name: result.displayName,
+          name: result.customTitle ?? result.displayName,
           preview: Text(
             result.lastMessage.isEmpty ? result.profession : result.lastMessage,
             maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -238,11 +348,12 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               ? '' : formatChatTime(result.lastActivityAt!.toLocal()),
           unread: result.unreadCount,
           pinned: result.pinned,
-          actionTooltip: result.pinned
-              ? 'Unpin server conversation' : 'Pin server conversation',
-          actionIcon: result.pinned
-              ? Icons.push_pin : Icons.push_pin_outlined,
+          actionTooltip: _showArchived ? 'Restore server conversation'
+              : result.pinned ? 'Unpin server conversation' : 'Pin server conversation',
+          actionIcon: _showArchived ? Icons.unarchive_outlined
+              : result.pinned ? Icons.push_pin : Icons.push_pin_outlined,
           onAction: () async {
+            if (_showArchived) { await _changeArchive(result); return; }
             final owner = ref.read(sessionProvider);
             final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
             final access = ref.read(masanaInboxSearchProvider);
@@ -255,7 +366,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               );
               if (mounted && identical(owner, ref.read(sessionProvider)) &&
                   epoch == ref.read(sessionProvider.notifier).authorizationEpoch) {
-                setState(() => _confirmedPinUpdates[result.characterId] =
+                setState(() => _confirmedRemoteUpdates[result.characterId] =
                     result.withPin(!result.pinned, nextRevision));
                 ref.invalidate(_serverSearch(serverKey));
               }
@@ -268,6 +379,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
               }
             }
           },
+          onLongPress: () => unawaited(_remoteOptions(result)),
           onTap: () {
             final owner = ref.read(sessionProvider);
             if (owner is! SessionSignedIn) return;
@@ -306,6 +418,21 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
             _changed('');
           },
         ),
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 2, 12, 8),
+          child: Align(alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: const ValueKey('remote-archive-toggle'),
+              icon: Icon(_showArchived ? Icons.inbox_outlined : Icons.archive_outlined),
+              label: Text(_showArchived ? 'Active conversations' : 'Archived conversations'),
+              onPressed: () => setState(() {
+                _showArchived = !_showArchived;
+                _confirmedRemoteUpdates.clear();
+                _resetPages();
+              }),
+            ),
+          ),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -320,7 +447,7 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
                       children: [
                         Text(
                           _query.isEmpty
-                              ? 'No conversations yet'
+                              ? (_showArchived ? 'No archived conversations' : 'No conversations yet')
                               : offline
                               ? 'No matches in saved conversations'
                               : 'No matching conversations',

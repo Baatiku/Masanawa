@@ -12,6 +12,8 @@ class MasanaInboxSearchItem {
     required this.profession,
     required this.lastMessage,
     required this.pinned,
+    this.archived = false,
+    this.customTitle,
     required this.unreadCount,
     required this.revision,
     this.lastActivityAt,
@@ -22,6 +24,8 @@ class MasanaInboxSearchItem {
   final String profession;
   final String lastMessage;
   final bool pinned;
+  final bool archived;
+  final String? customTitle;
   final int unreadCount;
   final int revision;
   /// Server-reported message activity, not pin/edit activity. Older servers
@@ -33,12 +37,16 @@ class MasanaInboxSearchItem {
     final name = data['displayName'];
     final profession = data['profession'];
     final pinned = data['pinned'];
+    final archived = data['archived'];
+    final title = data['customTitle'];
     final unread = data['unreadCount'];
     final revision = data['revision'];
     final rawActivity = data['lastActivityAt'];
     if (id is! String || !id.startsWith('character_') ||
         name is! String || name.trim().isEmpty ||
         profession is! String || pinned is! bool ||
+        (archived != null && archived is! bool) ||
+        (title != null && (title is! String || title.isEmpty || title.length > 80)) ||
         unread is! int || unread < 0 || revision is! int || revision < 0) {
       throw const FormatException('Invalid authorized inbox row');
     }
@@ -52,6 +60,8 @@ class MasanaInboxSearchItem {
       profession: profession,
       lastMessage: data['lastMessage'] is String ? data['lastMessage'] as String : '',
       pinned: pinned,
+      archived: archived == true,
+      customTitle: title as String?,
       unreadCount: unread,
       revision: revision,
       lastActivityAt: activity,
@@ -65,8 +75,28 @@ class MasanaInboxSearchItem {
         profession: profession,
         lastMessage: lastMessage,
         pinned: isPinned,
+        archived: archived,
+        customTitle: customTitle,
         unreadCount: unreadCount,
         revision: version,
+        lastActivityAt: lastActivityAt,
+      );
+
+  MasanaInboxSearchItem withArchive(bool isArchived, int version) =>
+      MasanaInboxSearchItem(
+        characterId: characterId, displayName: displayName,
+        profession: profession, lastMessage: lastMessage, pinned: pinned,
+        archived: isArchived, customTitle: customTitle,
+        unreadCount: unreadCount, revision: version,
+        lastActivityAt: lastActivityAt,
+      );
+
+  MasanaInboxSearchItem withTitle(String? title, int version) =>
+      MasanaInboxSearchItem(
+        characterId: characterId, displayName: displayName,
+        profession: profession, lastMessage: lastMessage, pinned: pinned,
+        archived: archived, customTitle: title,
+        unreadCount: unreadCount, revision: version,
         lastActivityAt: lastActivityAt,
       );
 }
@@ -89,11 +119,24 @@ abstract class MasanaInboxSearchAccess {
     required String query,
     String? cursor,
     int limit = 15,
+    bool archived = false,
   });
   Future<int> setPinned({
     required String bearer,
     required String characterId,
     required bool pinned,
+    required int expectedRevision,
+  });
+  Future<int> setArchived({
+    required String bearer,
+    required String characterId,
+    required bool archived,
+    required int expectedRevision,
+  });
+  Future<int> setTitle({
+    required String bearer,
+    required String characterId,
+    required String? title,
     required int expectedRevision,
   });
   Future<void> markRead({
@@ -138,9 +181,10 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
     required String query,
     String? cursor,
     int limit = 15,
+    bool archived = false,
   }) async {
     final term = query.trim();
-    if (term.isEmpty || term.length > 80 || limit < 1 || limit > 30 ||
+    if (term.length > 80 || limit < 1 || limit > 30 ||
         (cursor != null && (cursor.isEmpty || cursor.length > 1024 ||
             !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(cursor)))) {
       throw const FormatException('Invalid search query');
@@ -148,6 +192,7 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
     final response = await _dio.get<Map<String, dynamic>>(
       '/v1/chats',
       queryParameters: {'q': term, 'limit': limit,
+        if (archived) 'archived': 'true',
         if (cursor != null) 'cursor': cursor},
       options: _options(bearer),
     );
@@ -181,6 +226,44 @@ class DioMasanaInboxSearch implements MasanaInboxSearchAccess {
     final revision = result.data?['revision'];
     if (revision is! int || revision < 0) {
       throw const FormatException('Invalid pin receipt');
+    }
+    return revision;
+  }
+
+  @override
+  Future<int> setArchived({
+    required String bearer, required String characterId,
+    required bool archived, required int expectedRevision,
+  }) async {
+    final result = await _dio.patch<Map<String, dynamic>>(
+      '/v1/chats/${Uri.encodeComponent(characterId)}/archive',
+      data: {'archived': archived, 'expectedRevision': expectedRevision},
+      options: _options(bearer),
+    );
+    final revision = result.data?['revision'];
+    if (revision is! int || revision < 0 || result.data?['archived'] != archived) {
+      throw const FormatException('Invalid archive receipt');
+    }
+    return revision;
+  }
+
+  @override
+  Future<int> setTitle({
+    required String bearer, required String characterId,
+    required String? title, required int expectedRevision,
+  }) async {
+    if (title != null && (title.isEmpty || title.length > 80 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(title))) {
+      throw const FormatException('Invalid private conversation title');
+    }
+    final result = await _dio.patch<Map<String, dynamic>>(
+      '/v1/chats/${Uri.encodeComponent(characterId)}/title',
+      data: {'title': title, 'expectedRevision': expectedRevision},
+      options: _options(bearer),
+    );
+    final revision = result.data?['revision'];
+    if (revision is! int || revision < 0 || result.data?['title'] != title) {
+      throw const FormatException('Invalid title receipt');
     }
     return revision;
   }
