@@ -7,14 +7,15 @@ function fixture() {
   const resolveFan=vi.fn(async () => ({tenantId:"tenant-a",fanUserId:"fan-a"}));
   const list=vi.fn(async () => [{
     characterId:character,displayName:"Gwana",profession:"Teacher",
-    lastMessage:"Salam",lastActivityAt:"2026-10-11",pinned:false,archived:false,
+    lastMessage:"Salam",lastActivityAt:"2026-10-11",pinned:false,archived:false,customTitle:null,
     unreadCount:1,revision:0,
   }]);
   const setPinned=vi.fn(async () => 1 as number|null);
   const setArchived=vi.fn(async () => 1 as number|null);
+  const setTitle=vi.fn(async () => 1 as number|null);
   const markRead=vi.fn(async () => 2 as number|null);
-  registerMasanaInboxRoutes(app,{resolveFan,inbox:{list,setPinned,setArchived,markRead}});
-  return {app,resolveFan,list,setPinned,setArchived,markRead};
+  registerMasanaInboxRoutes(app,{resolveFan,inbox:{list,setPinned,setArchived,setTitle,markRead}});
+  return {app,resolveFan,list,setPinned,setArchived,setTitle,markRead};
 }
 describe("C10 authenticated Chats list HTTP",()=>{
   it("requires bearer authorization before any private read or write",async()=>{
@@ -23,6 +24,7 @@ describe("C10 authenticated Chats list HTTP",()=>{
       for(const [method,url] of [
         ["GET","/v1/chats"],["PATCH","/v1/chats/"+character],
         ["PATCH","/v1/chats/"+character+"/archive"],
+        ["PATCH","/v1/chats/"+character+"/title"],
         ["POST","/v1/chats/"+character+"/read"],
       ] as const){
         const result=await f.app.inject({method,url});
@@ -32,6 +34,7 @@ describe("C10 authenticated Chats list HTTP",()=>{
       expect(f.list).not.toHaveBeenCalled();
       expect(f.setPinned).not.toHaveBeenCalled();
       expect(f.setArchived).not.toHaveBeenCalled();
+      expect(f.setTitle).not.toHaveBeenCalled();
     }finally{await f.app.close();}
   });
   it("ignores forged tenant and fan in list and pin payload",async()=>{
@@ -88,16 +91,36 @@ describe("C10 authenticated Chats list HTTP",()=>{
         payload:{archived:false,expectedRevision:1}})).statusCode).toBe(409);
     }finally{await f.app.close();}
   });
+  it("private rename is validated, reversible, revision-safe and never impersonates the persona",async()=>{
+    const f=fixture(),headers={authorization:"Bearer fan"};
+    try{
+      const rename=await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/title`,headers,
+        payload:{title:"My study companion",expectedRevision:0,fanUserId:"forged"}});
+      expect(rename.statusCode).toBe(200);
+      expect(rename.json()).toEqual({revision:1,title:"My study companion"});
+      expect(f.setTitle).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},character,"My study companion",0);
+      const reset=await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/title`,headers,
+        payload:{title:null,expectedRevision:1}});
+      expect(reset.statusCode).toBe(200);
+      for(const title of ["", "x".repeat(81), "bad\nname", 4]){
+        expect((await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/title`,headers,
+          payload:{title,expectedRevision:1}})).statusCode).toBe(422);
+      }
+      f.setTitle.mockResolvedValueOnce(null);
+      expect((await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/title`,headers,
+        payload:{title:"Stale",expectedRevision:1}})).statusCode).toBe(409);
+    }finally{await f.app.close();}
+  });
   it("pages by a query-bound cursor, retains legacy responses and fails closed on malformed positions",async()=>{
     const f=fixture(),headers={authorization:"Bearer fan"};
     const second="character_0199f0d0-0000-7000-8000-000000000004";
     f.list.mockResolvedValueOnce([
       {characterId:character,displayName:"Gwana",profession:"Teacher",
         lastMessage:"Salam",lastActivityAt:"2026-10-11T14:00:00Z",
-        pinned:false,archived:false,unreadCount:1,revision:0},
+        pinned:false,archived:false,customTitle:null,unreadCount:1,revision:0},
       {characterId:second,displayName:"Amina",profession:"Teacher",
         lastMessage:"Reply",lastActivityAt:"2026-10-11T13:00:00Z",
-        pinned:true,archived:false,unreadCount:0,revision:0},
+        pinned:true,archived:false,customTitle:null,unreadCount:0,revision:0},
     ]);
     try {
       const first=await f.app.inject({method:"GET",url:"/v1/chats?q=teacher&limit=1",headers});

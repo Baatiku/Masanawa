@@ -11,9 +11,10 @@ describe("AF00 canonical C10 composition", () => {
     const list = vi.fn(async () => []);
     const setPinned = vi.fn(async () => 1);
     const setArchived = vi.fn(async () => 1);
+    const setTitle = vi.fn(async () => 1);
     const markRead = vi.fn(async () => 1);
     const app = createGatewayApp({ masanaInbox: {
-      enabled: () => false, resolveFan, inbox: { list, setPinned, setArchived, markRead },
+      enabled: () => false, resolveFan, inbox: { list, setPinned, setArchived, setTitle, markRead },
     } });
     apps.push(app);
     const headers = { authorization: "Bearer token" };
@@ -23,10 +24,13 @@ describe("AF00 canonical C10 composition", () => {
     expect((await app.inject({ method: "POST", url: "/v1/chats/"+character+"/read", headers })).statusCode).toBe(503);
     expect((await app.inject({ method: "PATCH", url: "/v1/chats/"+character+"/archive", headers,
       payload:{archived:true,expectedRevision:0} })).statusCode).toBe(503);
+    expect((await app.inject({ method: "PATCH", url: "/v1/chats/"+character+"/title", headers,
+      payload:{title:"My Masana",expectedRevision:0} })).statusCode).toBe(503);
     expect(resolveFan).not.toHaveBeenCalled();
     expect(list).not.toHaveBeenCalled();
     expect(setPinned).not.toHaveBeenCalled();
     expect(setArchived).not.toHaveBeenCalled();
+    expect(setTitle).not.toHaveBeenCalled();
     expect(markRead).not.toHaveBeenCalled();
   });
   it("uses server-derived scope, never request tenant or fan headers", async () => {
@@ -35,7 +39,7 @@ describe("AF00 canonical C10 composition", () => {
     const list = vi.fn(async () => []);
     const app = createGatewayApp({ masanaInbox: {
       enabled: () => true, resolveFan,
-      inbox: {list, setPinned:async()=>null, setArchived:async()=>null, markRead:async()=>null},
+      inbox: {list, setPinned:async()=>null, setArchived:async()=>null, setTitle:async()=>null, markRead:async()=>null},
     } });
     apps.push(app);
     const unauthorized = await app.inject({ method:"GET", url:"/v1/chats",

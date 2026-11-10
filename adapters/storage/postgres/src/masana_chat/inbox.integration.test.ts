@@ -133,10 +133,13 @@ describe("C10 PostgreSQL 18 private Masana inbox integration", () => {
       expect(archived[0]?.characterId).toBe(character);
       expect(archived[0]?.archived).toBe(true);
       expect(archived[0]?.lastMessage).toBe("Teacher reply");
+      expect(await inbox.setTitle(scope,character,"Private study",3)).toBe(4);
+      expect((await inbox.list(scope,"",undefined,true))[0]?.customTitle).toBe("Private study");
       expect(await inbox.list({tenantId:tenant,fanUserId:other},"",undefined,true)).toEqual([]);
       expect(await inbox.setArchived(scope,character,false,2)).toBeNull();
-      expect(await inbox.setArchived(scope,character,false,3)).toBe(4);
+      expect(await inbox.setArchived(scope,character,false,4)).toBe(5);
       expect((await inbox.list(scope))[0]?.archived).toBe(false);
+      expect((await inbox.list(scope))[0]?.customTitle).toBe("Private study");
       await query(`UPDATE masana.character_revisions SET state='retired'
         WHERE tenant_id=$1 AND character_id=$2 AND revision=1`,[tenant,character]);
       expect(await inbox.list(scope)).toEqual([]);

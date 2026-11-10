@@ -126,6 +126,18 @@ describe("C10 tenant-private canonical chat inbox", () => {
     expect((query.mock.calls[0] as unknown as [string,unknown[]])[1]).toEqual(["tenant-a","fan-a","",true]);
     await expect(inbox.setArchived(scope,"bad",true,0)).rejects.toThrow();
   });
+  it("allows scoped private rename only with valid titles and correct CAS",async()=>{
+    const {inbox,query}=repository([{revision:"2"}]);
+    expect(await inbox.setTitle(scope,character,"Study notes",1)).toBe(2);
+    const [sql,params]=query.mock.calls[0] as unknown as [string,unknown[]];
+    expect(sql).toContain("SET custom_title=$4");
+    expect(sql).toContain("p.revision=$5");
+    expect(params).toEqual(["tenant-a","fan-a",character,"Study notes",1]);
+    for(const title of ["", "x".repeat(81), "bad\nname"]){
+      await expect(inbox.setTitle(scope,character,title,1)).rejects.toThrow();
+    }
+    expect(query).toHaveBeenCalledTimes(1);
+  });
   it("never invents success after CAS loss or forbidden character",async()=>{
     const {inbox,query}=repository([]);
     expect(await inbox.setPinned(scope,character,true,0)).toBeNull();

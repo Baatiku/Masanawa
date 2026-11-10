@@ -11,6 +11,7 @@ export interface FanInboxItem {
   readonly lastActivityAt: string;
   readonly pinned: boolean;
   readonly archived: boolean;
+  readonly customTitle: string | null;
   readonly unreadCount: number;
   readonly revision: number;
 }
@@ -50,6 +51,8 @@ export interface MasanaInboxRoutesDeps {
       pinned: boolean, expectedRevision: number): Promise<number | null>;
     setArchived(scope: FanInboxScope, characterId: string,
       archived: boolean, expectedRevision: number): Promise<number | null>;
+    setTitle(scope: FanInboxScope, characterId: string,
+      title: string | null, expectedRevision: number): Promise<number | null>;
     markRead(scope: FanInboxScope, characterId: string): Promise<number | null>;
   };
 }
@@ -125,6 +128,24 @@ export function registerMasanaInboxRoutes(
     const revision=await deps.inbox.setArchived(scope,id,body.archived,body.expectedRevision as number);
     if(revision===null)return reply.code(409).send({code:"stale_or_unavailable_chat"});
     return reply.send({revision,archived:body.archived});
+  });
+  app.patch("/v1/chats/:characterId/title", async(request,reply)=>{
+    if(deps.enabled?.()===false)
+      return reply.code(503).send({code:"chats_inbox_disabled"});
+    const scope=await fan(request);
+    if(!scope)return reply.code(401).send({code:"unauthorized"});
+    const id=record(request.params).characterId;
+    const body=record(request.body);
+    if(!validId(id)||!Object.hasOwn(body,"title")||
+        (body.title!==null && (typeof body.title!=="string" || body.title.length<1 ||
+          body.title.length>80 || /[\x00-\x1f\x7f]/.test(body.title)))||
+        !Number.isSafeInteger(body.expectedRevision)||
+        (body.expectedRevision as number)<0 ||
+        (body.expectedRevision as number)>=Number.MAX_SAFE_INTEGER)
+      return reply.code(422).send({code:"invalid_private_title"});
+    const revision=await deps.inbox.setTitle(scope,id,body.title as string|null,body.expectedRevision as number);
+    if(revision===null)return reply.code(409).send({code:"stale_or_unavailable_chat"});
+    return reply.send({revision,title:body.title});
   });
   app.patch("/v1/chats/:characterId", async (request, reply) => {
     if (deps.enabled?.() === false)
