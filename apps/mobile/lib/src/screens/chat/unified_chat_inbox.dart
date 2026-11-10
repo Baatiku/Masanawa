@@ -187,27 +187,29 @@ class _UnifiedChatInboxState extends ConsumerState<UnifiedChatInbox>
     final owner = ref.read(sessionProvider);
     final epoch = ref.read(sessionProvider.notifier).authorizationEpoch;
     if (owner is! SessionSignedIn) return;
-    final editor = TextEditingController(text: row.customTitle ?? '');
+    var draft = row.customTitle ?? '';
     final selection = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Private conversation name'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Only you see this label. Public persona: ${row.displayName}'),
-          TextField(controller: editor, maxLength: 80, autofocus: true,
-            decoration: const InputDecoration(hintText: 'Conversation title')),
-        ]),
+        content: TextFormField(
+          initialValue: draft, onChanged: (value) => draft = value,
+          maxLength: 80,
+          decoration: InputDecoration(
+            hintText: 'Conversation title',
+            helperText: 'Public persona: ${row.displayName}',
+          ),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(dialogContext, '\u0000'),
               child: const Text('Use original')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, editor.text.trim()),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, draft.trim()),
               child: const Text('Save')),
         ],
       ),
     );
-    editor.dispose();
     if (!mounted || selection == null || selection.isEmpty ||
         !identical(owner, ref.read(sessionProvider)) ||
         epoch != ref.read(sessionProvider.notifier).authorizationEpoch ||
