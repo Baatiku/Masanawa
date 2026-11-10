@@ -7,13 +7,14 @@ function fixture() {
   const resolveFan=vi.fn(async () => ({tenantId:"tenant-a",fanUserId:"fan-a"}));
   const list=vi.fn(async () => [{
     characterId:character,displayName:"Gwana",profession:"Teacher",
-    lastMessage:"Salam",lastActivityAt:"2026-10-11",pinned:false,
+    lastMessage:"Salam",lastActivityAt:"2026-10-11",pinned:false,archived:false,
     unreadCount:1,revision:0,
   }]);
   const setPinned=vi.fn(async () => 1 as number|null);
+  const setArchived=vi.fn(async () => 1 as number|null);
   const markRead=vi.fn(async () => 2 as number|null);
-  registerMasanaInboxRoutes(app,{resolveFan,inbox:{list,setPinned,markRead}});
-  return {app,resolveFan,list,setPinned,markRead};
+  registerMasanaInboxRoutes(app,{resolveFan,inbox:{list,setPinned,setArchived,markRead}});
+  return {app,resolveFan,list,setPinned,setArchived,markRead};
 }
 describe("C10 authenticated Chats list HTTP",()=>{
   it("requires bearer authorization before any private read or write",async()=>{
@@ -21,6 +22,7 @@ describe("C10 authenticated Chats list HTTP",()=>{
     try {
       for(const [method,url] of [
         ["GET","/v1/chats"],["PATCH","/v1/chats/"+character],
+        ["PATCH","/v1/chats/"+character+"/archive"],
         ["POST","/v1/chats/"+character+"/read"],
       ] as const){
         const result=await f.app.inject({method,url});
@@ -29,6 +31,7 @@ describe("C10 authenticated Chats list HTTP",()=>{
       expect(f.resolveFan).not.toHaveBeenCalled();
       expect(f.list).not.toHaveBeenCalled();
       expect(f.setPinned).not.toHaveBeenCalled();
+      expect(f.setArchived).not.toHaveBeenCalled();
     }finally{await f.app.close();}
   });
   it("ignores forged tenant and fan in list and pin payload",async()=>{
@@ -65,16 +68,36 @@ describe("C10 authenticated Chats list HTTP",()=>{
         url:"/v1/chats/"+character+"/read",headers})).statusCode).toBe(404);
     }finally{await f.app.close();}
   });
+  it("archives only the principal's chat, with reversible CAS and an isolated cursor",async()=>{
+    const f=fixture(),headers={authorization:"Bearer fan"};
+    try {
+      const archive=await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/archive`,
+        headers,payload:{archived:true,expectedRevision:0,tenantId:"other"}});
+      expect(archive.statusCode).toBe(200);
+      expect(archive.json()).toEqual({revision:1,archived:true});
+      expect(f.setArchived).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},character,true,0);
+      expect((await f.app.inject({method:"GET",url:"/v1/chats?archived=true",headers})).statusCode).toBe(200);
+      expect(f.list).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},"",undefined,true);
+      for (const bad of ["1","yes","TRUE",""]) {
+        expect((await f.app.inject({method:"GET",url:`/v1/chats?archived=${bad}`,headers})).statusCode).toBe(422);
+      }
+      expect((await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/archive`,headers,
+        payload:{archived:"true",expectedRevision:1}})).statusCode).toBe(422);
+      f.setArchived.mockResolvedValueOnce(null);
+      expect((await f.app.inject({method:"PATCH",url:`/v1/chats/${character}/archive`,headers,
+        payload:{archived:false,expectedRevision:1}})).statusCode).toBe(409);
+    }finally{await f.app.close();}
+  });
   it("pages by a query-bound cursor, retains legacy responses and fails closed on malformed positions",async()=>{
     const f=fixture(),headers={authorization:"Bearer fan"};
     const second="character_0199f0d0-0000-7000-8000-000000000004";
     f.list.mockResolvedValueOnce([
       {characterId:character,displayName:"Gwana",profession:"Teacher",
         lastMessage:"Salam",lastActivityAt:"2026-10-11T14:00:00Z",
-        pinned:false,unreadCount:1,revision:0},
+        pinned:false,archived:false,unreadCount:1,revision:0},
       {characterId:second,displayName:"Amina",profession:"Teacher",
         lastMessage:"Reply",lastActivityAt:"2026-10-11T13:00:00Z",
-        pinned:true,unreadCount:0,revision:0},
+        pinned:true,archived:false,unreadCount:0,revision:0},
     ]);
     try {
       const first=await f.app.inject({method:"GET",url:"/v1/chats?q=teacher&limit=1",headers});
@@ -83,15 +106,16 @@ describe("C10 authenticated Chats list HTTP",()=>{
       const cursor=first.json().nextCursor as string;
       expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
       expect(f.list).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},"teacher",
-        {limit:2,cursor:null});
+        {limit:2,cursor:null},false);
       const next=await f.app.inject({method:"GET",
         url:`/v1/chats?q=teacher&limit=1&cursor=${cursor}`,headers});
       expect(next.statusCode).toBe(200);
       expect(next.json().nextCursor).toBeNull();
       expect(f.list).toHaveBeenCalledWith({tenantId:"tenant-a",fanUserId:"fan-a"},"teacher",
-        {limit:2,cursor:{lastActivityAt:"2026-10-11T14:00:00.000Z",characterId:character}});
+        {limit:2,cursor:{lastActivityAt:"2026-10-11T14:00:00.000Z",characterId:character}},false);
       for (const url of [
         `/v1/chats?q=other&limit=1&cursor=${cursor}`,
+        `/v1/chats?q=teacher&archived=true&limit=1&cursor=${cursor}`,
         "/v1/chats?limit=0", "/v1/chats?limit=31",
         "/v1/chats?cursor=abc", "/v1/chats?limit=2&cursor=abc",
       ]) {

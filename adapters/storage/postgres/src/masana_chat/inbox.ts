@@ -12,6 +12,7 @@ export interface FanInboxItem {
   readonly lastMessage: string;
   readonly lastActivityAt: string;
   readonly pinned: boolean;
+  readonly archived: boolean;
   readonly unreadCount: number;
   readonly revision: number;
 }
@@ -51,6 +52,7 @@ function mapped(row: Row): FanInboxItem {
     lastMessage: String(row.last_message ?? "").slice(0, 240),
     lastActivityAt: String(row.last_activity_at),
     pinned: row.pinned === true,
+    archived: row.archived === true,
     unreadCount: Math.min(99, unread),
     revision: n,
   };
@@ -73,8 +75,9 @@ export function createMasanaInboxRepository(
               WHERE h.tenant_id=t.tenant_id AND h.fan_user_id=t.user_id
                 AND h.character_id=t.character_id AND h.request_id=t.request_id)` : "";
   return Object.freeze({
-    async list(scope: FanInboxScope, query = "", page?: FanInboxPageOptions): Promise<readonly FanInboxItem[]> {
+    async list(scope: FanInboxScope, query = "", page?: FanInboxPageOptions, archived = false): Promise<readonly FanInboxItem[]> {
       boundedScope(scope);
+      if (typeof archived !== "boolean") throw new TypeError("invalid_inbox_archive_filter");
       if (query.length > 80) throw new TypeError("invalid_inbox_query");
       if (page && (!Number.isSafeInteger(page.limit) || page.limit < 1 || page.limit > 31 ||
           (page.cursor !== null && (!/^character_[0-9a-f-]{36}$/i.test(page.cursor.characterId) ||
@@ -95,6 +98,7 @@ export function createMasanaInboxRepository(
           COALESCE(t.reply, t.user_text, '') AS last_message,
           COALESCE(t.updated_at, l.session_at)::text AS last_activity_at,
           COALESCE(p.pinned, false) AS pinned,
+          COALESCE(p.archived, false) AS archived,
           COALESCE(p.revision, 0)::text AS revision,
           (SELECT count(*) FROM agents.mobile_turn_commands u
             WHERE u.tenant_id=$1 AND u.user_id=$2
@@ -126,16 +130,17 @@ ${previewHideFence}
         WHERE lower(r.profile->>'handle') <> 'gwani'
           AND ($3='' OR position(lower($3) in
             lower(COALESCE(r.profile->>'displayName','') || ' ' || COALESCE(r.profile->>'profession','')))>0)
-          ${page ? `AND ($4::timestamptz IS NULL OR
-            COALESCE(t.updated_at,l.session_at) < $4::timestamptz OR
-            (COALESCE(t.updated_at,l.session_at) = $4::timestamptz
-              AND l.character_id > $5))` : ""}
+          AND COALESCE(p.archived, false) = $4
+          ${page ? `AND ($5::timestamptz IS NULL OR
+            COALESCE(t.updated_at,l.session_at) < $5::timestamptz OR
+            (COALESCE(t.updated_at,l.session_at) = $5::timestamptz
+              AND l.character_id > $6))` : ""}
         ORDER BY COALESCE(t.updated_at,l.session_at) DESC, l.character_id
-        LIMIT ${page ? "$6" : "50"}
+        LIMIT ${page ? "$7" : "50"}
       `, page
-        ? [scope.tenantId, scope.fanUserId, query.trim(),
+        ? [scope.tenantId, scope.fanUserId, query.trim(), archived,
             page.cursor?.lastActivityAt ?? null, page.cursor?.characterId ?? null, page.limit]
-        : [scope.tenantId, scope.fanUserId, query.trim()]);
+        : [scope.tenantId, scope.fanUserId, query.trim(), archived]);
       return result.rows.map(mapped);
     },
     /** CAS pin update: revision 0 means the preference does not yet exist. */
@@ -161,6 +166,31 @@ ${previewHideFence}
              AND p.revision=$5 AND ${eligibleSession}
            RETURNING p.revision::text AS revision`;
       const result = await db.query<{revision: string}>(sql, expectedRevision === 0 ? params.slice(0, 4) : params);
+      const value = result.rows[0]?.revision;
+      return value === undefined ? null : Number(value);
+    },
+    /** Archive is a server-owned reversible preference, not message deletion. */
+    async setArchived(scope: FanInboxScope, characterId: string,
+      archived: boolean, expectedRevision: number): Promise<number | null> {
+      boundedScope(scope);
+      if (!/^character_[0-9a-f-]{36}$/i.test(characterId) ||
+          typeof archived !== "boolean" ||
+          !Number.isSafeInteger(expectedRevision) ||
+          expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER)
+        throw new TypeError("invalid_inbox_archive_mutation");
+      const params = [scope.tenantId, scope.fanUserId, characterId, archived, expectedRevision];
+      const sql = expectedRevision === 0
+        ? `INSERT INTO masana.fan_chat_preferences
+            (tenant_id,fan_user_id,character_id,archived)
+           SELECT $1,$2,$3,$4 WHERE ${eligibleSession}
+           ON CONFLICT (tenant_id,fan_user_id,character_id) DO NOTHING
+           RETURNING revision::text AS revision`
+        : `UPDATE masana.fan_chat_preferences p
+           SET archived=$4, revision=p.revision+1, updated_at=clock_timestamp()
+           WHERE p.tenant_id=$1 AND p.fan_user_id=$2 AND p.character_id=$3
+             AND p.revision=$5 AND ${eligibleSession}
+           RETURNING p.revision::text AS revision`;
+      const result = await db.query<{revision:string}>(sql, expectedRevision === 0 ? params.slice(0,4) : params);
       const value = result.rows[0]?.revision;
       return value === undefined ? null : Number(value);
     },
