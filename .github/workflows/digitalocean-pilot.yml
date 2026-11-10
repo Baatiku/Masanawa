@@ -65,6 +65,48 @@ jobs:
           --env-file infra/deployment/digitalocean/.env.example
           --file infra/deployment/digitalocean/compose.yaml
           build gateway worker ops
+      - name: Boot migrations and private Ops without package-manager downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          export SMOKE_DIR="$smoke_dir"
+          python3 - <<'PYTHON'
+          import os, pathlib, secrets
+          root = pathlib.Path(os.environ['SMOKE_DIR'])
+          password = secrets.token_hex(32)
+          runtime = root / 'runtime.env'
+          values = {
+              'MASANAWA_RUNTIME_ENV_FILE': str(runtime),
+              'POSTGRES_DB': 'masanawa_smoke', 'POSTGRES_USER': 'masanawa_smoke',
+              'POSTGRES_PASSWORD': password,
+              'MASANAWA_GATEWAY_IMAGE': 'masanawa-gateway:pilot',
+              'MASANAWA_WORKER_IMAGE': 'masanawa-worker:pilot',
+              'MASANAWA_OPS_IMAGE': 'masanawa-ops:pilot',
+          }
+          for name, entries in [('compose.env', values), ('runtime.env', {
+              'MASANAWA_DATABASE_URL': f'postgres://masanawa_smoke:{password}@postgres:5432/masanawa_smoke',
+              'COREPACK_ENABLE_NETWORK': '0',
+          })]:
+              target = root / name
+              target.touch(mode=0o600)
+              target.write_text(''.join(f'{key}={value}\n' for key, value in entries.items()))
+          PYTHON
+          compose=(docker compose -p masanawa-runtime-smoke --env-file "$smoke_dir/compose.env" -f infra/deployment/digitalocean/compose.yaml --profile ops)
+          # Only this disposable CI project is removed; never use this on a host deployment.
+          trap '"${compose[@]}" down --volumes; rm -rf "$smoke_dir"' EXIT
+          "${compose[@]}" up -d --no-build --wait --wait-timeout 120 ops
+          "${compose[@]}" exec -T ops node --input-type=module -e '
+            for (const path of ["/healthz", "/readyz", "/v1/admin/me", "/v1/admin/summary"]) {
+              const response = await fetch("http://127.0.0.1:3002" + path);
+              const expected = path.startsWith("/v1/") ? 401 : 200;
+              if (response.status !== expected) throw new Error(path + ": " + response.status);
+              console.log(path + ": " + response.status);
+            }'
+          "${compose[@]}" run --rm --no-deps migrate | node --input-type=module -e '
+            let input = ""; for await (const chunk of process.stdin) input += chunk;
+            const result = input.trim().split("\n").map(line => JSON.parse(line)).find(x => x.event === "database.migrations.complete");
+            if (!result || result.appliedCount !== 0) throw new Error("Migration replay was not a no-op");'
       - uses: docker/login-action@v3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:

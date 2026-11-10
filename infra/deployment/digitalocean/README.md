@@ -6,16 +6,16 @@
 
 | Unit | Default startup | Resource boundary | User-data authority |
 | --- | --- | --- | --- |
-| PostgreSQL 18 + pgvector | Yes; internal Docker network only | 640 MiB memory / 128 PID cap | Canonical accounts, sessions, chat, memory, NGN financial records |
+| PostgreSQL 18 + pgvector | Yes; internal Docker network only | 576 MiB memory / 128 PID cap | Canonical accounts, sessions, chat, memory, NGN financial records |
 | One-shot canonical migration | Yes, only after healthy PostgreSQL | 896 MiB; exits on success | Forward-only, checksum-locked production migrations; **no Alpha seed, no Railway import** |
-| Canonical Fastify Gateway | Yes, after successful migration; host loopback `127.0.0.1:3100` | 896 MiB / Node 640 MiB heap limit | One REST/streaming API for Flutter and web |
+| Canonical Fastify Gateway | Yes, after successful migration; host loopback `127.0.0.1:3100` | 768 MiB / Node 512 MiB heap limit | One REST/streaming API for Flutter and web |
 | Web-only Ops API | **Explicit `ops` profile** after migration and owner grant | 256 MiB / Node 160 MiB heap limit | Same canonical PostgreSQL and Gateway session authority |
-| Caddy HTTPS proxy | **Explicit `public` profile**, only after DNS/TLS checks | 128 MiB | Reverse proxy; never authenticates as a second app |
-| Canonical Worker | **Explicit `worker` profile; not pilot-approved** | 384 MiB if started | **Must remain off** until legacy jobs are retired and resource/lease/job safety qualified |
+| Caddy HTTPS proxy | **Explicit `public` profile**, only after DNS/TLS checks | 96 MiB | Reverse proxy; never authenticates as a second app |
+| Canonical Worker | **Explicit `worker` profile; not pilot-approved** | 320 MiB if started | **Must remain off** until legacy jobs are retired and resource/lease/job safety qualified |
 | Cloudflare news gateway | External existing Worker+D1 | External free/paid provider allowance | Public article metadata only; not chat, accounts, Wallet or memory |
 | Cloudflare Site frontend | External existing Site | External provider allowance | Non-authoritative browser UI; uses the same Gateway |
 
-The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. Upgrade to a larger Droplet if measured memory/CPU requires background jobs or LiveKit presence. Docker `mem_limit` is not a promise of performance or no OOM.
+The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. If measured memory/CPU cannot safely support a feature, leave that feature off; a resize requires separate owner authorization. Docker `mem_limit` is not a promise of performance or no OOM.
 
 ### Step 0 — gates, before creating resources
 
@@ -26,7 +26,35 @@ The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+Postgre
 4. Obtain provider-scoped Gemini key (server only), a verified OTP email/SMS route, and private recipient for encrypted off-Droplet backups. Rotate any historic keys exposed in chat; do not reuse expired Railway variables as a secret source.
 5. No previously used Railway/Postgres/D1 history is to be migrated. Start with an empty PostgreSQL volume, but **never erase an existing later deployment** under this rule.
 
-### Step 1 — prepare the host
+### Step 1 — inspect and prepare the existing host
+
+Before installing packages, creating credentials or running Compose, inspect the
+existing host through an authenticated SSH connection. Preserve existing volumes,
+runtime files, tenant IDs and financial records. Record only redacted evidence:
+
+```sh
+hostnamectl
+free -m
+df -h
+sudo ss -lntp
+sudo systemctl status ssh --no-pager
+sudo ufw status verbose
+if command -v docker >/dev/null; then
+  sudo docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+  sudo docker volume ls
+fi
+sudo stat -c '%a %U %n' /etc/masanawa/compose.env /etc/masanawa/runtime.env
+```
+
+Do not print private environment files, full container inspection output or
+unredacted logs. A missing runtime file is an inspection finding, not permission
+to replace an existing database. Verify the SSH host key through a trusted
+channel; never disable host-key verification. A connection refusal occurs before
+SSH authentication and does not prove that a private key is accepted. Check both
+the executor's supported TCP route and the server listener/firewalls before
+changing keys. An account-level DigitalOcean SSH key record contains only the
+public key; it cannot recover a missing private key or modify an existing host's
+`authorized_keys`.
 
 - Ubuntu LTS, an ordinary sudo operator account, SSH public-key auth, no password-only SSH, automatic security updates, firewall and provider firewall for reviewed `22/tcp`, `80/tcp`, `443/tcp` only. Review changes before enabling the firewall so active SSH is not cut off.
 - Install maintained Docker Engine and Docker Compose plugin, Node 22+ only for the preflight script (or run it from a trusted Node container with read-only mounts), `age`, `rclone`, `flock` and monitoring/backup tooling. Keep the operator out of public Docker API exposure; Docker group membership has root-equivalent privileges.
@@ -80,11 +108,17 @@ From this directory in a checkout of the **exact deployed Git commit**:
 ```sh
 node preflight.mjs /etc/masanawa/compose.env /etc/masanawa/runtime.env
 docker compose --env-file /etc/masanawa/compose.env -f compose.yaml config --quiet
-docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile worker pull postgres gateway worker
-docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile worker up -d --no-build postgres migrate gateway worker
+docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile ops pull postgres gateway ops
+docker compose --env-file /etc/masanawa/compose.env -f compose.yaml up -d --no-build postgres migrate gateway
 curl --fail http://127.0.0.1:3100/healthz
 curl --fail http://127.0.0.1:3100/readyz
 ```
+
+These commands deliberately leave the Worker stopped. A news feature flag does
+not enable the Compose worker profile. On an existing deployment, first inspect
+`docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile worker ps`
+and explicitly stop an already-running Worker before adding Ops if safe capacity
+has not been established. Never remove its database volume.
 
 For web administration on the same Droplet, once Gateway is healthy and a vetted owner grant exists, run `docker compose --env-file /etc/masanawa/compose.env -f compose.yaml --profile ops up -d --no-build ops` and check the Ops container's Docker-internal `/readyz` endpoint. Ops exposes **no host port**. Launch Caddy with both `--profile public --profile ops` once TLS and DNS are ready; its admin routes require the Ops upstream. On the 2 GiB pilot, prefer the Ops profile *instead of* the worker until memory and scheduler safety are measured. Do not claim background ingestion/deletion are operational with the worker stopped.
 

@@ -1,6 +1,8 @@
 # Canonical DigitalOcean pilot. Production credentials stay in an external 0600 file.
 # Default: PostgreSQL -> one-shot migrations -> Gateway bound to host loopback.
 # `public` and `worker` profiles require separate operator qualification.
+# Execute built Node entrypoints directly: UID 1000 must not need a root-owned
+# Corepack cache or a package-manager download at container startup.
 name: masanawa
 
 services:
@@ -34,7 +36,7 @@ services:
     build:
       context: ../../..
       dockerfile: infra/deployment/gateway/Dockerfile
-    command: ["pnpm", "--filter", "@masanawa/gateway-service", "migrate"]
+    command: ["node", "--conditions=production", "services/gateway/dist/migrate.js"]
     env_file:
       - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
     environment:
@@ -61,7 +63,7 @@ services:
       dockerfile: infra/deployment/gateway/Dockerfile
     # Do not cohost the optional Python LiveKit process or re-run migrations
     # from the Railway startup script; those have independent release gates.
-    command: ["pnpm", "--filter", "@masanawa/gateway-service", "start"]
+    command: ["node", "--conditions=production", "services/gateway/dist/main.js"]
     env_file:
       - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
     environment:
@@ -104,6 +106,7 @@ services:
   ops:
     profiles: ["ops"]
     image: ${MASANAWA_OPS_IMAGE:-masanawa-ops:pilot}
+    command: ["node", "--conditions=production", "services/ops/dist/main.js"]
     build:
       context: ../../..
       dockerfile: infra/deployment/ops/Dockerfile
@@ -144,7 +147,7 @@ services:
     build:
       context: ../../..
       dockerfile: infra/deployment/worker/Dockerfile
-    command: ["pnpm", "--filter", "@masanawa/worker-service", "start"]
+    command: ["node", "--conditions=production", "services/worker/dist/main.js"]
     env_file:
       - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
     environment:
