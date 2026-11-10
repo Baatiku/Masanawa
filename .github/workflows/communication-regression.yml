@@ -157,4 +157,22 @@ jobs:
           --dart-define=API_BASE_URL=https://api.masanawa.com
           --dart-define=AGENT_BASE_URL=https://api.masanawa.com
       - name: Assert the compiled APK exists and is not empty
-        run: test -s build/app/outputs/flutter-apk/app-debug.apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/app/outputs/flutter-apk/app-debug.apk
+          cd build/app/outputs/flutter-apk
+          sha256sum app-debug.apk > app-debug.apk.sha256
+          printf 'source_sha=%s\n' '${{ github.event.pull_request.head.sha || github.sha }}' > debug-build-source.txt
+          printf 'gateway_origin=https://api.masanawa.com\n' >> debug-build-source.txt
+          printf 'build_type=debug; not a signed release or live deployment\n' >> debug-build-source.txt
+      - name: Upload debug APK for owner device verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: masanawa-gateway-debug-apk-${{ github.run_id }}
+          path: |
+            apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+            apps/mobile/build/app/outputs/flutter-apk/app-debug.apk.sha256
+            apps/mobile/build/app/outputs/flutter-apk/debug-build-source.txt
+          retention-days: 14
+          if-no-files-found: error
