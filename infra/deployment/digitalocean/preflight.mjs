@@ -36,14 +36,47 @@ const unqualifiedFlags = [
   "MASANAWA_ALPHA_ENABLED",
   "MASANAWA_MB_REPLIES_ENABLED",
   "MASANAWA_MB_CALLS_ENABLED",
-  "MASANAWA_NGN_CALLS_ENABLED",
   "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED",
-  "FLUTTERWAVE_BILLS_ENABLED",
   "MASANAWA_GB_DATA_PURCHASE_ENABLED",
-  "MASANAWA_NEWS_INGEST_ENABLED",
   "MASANAWA_STATUS_PROMOTIONS_ENABLED",
   "MASANAWA_STATUS_TIPS_ENABLED",
 ];
+
+function binaryFlag(runtime, key) {
+  const value = runtime.get(key) ?? "false";
+  if (value !== "true" && value !== "false") fail(`feature_flag.${key.toLowerCase()}_invalid`);
+  return value === "true";
+}
+
+/** A qualified deployment may activate these real new NGN/news paths. The
+ * production Gateway still performs independent DB/provider/runtime readiness
+ * checks; this preflight never mints balances or accepts mock credentials. */
+function qualifyPilotFeatures(runtime) {
+  const ngnCalls = binaryFlag(runtime, "MASANAWA_NGN_CALLS_ENABLED");
+  const ngnCatalog = binaryFlag(runtime, "MASANAWA_NGN_DATA_CATALOG_ENABLED");
+  const ngnData = binaryFlag(runtime, "MASANAWA_NGN_DATA_PURCHASE_ENABLED");
+  const flutterwave = binaryFlag(runtime, "FLUTTERWAVE_BILLS_ENABLED");
+  const news = binaryFlag(runtime, "MASANAWA_NEWS_INGEST_ENABLED");
+  if (ngnCalls && (runtime.get("MASANAWA_GB_SEND_REVIEW_SECRET") ?? "").length < 32)
+    fail("ngn_calls.review_secret_missing");
+  if (ngnData && (!ngnCatalog || !flutterwave)) fail("ngn_data.catalog_or_provider_missing");
+  if (ngnCatalog && !runtime.get("MASANAWA_NGN_DATA_APPROVALS_JSON"))
+    fail("ngn_data.approvals_missing");
+  if (flutterwave) {
+    if (!ngnData || !ngnCatalog) fail("flutterwave.ngn_data_not_qualified");
+    for (const key of ["FLUTTERWAVE_SECRET_KEY", "FLUTTERWAVE_WEBHOOK_SECRET_HASH",
+      "FLUTTERWAVE_WEBHOOK_URL", "MASANAWA_BILLING_ACTION_SECRET"]) required(runtime,key);
+    if (!runtime.get("FLUTTERWAVE_WEBHOOK_URL")?.startsWith("https://"))
+      fail("flutterwave.webhook_not_https");
+    if ((runtime.get("MASANAWA_BILLING_ACTION_SECRET") ?? "").length < 32)
+      fail("flutterwave.action_secret_too_short");
+    if (runtime.get("MASANAWA_FLUTTERWAVE_VERIFY_ON_START") !== "true")
+      fail("flutterwave.startup_verification_required");
+    // The canonical service independently validates the actual approved list,
+    // webhook, settlement ledgers and provider before serving any purchase.
+  }
+  return { ngnCalls, ngnCatalog, ngnData, flutterwave, news };
+}
 
 export function validatePilotConfig(compose, runtime) {
   const runtimeFile = required(compose, "MASANAWA_RUNTIME_ENV_FILE");
@@ -60,6 +93,8 @@ export function validatePilotConfig(compose, runtime) {
   }
   const image = required(compose, "MASANAWA_GATEWAY_IMAGE");
   if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(image)) fail("gateway_image.not_commit_pinned");
+  const workerImage = required(compose, "MASANAWA_WORKER_IMAGE");
+  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(workerImage)) fail("worker_image.not_commit_pinned");
   let dbUrl;
   try {
     dbUrl = new URL(required(runtime, "MASANAWA_DATABASE_URL"));
@@ -91,10 +126,12 @@ export function validatePilotConfig(compose, runtime) {
   for (const flag of unqualifiedFlags) {
     if (runtime.get(flag) !== "false") fail(`feature_flag.${flag.toLowerCase()}_must_be_disabled`);
   }
+  const features = qualifyPilotFeatures(runtime);
   if (runtime.get("RESEND_API_KEY") && !runtime.get("MASANAWA_AUTH_EMAIL_FROM")) fail("otp_sender.missing");
   if (runtime.get("MASANAWA_RUNTIME_ENV_FILE") || runtime.get("POSTGRES_PASSWORD")) fail("runtime_env.cross_contaminated");
   if (compose.get("MASANAWA_GEMINI_API_KEY") || compose.get("RESEND_API_KEY")) fail("compose_env.provider_secret_exposed");
-  return Object.freeze({ apiOrigin: origin, imagePinned: true, workerDisabledByDefault: true });
+  return Object.freeze({ apiOrigin: origin, imagePinned: true,
+    workerDisabledByDefault: !features.news, qualifiedFeatures: features });
 }
 
 function loadPrivateEnv(file) {
