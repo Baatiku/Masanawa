@@ -76,6 +76,9 @@ export interface CustomerAuthService {
   capabilities(): Readonly<{
     otpChannels: readonly PlatformAuthChannel[];
   }>;
+  /** Read-only bearer validation for the shared Flutter/web account principal.
+   * Optional only for legacy injected test adapters; production implements it. */
+  currentSession?(input: Readonly<{authorizationHeader: string | undefined}>): Promise<AuthUserView>;
   sendOtp(input: Readonly<{ phone?: string; email?: string }>): Promise<Readonly<{
     phone?: string;
     email?: string;
@@ -344,6 +347,10 @@ export function createCustomerAuthService(input: Readonly<{
   ]);
 
   return Object.freeze<CustomerAuthService>({
+    async currentSession(request) {
+      const {identity}=await requireSession(request.authorizationHeader);
+      return authUser(identity.profile,false);
+    },
     capabilities() {
       return Object.freeze({ otpChannels });
     },

@@ -554,6 +554,14 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
     app.get("/auth/capabilities", async () => auth.capabilities());
 
+    app.get("/auth/session", async (request,reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      try {
+        if (!auth.currentSession) throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+        return {user:await auth.currentSession({authorizationHeader:request.headers.authorization})};
+      } catch(error) {return authError(error,reply);}
+    });
+
     app.post(
       "/auth/otp",
       {

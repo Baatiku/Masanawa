@@ -100,6 +100,11 @@ describe("gateway service bootstrap", () => {
     let savedContact:{contactPhone:string;countryIso:string;subdivisionIso?:string}|null=null;
     const customerAuth: CustomerAuthService = {
       capabilities: () => ({ otpChannels: ["email"] }),
+      async currentSession({authorizationHeader}) {
+        if(authorizationHeader!=="Bearer owner")throw new CustomerAuthError("UNAUTHORIZED",401);
+        return {id:"user_example",name:"Amina Okafor",email:"amina@example.com",phone:null,
+          locale:"en",status:"ACTIVE",role:"CITIZEN",isNewUser:false,communityId:null,stateId:null,createdAt:"2026-11-09T00:00:00Z"};
+      },
       async sendOtp() { throw new Error("unused"); },
       async verifyOtp() { throw new Error("unused"); },
       async accountStatus() { throw new Error("unused"); },
@@ -152,6 +157,14 @@ describe("gateway service bootstrap", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ otpChannels: ["email"] });
+
+    const deniedSession=await app.inject({url:"/auth/session"});
+    expect(deniedSession.statusCode).toBe(401);
+    expect(deniedSession.headers["cache-control"]).toBe("private, no-store");
+    const webSession=await app.inject({url:"/auth/session",headers:{authorization:"Bearer owner"}});
+    expect(webSession.statusCode).toBe(200);
+    expect(webSession.json()).toMatchObject({user:{id:"user_example",name:"Amina Okafor"}});
+    expect(webSession.body).not.toContain("accessToken");
 
     const privateUrl='/v1/auth/profile/contact-geography';
     const denied=await app.inject({method:'GET',url:privateUrl});

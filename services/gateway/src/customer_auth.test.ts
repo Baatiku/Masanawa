@@ -918,6 +918,10 @@ describe('new account welcome delivery',()=>{
     const created=await service.verifyOtp({email:'welcome@example.com',code,
       firstName:'Amina',lastName:'Okafor',contactPhone:'08012345678'});
     expect(created.user.isNewUser).toBe(true);
+    expect(await service.currentSession?.({authorizationHeader:`Bearer ${created.accessToken}`}))
+      .toMatchObject({id:created.user.id,name:created.user.name,email:'welcome@example.com',isNewUser:false});
+    await expect(service.currentSession?.({authorizationHeader:'Bearer invalid'}))
+      .rejects.toMatchObject({code:'UNAUTHORIZED'});
     expect(welcomes).toEqual(['welcome@example.com']);
     await service.sendOtp({email:'welcome@example.com'});
     expect((await service.verifyOtp({email:'welcome@example.com',code})).user.isNewUser).toBe(false);
