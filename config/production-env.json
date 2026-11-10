@@ -445,11 +445,32 @@
       "description": "Only enable Flutterwave whole-GB redemption after approved current operator mapping, live Bills credentials, authenticated MB reservations, forward-only journal migration and independently qualified provider delivery GET are ready."
     },
     {
+      "name": "MASANAWA_NGN_DATA_APPROVALS_JSON",
+      "owner": "gateway/ngn-data",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only reviewed provider bundle identities, NGN pricing, expiry and evidence. Required for canonical direct-NGN catalogue; never a client-selected debit authority."
+    },
+    {
+      "name": "MASANAWA_NGN_DATA_CATALOG_ENABLED",
+      "owner": "gateway/ngn-data",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit new NGN data catalogue switch independent of retired GB/MB flags; requires approved mapping, live Flutterwave, canonical auth and PostgreSQL."
+    },
+    {
+      "name": "MASANAWA_NGN_DATA_PURCHASE_ENABLED",
+      "owner": "gateway/ngn-data",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit NGN Buy Data purchase switch, effective only with the new NGN catalogue, reviewed live provider items and durable reserved NGN ledger."
+    },
+    {
       "name": "MASANAWA_GB_SEND_REVIEW_SECRET",
       "owner": "gateway/gb-wallet",
       "classification": "secret",
       "requiredIn": [],
-      "description": "Optional 32-byte-or-longer private signing authority for immutable purchased-MB Send review tokens. Provision only when the production atomic recipient ledger and recipient eligibility reader are verified; never reveal to clients."
+      "description": "Private 32-byte-or-longer signing authority for reviewed NGN wallet/call admission tokens and retained historical MB reviews. Requires qualified durable ledgers and recipient eligibility; never reveal to clients."
     },
     {
       "name": "MASANAWA_GEMINI_API_KEY",

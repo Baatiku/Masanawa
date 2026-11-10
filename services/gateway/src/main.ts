@@ -1,4 +1,6 @@
 import {createNgnSpending,createNgnCallAdmissions,createNgnDataJournal,createPostgresNgnTransferRepository,createPostgresNgnRequestRepository} from '@masanawa/postgres';
+import {ngnDataActivation} from './ngn_data/activation.js';
+import {ngnCallsEnabled} from './ngn_calls/activation.js';
 import {createNgnCallRelay} from './ngn_calls/relay.js';
 import {NgnCallReviewError,type NgnCallPorts} from './ngn_calls/review.js';
 import {createOfficialSocialSync} from './official_social_store.js';
@@ -1889,13 +1891,13 @@ export async function startGatewayService(
       ?{version:String(revision)}:null;
   };
   const ngnCallSecret=env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
-  if((env.MASANAWA_NGN_CALLS_ENABLED??env.MASANAWA_MB_CALLS_ENABLED)==='true' &&
+  if(ngnCallsEnabled(env) &&
      (!ngnCallJournal||!sessions||!featureTenant||!ngnCallSecret||
       Buffer.byteLength(ngnCallSecret)<32||!mbLiveVoiceTokens||
       !conversationAuthorizer||!publicBaseUrl))
-    throw new TypeError('MB calls enabled without authorized journal, live provider, review key and public relay origin');
+    throw new TypeError('NGN calls enabled without authorized journal, live provider, review key and public relay origin');
   const ngnCalls:NgnCallPorts|undefined=options.appOptions?.ngnCalls ??
-    ((env.MASANAWA_NGN_CALLS_ENABLED??env.MASANAWA_MB_CALLS_ENABLED)==='true' && ngnCallJournal && sessions && featureTenant &&
+    (ngnCallsEnabled(env) && ngnCallJournal && sessions && featureTenant &&
      ngnCallSecret && Buffer.byteLength(ngnCallSecret)>=32 && mbLiveVoiceTokens &&
      conversationAuthorizer && publicBaseUrl ? {
       authorize:resolveFeatureFan,approved:approvedNgnCallMasana,
@@ -1943,7 +1945,7 @@ export async function startGatewayService(
       },
       finish:(actor,id)=>ngnRelay!.finish(actor,id),
     }:undefined);
-  if((env.MASANAWA_NGN_CALLS_ENABLED??env.MASANAWA_MB_CALLS_ENABLED)==='true' && ngnCalls &&
+  if(ngnCallsEnabled(env) && ngnCalls &&
      !options.appOptions?.ngnCallRelay && ngnCallJournal && publicBaseUrl){
     ngnRelay=createNgnCallRelay({store:ngnCallJournal,publicOrigin:publicBaseUrl,
       report:event=>console.error(JSON.stringify({event:'agent.ngn_call_relay_failed',...event,
@@ -2201,9 +2203,27 @@ export async function startGatewayService(
           },
         };
       })();
-    const ngnDataCatalogue=options.appOptions?.ngnDataCatalogue??gbDataCatalogue;
+    // This is an independent direct-NGN product. Reusing the retired MB
+    // purchase switch silently kept Buy Data offline after the NGN cutover.
+    // A reviewed provider catalogue and a separate NGN purchase decision are
+    // required; neither grants an MB sale or creates a second wallet authority.
+    const ngnActivation=ngnDataActivation(env);
+    const ngnDataCatalogue:GatewayAppOptions['ngnDataCatalogue']=options.appOptions?.ngnDataCatalogue??(()=>{
+      if(!ngnActivation.catalogue)return undefined;
+      const raw=env.MASANAWA_NGN_DATA_APPROVALS_JSON?.trim();
+      if(!raw||!flutterwaveBills||!featurePool||!sessions||!featureTenant)
+        throw new TypeError('NGN Buy Data catalogue enabled without canonical auth, provider, DB or approved mapping');
+      const parsed:unknown=JSON.parse(raw);
+      if(!Array.isArray(parsed))throw new TypeError('NGN Buy Data approvals must be an array');
+      const approved=parsed as ApprovedWholeGbBundle[];
+      projectVerifiedWholeGbBundles(approved,[],new Date());
+      return {authorize:async(header:string|undefined)=>{
+        const actor=await resolveFeatureFan(header);
+        return {tenantId:actor.tenantId,userId:actor.userId};
+      },approved:async()=>approved,liveItems:createLiveFlutterwaveGbDataItems(flutterwaveBills)};
+    })();
     const ngnDataPurchases:GatewayAppOptions['ngnDataPurchases']=options.appOptions?.ngnDataPurchases??
-      (gbDataPurchases&&ngnDataCatalogue&&featurePool&&flutterwaveBills?(()=>{
+      (ngnActivation.purchases&&ngnDataCatalogue&&featurePool&&flutterwaveBills&&sessions&&featureTenant?(()=>{
         const spending=createNgnSpending(featurePool),journal=createNgnDataJournal(featurePool);
         return {authorize:ngnDataCatalogue.authorize,service:{approved:ngnDataCatalogue.approved,liveItems:ngnDataCatalogue.liveItems,reserve:spending.reserve,capture:spending.capture,release:spending.release,
           admit:(actor,entry,hash)=>withTransaction(featurePool,async client=>{
@@ -2211,6 +2231,8 @@ export async function startGatewayService(
             return createNgnDataJournal(featurePool,client).claim(actor,entry,hash);
           }),claim:journal.claim,read:journal.read,resolve:journal.resolve,pay:(input:Parameters<typeof flutterwaveBills.createPayment>[0])=>flutterwaveBills.createPayment(input),status:(reference:string)=>flutterwaveBills.getStatus(reference)}};
       })():undefined);
+    if(ngnActivation.purchases&&!ngnDataPurchases)
+      throw new TypeError('NGN Buy Data purchase enabled without its qualified provider and durable ledger');
     app = appFactory({
       ...(status ? {status} : {}),
       ...(masana ? {masana} : {}),
