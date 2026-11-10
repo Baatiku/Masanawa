@@ -71,7 +71,7 @@ function checkActor(actor: NgnSendActor): void {
     throw new NgnSendError(401,"unauthorized");
   }
 }
-function mb(amount: number) {
+function validKobo(amount: number) {
   if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1_000_000_000) {
     throw new NgnSendError(422,"invalid_ngn_amount");
   }
@@ -134,7 +134,7 @@ export function createNgnSendReviewService(ports: NgnSendPorts) {
     ) {
       checkActor(actor);
       const normalized=normalizeHandle(username);
-      const amount=mb(amountKobo);
+      const amount=validKobo(amountKobo);
       const recipient=await ports.resolveRecipient(actor,normalized);
       if (!recipient?.active || recipient.username.toLowerCase()!==normalized ||
           !validAccount(recipient.userId)) {

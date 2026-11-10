@@ -17,7 +17,7 @@ export function registerNgnCallRoutes(app:FastifyInstance,ports:NgnCallPorts){
       reply.code(error.statusCode);return {error:{code:error.code}};
     }
     if(error instanceof Error&&error.message==='ngn.insufficient_balance'){
-      reply.code(409);return {error:{code:'ngn.call.insufficient_mb'}};
+      reply.code(409);return {error:{code:'ngn.call.insufficient_balance'}};
     }
     if(error instanceof Error&&error.message==='ngn.account_frozen'){
       reply.code(403);return {error:{code:'ngn.call.account_restricted'}};

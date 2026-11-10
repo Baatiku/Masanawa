@@ -16,10 +16,22 @@ const String kAgentBaseUrl = String.fromEnvironment(
   defaultValue: 'https://api.masanawa.com',
 );
 
-ApiException _replyStreamFailure(Map<String, dynamic> event) {
+/// Convert canonical reply failures to user-safe NGN messages without exposing
+/// provider data or reviving legacy MB billing in the retained chat UI.
+ApiException agentReplyStreamFailure(Map<String, dynamic> event) {
   return switch (event['code']) {
+    'ngn.insufficient_balance' => const ApiException(
+      'Not enough Naira for a ₦2 reply. Fund your wallet and try again.',
+      statusCode: 409,
+      code: 'ngn.insufficient_balance',
+    ),
+    'ngn.account_frozen' => const ApiException(
+      'Your NGN wallet is restricted. Contact support before trying again.',
+      statusCode: 403,
+      code: 'ngn.account_frozen',
+    ),
     'gb.wallet.insufficient_mb' => const ApiException(
-      'Not enough data MB for a reply. Buy Data and try again.',
+      'This older MB-billed reply cannot be processed. New replies cost ₦2 from your NGN wallet.',
       statusCode: 409,
       code: 'gb.wallet.insufficient_mb',
     ),
@@ -440,7 +452,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
               }
               continue;
             }
-            if (type == 'error') throw _replyStreamFailure(event);
+            if (type == 'error') throw agentReplyStreamFailure(event);
             if (type == 'done') { done = event; break; }
           }
           if (done != null) {
@@ -540,7 +552,7 @@ class MasanawaAgentTransport implements AgentTransport, AgentShellTransport, Str
           requestId:requestId,onSendProgress:onUploadProgress)) {
           final type=event['type'];
           if(const ['delta','audio','audio-transcript','done','error'].contains(type))outputStarted=true;
-          if(type=='error')throw _replyStreamFailure(event);
+          if(type=='error')throw agentReplyStreamFailure(event);
           if(type=='delta' && event['text'] is String){
             final text=event['text'] as String;
             if(streamedText.length+text.length>32000)throw const ApiException('Invalid streamed reply');
