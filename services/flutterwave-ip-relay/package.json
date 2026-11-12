@@ -1,0 +1,13 @@
+{
+  "name": "@masanawa/flutterwave-ip-relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node relay.mjs",
+    "test": "node --test relay.test.mjs"
+  }
+}
