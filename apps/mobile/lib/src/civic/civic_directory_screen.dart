@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../theme/masanawa_theme.dart';
 import 'civic_catalog.dart';
+import 'civic_officeholders.dart';
 
 /// WhatsApp-like compact directory, backed by attributed public reference
 /// records. This is separate from the account-scoped live AI Character roster.
@@ -23,7 +24,7 @@ class _CivicDirectoryScreenState extends State<CivicDirectoryScreen> {
   @override
   void initState() {
     super.initState();
-    if (const ['All','People','Agencies','Government','Directorates','History'].contains(widget.initialCategory)) {
+    if (const ['All','Leaders','States','Legislature','People','Agencies','Government','Directorates','History'].contains(widget.initialCategory)) {
       _category = widget.initialCategory;
     }
   }
@@ -67,7 +68,7 @@ class _CivicDirectoryScreenState extends State<CivicDirectoryScreen> {
         SizedBox(
           height: 47,
           child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12), children: [
-            for (final category in const ['All','People','Agencies','Government','Directorates','History'])
+            for (final category in const ['All','Leaders','States','Legislature','Agencies','Directorates','History'])
               Padding(padding: const EdgeInsets.symmetric(horizontal: 3),child: ChoiceChip(
                 label: Text(category), selected: _category == category,
                 onSelected: (_) => setState(() => _category = category),
@@ -112,6 +113,7 @@ class CivicDirectoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.masanawa;
+    final officeholder = civicExecutiveFor(entry.id);
     final icon = switch(entry.kind) {
       CivicKind.person => Icons.person_outline,
       CivicKind.institution => Icons.account_balance_outlined,
@@ -124,7 +126,9 @@ class CivicDirectoryTile extends StatelessWidget {
       contentPadding:const EdgeInsets.symmetric(horizontal:14,vertical:4),
       leading: CircleAvatar(radius:23,backgroundColor: colors.brand.withValues(alpha:0.10),child:Icon(icon,color:colors.brand)),
       title:Text(entry.name,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:15.5,fontWeight:FontWeight.w600)),
-      subtitle:Text('${entry.shortName == null ? entry.category : '${entry.shortName} · ${entry.category}'} · ${entry.level}',maxLines:1,overflow:TextOverflow.ellipsis),
+      subtitle:Text(officeholder == null
+        ? '${entry.shortName == null ? entry.category : '${entry.shortName} · ${entry.category}'} · ${entry.level}'
+        : '${officeholder.name} · ${officeholder.office}',maxLines:1,overflow:TextOverflow.ellipsis),
       trailing:const Icon(Icons.chevron_right,size:20),
       onTap:() => context.push('/civic/${Uri.encodeComponent(entry.id)}'),
     );

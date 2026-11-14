@@ -9,6 +9,8 @@ import '../state/ai_chat_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'civic_catalog.dart';
 import 'civic_directory_screen.dart';
+import 'civic_leader_dossiers.dart';
+import 'civic_officeholders.dart';
 
 /// Reference profiles never claim to be official channels. A paid AI chat is
 /// offered only for an independently admitted, currently visible Character.
@@ -27,6 +29,9 @@ class CivicProfileScreen extends ConsumerWidget {
     final colors = context.masanawa;
     final parent = entry.parentId == null ? null : civicById(entry.parentId!);
     final children = civicChildren(entry.id);
+    final leader = civicLeaderDossiers[entry.id];
+    final executive = civicExecutiveFor(entry.id);
+    final chamberLeaders = civicLeadersForChamber(entry.id);
     final agents = ref.watch(agentDirectoryProvider).agents;
     // No name-only, fuzzy or institution-name impersonation binding.
     // Person links require reviewed official identity; institution links use
@@ -102,14 +107,43 @@ class CivicProfileScreen extends ConsumerWidget {
           body:TabBarView(children:[
             _CivicTab(children:[
               _Section(title:'Overview',child:SelectableText(entry.summary,style:theme.textTheme.bodyLarge?.copyWith(height:1.55))),
+              if (leader != null) _Section(title:'Historical context',child:SelectableText(leader.context,style:theme.textTheme.bodyMedium?.copyWith(height:1.5))),
+              if (leader != null) _Section(title:'Background and career',child:Column(children:[
+                for (final fact in leader.background) _LineItem(icon:Icons.school_outlined,title:fact),
+              ])),
               if (entry.tenures.isNotEmpty) _Section(title:'Offices held',child:Column(children:[
                 for (final t in entry.tenures) _LineItem(icon:Icons.history_toggle_off,title:t.title,subtitle:'${t.from} — ${t.to}'),
+              ])),
+              if (executive != null) _Section(title:civicOfficeholderIndexFresh
+                ? 'Current executive officeholder' : 'Last verified executive officeholder',
+                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                _LineItem(icon:Icons.person_outline,title:executive.name,subtitle:executive.office),
+                Text('Officeholder checked $civicOfficeholderCheckedAt. This is an office listing, not a complete personal biography or an official AI account. Reconfirm after the review date.',
+                  style:TextStyle(fontSize:12,color:colors.textMuted)),
+                // The Governors' Forum listing currently contains injected
+                // third-party spam links: do not send citizens to it until
+                // its site integrity has been independently restored.
+                if (executive.jurisdictionId == 'fct') TextButton.icon(
+                  onPressed:()=>_openSource(context,executive.sourceUrl),
+                  icon:const Icon(Icons.open_in_new,size:17),label:const Text('Verify officeholder')),
+              ])),
+              if (chamberLeaders.isNotEmpty) _Section(title:'Current chamber leadership',child:Column(children:[
+                for (final leader in chamberLeaders) _LineItem(icon:Icons.how_to_reg_outlined,title:leader.name,subtitle:leader.office),
               ])),
               if (entry.deceased) const _LineItem(icon:Icons.history,title:'Historical figure',subtitle:'Deceased; historical AI representation, not the living person'),
               if (parent != null) _Section(title:'Part of',child:CivicDirectoryTile(entry:parent)),
               if (children.isNotEmpty) _Section(title:'Explore related offices and directorates',child:Column(children:[for(final child in children) CivicDirectoryTile(entry:child)])),
             ]),
             _CivicTab(children:[
+              if (leader != null) _Section(title:'Documented actions and developments',child:Column(children:[
+                for (final fact in leader.governmentRecord) _LineItem(icon:Icons.fact_check_outlined,title:fact),
+              ])),
+              if (leader != null) _Section(title:'Public programme and priorities',child:Column(children:[
+                for (final fact in leader.publicAgenda) _LineItem(icon:Icons.flag_outlined,title:fact),
+              ])),
+              if (leader != null) _Section(title:'Historical debates and scrutiny',child:Column(children:[
+                for (final fact in leader.historicalDebates) _LineItem(icon:Icons.balance_outlined,title:fact),
+              ])),
               if (entry.responsibilities.isNotEmpty) _Section(title:'Mandate and responsibilities',child:Column(children:[
                 for (final text in entry.responsibilities) _LineItem(icon:Icons.check_circle_outline,title:text),
               ])),
@@ -122,10 +156,8 @@ class CivicProfileScreen extends ConsumerWidget {
               if (entry.tenures.isNotEmpty) _Section(title:'Career timeline',child:Column(children:[
                 for(final t in entry.tenures) _LineItem(icon:Icons.timeline,title:t.title,subtitle:'${t.from} – ${t.to}'),
               ])),
-              if (entry.responsibilities.isEmpty && entry.services.isEmpty && entry.initiatives.isEmpty && entry.tenures.isEmpty)
+              if (leader == null && entry.responsibilities.isEmpty && entry.services.isEmpty && entry.initiatives.isEmpty && entry.tenures.isEmpty)
                 const _Section(title:'Record status',child:Text('Detailed responsibilities, achievements and public ambitions are being reviewed. Nothing is inferred without a source.')),
-              if (entry.kind == CivicKind.person) const _Section(title:'Achievements and ambitions',
-                child:Text('Only sourced achievements, policy commitments and ambitions will appear here. A term in office alone is not evidence of an achievement.')),
             ]),
             _CivicTab(children:[
               _Section(title:'Primary reference',child:ListTile(
@@ -134,6 +166,13 @@ class CivicProfileScreen extends ConsumerWidget {
                 subtitle:Text(entry.sourceUrl),
                 trailing:const Icon(Icons.open_in_new),
                 onTap:()=>_openSource(context,entry.sourceUrl),
+              )),
+              if (leader != null) _Section(title:'Biographical reading',child:ListTile(
+                contentPadding:EdgeInsets.zero,
+                title:Text(Uri.parse(leader.sourceUrl).host),
+                subtitle:Text(leader.sourceUrl),
+                trailing:const Icon(Icons.open_in_new),
+                onTap:()=>_openSource(context,leader.sourceUrl),
               )),
               if (entry.website != null) _Section(title:'Organisation website',child:ListTile(
                 contentPadding:EdgeInsets.zero,

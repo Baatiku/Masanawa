@@ -3,6 +3,8 @@
 ///
 /// Keep people, offices and institutions separate. Never infer a current office
 /// from an earlier tenure, and never turn a missing achievement into a claim.
+import 'civic_officeholders.dart';
+
 enum CivicKind { person, institution, office, department, jurisdiction }
 
 enum CivicBranch { executive, legislature, judiciary, independent, historic }
@@ -61,6 +63,9 @@ class CivicEntry {
     ...responsibilities,
     ...services,
     ...tenures.map((t) => t.title),
+    civicExecutiveFor(id)?.name ?? '',
+    civicExecutiveFor(id)?.office ?? '',
+    ...civicLeadersForChamber(id).map((leader) => leader.name),
   ].join(' ').toLowerCase();
 }
 
@@ -317,6 +322,9 @@ List<CivicEntry> searchCivicDirectory({String query = '', String category = 'All
     if (category == 'Agencies' && e.kind != CivicKind.institution) return false;
     if (category == 'Government' && e.kind != CivicKind.office && e.kind != CivicKind.jurisdiction) return false;
     if (category == 'Directorates' && e.kind != CivicKind.department) return false;
+    if (category == 'Leaders' && e.kind != CivicKind.person) return false;
+    if (category == 'States' && e.kind != CivicKind.jurisdiction) return false;
+    if (category == 'Legislature' && e.id != 'legislature' && e.id != 'senate' && e.id != 'house' && e.id != 'national-assembly') return false;
     if (sector != 'All' && sector != e.sector) return false;
     return needle.isEmpty || e.searchable.contains(needle);
   }).toList(growable:false);
