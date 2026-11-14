@@ -1,31 +1,41 @@
-/** Owner-approved roster, 2026-10-17. Exact API names, never silent substitutions.
- * Descriptions/age tiers are owner-provided; provider acceptance is qualified separately. */
-export const APPROVED_MASANA_VOICES = Object.freeze(["Algenib", "Algieba", "Aoede", "Arlo", "Bodi", "Brio", "Charon", "Cleo", "Cruz", "Daro", "Elio", "Enya", "Enzo", "Finn", "Fola", "Gero", "Hali", "Jett", "Jori", "Kira", "Knox", "Koda", "Lora", "Ludo", "Lumi", "Mako", "Milo", "Neno", "Nika", "Nyla", "Olin", "Puck", "Rami", "Riko", "Rina", "Sami", "Sola", "Sulafat", "Tova", "Varo", "Zali", "Zeno", "Zuri"] as const);
-export const MASANA_VOICE_ASSIGNMENTS: Readonly<Record<string,string>> = Object.freeze({
-  "gwani": "Bodi",
-  "gwana": "Fola",
-  "amina": "Lora",
-  "fatima": "Lumi",
-  "salim": "Algieba",
-  "zainab": "Cleo",
-  "sadiq": "Zeno",
-  "musa": "Mako",
-  "bello": "Varo",
-  "umar": "Algenib",
-  "safiya": "Kira",
-  "ruqayya": "Tova",
-  "idris": "Charon",
-  "maryam": "Sola",
-  "kabir": "Knox",
-  "hauwa": "Zuri",
-  "yusuf": "Rami",
-  "haruna": "Gero",
-  "bilkisu": "Enya",
-  "nura": "Olin",
-  "aisha": "Hali",
-  "abdulrahman": "Daro",
-  "layla": "Sulafat",
-  "grace": "Zali",
-  "asha": "Nika",
-  "mei": "Rina"
-});
+/** Owner-selected synthetic voice policy. Exact Google API names, checked
+ * against https://ai.google.dev/gemini-api/docs/speech-generation .
+ * Gender here is the editorial voice assignment for an AI contact, not an
+ * inferred demographic attribute of a user or an institution. */
+export type ContactVoiceGender='female'|'male';
+export const APPROVED_MASANA_VOICES=Object.freeze(['Sulafat','Algenib','Algieba'] as const);
+export function contactVoice(gender:ContactVoiceGender,index=0):string {
+ return gender==='female'?'Sulafat':index%2===0?'Algenib':'Algieba';
+}
+/** Future verified custom IDs survive stock-policy reconciliation. */
+export function isCustomContactVoice(name:string):boolean{return /^voice_[A-Za-z0-9_-]+$/.test(name);}
+export const MASANA_CONTACT_GENDERS:Readonly<Record<string,ContactVoiceGender>>=Object.freeze({
+ 'gwani':'male',
+ 'gwana':'female',
+ 'amina':'female',
+ 'fatima':'female',
+ 'salim':'male',
+ 'zainab':'female',
+ 'sadiq':'male',
+ 'musa':'male',
+ 'bello':'male',
+ 'umar':'male',
+ 'safiya':'female',
+ 'ruqayya':'female',
+ 'idris':'male',
+ 'maryam':'female',
+ 'kabir':'male',
+ 'hauwa':'female',
+ 'yusuf':'male',
+ 'haruna':'male',
+ 'bilkisu':'female',
+ 'nura':'male',
+ 'aisha':'female',
+ 'abdulrahman':'male',
+ 'layla':'female',
+ 'grace':'female',
+ 'asha':'female',
+ 'mei':'female',
+ });
+export const MASANA_VOICE_ASSIGNMENTS:Readonly<Record<string,string>>=Object.freeze(
+ Object.fromEntries(Object.entries(MASANA_CONTACT_GENDERS).map(([key,gender],index)=>[key,contactVoice(gender,index)])));

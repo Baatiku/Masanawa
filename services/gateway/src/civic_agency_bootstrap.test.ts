@@ -42,8 +42,14 @@ describe('independently operated agency AI guides',()=>{
   expect(first).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:CIVIC_AGENCY_CATALOG.length});
   expect(presentations.size).toBe(CIVIC_AGENCY_CATALOG.length);
   expect([...presentations.values()].every(p=>p.visibleInUserApp&&p.displayName.endsWith('AI Guide'))).toBe(true);
+  const keys=[...profiles.keys()];
+  const stock=profiles.get(keys[0]!)!;profiles.set(keys[0]!,{...stock,voiceName:'Bodi'});
+  const custom=profiles.get(keys[1]!)!;profiles.set(keys[1]!,{...custom,voiceName:'voice_verified_fixture'});
   const second=await ensureCivicAgencyAgents(args);
   expect(second).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:0});
+  expect(profiles.get(keys[0]!)!.voiceName).toBe('Sulafat');
+  expect(profiles.get(keys[0]!)!.revision).toBe(stock.revision+1);
+  expect(profiles.get(keys[1]!)!.voiceName).toBe('voice_verified_fixture');
   expect(approvedRows).toBe(CIVIC_AGENCY_CATALOG.length*2); // conditional insert is safe on restart
   expect(seeded.size).toBe(CIVIC_AGENCY_CATALOG.length);
  });

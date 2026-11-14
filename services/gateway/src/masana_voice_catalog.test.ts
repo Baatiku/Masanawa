@@ -1,16 +1,23 @@
 import {describe,it,expect} from 'vitest';
-import {APPROVED_MASANA_VOICES,MASANA_VOICE_ASSIGNMENTS} from './masana_voice_catalog.js';
+import {APPROVED_MASANA_VOICES,MASANA_VOICE_ASSIGNMENTS,MASANA_CONTACT_GENDERS,contactVoice,isCustomContactVoice} from './masana_voice_catalog.js';
 import {PROFESSIONAL_MASANA_CATALOG} from './platform_agent_bootstrap.js';
-describe('owner-approved persona voices',()=>{
- it('assigns 26 distinct exact approved names',()=>{
-  const names=Object.values(MASANA_VOICE_ASSIGNMENTS);
-  expect(names).toHaveLength(26);expect(new Set(names).size).toBe(26);
-  expect(names.every(n=>(APPROVED_MASANA_VOICES as readonly string[]).includes(n))).toBe(true);
-  expect(names).toEqual(expect.arrayContaining(['Algenib','Algieba','Charon','Sulafat']));
-  expect(names).not.toContain('Aoede');expect(names).not.toContain('Puck');expect(names).not.toContain('Fora');
-  expect(MASANA_VOICE_ASSIGNMENTS).toMatchObject({gwani:'Bodi',gwana:'Fola'});
+import {CIVIC_AGENCY_CATALOG} from './civic_agency_bootstrap.js';
+import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
+describe('gendered synthetic contact voices',()=>{
+ it('covers every professional, official and civic contact with exact provider names',()=>{
+  expect(APPROVED_MASANA_VOICES).toEqual(['Sulafat','Algenib','Algieba']);
+  expect(Object.keys(MASANA_CONTACT_GENDERS)).toHaveLength(26);
+  const contacts=[...PROFESSIONAL_MASANA_CATALOG,...OFFICIAL_ROSTER_MANIFEST,...CIVIC_AGENCY_CATALOG];
+  expect(contacts).toHaveLength(148);
+  for(const [i,c] of contacts.entries()){
+   expect(['female','male']).toContain(c.gender);
+   expect(c.gender==='female'?contactVoice(c.gender,i)==='Sulafat':['Algenib','Algieba'].includes(contactVoice(c.gender,i))).toBe(true);
+  }
+  for(const p of PROFESSIONAL_MASANA_CATALOG){expect(p.voiceName).toBe(MASANA_VOICE_ASSIGNMENTS[p.key]);expect(p.gender==='female'?p.voiceName==='Sulafat':['Algenib','Algieba'].includes(p.voiceName)).toBe(true);}
  });
- it('wires each catalog entry to its selected voice',()=>{
-  for(const persona of PROFESSIONAL_MASANA_CATALOG)expect(persona.voiceName).toBe(MASANA_VOICE_ASSIGNMENTS[persona.key]);
+ it('preserves explicit custom IDs but does not mistake a stock name for one',()=>{
+  expect(isCustomContactVoice('voice_verified_example')).toBe(true);
+  expect(isCustomContactVoice('Sulafat')).toBe(false);
+  expect(isCustomContactVoice('voice_')).toBe(false);
  });
 });

@@ -8,21 +8,15 @@ import type {PlatformAgentIdentityProvisioner} from './platform_agent_bootstrap.
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
 import {OFFICIAL_ROSTER_MANIFEST,type OfficialRosterSubject} from './official_roster_manifest.js';
 import {PROFESSIONAL_MASANA_CATALOG} from './platform_agent_bootstrap.js';
-import {APPROVED_MASANA_VOICES} from './masana_voice_catalog.js';
+import {contactVoice,isCustomContactVoice} from './masana_voice_catalog.js';
 import {admitBundledOfficialLaunch} from './official_launch_admission.js';
 import {OFFICIAL_LAUNCH_BIOGRAPHIES} from './official_launch_biographies.js';
 
 export type {OfficialRosterSubject} from './official_roster_manifest.js';
 export function officialRosterIntroduction(name:string){return `Independent AI simulation based on ${name}. Not the official or their office.`;}
-// Generic synthetic voices, never a clone of an official. Keep the first
-// presidential group distinct and avoid assigning the former shared female
-// default to male public figures. Existing staff voice selections are preserved.
+// Synthetic voice assignment only; never a claim of an official's own voice.
 export function officialRosterVoice(subject:OfficialRosterSubject,index:number):string{
- if(subject.officialName==='Dahiru Aishatu Ahmed')return 'Fola';
- const maleVoices=['Algenib','Algieba','Charon','Puck','Bodi','Zeno','Mako','Varo','Knox','Rami','Gero','Olin','Daro'];
- const voice=maleVoices[index%maleVoices.length]!;
- if(!APPROVED_MASANA_VOICES.some(v=>v===voice))throw Error('official_voice_not_approved');
- return voice;
+ return contactVoice(subject.gender,index);
 }
 /** Called inside the existing tenant catalogue advisory lock. Register new
  * canonical subjects first; do not advertise an incomplete biography as a
@@ -72,9 +66,12 @@ export async function ensureOfficialPlatformAgents(input:{
     countryCode:'NG',countryName:'Nigeria',visibleInUserApp:false,sortOrder:100+index,revision:1}});
    all.push(presentation);
   }
-  if(!await input.profiles.readForCharacter({tenantId:input.tenantId,characterId})){
+  const existingProfile=await input.profiles.readForCharacter({tenantId:input.tenantId,characterId});
+  if(!existingProfile){
    await input.profiles.put({expectedRevision:null,profile:{schemaVersion:1,tenantId:input.tenantId,characterId,
     supportAgent:false,defaultForNewUsers:false,voiceProvider:'gemini',voiceName:officialRosterVoice(subject,index),revision:1}});
+  }else if(existingProfile.voiceProvider.toLowerCase()==='gemini'&&!isCustomContactVoice(existingProfile.voiceName)&&existingProfile.voiceName!==officialRosterVoice(subject,index)){
+   await input.profiles.put({expectedRevision:existingProfile.revision,profile:{...existingProfile,voiceName:officialRosterVoice(subject,index),revision:existingProfile.revision+1}});
   }
   if(!await input.skillAssignments.readForCharacter({tenantId:input.tenantId,characterId})){
    await input.skillAssignments.put({expectedRevision:null,assignment:{schemaVersion:1,tenantId:input.tenantId,characterId,

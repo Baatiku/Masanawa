@@ -1,3 +1,4 @@
+import {contactVoice,isCustomContactVoice,type ContactVoiceGender} from './masana_voice_catalog.js';
 import {createCanonicalId,nowInstant,type CharacterId,type TenantId} from '@masanawa/contracts';
 import type {Pool} from '@masanawa/postgres';
 import type {AgentPresentationRepository,PlatformAgentProfileRepository,CharacterSkillAssignmentRepository} from '@masanawa/agents';
@@ -8,7 +9,7 @@ import type {PlatformAgentIdentityProvisioner} from './platform_agent_bootstrap.
 /** Independently operated civic AI guides. They explain public functions and
  * never claim to be the named ministry/agency, accept applications or payments,
  * or access government/private records. URLs are public provenance, not APIs. */
-export const CIVIC_AGENCY_CATALOG = Object.freeze([
+export const CIVIC_AGENCY_CATALOG = Object.freeze(([
  {id:'inec',name:'Independent National Electoral Commission',short:'INEC',topic:'elections and voter registration',source:'https://www.inecnigeria.org/'},
  {id:'nimc',name:'National Identity Management Commission',short:'NIMC',topic:'national identity, enrolment and NIN guidance',source:'https://nimc.gov.ng/'},
  {id:'nafdac',name:'National Agency for Food and Drug Administration and Control',short:'NAFDAC',topic:'food, drug and product safety regulation',source:'https://nafdac.gov.ng/'},
@@ -25,7 +26,7 @@ export const CIVIC_AGENCY_CATALOG = Object.freeze([
  {id:'nitda',name:'National Information Technology Development Agency',short:'NITDA',topic:'information technology policy and digital development',source:'https://nitda.gov.ng/'},
  {id:'npa',name:'Nigerian Ports Authority',short:'NPA',topic:'port management and marine services',source:'https://nigerianports.gov.ng/'},
  {id:'faan',name:'Federal Airports Authority of Nigeria',short:'FAAN',topic:'airport facilities and services',source:'https://faan.gov.ng/'},
-] as const);
+] as const).map((seed,index)=>Object.freeze({...seed,gender:(index%2===0?'female':'male') as ContactVoiceGender})));
 
 export function approvedCivicAgencyId(value:unknown):string|null {
  return typeof value==='string'&&CIVIC_AGENCY_CATALOG.some(s=>s.id===value)?value:null;
@@ -88,9 +89,13 @@ export async function ensureCivicAgencyAgents(input:{
     greeting:`Hello! I'm an independent Masanawa AI guide to ${seed.short}, not the agency. What would you like to understand?`,
     countryCode:'NG',countryName:'Nigeria',visibleInUserApp:true,sortOrder:200+index,revision:1}});
   }
-  if(!await input.profiles.readForCharacter({tenantId:input.tenantId,characterId})){
+  const existingProfile=await input.profiles.readForCharacter({tenantId:input.tenantId,characterId});
+  const voiceName=contactVoice(seed.gender,index);
+  if(!existingProfile){
    await input.profiles.put({expectedRevision:null,profile:{schemaVersion:1,tenantId:input.tenantId,
-    characterId,supportAgent:false,defaultForNewUsers:false,voiceProvider:'gemini',voiceName:'Bodi',revision:1}});
+    characterId,supportAgent:false,defaultForNewUsers:false,voiceProvider:'gemini',voiceName,revision:1}});
+  }else if(existingProfile.voiceProvider.toLowerCase()==='gemini'&&!isCustomContactVoice(existingProfile.voiceName)&&existingProfile.voiceName!==voiceName){
+   await input.profiles.put({expectedRevision:existingProfile.revision,profile:{...existingProfile,voiceName,revision:existingProfile.revision+1}});
   }
   if(!await input.skillAssignments.readForCharacter({tenantId:input.tenantId,characterId})){
    await input.skillAssignments.put({expectedRevision:null,assignment:{schemaVersion:1,tenantId:input.tenantId,

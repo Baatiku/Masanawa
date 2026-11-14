@@ -18,8 +18,8 @@ it('keeps stable separate person IDs for four presidential and 102 reported gove
  expect(OFFICIAL_ROSTER_MANIFEST.filter(s=>s.state===null).map(s=>s.party).sort()).toEqual(['ADC','APC','NDC','PDP']);
  expect(new Set(OFFICIAL_ROSTER_MANIFEST.filter(s=>s.state!==null).map(s=>s.state)).size).toBe(28);
  expect(OFFICIAL_ROSTER_MANIFEST.every(s=>!s.biographyReady)).toBe(true);
- expect(OFFICIAL_ROSTER_MANIFEST.slice(0,4).map(officialRosterVoice)).toEqual(['Algenib','Algieba','Charon','Puck']);
- expect(officialRosterVoice(OFFICIAL_ROSTER_MANIFEST[10]!,10)).toBe('Fola');
+ expect(OFFICIAL_ROSTER_MANIFEST.slice(0,4).map(officialRosterVoice)).toEqual(['Algenib','Algieba','Algenib','Algieba']);
+ expect(officialRosterVoice(OFFICIAL_ROSTER_MANIFEST[10]!,10)).toBe('Sulafat');
 });
 it('creates real canonical officials, admits an actual reviewed packet, activates and retires public specialists without reassigning history',async()=>{
  const db=new PGlite();const tenantId=createCanonicalId('tenant');
@@ -58,7 +58,7 @@ it('creates real canonical officials, admits an actual reviewed packet, activate
    VALUES($1,$2,$3,$4,$5,'Synthetic test artwork','fixture')`,[tenantId,'fixture-'+kind,specialist,kind,'fixture/'+kind]);
   await db.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at)
    VALUES($1,$2,1,'approved',$3::jsonb,'fixture',now())`,[tenantId,specialist,JSON.stringify(legacyProfile)]);
-  const roster:OfficialRosterSubject[]=[0,1].map(i=>({officialName:'Synthetic candidate '+i,party:i===0?'APC':'ADC',office:'Reported candidate',state:null,
+  const roster:OfficialRosterSubject[]=[0,1].map(i=>({gender:i===0?'female':'male',officialName:'Synthetic candidate '+i,party:i===0?'APC':'ADC',office:'Reported candidate',state:null,
    characterId:createCanonicalId('character'),characterVersionId:createCanonicalId('character-version'),rosterSourceUrl:'https://example.test/roster',
    rosterSourceDate:'2026-10-29',rosterCheckedAt:'2026-10-29',biographyReady:false}));
   const input={pool,tenantId,identity,presentations,profiles,skillAssignments:createPostgresCharacterSkillAssignmentRepository(pool),
@@ -66,6 +66,16 @@ it('creates real canonical officials, admits an actual reviewed packet, activate
   expect(await ensureOfficialPlatformAgents(input)).toMatchObject({registered:2,active:0,biographyPending:2});
   expect((await presentations.listVisible({tenantId})).map(p=>p.characterId)).toEqual([specialist]);
   expect(await ensureOfficialPlatformAgents(input)).toMatchObject({registered:0,active:0});
+  const initialProfile=(await profiles.readForCharacter({tenantId,characterId:roster[0]!.characterId as never}))!;
+  await profiles.put({expectedRevision:initialProfile.revision,profile:{...initialProfile,voiceName:'Fola',revision:initialProfile.revision+1}});
+  await ensureOfficialPlatformAgents(input);
+  const migrated=(await profiles.readForCharacter({tenantId,characterId:roster[0]!.characterId as never}))!;
+  expect(migrated.voiceName).toBe('Sulafat');
+  await ensureOfficialPlatformAgents(input);
+  expect((await profiles.readForCharacter({tenantId,characterId:migrated.characterId}))!.revision).toBe(migrated.revision);
+  await profiles.put({expectedRevision:migrated.revision,profile:{...migrated,voiceName:'voice_verified_fixture',revision:migrated.revision+1}});
+  await ensureOfficialPlatformAgents(input);
+  expect((await profiles.readForCharacter({tenantId,characterId:migrated.characterId}))!.voiceName).toBe('voice_verified_fixture');
   const subject=roster[0]!,characterId=subject.characterId as typeof specialist,characterVersionId=subject.characterVersionId as typeof specialistVersion;
   const version=await createPostgresCharacterVersionReader(client as never).readCharacterVersion({tenantId,characterId,characterVersionId});
   expect(version?.constitution.publicOfficial).toEqual({officialName:subject.officialName,countryCode:'NG'});
