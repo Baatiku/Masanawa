@@ -70,11 +70,11 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.identity.provision).toHaveBeenCalledTimes(26);
    expect(f.presentations).toHaveLength(26);
    expect(f.profiles).toHaveLength(26);
-   expect(new Set(f.profiles.map(p=>p.voiceName)).size).toBe(26);
+   expect(new Set(f.profiles.map(p=>p.voiceName)).size).toBe(3);
    expect(f.assignments.size).toBe(26);
    expect(f.profiles.filter(p=>p.defaultForNewUsers)).toHaveLength(1);
-   expect(f.profiles[0]).toMatchObject({supportAgent:true,voiceName:"Bodi"});
-   expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Fola"});
+   expect(f.profiles[0]).toMatchObject({supportAgent:true,voiceName:"Algenib"});
+   expect(f.profiles[1]).toMatchObject({supportAgent:true,voiceName:"Sulafat"});
    expect(f.profiles.slice(2).every(p=>!p.supportAgent&&p.voiceProvider==="gemini")).toBe(true);
    expect(f.presentations[2]?.greeting).toBe(MASANA_CHARACTER_DESIGNS.amina?.welcome);
    expect(f.presentations[2]?.about).toContain("Communication style:");
@@ -101,16 +101,16 @@ describe("26 professional Masana production bootstrap",()=>{
    expect(f.presentations[1]?.displayName).toBe("Malamah Gwana");
    expect(f.identity.provision).toHaveBeenCalledTimes(24);
    expect(f.profiles).toHaveLength(26);
-   expect(f.profiles.find(p=>p.characterId===gwana)?.voiceName).toBe("Fola");
+   expect(f.profiles.find(p=>p.characterId===gwana)?.voiceName).toBe("Sulafat");
  });
  it('repairs untouched shared female stock defaults but preserves later staff voice choices',async()=>{
   const f=fixture(),tenant=createCanonicalId('tenant');await run(f,tenant);
   f.profiles.forEach((profile,i)=>{f.profiles[i]={...profile,voiceName:'Aoede',revision:1};});
-  const edited=f.profiles[2]!;f.profiles[2]={...edited,voiceName:'CustomStudioVoice',revision:3};
+  const edited=f.profiles[2]!;f.profiles[2]={...edited,voiceName:'voice_verified_studio',revision:3};
   await run(f,tenant);
-  expect(f.profiles[0]?.voiceName).toBe('Bodi');expect(f.profiles[1]?.voiceName).toBe('Fola');
-  expect(f.profiles[2]?.voiceName).toBe('CustomStudioVoice');
-  expect(new Set(f.profiles.map(p=>p.voiceName)).size).toBe(26);
+  expect(f.profiles[0]?.voiceName).toBe('Algenib');expect(f.profiles[1]?.voiceName).toBe('Sulafat');
+  expect(f.profiles[2]?.voiceName).toBe('voice_verified_studio');
+  expect(new Set(f.profiles.map(p=>p.voiceName)).size).toBe(4);
  });
  it("does not override hidden or administrator-customized characters",async()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
@@ -151,11 +151,11 @@ describe("26 professional Masana production bootstrap",()=>{
    const f=fixture(),tenant=createCanonicalId("tenant");
    await run(f,tenant);
    const earlier=f.profiles[2]!;
-   f.profiles[2]={...earlier,voiceName:"CustomStudioVoice",revision:earlier.revision+1};
+   f.profiles[2]={...earlier,voiceName:"voice_verified_studio",revision:earlier.revision+1};
    f.presentations[2]={...f.presentations[2]!,greeting:"My curated introduction"};
    const next=await run(f,tenant);
    expect(next.changed).toBe(false);
-   expect(f.profiles[2]?.voiceName).toBe("CustomStudioVoice");
+   expect(f.profiles[2]?.voiceName).toBe("voice_verified_studio");
    expect(f.presentations[2]?.greeting).toBe("My curated introduction");
  });
 

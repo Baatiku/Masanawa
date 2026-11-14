@@ -1,5 +1,5 @@
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
-import { MASANA_VOICE_ASSIGNMENTS } from "./masana_voice_catalog.js";
+import { MASANA_VOICE_ASSIGNMENTS, MASANA_CONTACT_GENDERS, isCustomContactVoice, type ContactVoiceGender } from "./masana_voice_catalog.js";
 import type {
   AgentPresentation, AgentPresentationRepository,
   CharacterSkillAssignmentRepository, PlatformAgentProfileRepository,
@@ -17,7 +17,7 @@ export interface ProfessionalMasanaSeed {
  readonly key:string;readonly displayName:string;readonly roleLabel:string;
  readonly countryCode:string;readonly countryName:string;
  readonly roomName:string;readonly expertise:readonly string[];
- readonly languages:readonly string[];readonly voiceName:string;
+ readonly languages:readonly string[];readonly voiceName:string;readonly gender:ContactVoiceGender;
  readonly supportAgent:boolean;readonly illustrationIndex:number;
  readonly roomId:string;
  readonly handle:string;
@@ -35,7 +35,7 @@ export const PROFESSIONAL_MASANA_CATALOG:readonly ProfessionalMasanaSeed[] =
      countryName:key==="asha"?"India":key==="mei"?"China":"Nigeria",
      expertise:Object.freeze(expertise.split(", ")),
      languages:Object.freeze(languages.split(",")),
-     voiceName,supportAgent:kind==="support",
+     gender:MASANA_CONTACT_GENDERS[key]!,voiceName,supportAgent:kind==="support",
      illustrationIndex:index,
      roomId:"room_masana_"+String(index).padStart(2,"0")+"_"+key,
      handle:"masana."+key,
@@ -185,13 +185,9 @@ export async function ensureDefaultPlatformAgents(input:Readonly<{
        voiceProvider:"gemini",voiceName:seed.voiceName,revision:1,
      }});
      changed=true;
-   }else if(profile.voiceProvider.toLowerCase()==="gemini" && profile.voiceName!==seed.voiceName &&
-     // Migrate only old shared stock voices. Preserve staff-selected voices.
-     ((seed.key==="gwana"&&["Sulafat","Fora"].includes(profile.voiceName)) ||
-      (seed.key!=="gwani"&&seed.key!=="gwana"&&["Bodi","Fora"].includes(profile.voiceName)) ||
-      (profile.revision===1 && ["Aoede","Kore","Sulafat"].includes(profile.voiceName)))){
-     // Owner-authorized 26-persona roster revision. Preserve identity and use
-     // optimistic revision fencing; never create replacement Masana.
+   }else if(profile.voiceProvider.toLowerCase()==="gemini" && profile.voiceName!==seed.voiceName && !isCustomContactVoice(profile.voiceName)){
+     // Reconcile stock voices once with optimistic fencing; retain canonical
+     // identities, history and explicitly provisioned custom voice IDs.
      await input.profiles.put({expectedRevision:profile.revision,profile:{
        ...profile,voiceName:seed.voiceName,revision:profile.revision+1,
      }});
