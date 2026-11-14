@@ -232,6 +232,7 @@ export function createCustomerAuthService(input: Readonly<{
   otpPepper: string;
   emailDelivery?: OtpDelivery;
   smsDelivery?: OtpDelivery;
+  afterSignup?:(actor:Readonly<{tenantId:TenantId;userId:UserId}>)=>Promise<void>;
   accessTtlSeconds?: number;
   refreshTtlSeconds?: number;
   otpTtlSeconds?: number;
@@ -533,6 +534,11 @@ export function createCustomerAuthService(input: Readonly<{
         // deduplicates the stable account key; no welcome on ordinary logins.
         await input.emailDelivery?.sendWelcome?.({identifier:profile.email,name:profile.name,
           ...(profile.username?{username:profile.username}:{}),userId:profile.userId}).catch(()=>undefined);
+      }
+      if(isNewUser&&input.afterSignup){
+        // A bank-provider outage must never invalidate a completed OTP/session.
+        // Manual Wallet setup resumes the same durable owner reference.
+        try{void input.afterSignup({tenantId:profile.tenantId,userId:profile.userId}).catch(()=>undefined);}catch{}
       }
       return tokens;
     },

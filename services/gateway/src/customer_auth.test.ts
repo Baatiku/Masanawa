@@ -470,6 +470,26 @@ describe("platform-session Agent authorization", () => {
 });
 
 describe("customer authentication", () => {
+  it('starts bank setup only for a completed new signup without blocking tokens on a stalled provider',async()=>{
+    const repository=new MemorySessions();let code='',started=0;
+    const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
+      emailDelivery:{async send(value){code=value.code;}},afterSignup:async actor=>{expect(actor.userId).toBe(repository.profile?.userId);started++;await new Promise<void>(()=>{});}});
+    await service.sendOtp({email:'bank@example.com'});
+    await expect(service.verifyOtp({email:'bank@example.com',code:'000000'})).rejects.toBeDefined();
+    expect(started).toBe(0);
+    const first=await service.verifyOtp({email:'bank@example.com',code,firstName:'Test',lastName:'Owner',contactPhone:'08031234567'});
+    expect(first.user.isNewUser).toBe(true);expect(first.accessToken).toBeTruthy();expect(started).toBe(1);
+    await service.sendOtp({email:'bank@example.com'});
+    expect((await service.verifyOtp({email:'bank@example.com',code})).user.isNewUser).toBe(false);expect(started).toBe(1);
+  });
+  it('retains successful signup when automatic bank setup rejects',async()=>{
+    const repository=new MemorySessions();let code='';
+    const service=createCustomerAuthService({repository,tenantId:createCanonicalId('tenant'),otpPepper:'p'.repeat(48),
+      emailDelivery:{async send(value){code=value.code;}},afterSignup:async()=>{throw Error('provider unavailable');}});
+    await service.sendOtp({email:'bank-failure@example.com'});
+    expect((await service.verifyOtp({email:'bank-failure@example.com',code,firstName:'Test',lastName:'Owner',contactPhone:'08031234567'})).accessToken).toBeTruthy();
+  });
+
   it('keeps OTP usable when automatic names are exhausted or a preferred name is taken',async()=>{
     const repository=new MemorySessions();let code='';let available=false;
     const canAllocateUsername=async()=>available;

@@ -42,6 +42,17 @@ const safe=(account:BillstackAccount|null)=>{
  return {state:"assigned" as const, bankId:account.bankId,bankName:account.bankName,
   accountNumber:account.accountNumber,accountName:account.accountName};
 };
+/** One account per canonical owner. New signup and manual recovery share this
+ * path: an existing pending reference is never dispatched a second time. */
+export async function ensureBillstackAccount(ports:BillstackFundingPorts,person:BillstackFundingActor):Promise<BillstackAccount>{
+ if(ports.canAssign?!ports.canAssign():ports.ready&&!ports.ready())throw Error('account_assignment_not_verified');
+ const existing=await ports.read(person);if(existing)return existing;
+ const ref='gb'+randomUUID().replaceAll('-','');
+ const applicant=await ports.applicant(person,ref);assertBillstackApplicant(applicant);
+ const first=await ports.start(person,ref);if(!first.created)return first.account;
+ const generated=await ports.create(applicant);
+ return ports.finalize(person,ref,generated);
+}
 export function registerBillstackFundingRoutes(app:FastifyInstance,ports:BillstackFundingPorts) {
  const actor=async(header:string|undefined)=>{
   const identity=await ports.authorize(header);
@@ -98,26 +109,12 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
     reply.code(401);return {error:{code:"unauthorized"}};
   }
   try{
-    if(ports.canAssign ? !ports.canAssign() : ports.ready && !ports.ready())
-      throw new Error("account_assignment_not_verified");
-    const existing=await ports.read(person);
-    if(existing)return {account:safe(existing)};
-    const ref="gb"+randomUUID().replaceAll("-","");
-    const applicant=await ports.applicant(person,ref);
-    try{assertBillstackApplicant(applicant);}catch(error){
-      if(error instanceof BillstackProviderError&&error.code==="invalid_applicant"){
-        reply.code(400);return {error:{code:"invalid_applicant",message:"Check your names, email and Nigerian contact phone before assigning an account."}};
-      }
-      throw error;
-    }
-    const first=await ports.start(person,ref);
-    if(!first.created)return {account:safe(first.account)};
-    // Provider create is a financial write: never automatically retry after
-    // an unknown outcome; the durable pending reference is operator-reconcilable.
-    const generated=await ports.create(applicant);
-    const assigned=await ports.finalize(person,ref,generated);
+    const assigned=await ensureBillstackAccount(ports,person);
     return {account:safe(assigned)};
-  }catch{
+  }catch(error){
+    if(error instanceof BillstackProviderError&&error.code==='invalid_applicant'){
+      reply.code(400);return {error:{code:'invalid_applicant'}};
+    }
     reply.code(503);
     return {error:{code:"account_assignment_pending",message:"Account assignment is pending verification. Do not transfer until bank details appear."}};
   }
