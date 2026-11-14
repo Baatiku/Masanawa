@@ -1,3 +1,4 @@
+import {ensureBillstackAccount} from './gb_wallet/billstack_funding_routes.js';
 import {createNgnSpending,createNgnCallAdmissions,createNgnDataJournal,createPostgresNgnTransferRepository,createPostgresNgnRequestRepository} from '@masanawa/postgres';
 import {ngnDataActivation} from './ngn_data/activation.js';
 import {ngnCallsEnabled} from './ngn_calls/activation.js';
@@ -590,6 +591,7 @@ export async function startGatewayService(
   let ownerAccessSweepTenantId: TenantId | undefined;
   let ownerAccessSweepTimer: ReturnType<typeof setInterval> | undefined;
   let ownerAccessSweepRunning = false;
+  let signupFunding:((actor:{tenantId:TenantId;userId:import("@masanawa/contracts").UserId})=>Promise<void>)|undefined;
   let customerAuth: CustomerAuthService | undefined =
     options.appOptions?.customerAuth;
   let accountDeletion: AccountDeletionService | undefined =
@@ -821,6 +823,7 @@ export async function startGatewayService(
         repository: database.platformSessions,
         tenantId: activePlatformTenantId,
         otpPepper,
+        afterSignup:async(actor)=>{await signupFunding?.(actor);},
         ...(resendApiKey && resendFrom
           ? {
               emailDelivery: createResendOtpDelivery({
@@ -2123,6 +2126,11 @@ export async function startGatewayService(
         webhookSecret:billstackSecret,
       };
     })() : undefined);
+  signupFunding=billstackFunding?async(actor)=>{
+    // Allocation does not enable deposit credit or expose unqualified funding
+    // instructions. It is the same idempotent path as the Wallet action.
+    await ensureBillstackAccount(billstackFunding,actor);
+  }:undefined;
   const masanaInbox: GatewayAppOptions["masanaInbox"] =
     options.appOptions?.masanaInbox ??
     (featurePool && sessions && featureTenant ? {

@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import {createHmac} from "node:crypto";
 import {afterEach,describe,expect,it,vi} from "vitest";
-import {registerBillstackFundingRoutes,type BillstackFundingPorts} from "./billstack_funding_routes.js";
+import {registerBillstackFundingRoutes,ensureBillstackAccount,type BillstackFundingPorts} from "./billstack_funding_routes.js";
 const apps:Array<ReturnType<typeof Fastify>>=[];
 afterEach(async()=>{await Promise.all(apps.splice(0).map(x=>x.close()));});
 const secret="server-side-test-webhook-9psb-abcdefgh";
@@ -26,7 +26,7 @@ function setup(overrides:Partial<BillstackFundingPorts>={}) {
   ...overrides,
  };
  const app=Fastify({logger:false});apps.push(app);registerBillstackFundingRoutes(app,p);
- return {app,credit,create};
+ return {app,credit,create,ports:p};
 }
 describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
  it("hides account details until authenticated and provider confirmed",async()=>{
@@ -156,4 +156,18 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   expect(result.statusCode).toBe(503);expect(f.credit).not.toHaveBeenCalled();
  });
 
+});
+
+it('shares one durable assignment between signup and manual retry after a provider timeout',async()=>{
+ let saved:import('./billstack_funding_routes.js').BillstackAccount|null=null;
+ const f=setup({read:async()=>saved,start:async(_actor,reference)=>{
+  if(saved)return {created:false,account:saved};
+  saved={state:'pending',reference,bankId:'9PSB',accountNumber:null,accountName:null,bankName:null};return {created:true,account:saved};
+ },create:async()=>{throw Error('provider timeout');}});
+ const owner={tenantId:'tenant-a',userId:'fan-a'};
+ await expect(ensureBillstackAccount(f.ports,owner)).rejects.toThrow('provider timeout');
+ const original=await f.ports.read(owner);
+ const result=await f.app.inject({method:'POST',url:'/v1/gb/wallet/virtual-account',headers:{authorization:'Bearer session'}});
+ expect(result.statusCode).toBe(200);expect(result.json().account.state).toBe('pending');
+ expect((await f.ports.read(owner))?.reference).toBe(original?.reference);
 });
