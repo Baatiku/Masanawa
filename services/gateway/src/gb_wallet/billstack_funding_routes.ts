@@ -18,6 +18,7 @@ export interface BillstackFundingPorts {
  start:(actor:BillstackFundingActor,reference:string)=>Promise<{account:BillstackAccount;created:boolean}>;
  create:(input:{reference:string;email:string;phone:string;firstName:string;lastName:string})=>
    Promise<{reference:string;accountNumber:string;accountName:string;bankName:string;bankId:BillstackBankId}>;
+ lookup?:(reference:string)=>Promise<{reference:string;accountNumber:string;accountName:string;bankName:string;bankId:BillstackBankId}|null>;
  finalize:(actor:BillstackFundingActor,reference:string,account:{
   reference:string;accountNumber:string;accountName:string;bankName:string;bankId:BillstackBankId;
  })=>Promise<BillstackAccount>;
@@ -46,7 +47,17 @@ const safe=(account:BillstackAccount|null)=>{
  * path: an existing pending reference is never dispatched a second time. */
 export async function ensureBillstackAccount(ports:BillstackFundingPorts,person:BillstackFundingActor):Promise<BillstackAccount>{
  if(ports.canAssign?!ports.canAssign():ports.ready&&!ports.ready())throw Error('account_assignment_not_verified');
- const existing=await ports.read(person);if(existing)return existing;
+ const existing=await ports.read(person);
+ if(existing){
+  if(existing.state==='pending'&&ports.lookup){
+   const found=await ports.lookup(existing.reference);
+   if(found){
+    try{return await ports.finalize(person,existing.reference,found);}
+    catch(error){const current=await ports.read(person);if(current?.state==='assigned')return current;throw error;}
+   }
+  }
+  return existing;
+ }
  const ref='gb'+randomUUID().replaceAll('-','');
  const applicant=await ports.applicant(person,ref);assertBillstackApplicant(applicant);
  const first=await ports.start(person,ref);if(!first.created)return first.account;

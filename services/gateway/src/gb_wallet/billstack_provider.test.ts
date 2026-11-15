@@ -71,3 +71,15 @@ describe("Billstack reserved 9PSB and raw-body authenticated notification",()=>{
     expect(()=>verifyBillstackWebhook(raw,{},key,now)).toThrow();
   });
 });
+
+it('looks up only the original merchant reference and selects its configured bank',async()=>{
+ const fetcher=vi.fn(async(_url:unknown,init:RequestInit|undefined)=>{
+  expect(JSON.parse(String(init?.body))).toEqual({reference:'gb_original_123'});
+  return Response.json({status:true,data:{reference:'provider_123',merchant_reference:'gb_original_123',account:[{bank_id:'PALMPAY'},{bank_id:'9PSB',account_number:'1234567890',account_name:'QA Owner',bank_name:'9PSB Bank'}]}});
+ });
+ const client=createBillstackReservedAccountClient({secretKey:'synthetic-secret-key',fetcher:fetcher as never});
+ expect(await client.lookup('gb_original_123')).toMatchObject({accountNumber:'1234567890',bankId:'9PSB'});
+ expect(fetcher.mock.calls[0]?.[0]).toBe('https://api.billstack.co/v2/thirdparty/getVirtualAccount/');
+ const wrong=createBillstackReservedAccountClient({secretKey:'synthetic-secret-key',fetcher:async()=>Response.json({status:true,data:{merchant_reference:'another_owner',account:[]}})});
+ await expect(wrong.lookup('gb_original_123')).rejects.toMatchObject({code:'reference_mismatch'});
+});

@@ -626,11 +626,13 @@ describe("customer authentication", () => {
     expect(rendered.text).toContain("123456");
     expect(rendered.html).toContain("Masanawa");
     expect(rendered.html).toContain("123456");
-    expect(rendered.html).toContain("#075E54");
+    expect(rendered.html).not.toContain("#075E54");
     expect(rendered.html).toContain("#25D366");
     expect(rendered.html).not.toMatch(/#0121D2|#1DA4FD|#0A6FFA/u);
     expect(rendered.html).toContain('lang="en"');
     expect(rendered.html).toContain("monospace");
+    expect(rendered.html).toContain("cid:masanawa-logo");
+    expect(rendered.html).not.toContain("/auth/code");
     expect(rendered.html).not.toContain("min-width:260px");
     expect(rendered.html).toContain("Security note");
 
@@ -655,6 +657,7 @@ describe("customer authentication", () => {
       subject: "Your Masanawa sign-in code",
       text: expect.stringContaining("123456"),
       html: expect.stringContaining("123456"),
+      attachments:[{filename:"masanawa-logo.png",content:expect.any(String),content_id:"masanawa-logo"}],
       tags: [{ name: "category", value: "authentication_otp" }],
     });
   });

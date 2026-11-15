@@ -2111,6 +2111,7 @@ export async function startGatewayService(
         read:storage.read,
         start:storage.start,
         create:provider.reserve,
+        lookup:provider.lookup,
         finalize:storage.finalize,
         credit:(payment:Parameters<typeof storage.applyVerifiedPayment>[0])=>
           createNgnWalletRepository(featurePool).deposit(payment),

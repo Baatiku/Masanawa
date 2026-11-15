@@ -3,17 +3,17 @@ import Fastify from 'fastify';
 import {renderMasanawaOtpEmail,renderMasanawaWelcomeEmail} from './auth_email_templates.js';
 import {registerAuthEmailRoutes} from './auth_email_routes.js';
 describe('branded account emails',()=>{
- it('uses real PNG branding, contiguous OTP and a fragment-only copy helper',()=>{
+ it('embeds inline PNG branding and a contiguous code without a copy-helper detour',()=>{
   const message=renderMasanawaOtpEmail('012345','https://gateway.example.test');
-  expect(message.html).toContain('https://gateway.example.test/brand/masanawa-logo.png');
-  expect(message.html).toContain('/auth/code#012345');expect(message.html).not.toContain('<script');
+  expect(message.html).toContain('cid:masanawa-logo');expect(message.attachments[0]?.content_id).toBe('masanawa-logo');expect(Buffer.from(message.attachments[0]!.content,'base64').subarray(1,4).toString()).toBe('PNG');
+  expect(message.html).not.toContain('/auth/code');expect(message.html).not.toContain('<script');
   expect(message.text).toContain('012345');expect(message.html).toContain('10 minutes');
   expect(()=>renderMasanawaOtpEmail('<html>')).toThrow();
   expect(()=>renderMasanawaOtpEmail('123456','http://bad.test')).toThrow();
  });
  it('defaults to the canonical provider-independent HTTPS origin',()=>{
   const message=renderMasanawaOtpEmail('123456');
-  expect(message.text).toContain('https://api.masanawa.com/auth/code#123456');
+  expect(message.text).not.toContain('/auth/code');expect(message.html).not.toContain('Open code');
   expect(message.html).not.toContain('railway.app');
  });
  it('escapes welcome names and displays the assigned username',()=>{
