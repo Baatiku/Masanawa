@@ -188,6 +188,12 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     }, { additionalProperties: false });
     app.get("/v1/admin/me", async (request, reply) =>
       handle(reply, () => admin.me({ authorizationHeader: request.headers.authorization })));
+    app.get("/v1/admin/test-wallet", async (request, reply) =>
+      handle(reply, () => admin.testWallet({ authorizationHeader: request.headers.authorization })));
+    app.post("/v1/admin/test-wallet/seed", {schema:{body:Type.Object({}, {additionalProperties:false})}}, async (request, reply) =>
+      handle(reply, () => admin.seedTestWallet({ authorizationHeader: request.headers.authorization })));
+    app.post("/v1/admin/test-wallet/debit", {schema:{body:Type.Object({requestId:Type.String({minLength:16,maxLength:80,pattern:"^[a-zA-Z0-9_-]+$"}),kind:Type.Union([Type.Literal("reply"),Type.Literal("call"),Type.Literal("data"),Type.Literal("send")]),amountKobo:Type.Integer({minimum:1,maximum:500000})},{additionalProperties:false})}}, async(request,reply)=>
+      handle(reply,()=>admin.debitTestWallet({authorizationHeader:request.headers.authorization,...request.body})));
     app.get("/v1/admin/summary", async (request, reply) =>
       handle(reply, () => admin.summary({ authorizationHeader: request.headers.authorization })));
     app.get("/v1/admin/users", { schema: { querystring: Filtered } }, async (request, reply) =>
