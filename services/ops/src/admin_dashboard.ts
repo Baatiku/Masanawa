@@ -9,6 +9,7 @@ export type AdminCapability =
   | "audit.read"
   | "news.read"
   | "wallet.read"
+  | "wallet.test.write"
   | "data.read"
   | "calls.read"
   | "moderation.read"
@@ -61,6 +62,9 @@ export interface AdminActor {
 }
 
 export interface OpsAdminDashboardService {
+  debitTestWallet(input: { authorizationHeader: string | undefined; requestId:string; kind:"reply"|"call"|"data"|"send"; amountKobo:number }): Promise<unknown>;
+  seedTestWallet(input: { authorizationHeader: string | undefined }): Promise<unknown>;
+  testWallet(input: { authorizationHeader: string | undefined }): Promise<unknown>;
   authorize(input: { authorizationHeader: string | undefined; capability: AdminCapability }): Promise<AdminActor>;
   me(input: { authorizationHeader: string | undefined }): Promise<AdminActor>;
   summary(input: { authorizationHeader: string | undefined }): Promise<Record<string, number>>;
@@ -105,6 +109,25 @@ export function createOpsAdminDashboardService(input: {
   const page = (limit: number, offset: number) => ({ limit: Math.min(100, Math.max(1, Math.trunc(limit))), offset: Math.min(10_000, Math.max(0, Math.trunc(offset))) });
 
   return Object.freeze<OpsAdminDashboardService>({
+    async debitTestWallet(request) {
+      const actor = await authorize({ ...request, capability: "wallet.test.write" });
+      if (!/^[a-zA-Z0-9_-]{16,80}$/.test(request.requestId) || !Number.isSafeInteger(request.amountKobo) || request.amountKobo<1 || request.amountKobo>500000 || !["reply","call","data","send"].includes(request.kind)) throw new TypeError("Invalid test debit");
+      const result=await input.pool.query(`SELECT security.debit_ops_test_wallet($1,$2,$3,$4,$5) AS "balanceKobo"`,[actor.tenantId,actor.actorId,request.requestId,request.kind,request.amountKobo]);
+      return {environment:"isolated-test",providerDispatch:false,receipt:{requestId:request.requestId,kind:request.kind,amountKobo:request.amountKobo},wallet:result.rows[0]};
+    },
+    async seedTestWallet(request) {
+      const actor = await authorize({ ...request, capability: "wallet.test.write" });
+      await input.pool.query(`INSERT INTO security.ops_test_wallets(tenant_id,user_id)
+        VALUES($1,$2) ON CONFLICT(tenant_id,user_id) DO NOTHING`, [actor.tenantId,actor.actorId]);
+      return this.testWallet(request);
+    },
+    async testWallet(request) {
+      const actor = await authorize({ ...request, capability: "wallet.read" });
+      const result = await input.pool.query(`SELECT balance_kobo AS "balanceKobo",revision,created_at AS "createdAt"
+        FROM security.ops_test_wallets WHERE tenant_id=$1 AND user_id=$2`, [actor.tenantId,actor.actorId]);
+      return { environment: "isolated-test", currency: "NGN", providerDispatch: false, transferableToLive: false,
+        wallet: result.rows[0] ?? null };
+    },
     authorize,
     me: (request) => authorize({ ...request, capability: "dashboard.read" }),
     async summary(request) {

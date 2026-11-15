@@ -26,6 +26,18 @@ function fixture(email: string | null = "owner@example.com") {
 }
 
 describe("web Ops dashboard authorization", () => {
+  it("denies test credit without its explicit write capability", async () => {
+    const {service,query}=fixture();
+    await expect(service.seedTestWallet({authorizationHeader:access})).rejects.toMatchObject({statusCode:403});
+    expect(query).not.toHaveBeenCalled();
+  });
+  it("reads only the signed-in administrator's isolated wallet", async () => {
+    const {service,query}=fixture();
+    const result=await service.testWallet({authorizationHeader:access});
+    expect(result).toMatchObject({environment:"isolated-test",providerDispatch:false,transferableToLive:false});
+    expect(query.mock.calls[0]?.[1]).toEqual([tenantId,"user_123"]);
+    expect(query.mock.calls[0]?.[0]).toContain("security.ops_test_wallets");
+  });
   it("rejects missing, malformed, non-admin and cross-tenant sessions before querying", async () => {
     const { service, query } = fixture("not-owner@example.com");
     await expect(service.summary({ authorizationHeader: undefined })).rejects.toMatchObject({ statusCode: 401 });
