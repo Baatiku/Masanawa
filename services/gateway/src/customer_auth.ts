@@ -1248,6 +1248,7 @@ export function createResendOtpDelivery(input: Readonly<{
           subject: message.subject,
           text: message.text,
           html: message.html,
+          attachments: message.attachments,
           tags: [{ name: "category", value: "authentication_otp" }],
         }),
       });

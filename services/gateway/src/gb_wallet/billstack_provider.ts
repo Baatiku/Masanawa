@@ -43,6 +43,26 @@ export function createBillstackReservedAccountClient(input:{secretKey:string; ba
   if(bankId!=="9PSB"&&bankId!=="PALMPAY")throw new TypeError("Unsupported Billstack bank");
   const fetcher=input.fetcher??fetch;
   return {
+    /** Documented read-only lookup despite POST transport. Never allocate on
+     * a lookup failure; bind the provider merchant reference to our owner row. */
+    async lookup(reference:string):Promise<BillstackReservedAccount|null>{
+      if(!/^[A-Za-z0-9_-]{8,128}$/.test(reference))throw new BillstackProviderError('invalid_reference');
+      let response:Response;
+      try{response=await fetcher('https://api.billstack.co/v2/thirdparty/getVirtualAccount/',{method:'POST',headers:{authorization:'Bearer '+input.secretKey,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({reference}),signal:AbortSignal.timeout(15000),redirect:'error'});}catch{throw new BillstackProviderError('lookup_unavailable');}
+      if(response.status===404)return null;
+      if(!response.ok)throw new BillstackProviderError('lookup_unavailable');
+      const envelope=object(await response.json());
+      if(envelope.status!==true)throw new BillstackProviderError('lookup_unavailable');
+      const data=object(envelope.data);
+      if(data.merchant_reference!==reference)throw new BillstackProviderError('reference_mismatch');
+      if(!Array.isArray(data.account))throw new BillstackProviderError('invalid_response');
+      const matches=data.account.map(object).filter(a=>a.bank_id===bankId);
+      if(matches.length!==1)throw new BillstackProviderError('wrong_bank');
+      const account=matches[0]!;
+      const accountNumber=text(account.account_number,10,10);
+      if(!/^\d{10}$/.test(accountNumber))throw new BillstackProviderError('invalid_response');
+      return {reference:text(data.reference,1,160),accountNumber,accountName:text(account.account_name,1,160),bankName:text(account.bank_name,1,120),bankId};
+    },
     async reserve(applicant:BillstackAccountApplicant):Promise<BillstackReservedAccount> {
       assertBillstackApplicant(applicant);
       let response:Response;

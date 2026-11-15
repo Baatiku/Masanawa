@@ -171,3 +171,12 @@ it('shares one durable assignment between signup and manual retry after a provid
  expect(result.statusCode).toBe(200);expect(result.json().account.state).toBe('pending');
  expect((await f.ports.read(owner))?.reference).toBe(original?.reference);
 });
+
+it('recovers a pending provider account by original reference without allocating again',async()=>{
+ const lookup=vi.fn(async()=>({reference:'provider_123',accountNumber:'1234567890',accountName:'QA Owner',bankName:'9PSB Bank',bankId:'9PSB' as const}));
+ const finalize=vi.fn(async(_actor,reference,found)=>({...found,reference,state:'assigned' as const}));
+ const f=setup({read:async()=>({state:'pending',reference:'gb_original_123',bankId:'9PSB',accountNumber:null,accountName:null,bankName:null}),lookup,finalize});
+ const result=await f.app.inject({method:'POST',url:'/v1/gb/wallet/virtual-account',headers:{authorization:'Bearer session'}});
+ expect(result.statusCode).toBe(200);expect(result.json().account).toMatchObject({state:'assigned',accountNumber:'1234567890'});
+ expect(lookup).toHaveBeenCalledWith('gb_original_123');expect(f.create).not.toHaveBeenCalled();expect(finalize.mock.calls[0]?.[1]).toBe('gb_original_123');
+});
