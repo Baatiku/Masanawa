@@ -257,6 +257,21 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
       accessHash,at:new Date(Date.parse(rotatedAt)+1000).toISOString(),
     })).resolves.toBeNull();
 
+    // Concurrent requests using the same original token must receive the same
+    // successor; a different successor or a replay after the overlap is denied.
+    const retry = {
+      refreshHash,nextAccessHash:hashPlatformSessionToken(nextAccess),
+      nextRefreshHash:hashPlatformSessionToken(nextRefresh),
+      accessExpiresAt:new Date(Date.parse(rotatedAt)+900_000).toISOString(),
+      refreshExpiresAt:new Date(Date.parse(rotatedAt)+400*86400000).toISOString(),
+      rotatedAt:new Date(Date.parse(rotatedAt)+1000).toISOString(),
+    };
+    await expect(repository.rotateRefresh(retry)).resolves.toMatchObject({userId:profile.userId});
+    await expect(repository.rotateRefresh({...retry,nextRefreshHash:hashPlatformSessionToken(mintPlatformSessionToken('refresh'))})).resolves.toBeNull();
+    await expect(repository.rotateRefresh({...retry,rotatedAt:new Date(Date.parse(rotatedAt)+46000).toISOString()})).resolves.toBeNull();
+    const sessions=await repository.listSessions!({tenantId,userId:profile.userId,accessHash:retry.nextAccessHash,at:retry.rotatedAt});
+    expect(sessions[0]?.createdAt).toBe(createdAt);
+
     const nextAccessHash = hashPlatformSessionToken(nextAccess);
     await repository.revokeAccess({
       accessHash:nextAccessHash,
@@ -266,6 +281,7 @@ describeDatabase("customer platform sessions PostgreSQL acceptance", () => {
       accessHash:nextAccessHash,
       at:new Date(Date.parse(rotatedAt)+3000).toISOString(),
     })).resolves.toBeNull();
+    await expect(repository.rotateRefresh({...retry,rotatedAt:new Date(Date.parse(rotatedAt)+3000).toISOString()})).resolves.toBeNull();
   });
 
   it("denies access and refresh when the canonical platform tenant is disabled", async () => {

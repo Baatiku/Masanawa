@@ -615,9 +615,12 @@ export function createPostgresPlatformSessionRepository(pool: Pool): PlatformSes
       return withTransaction(pool, async (client) => {
         const result = await client.query<{ tenant_id: string; user_id: string }>(
           `UPDATE security.platform_sessions s
-              SET access_hash=$2,refresh_hash=$3,access_expires_at=$4,
+              SET previous_refresh_hash=CASE WHEN s.refresh_hash=$1 THEN s.refresh_hash ELSE s.previous_refresh_hash END,
+                  previous_refresh_until=CASE WHEN s.refresh_hash=$1 THEN $6::timestamptz+interval '45 seconds' ELSE s.previous_refresh_until END,
+                  access_hash=$2,refresh_hash=$3,access_expires_at=$4,
                   refresh_expires_at=$5,updated_at=$6
-            WHERE s.refresh_hash=$1
+            WHERE (s.refresh_hash=$1 OR (s.previous_refresh_hash=$1 AND s.previous_refresh_until>$6
+                   AND s.access_hash=$2 AND s.refresh_hash=$3))
               AND s.revoked_at IS NULL
               AND s.refresh_expires_at>$6
               AND EXISTS (

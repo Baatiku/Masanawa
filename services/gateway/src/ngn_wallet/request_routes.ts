@@ -66,6 +66,7 @@ export function registerNgnRequestRoutes(
   app.post("/v1/ngn/wallet/requests",{
     schema: {body: Type.Object({
       username: Type.String({minLength:2,maxLength:80}),
+      recipientId: Type.Optional(Type.String({minLength:1,maxLength:160})),
       amountKobo: Type.Integer({minimum:1,maximum:1000000000}),
       idempotencyKey: Type.String({minLength:12,maxLength:128}),
     },{additionalProperties:false})},
@@ -73,12 +74,13 @@ export function registerNgnRequestRoutes(
     reply.header("cache-control","no-store");
     try {
       const owner=await actor(request.headers.authorization);
-      const body=request.body as {username:string;amountKobo:number;idempotencyKey:string};
+      const body=request.body as {username:string;recipientId?:string;amountKobo:number;idempotencyKey:string};
       const handle=body.username.trim().replace(/^@/,"").toLowerCase();
       if (!/^[a-z0-9_][a-z0-9_.-]{1,63}$/.test(handle)) {
         throw new NgnRequestStoreError(422,"invalid_username");
       }
       const payer=await ports.resolveRecipient(owner,handle);
+      if(body.recipientId!==undefined&&payer?.userId!==body.recipientId)throw new NgnRequestStoreError(409,'recipient_changed');
       if (!payer?.active || payer.userId===owner.userId ||
           payer.username.toLowerCase()!==handle) {
         throw new NgnRequestStoreError(404,"recipient_unavailable");

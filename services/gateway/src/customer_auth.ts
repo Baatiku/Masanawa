@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
 import {parseSignupContact,SignupContactError} from './signup_contact.js';
 export { renderMasanawaOtpEmail, renderMasanawaWelcomeEmail } from "./auth_email_templates.js";
@@ -240,7 +240,7 @@ export function createCustomerAuthService(input: Readonly<{
   now?: () => string;
 }>): CustomerAuthService {
   const accessTtlSeconds = assertTtl(input.accessTtlSeconds ?? 900, "accessTtlSeconds", 60, 86_400);
-  const refreshTtlSeconds = assertTtl(input.refreshTtlSeconds ?? 30 * 24 * 60 * 60, "refreshTtlSeconds", 3600, 365 * 24 * 60 * 60);
+  const refreshTtlSeconds = assertTtl(input.refreshTtlSeconds ?? 400 * 24 * 60 * 60, "refreshTtlSeconds", 3600, 400 * 24 * 60 * 60);
   const otpTtlSeconds = assertTtl(input.otpTtlSeconds ?? 600, "otpTtlSeconds", 60, 3600);
   const resendSeconds = assertTtl(input.resendSeconds ?? 60, "resendSeconds", 30, 3600);
   if (refreshTtlSeconds <= accessTtlSeconds) throw new TypeError("refreshTtlSeconds must exceed accessTtlSeconds");
@@ -723,8 +723,11 @@ export function createCustomerAuthService(input: Readonly<{
         throw new CustomerAuthError("SESSION_NOT_FOUND", 401);
       }
       const rotatedAt = now();
-      const accessToken = mintPlatformSessionToken("access");
-      const refreshToken = mintPlatformSessionToken("refresh");
+      // Parallel renewals of the same original credential must receive the
+      // same successor. Domain separation prevents OTP/access/refresh reuse.
+      const successor=(kind:'access'|'refresh')=>`msw_${kind}_`+createHmac('sha256',input.otpPepper).update('masanawa/session-successor/v1/'+kind+'\0'+request.refreshToken.trim()).digest('base64url');
+      const accessToken = successor('access');
+      const refreshToken = successor('refresh');
       const identity = await input.repository.rotateRefresh({
         refreshHash,
         nextAccessHash: hashPlatformSessionToken(accessToken),

@@ -71,6 +71,10 @@ it('keeps old names reserved, rejects stale edits, moves moderation and canonica
 it('searches name/handle prefixes and exact private contacts only, honoring tenant, self, blocks and restrictions',async()=>{
  await user('find','Amina Yusuf','t','amina');await user('foreign','Amina Yusuf','other','amina');
  expect(await directory.search(actor,'Ami')).toMatchObject([{userId:'find',username:'amina',displayName:'Amina Yusuf'}]);
+ expect(await directory.search(actor,'Yus')).toMatchObject([{userId:'find'}]);
+ expect(await directory.search(actor,'Yus   Ami')).toMatchObject([{userId:'find'}]);
+ expect(await directory.search(actor,'Amina Zainab')).toEqual([]);
+ expect(await directory.search(actor,'Yus%')).toEqual([]);
  expect(await directory.search(actor,'find@example.com')).toMatchObject([{userId:'find'}]);
  expect(await directory.search(actor,'find@exam')).toEqual([]);
  const longEmail='a'.repeat(60)+'@'+'b'.repeat(60)+'.'+'c'.repeat(60)+'.com';
