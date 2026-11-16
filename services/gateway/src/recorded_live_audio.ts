@@ -2,6 +2,7 @@ import type {
   NativeAudioRenderer,
   NativeAudioRenderResult,
 } from "./native_audio.js";
+import {createGeminiLiveAudioRenderer} from './native_audio.js';
 
 export type RecordedLiveSocket = Pick<
   WebSocket,
@@ -44,6 +45,7 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
         throw new RangeError("Native audio text is invalid");
       if (signal?.aborted) throw new Error("Recorded speech cancelled");
       const selectedVoice = context?.voiceName?.trim() || voiceName;
+      if(/^voice_[a-zA-Z0-9_-]{1,160}$/.test(selectedVoice))return createGeminiLiveAudioRenderer({apiKey,model:'gemini-3.8-flash-tts',voiceName:selectedVoice}).render(text,signal,onPcmChunk,context);
       const socket = socketFactory(
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=" +
           encodeURIComponent(apiKey),

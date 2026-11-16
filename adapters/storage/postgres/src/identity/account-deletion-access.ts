@@ -63,6 +63,9 @@ export function createPostgresAccountDeletionAccessRevoker(
         throw new Error("account_deletion.access_invalid_input");
       }
       return withTransaction(pool, async (client) => {
+        // The administrative access transition uses this same per-user lock.
+        // A worker that has revoked deletion access cannot race a reactivation.
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('identity-access:'||$1::text||':'||$2::text,0))`,[input.tenantId,input.userId]);
         // Fixed lock order with deletion request transitions/OTP verification.
         // Prevents revocation before the immutable request has been admitted.
         const selected = await client.query<RequestRow>(

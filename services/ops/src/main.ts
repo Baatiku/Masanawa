@@ -1,4 +1,14 @@
 import { pathToFileURL } from "node:url";
+import {createVoiceAdmin} from './voice_admin.js';
+import {createWalletAdmin} from './wallet_admin.js';
+import {createPersonaAdmin} from './persona_admin.js';
+import {createPortraitAdmin} from './portrait_admin.js';
+import {createRoleAdmin} from './role_admin.js';
+import {createContentAdmin} from './content_admin.js';
+import {createUserAdmin} from './user_admin.js';
+import {createDataAdmin} from './data_admin.js';
+import {createEvidenceAdmin} from './evidence_admin.js';
+import {PgHomeFeedRepository} from '@masanawa/postgres';
 import type {
   AgentPresentationRepository,
   CharacterSkillAssignmentRepository,
@@ -42,6 +52,15 @@ export interface ServiceProcess extends NodeSignalSource {
 }
 
 export interface ServiceDatabaseDependency {
+  readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
+  readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
+  readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
+  readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
+  readonly portraitAdmin?: ReturnType<typeof createPortraitAdmin>;
+  readonly roleAdmin?: ReturnType<typeof createRoleAdmin>;
+  readonly contentAdmin?: ReturnType<typeof createContentAdmin>;
+  readonly userAdmin?: ReturnType<typeof createUserAdmin>;
+  readonly dataAdmin?: ReturnType<typeof createDataAdmin>;
   readonly readinessCheck: ReadinessCheck;
   readonly agentPresentations?: AgentPresentationRepository;
   readonly characterSkillAssignments?: CharacterSkillAssignmentRepository;
@@ -107,13 +126,19 @@ function createDefaultDatabaseDependency(
     connectionString,
     applicationName: "masanawa-ops",
   });
+  const adminDashboard=createOpsAdminDashboardService({sessions:createPostgresPlatformSessionRepository(database.pool),pool:database.pool,grants:parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),dynamicCapabilities:async(tenantId,userId)=>{const caps=(await database.pool.query(`SELECT capabilities FROM security.ops_admin_roles WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows[0]?.capabilities;return Array.isArray(caps)?caps.filter((c:unknown):c is string=>typeof c==='string'&&/^[a-z]+(?:\.[a-z]+)+$/.test(c)):[];}});
   return Object.freeze({
+    evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    walletAdmin:createWalletAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    personaAdmin:createPersonaAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    portraitAdmin:createPortraitAdmin({pool:database.pool,authorize:adminDashboard.authorize,publicBaseUrl:env.MASANAWA_PUBLIC_BASE_URL}),
+    roleAdmin:createRoleAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    contentAdmin:createContentAdmin({pool:database.pool,feed:new PgHomeFeedRepository(database.pool,true,true),authorize:adminDashboard.authorize}),
+    userAdmin:createUserAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    dataAdmin:createDataAdmin({pool:database.pool,authorize:adminDashboard.authorize,initialApprovals:env.MASANAWA_NGN_DATA_APPROVALS_JSON}),
+    voiceAdmin:createVoiceAdmin({pool:database.pool,authorize:adminDashboard.authorize,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?{apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY}:{})}),
     readinessCheck: database.readinessCheck,
-    adminDashboard: createOpsAdminDashboardService({
-      sessions: createPostgresPlatformSessionRepository(database.pool),
-      pool: database.pool,
-      grants: parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),
-    }),
+    adminDashboard,
     agentPresentations: createPostgresAgentPresentationRepository(database.pool),
     characterSkillAssignments:
       createPostgresCharacterSkillAssignmentRepository(database.pool),
@@ -161,6 +186,19 @@ export async function startOpsService(
   try {
     app = appFactory({
       ...(options.appOptions ?? {}),
+      ...(database.voiceAdmin ? {voiceAdmin:database.voiceAdmin}:{}),
+      ...(database.evidenceAdmin ? {evidenceAdmin:database.evidenceAdmin}:{}),
+      ...(database.walletAdmin ? {walletAdmin:database.walletAdmin}:{}),
+      ...(database.personaAdmin ? {personaAdmin:database.personaAdmin}:{}),
+      ...(database.portraitAdmin ? {portraitAdmin:database.portraitAdmin}:{}),
+      ...(database.roleAdmin ? {roleAdmin:database.roleAdmin}:{}),
+      ...(database.contentAdmin ? {contentAdmin:database.contentAdmin}:{}),
+      ...(database.userAdmin ? {userAdmin:database.userAdmin}:{}),
+      ...(database.dataAdmin ? {dataAdmin:database.dataAdmin}:{}),
+      runtimeMetadata:{
+        providers:[['Gemini',['MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY','MASANAWA_ALPHA_GEMINI_API_KEY']],['Billstack',['MASANAWA_BILLSTACK_SECRET_KEY','BILLSTACK_SECRET_KEY']],['Flutterwave',['FLUTTERWAVE_SECRET_KEY','MASANAWA_FLUTTERWAVE_SECRET_KEY']],['Resend',['RESEND_API_KEY','MASANAWA_RESEND_API_KEY']]].map(([name,keys])=>({name:String(name),configured:(keys as string[]).some(k=>Boolean(env[k]?.trim())),verification:'not_checked'})),
+        flags:['MASANAWA_NGN_CALLS_ENABLED','MASANAWA_NGN_DATA_CATALOG_ENABLED','MASANAWA_NGN_DATA_PURCHASE_ENABLED','MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED'].map(name=>({name,enabled:env[name]==='true'})),
+      },
       ...(composedAgentAdmin ? { agentAdmin: composedAgentAdmin } : {}),
       ...(database.adminDashboard ? { adminDashboard: database.adminDashboard } : {}),
       readinessChecks: [

@@ -42,6 +42,7 @@ it('atomically admits only exact new official identities, preserves withdrawn ev
  const source={platform:'x',accountId:'123',handle:'example',rightsBasis:'Reviewed original account usage',reviewExpiresAt:p.reviewExpiresAt};
  const first=await admitOfficialDossier(pg as never,p,'reviewer');expect(first.evidenceCount).toBe(1);expect(first.packetSha256).toHaveLength(64);
  expect(await admitOfficialDossier(pg as never,p,'reviewer')).toEqual(first);
+ await expect(admitOfficialDossier(pg as never,{...p,office:'Stale administrator change'},'reviewer',{expectedReviewId:null})).rejects.toThrow('official_review_revision_changed');
  await admitOfficialDossier(pg as never,{...p,office:'Updated dated office'},'reviewer');
  await expect(admitOfficialDossier(pg as never,p,'reviewer')).rejects.toThrow('superseded');
  expect((await db.query(`SELECT state,count(*)::int AS n FROM masana.public_official_evidence GROUP BY state ORDER BY state`)).rows).toEqual([{state:'approved',n:1},{state:'withdrawn',n:1}]);

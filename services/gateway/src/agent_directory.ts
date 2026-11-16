@@ -42,6 +42,7 @@ export interface MobileAgentDirectoryEntry {
   readonly publicOfficial?:import('./agent_identity.js').ApprovedMasanaDirectoryIdentity['publicOfficial'];
   readonly portraitKey?: string;
   readonly avatarUrl?:string;
+  readonly biography?:string;
   readonly following?: boolean;
   readonly conversationStarters?: readonly string[];
   readonly socialChannels?: readonly MasanaSocialChannel[];
@@ -163,6 +164,7 @@ export function createAgentDirectoryService(input: {
             ...(identity?.civicAgencyId?{civicAgencyId:identity.civicAgencyId}:{}),
             ...(identity?.publicOfficial?{publicOfficial:identity.publicOfficial}:{}),
             ...(identity?.avatarUrl?{avatarUrl:identity.avatarUrl}:{}),
+            ...(identity?.biography?{biography:identity.biography}:{}),
             ...(identity?.portraitKey ? {portraitKey:identity.portraitKey} : {}),
             following:identity?.following??false,
             conversationStarters:Object.freeze([...(design?.starters??[])]),

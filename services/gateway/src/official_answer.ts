@@ -27,7 +27,7 @@ export function renderOfficialAnswer(raw:string,official:PublicOfficialPersona,l
   for(const match of r.answer.matchAll(/https?:\/\/[^\s<>\]\)]+/g))if(!allowed.has(match[0].replace(/[.,;!?]+$/,'')))return fallback;
   const cited=evidence.map(e=>{const title=e!.title.replace(/[\[\]()*_`<>]/g,'');const uri=new URL(e!.sourceUrl);
    if(uri.protocol!=='https:'||uri.username||uri.password)throw Error('invalid_source');
-   return `[${title}](${uri.href.replace(/\(/g,'%28').replace(/\)/g,'%29')}) · ${e!.sourceDate}`;
+   return `[${title}](${uri.href.replace(/\(/g,'%28').replace(/\)/g,'%29')}) · ${e!.sourceDateKind==='retrieval'?'Retrieved ':''}${e!.sourceDate}`;
   });
   return r.answer.trim()+(cited.length?'\n\n'+cited.join('\n'):'');
  }catch{return fallback;}

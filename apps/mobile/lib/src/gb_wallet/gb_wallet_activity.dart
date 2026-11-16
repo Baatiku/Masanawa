@@ -20,6 +20,7 @@ class GbActivityItem {
     'request_pay'=>amount>0?'Request payment received':'Paid request',
     'tip'=>'Masana tip','reply'=>'Masana reply usage','connected_call'=>'Masana call usage',
     'data'=>'Data purchase','redeem'=>'Data redemption','reversal'=>'Reversal','deposit'=>'NGN deposit',
+    'admin_adjustment'=>'Administrator balance adjustment',
     'exchange'=>'NGN data exchange','deposit_reversal'=>'Deposit reversal',_=>'Wallet movement',
   };
   String get amountLabel {

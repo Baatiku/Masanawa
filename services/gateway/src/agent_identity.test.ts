@@ -5,6 +5,7 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
  it("reads identity by tenant and canonical character ID, with a private user-scoped follow",async()=>{
    const tenant=createCanonicalId("tenant"),user=createCanonicalId("user"),character=createCanonicalId("character");
    const query=vi.fn(async(sql:string,params:unknown[])=>{
+     if(sql.includes('agents.admin_persona_configs')){expect(params).toEqual([tenant,[character]]);return {rows:[]};}
      expect(sql).toContain("revision.state='approved'");
      expect(sql).toContain("owner.kind='platform'");
      expect(sql).toContain("following.fan_user_id=$3");
@@ -16,7 +17,7 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
    expect((await port.read({tenantId:tenant,userId:user,characterIds:[]})).size).toBe(0);
    const identities=await port.read({tenantId:tenant,userId:user,characterIds:[character]});
    expect(identities.get(character)).toEqual({portraitKey:"amina",following:true,socialChannels:[]});
-   expect(query).toHaveBeenCalledTimes(1);
+   expect(query).toHaveBeenCalledTimes(2);
  });
  it("does not bind unapproved/lookalike custom media to stock images",async()=>{
    const character=createCanonicalId("character");

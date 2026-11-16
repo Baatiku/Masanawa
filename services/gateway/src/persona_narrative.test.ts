@@ -5,7 +5,9 @@ describe('published persona identity for all conversation media', () => {
  it('reads the exact active published biography and refuses drafts, old versions and foreign scope', async () => {
   const db=new PGlite();
   try {
-   await db.exec(`CREATE SCHEMA identity;
+   await db.exec(`CREATE SCHEMA agents;
+    CREATE TABLE agents.admin_persona_configs(tenant_id text,character_id text,state text,main_prompt text,tone text,biography text,context text,research_enabled boolean,revision bigint);
+    CREATE SCHEMA identity;
     CREATE TABLE identity.characters(tenant_id text,character_id text,active_character_version_id text,state text);
     CREATE TABLE identity.character_versions(tenant_id text,character_id text,character_version_id text,state text,constitution jsonb);
     INSERT INTO identity.characters VALUES('tenant-a','character-a','version-a','active');

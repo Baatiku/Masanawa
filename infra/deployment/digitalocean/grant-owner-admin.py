@@ -32,7 +32,7 @@ grants = json.loads(values.get(key, '[]'))
 if not isinstance(grants, list):
     raise SystemExit('Invalid grants list')
 email = 'belloabubakaratiku@gmail.com'
-capabilities = ['dashboard.read','users.read','runtime.read','operations.read','audit.read','news.read','wallet.read','wallet.test.write','data.read','calls.read','moderation.read','agents.presentation.read','agents.presentation.write','agents.skills.read','agents.skills.write','skills.catalog.read']
+capabilities = ['dashboard.read','users.read','users.write','runtime.read','operations.read','audit.read','news.read','news.write','wallet.read','wallet.test.write','wallet.adjust.write','roles.read','roles.write','data.read','data.write','calls.read','moderation.read','moderation.write','agents.presentation.read','agents.presentation.write','agents.evidence.write','agents.skills.read','agents.skills.write','skills.catalog.read']
 existing = next((g for g in grants if g.get('tenantId') == tenant and g.get('email','').lower() == email), None)
 if existing:
     existing['capabilities'] = sorted(set(existing['capabilities']) | set(capabilities))

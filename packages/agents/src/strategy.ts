@@ -34,6 +34,7 @@ export type AgentStrategyInput =
     };
 
 export interface AgentPersonaNarrative {
+  readonly adminInstructions?:Readonly<{mainPrompt:string;tone:string;context:string;revision:string}>;
   readonly publicOfficial?: import('./public-official.js').PublicOfficialPersona;
   readonly biography: string;
   readonly personality: readonly string[];

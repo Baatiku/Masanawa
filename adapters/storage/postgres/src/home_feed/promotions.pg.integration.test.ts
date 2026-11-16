@@ -43,7 +43,13 @@ describe.skipIf(!dsn)('SPE-A08 PostgreSQL race and reserve acceptance',()=>{
  afterAll(async()=>{
   await db?.end();
   if(admin){
-   await admin.query('DROP DATABASE IF EXISTS "'+name+'" WITH (FORCE)');
+   // Pool.end can resolve just before PostgreSQL observes every socket close.
+   // FORCE can then kill an ending client and emit an uncaught pg error after
+   // all assertions passed. Wait for server-side disconnect and drop normally.
+   for(let attempt=0;;attempt++){
+    try{await admin.query('DROP DATABASE IF EXISTS "'+name+'"');break;}
+    catch(error){if((error as {code?:string}).code!=='55006'||attempt>=39)throw error;await new Promise(resolve=>setTimeout(resolve,50));}
+   }
    await admin.end();
   }
  },30_000);

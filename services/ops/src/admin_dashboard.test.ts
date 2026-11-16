@@ -26,6 +26,15 @@ function fixture(email: string | null = "owner@example.com") {
 }
 
 describe("web Ops dashboard authorization", () => {
+  it('requires the original authentication to be recent for every administrator write',async()=>{
+    const f=fixture();
+    const service=createOpsAdminDashboardService({sessions:{resolveAccess:f.resolveAccess} as unknown as PlatformSessionRepository,pool:{query:f.query} as never,grants:parseOpsAdminGrants(JSON.stringify([{tenantId,email:'owner@example.com',capabilities:['*']}]))});
+    f.query.mockResolvedValueOnce({rows:[]});
+    await expect(service.authorize({authorizationHeader:access,capability:'agents.presentation.write'})).rejects.toMatchObject({statusCode:403,message:'fresh_admin_sign_in_required'});
+    expect(f.query.mock.calls[0]?.[0]).toContain("created_at>clock_timestamp()-interval '15 minutes'");
+    expect(f.query.mock.calls[0]?.[1]).toEqual([tenantId,'user_123',hashPlatformSessionToken(token)]);
+    await expect(service.authorize({authorizationHeader:access,capability:'agents.presentation.write'})).resolves.toMatchObject({actorId:'user_123'});
+  });
   it("denies test credit without its explicit write capability", async () => {
     const {service,query}=fixture();
     await expect(service.seedTestWallet({authorizationHeader:access})).rejects.toMatchObject({statusCode:403});
