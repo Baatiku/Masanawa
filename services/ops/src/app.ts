@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import {VoiceAdminError,type createVoiceAdmin} from './voice_admin.js';
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
 import type { AgentAdminService } from "./agent_admin.js";
@@ -16,6 +17,7 @@ export interface ReadinessCheck {
 }
 
 export interface OpsAppOptions {
+  readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
@@ -225,7 +227,21 @@ export function createOpsApp(options: OpsAppOptions = {}) {
         limit: request.query.limit ?? 50, offset: request.query.offset ?? 0 })));
   }
 
+  if(options.voiceAdmin&&options.adminDashboard){
+    const service=options.voiceAdmin;
+    const preflight=async(request:{headers:{authorization?:string|undefined}},reply:{code:(status:number)=>unknown;send:(data:unknown)=>unknown})=>{try{await options.adminDashboard!.authorize({authorizationHeader:request.headers.authorization,capability:'agents.presentation.write'});}catch(error){reply.code(error instanceof OpsAdminAccessError?error.statusCode:503);return reply.send({error:'Voice administration denied'});}};
+    const run=async(reply:{code:(status:number)=>unknown},action:()=>Promise<unknown>)=>{try{return await action();}catch(error){reply.code(error instanceof VoiceAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof VoiceAdminError?error.code:'voice_admin_unavailable'};}};
+    app.get('/v1/admin/voices',{onRequest:preflight,schema:{querystring:Type.Object({characterId:Type.String({pattern:'^[a-zA-Z0-9_-]{1,128}$'})},{additionalProperties:false})}},async(request,reply)=>run(reply,()=>service.list(request.headers.authorization,request.query.characterId)));
+    app.post('/v1/admin/voices/enroll',{onRequest:preflight,bodyLimit:8_100_000,schema:{body:Type.Object({characterId:Type.String({maxLength:128}),requestId:Type.String({minLength:16,maxLength:80}),displayName:Type.String({minLength:1,maxLength:120}),sample:Type.String({maxLength:4_000_000}),consent:Type.String({maxLength:4_000_000}),adultSpeakerConfirmed:Type.Boolean()},{additionalProperties:false})}},async(request,reply)=>run(reply,()=>service.enroll(request.headers.authorization,request.body)));
+    app.post('/v1/admin/voices/assign',{onRequest:preflight,schema:{body:Type.Object({characterId:Type.String({maxLength:128}),requestId:Type.String({minLength:16,maxLength:80}),expectedRevision:Type.Integer({minimum:0})},{additionalProperties:false})}},async(request,reply)=>run(reply,()=>service.assign(request.headers.authorization,request.body)));
+  }
 
+
+  if(options.voiceAdmin&&options.adminDashboard){
+    app.post('/v1/admin/voices/audition',{schema:{body:Type.Object({characterId:Type.String({pattern:'^[a-zA-Z0-9_-]{1,128}$'}),requestId:Type.String({pattern:'^[a-zA-Z0-9_-]{16,80}$'})},{additionalProperties:false})}},async(request,reply)=>{
+      try{return await options.voiceAdmin!.audition(request.headers.authorization,request.body);}catch(error){reply.code(error instanceof VoiceAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof VoiceAdminError?error.code:'voice_preview_unavailable'};}
+    });
+  }
   if (options.agentAdmin) {
     const agentAdmin = options.agentAdmin;
 

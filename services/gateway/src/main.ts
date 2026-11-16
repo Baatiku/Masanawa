@@ -1549,6 +1549,10 @@ export async function startGatewayService(
           }}),
           ...(nativeAudio ? { nativeAudio } : {}),
           voiceForCharacter: async (scope) => {
+            if(database.featurePool){
+              const custom=await database.featurePool.query(`SELECT e.voice_id FROM agents.admin_voice_assignments a JOIN agents.admin_voice_enrollments e ON e.tenant_id=a.tenant_id AND e.character_id=a.character_id AND e.request_id=a.request_id AND e.state='ready' WHERE a.tenant_id=$1 AND a.character_id=$2`,[scope.tenantId,scope.characterId]);
+              if(custom.rows[0]?.voice_id)return custom.rows[0].voice_id as string;
+            }
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
             if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
             throw Object.assign(new Error('Persona voice configuration is unavailable'),{code:'agent.voice_unavailable'});

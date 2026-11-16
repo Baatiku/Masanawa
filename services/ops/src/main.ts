@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import {createVoiceAdmin} from './voice_admin.js';
 import type {
   AgentPresentationRepository,
   CharacterSkillAssignmentRepository,
@@ -42,6 +43,7 @@ export interface ServiceProcess extends NodeSignalSource {
 }
 
 export interface ServiceDatabaseDependency {
+  readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly readinessCheck: ReadinessCheck;
   readonly agentPresentations?: AgentPresentationRepository;
   readonly characterSkillAssignments?: CharacterSkillAssignmentRepository;
@@ -107,13 +109,11 @@ function createDefaultDatabaseDependency(
     connectionString,
     applicationName: "masanawa-ops",
   });
+  const adminDashboard=createOpsAdminDashboardService({sessions:createPostgresPlatformSessionRepository(database.pool),pool:database.pool,grants:parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON)});
   return Object.freeze({
+    voiceAdmin:createVoiceAdmin({pool:database.pool,authorize:adminDashboard.authorize,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?{apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY}:{})}),
     readinessCheck: database.readinessCheck,
-    adminDashboard: createOpsAdminDashboardService({
-      sessions: createPostgresPlatformSessionRepository(database.pool),
-      pool: database.pool,
-      grants: parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),
-    }),
+    adminDashboard,
     agentPresentations: createPostgresAgentPresentationRepository(database.pool),
     characterSkillAssignments:
       createPostgresCharacterSkillAssignmentRepository(database.pool),
@@ -161,6 +161,7 @@ export async function startOpsService(
   try {
     app = appFactory({
       ...(options.appOptions ?? {}),
+      ...(database.voiceAdmin ? {voiceAdmin:database.voiceAdmin}:{}),
       ...(composedAgentAdmin ? { agentAdmin: composedAgentAdmin } : {}),
       ...(database.adminDashboard ? { adminDashboard: database.adminDashboard } : {}),
       readinessChecks: [
