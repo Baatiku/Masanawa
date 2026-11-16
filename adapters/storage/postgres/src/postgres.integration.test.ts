@@ -236,6 +236,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0119_ops_admin_roles.sql",
       "security/0120_ops_user_lifecycle.sql",
       "security/0121_ops_user_deletion_barrier.sql",
+      "security/0122_persistent_session_rotation.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",

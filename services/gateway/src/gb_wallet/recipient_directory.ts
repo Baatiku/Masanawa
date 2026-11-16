@@ -23,7 +23,7 @@ export function recipientSearchTerm(raw:string):{kind:'name'|'username'|'email'|
   if(!phone?.isValid())return null;
   return {kind:'phone',value:phone.number,...(phone.country==='NG'?{localPhone:'0'+phone.nationalNumber}:{})};
  }
- const term=value.replace(/^@/u,'').toLowerCase();
+ const term=value.replace(/^@/u,'').toLowerCase().replace(/\s+/gu,' ');
  if(term.length<2||term.length>80||!/[\p{L}\p{N}]/u.test(term))return null;
  if(value.startsWith('@')&&!/^[a-z0-9_][a-z0-9_.-]{1,39}$/u.test(term))return null;
  return {kind:value.startsWith('@')?'username':'name',value:term};
@@ -46,8 +46,10 @@ export function createGbRecipientDirectory(pool:Pick<Pool,'query'>){
      AND s.user_id=p.user_id AND (s.contact_phone IN ($3,$4) OR s.phone IN ($3,$4)))`;
    }else{
     values[2]=term.value.replace(/[\\%_]/gu,'\\$&')+'%';
-    predicate=term.kind==='username'?`lower(p.handle) LIKE $3 ESCAPE '\\'`:
-      `(lower(p.handle) LIKE $3 ESCAPE '\\' OR lower(p.display_name) LIKE $3 ESCAPE '\\')`;
+    if(term.kind==='username')predicate=`lower(p.handle) LIKE $3 ESCAPE '\\'`;
+    else {const words=term.value.split(' ');if(words.length>8)return [];values.push(words.map(w=>w.replace(/[\\%_]/gu,'\\$&')));
+      predicate=`(lower(p.handle) LIKE $3 ESCAPE '\\' OR NOT EXISTS(SELECT 1 FROM unnest($4::text[]) word WHERE lower(p.display_name) NOT LIKE word||'%' ESCAPE '\\' AND lower(p.display_name) NOT LIKE '% '||word||'%' ESCAPE '\\'))`;
+    }
    }
    const result=await pool.query<Row>(`${selection} WHERE ${access} AND (${predicate})
     ORDER BY lower(p.handle),p.user_id LIMIT 8`,values);

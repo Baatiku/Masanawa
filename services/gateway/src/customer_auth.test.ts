@@ -606,6 +606,8 @@ describe("customer authentication", () => {
       authorizationHeader: `Bearer ${signedIn.accessToken}`,
     })).resolves.toMatchObject({ tenantId });
 
+    const originalSession=[...repository.sessions.values()][0]!;
+    expect(Date.parse(originalSession.refreshExpiresAt)-Date.parse(originalSession.accessExpiresAt)+900000).toBe(400*86400000);
     const rotated = await service.refresh({ refreshToken: signedIn.refreshToken });
     await expect(customer.authorize({
       authorizationHeader: `Bearer ${signedIn.accessToken}`,

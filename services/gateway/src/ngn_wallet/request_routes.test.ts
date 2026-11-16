@@ -9,6 +9,7 @@ it('NGN requests require session authority, resolve payer and provide exact owne
  registerNgnRequestRoutes(app,{authorize:async h=>{if(h!=='Bearer test')throw new NgnRequestStoreError(403,'unauthorized');return actor;},resolveRecipient:async()=>({userId:'bob',username:'bob.user',displayName:'Bob',active:true}),store:{create,get,list:async()=>[entry],pay:async()=>({operationId:'ngnpay_'+entry.requestId,amountKobo:123,state:'completed'}),decline:async()=>({...entry,state:'declined'}),cancel:async()=>({...entry,state:'cancelled'})}});
  try{expect((await app.inject({url:'/v1/ngn/wallet/requests/'+entry.requestId})).statusCode).toBe(403);
  const headers={authorization:'Bearer test'};const r=await app.inject({method:'POST',url:'/v1/ngn/wallet/requests',headers,payload:{username:'bob.user',amountKobo:123,idempotencyKey:'request_abcdefghijkl'}});expect(r.statusCode).toBe(201);expect(create).toHaveBeenCalledWith(actor,{payerId:'bob',amountKobo:123,idempotencyKey:'request_abcdefghijkl'});
+ const changed=await app.inject({method:'POST',url:'/v1/ngn/wallet/requests',headers,payload:{username:'bob.user',recipientId:'someone_else',amountKobo:123,idempotencyKey:'request_changedrecipient'}});expect(changed.statusCode).toBe(409);expect(create).toHaveBeenCalledTimes(1);
  expect((await app.inject({url:'/v1/ngn/wallet/requests/'+entry.requestId,headers})).json()).toEqual({request:entry});expect(get).toHaveBeenCalledWith(actor,entry.requestId);
  }finally{await app.close();}
 });
