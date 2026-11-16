@@ -16,6 +16,8 @@ within 15 minutes. Refreshing an access token does not renew that age.
 Source completion below is distinct from installation and live qualification.
 The previously installed owner grant must be expanded using the updated private
 installer after canonical migrations and the matching Gateway/Ops images deploy.
+Deletion-requested/revoked accounts cannot be reactivated: the administrator and deletion worker share a per-user transaction lock. Admin adjustments have their own truthful notification title.
+
 No live wallet credit, real speaker enrollment, provider purchase, database reset,
 paid service or Worker activation was performed by this batch.
 
@@ -50,9 +52,9 @@ unrelated open requirements or retire any immutable financial history.
 
 ## Verification evidence
 
-The connected local matrix passes 132 tests (18 PostgreSQL-gated cases skipped
+The connected local matrix passes 132 tests (19 PostgreSQL-gated cases skipped
 in that run). A separate disposable PostgreSQL 18/pgvector instance applies the
-entire canonical migration composition and passes 57 tests, including real NGN
+entire canonical migration composition and passes 60 tests, including real NGN
 hold/adjustment/idempotency/audit and voice lifecycle/recovery records. Google
 HTTP responses in voice tests are explicit fixtures, not provider acceptance.
 The companion web passes 86 unit tests, TypeScript, ESLint (zero errors; existing

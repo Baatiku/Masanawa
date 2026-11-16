@@ -1,7 +1,7 @@
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
 import {mintPlatformSessionToken,hashPlatformSessionToken} from '@masanawa/security';
-import {createPostgresPool,createPostgresPlatformSessionRepository,platformProductMigrationRoots,runMigrations,type Pool} from '@masanawa/postgres';
+import {createPostgresPool,createPostgresPlatformSessionRepository,createPostgresAccountDeletionAccessRevoker,platformProductMigrationRoots,runMigrations,type Pool} from '@masanawa/postgres';
 import {createOpsAdminDashboardService,parseOpsAdminGrants} from './admin_dashboard.js';
 import {createWalletAdmin} from './wallet_admin.js';
 import {createPersonaAdmin} from './persona_admin.js';
@@ -30,6 +30,8 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   await expect(service.adjust(header,{...base,operationId:'admin_'+createCanonicalId('operation'),mode:'set_balance',amountKobo:50000,expectedVersion:1})).rejects.toMatchObject({code:'admin_balance_below_holds_or_overflow'});
   await service.adjust(header,{...base,operationId:'admin_'+createCanonicalId('operation'),mode:'set_balance',amountKobo:200000,expectedVersion:1});
   account=await service.read(header,target);expect(account).toMatchObject({balanceKobo:'200000',heldKobo:'100000',version:'2'});
+  const notices=(await pool.query(`SELECT title FROM agents.mobile_notification_history WHERE tenant_id=$1 AND user_id=$2 AND category='wallet'`,[tenant,target])).rows;
+  expect(notices).toHaveLength(2);expect(notices.every(row=>row.title==='NGN balance adjusted')).toBe(true);
   await expect(pool.query(`UPDATE gb_wallet.ngn_admin_adjustments SET reason='edited' WHERE tenant_id=$1`,[tenant])).rejects.toThrow();
  });
  it('publishes audited persona revisions and rejects stale updates',async()=>{
@@ -60,5 +62,19 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   const history=await authority.audit({authorizationHeader:header,limit:100,offset:0});
   expect(history).toEqual(expect.arrayContaining([expect.objectContaining({eventType:'admin.ngn.adjustment'}),expect.objectContaining({eventType:'admin.voice.provider_voice_deleted'}),expect.objectContaining({eventType:'admin.permissions'})]));
   expect(history.every(row=>typeof row==='object'&&row!==null&&!Object.hasOwn(row,'payload'))).toBe(true);
+ });
+ it('serializes administrator reactivation against deletion revocation and preserves the deletion barrier',async()=>{
+  const user=createCanonicalId('user'),requestId=crypto.randomUUID(),now=new Date().toISOString();
+  await pool.query(`INSERT INTO identity.users(tenant_id,user_id,state,created_at,updated_at) VALUES($1,$2,'disabled',$3,$3)`,[tenant,user,now]);
+  await pool.query(`INSERT INTO identity.account_deletion_requests(request_id,tenant_id,user_id,phase,created_at,updated_at) VALUES($1,$2,$3,'processing',$4,$4)`,[requestId,tenant,user,now]);
+  let entered!:()=>void,release!:()=>void;const locked=new Promise<void>(r=>entered=r),permission=new Promise<void>(r=>release=r);
+  // This isolated identity has no wallets, payouts, provider operations or data.
+  const revoker=createPostgresAccountDeletionAccessRevoker(pool,{check:async()=>{entered();await permission;return {clear:true,checkedAt:now,reference:'isolated-zero-obligation-acceptance'};}});
+  const deleting=revoker.revoke({tenantId:tenant,userId:user,requestId,expectedRevision:1,now});await locked;
+  let settled=false;const attempted=createUserAdmin({pool,authorize:authority.authorize}).transition(header,{userId:user,operationId:'reactivate_'+createCanonicalId('operation'),state:'active',expectedRevision:1,reason:'Explicit isolated reactivation concurrency probe'}).then(value=>{settled=true;return {value,error:null};},error=>{settled=true;return {value:null,error};});
+  try{await new Promise(r=>setTimeout(r,40));expect(settled).toBe(false);}finally{release();}
+  await deleting;expect((await attempted).error).toMatchObject({code:'user_deletion_blocks_reactivation'});
+  expect((await pool.query(`SELECT state FROM identity.users WHERE tenant_id=$1 AND user_id=$2`,[tenant,user])).rows[0]).toEqual({state:'disabled'});
+  expect(await revoker.revoke({tenantId:tenant,userId:user,requestId,expectedRevision:1,now})).toMatchObject({alreadyRevoked:true});
  });
 });
