@@ -4,15 +4,22 @@ import type { Pool } from "@masanawa/postgres";
 export type AdminCapability =
   | "dashboard.read"
   | "users.read"
+  | "users.write"
   | "runtime.read"
   | "operations.read"
   | "audit.read"
   | "news.read"
+  | "news.write"
   | "wallet.read"
   | "wallet.test.write"
+  | "wallet.adjust.write"
+  | "roles.read"
+  | "roles.write"
   | "data.read"
+  | "data.write"
   | "calls.read"
   | "moderation.read"
+  | "moderation.write"
   | "agents.presentation.read"
   | "agents.presentation.write"
   | "agents.skills.read"
@@ -83,6 +90,7 @@ export function createOpsAdminDashboardService(input: {
   sessions: PlatformSessionRepository;
   pool: Pick<Pool, "query">;
   grants: readonly Grant[];
+  dynamicCapabilities?:(tenantId:string,userId:string)=>Promise<readonly string[]>;
 }): OpsAdminDashboardService {
   async function authorize(request: { authorizationHeader: string | undefined; capability: AdminCapability }): Promise<AdminActor> {
     const match = /^Bearer\s+([^\s]+)$/i.exec(request.authorizationHeader ?? "");
@@ -99,8 +107,19 @@ export function createOpsAdminDashboardService(input: {
       (grant.userId === identity.userId ||
         (grant.email !== undefined && grant.email === identity.profile.email?.trim().toLowerCase()) ||
         (grant.phone !== undefined && grant.phone === identity.profile.phone?.trim())));
-    const capabilities = [...new Set(grants.flatMap((grant) => grant.capabilities))];
+    const dynamic=await input.dynamicCapabilities?.(identity.tenantId,identity.userId)??[];
+    const capabilities = [...new Set([...grants.flatMap((grant) => grant.capabilities),...dynamic])];
     if (!capabilities.includes("*") && !capabilities.includes(request.capability)) throw new OpsAdminAccessError(403, "Admin capability denied");
+    // Refreshing an access token must not refresh the authentication age.
+    // All administrator writes, including provider voice enrollment, use the
+    // original session creation time checked in PostgreSQL.
+    if (request.capability.endsWith('.write')) {
+      const fresh = await input.pool.query(`SELECT 1 FROM security.platform_sessions
+        WHERE tenant_id=$1 AND user_id=$2 AND access_hash=$3 AND revoked_at IS NULL
+        AND access_expires_at>clock_timestamp() AND created_at>clock_timestamp()-interval '15 minutes'`,
+        [identity.tenantId, identity.userId, hashPlatformSessionToken(match[1]!)]);
+      if (!fresh.rows.length) throw new OpsAdminAccessError(403, 'fresh_admin_sign_in_required');
+    }
     return { tenantId: identity.tenantId, actorId: identity.userId, name: identity.profile.name, capabilities };
   }
 
@@ -145,7 +164,7 @@ export function createOpsAdminDashboardService(input: {
     async users(request) {
       const tenantId = await scoped("users.read", request.authorizationHeader);
       const { limit, offset } = page(request.limit, request.offset);
-      const result = await input.pool.query(`SELECT u.user_id AS "userId",p.display_name AS "displayName",u.state,u.created_at AS "createdAt",
+      const result = await input.pool.query(`SELECT u.user_id AS "userId",p.display_name AS "displayName",u.state,u.revision::text,u.created_at AS "createdAt",
         (SELECT count(*)::integer FROM identity.relationships r WHERE r.tenant_id=u.tenant_id AND r.user_id=u.user_id) AS "relationshipCount"
         FROM identity.users u LEFT JOIN security.platform_user_profiles p ON p.tenant_id=u.tenant_id AND p.user_id=u.user_id
         WHERE u.tenant_id=$1 AND ($2::text IS NULL OR u.state=$2) ORDER BY u.created_at DESC,u.user_id DESC LIMIT $3 OFFSET $4`, [tenantId, request.state ?? null, limit, offset]);
@@ -172,15 +191,25 @@ export function createOpsAdminDashboardService(input: {
     async audit(request) {
       const tenantId = await scoped("audit.read", request.authorizationHeader);
       const { limit, offset } = page(request.limit, request.offset);
-      const result = await input.pool.query(`SELECT audit_event_id AS "auditEventId",event_type AS "eventType",aggregate_type AS "aggregateType",
-        aggregate_id AS "aggregateId",correlation_id AS "correlationId",occurred_at AS "occurredAt"
-        FROM events.audit_events WHERE tenant_id=$1 ORDER BY occurred_at DESC,audit_event_id DESC LIMIT $2 OFFSET $3`, [tenantId, limit, offset]);
+      const result = await input.pool.query(`SELECT * FROM (
+        SELECT audit_event_id::text AS "auditEventId",event_type AS "eventType",aggregate_type AS "aggregateType",aggregate_id AS "aggregateId",correlation_id::text AS "correlationId",occurred_at AS "occurredAt" FROM events.audit_events WHERE tenant_id=$1
+        UNION ALL SELECT 'wallet:'||operation_id,'admin.ngn.adjustment','wallet',account_id,operation_id,created_at FROM gb_wallet.ngn_admin_adjustments WHERE tenant_id=$1
+        UNION ALL SELECT 'persona:'||character_id||':'||revision,'admin.persona.configuration','persona',character_id,NULL,created_at FROM agents.admin_persona_config_events WHERE tenant_id=$1
+        UNION ALL SELECT 'portrait:'||character_id||':'||revision,'admin.persona.portrait','persona',character_id,NULL,created_at FROM agents.admin_persona_portrait_events WHERE tenant_id=$1
+        UNION ALL SELECT 'voice-assignment:'||event_id,'admin.voice.assignment','persona',character_id,request_id,created_at FROM agents.admin_voice_assignment_events WHERE tenant_id=$1
+        UNION ALL SELECT 'voice-lifecycle:'||event_id,'admin.voice.'||action,'persona',character_id,request_id,created_at FROM agents.admin_voice_lifecycle_events WHERE tenant_id=$1
+        UNION ALL SELECT 'role:'||user_id||':'||revision,'admin.permissions','user',user_id,NULL,created_at FROM security.ops_admin_role_events WHERE tenant_id=$1
+        UNION ALL SELECT 'account:'||operation_id,'admin.account.'||next_state,'user',user_id,operation_id,created_at FROM security.ops_user_lifecycle_events WHERE tenant_id=$1
+        UNION ALL SELECT 'data:'||revision,'admin.data.catalogue','catalogue',tenant_id,NULL,created_at FROM gb_wallet.admin_data_catalogue_events WHERE tenant_id=$1
+        UNION ALL SELECT 'publisher:'||publisher_id||':'||revision,'admin.publisher.review','publisher',publisher_id,NULL,created_at FROM feed.publisher_review_events WHERE tenant_id=$1
+      ) history ORDER BY "occurredAt" DESC,"auditEventId" DESC LIMIT $2 OFFSET $3`, [tenantId, limit, offset]);
       return result.rows;
     },
     async news(request) {
       const tenantId = await scoped("news.read", request.authorizationHeader);
       const { limit, offset } = page(request.limit, request.offset);
       const result = await input.pool.query(`SELECT publisher_id AS "publisherId",display_name AS "displayName",state,
+        rights_basis AS "rightsBasis",rights_until AS "rightsUntil",revision::text,
         rights_basis IS NOT NULL AND rights_until > clock_timestamp() AS "rightsCurrent",
         reviewed_by IS NOT NULL AS "rightsReviewed",last_poll_at AS "lastPollAt",last_error AS "lastError",
         next_poll_at AS "nextPollAt"

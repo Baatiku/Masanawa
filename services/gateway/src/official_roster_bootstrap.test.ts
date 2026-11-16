@@ -28,7 +28,7 @@ it('creates real canonical officials, admits an actual reviewed packet, activate
  const pool={query,connect:async()=>client} as never;
  try{
   for(const [root,names] of Object.entries({identity:['0001_identity_foundation.sql','0002_character_ownership.sql'],
-   agents:['0001_character_sessions.sql','0002_agent_configurations.sql','0004_platform_agent_preferences.sql','0005_platform_agent_default.sql','0012_masana_country_identity.sql'],
+   agents:['0001_character_sessions.sql','0002_agent_configurations.sql','0004_platform_agent_preferences.sql','0005_platform_agent_default.sql','0012_masana_country_identity.sql','0021_admin_persona_controls.sql'],
    masana:['0001_masana_profiles.sql','0011_public_official_dossiers.sql','0012_public_official_review_receipts.sql','0013_grokipedia_only_review_scope.sql','0014_public_official_optional_media.sql','0015_attributed_biography_references.sql']}))
    for(const name of names)await db.exec(await readFile(new URL(`../../../packages/${root}/migrations/${name}`,import.meta.url),'utf8'));
   const identity={async provision(input:Parameters<Parameters<typeof ensureOfficialPlatformAgents>[0]['identity']['provision']>[0]){

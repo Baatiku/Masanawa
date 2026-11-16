@@ -36,6 +36,7 @@ import type { GbRequestPorts } from "./gb_wallet/request_routes.js";
 import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
+import {createPublicRecordResearch} from './public_record_research.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService, SavedLibraryService } from "@masanawa/feed";
 import {
@@ -845,7 +846,7 @@ export async function startGatewayService(
     }
 
     const customerAuthorizers = createPlatformCustomerAuthorizers({
-      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool))} : {}),
+      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,createPublicRecordResearch()))} : {}),
       sessions: customerSessions,
       presentations: database.agentPresentations,
       skillAssignments: database.characterSkillAssignments,
@@ -1504,7 +1505,7 @@ export async function startGatewayService(
             ? { activity: database.mobileActivity }
             : {}),
           ...(database.featurePool ? {
-            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool)),
+            identities: createPgAgentMasanaIdentityReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool),publicBaseUrl),
           } : {}),
         })
       : undefined);
@@ -1549,6 +1550,10 @@ export async function startGatewayService(
           }}),
           ...(nativeAudio ? { nativeAudio } : {}),
           voiceForCharacter: async (scope) => {
+            if(database.featurePool){
+              const custom=await database.featurePool.query(`SELECT e.voice_id FROM agents.admin_voice_assignments a JOIN agents.admin_voice_enrollments e ON e.tenant_id=a.tenant_id AND e.character_id=a.character_id AND e.request_id=a.request_id AND e.state='ready' WHERE a.tenant_id=$1 AND a.character_id=$2 AND a.active=true`,[scope.tenantId,scope.characterId]);
+              if(custom.rows[0]?.voice_id)return custom.rows[0].voice_id as string;
+            }
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
             if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
             throw Object.assign(new Error('Persona voice configuration is unavailable'),{code:'agent.voice_unavailable'});
@@ -1887,6 +1892,8 @@ export async function startGatewayService(
         AND c.character_id=r.character_id AND c.state='active'
       JOIN identity.character_ownership o ON o.tenant_id=r.tenant_id
         AND o.character_id=r.character_id AND o.kind='platform'
+      JOIN agents.agent_presentations presentation ON presentation.tenant_id=r.tenant_id
+        AND presentation.character_id=r.character_id AND presentation.visible_in_user_app=true
       WHERE r.tenant_id=$1 AND r.character_id=$2 AND r.state='approved'
       LIMIT 1`,[actor.tenantId,characterId]);
     const revision=result.rows[0]?.revision;
@@ -2217,9 +2224,10 @@ export async function startGatewayService(
     // A reviewed provider catalogue and a separate NGN purchase decision are
     // required; neither grants an MB sale or creates a second wallet authority.
     const ngnActivation=ngnDataActivation(env);
+    const databaseNgnApprovals=ngnActivation.catalogue&&featurePool&&featureTenant?(await featurePool.query(`SELECT bundles FROM gb_wallet.admin_data_catalogues WHERE tenant_id=$1`,[featureTenant])).rows[0]?.bundles:undefined;
     const ngnDataCatalogue:GatewayAppOptions['ngnDataCatalogue']=options.appOptions?.ngnDataCatalogue??(()=>{
       if(!ngnActivation.catalogue)return undefined;
-      const raw=env.MASANAWA_NGN_DATA_APPROVALS_JSON?.trim();
+      const raw=databaseNgnApprovals?JSON.stringify(databaseNgnApprovals):env.MASANAWA_NGN_DATA_APPROVALS_JSON?.trim();
       if(!raw||!flutterwaveBills||!featurePool||!sessions||!featureTenant)
         throw new TypeError('NGN Buy Data catalogue enabled without canonical auth, provider, DB or approved mapping');
       const parsed:unknown=JSON.parse(raw);
@@ -2229,7 +2237,7 @@ export async function startGatewayService(
       return {authorize:async(header:string|undefined)=>{
         const actor=await resolveFeatureFan(header);
         return {tenantId:actor.tenantId,userId:actor.userId};
-      },approved:async()=>approved,liveItems:createLiveFlutterwaveGbDataItems(flutterwaveBills)};
+      },approved:async()=>{const row=(await featurePool.query(`SELECT bundles FROM gb_wallet.admin_data_catalogues WHERE tenant_id=$1`,[featureTenant])).rows[0];const current=row?row.bundles:approved;projectVerifiedWholeGbBundles(current,[],new Date());return current as ApprovedWholeGbBundle[];},liveItems:createLiveFlutterwaveGbDataItems(flutterwaveBills)};
     })();
     const ngnDataPurchases:GatewayAppOptions['ngnDataPurchases']=options.appOptions?.ngnDataPurchases??
       (ngnActivation.purchases&&ngnDataCatalogue&&featurePool&&flutterwaveBills&&sessions&&featureTenant?(()=>{
@@ -2289,6 +2297,7 @@ export async function startGatewayService(
       // reconciliation, retention and any required account-data exports.
       ...(twinProduction ? { twinProduction } : {}),
       ...(composedDirectory ? { agentDirectory: composedDirectory } : {}),
+      ...(database.featurePool&&platformTenantId?{personaPortraits:{read:async(characterId:string)=>{const row=(await database.featurePool!.query(`SELECT r.image_png FROM agents.admin_persona_portraits r JOIN agents.agent_presentations p ON p.tenant_id=r.tenant_id AND p.character_id=r.character_id AND p.visible_in_user_app=true WHERE r.tenant_id=$1 AND r.character_id=$2`,[platformTenantId,characterId])).rows[0];return row?.image_png??null;}}}:{}),
       ...(gbWalletSummary ? { gbWalletSummary } : {}),
       ...(gbWalletActivity ? { gbWalletActivity } : {}),
       ...(gbCalls ? {gbCalls} : {}),

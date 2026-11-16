@@ -11,6 +11,7 @@ export interface ApprovedMasanaDirectoryIdentity {
   readonly civicAgencyId?:string;
   readonly publicOfficialSimulation?:boolean;
   readonly avatarUrl?:string;
+  readonly biography?:string;
   readonly publicOfficial?:{portrait?:{url:string;sourceUrl:string;credit:string;licenseLabel:string;licenseUrl?:string};party?:{code:string;name:string;emblemUrl:string;sourceUrl:string;checkedAt:string};officialName:string;office:string;identitySourceUrl:string;reviewedAt:string;reviewExpiresAt:string;verification:'source_reviewed';representation:'ai_simulation';biography?:string;biographicalFacts?:import('@masanawa/masana').MasanaBiographicalFacts};
   readonly portraitKey: string | null;
   readonly following: boolean;
@@ -26,6 +27,7 @@ export interface AgentMasanaIdentityReader {
 export function createPgAgentMasanaIdentityReader(
   db:{query(sql:string,params:unknown[]):Promise<{rows:unknown[]}>},
   officials?:ReturnType<typeof import('./public_official_knowledge.js').createOfficialKnowledgeReader>,
+  portraitBaseUrl?:string,
 ):AgentMasanaIdentityReader {
   return Object.freeze({
     async read({tenantId,userId,characterIds}:Parameters<AgentMasanaIdentityReader["read"]>[0]) {
@@ -81,6 +83,12 @@ export function createPgAgentMasanaIdentityReader(
           Object.freeze({...(civicAgencyId?{civicAgencyId}:{}),...(portrait?{avatarUrl:portrait.url}:{}),...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(portrait?{portrait}:{}),...(party?{party}:{}),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
             socialChannels:validateMasanaSocialChannels(row.social_channels)}));
       }
+      if(portraitBaseUrl){
+        const portraits=await db.query(`SELECT character_id,revision::text,credit,source_url FROM agents.admin_persona_portraits WHERE tenant_id=$1 AND character_id=ANY($2::text[])`,[tenantId,characterIds]);
+        for(const raw of portraits.rows){const row=raw as {character_id:string;revision:string;credit:string;source_url:string};if(!characterIds.includes(row.character_id as CharacterId))continue;const prior=result.get(row.character_id as CharacterId);result.set(row.character_id as CharacterId,Object.freeze({...prior,...(prior?.publicOfficial?{publicOfficial:{...prior.publicOfficial,portrait:{url:new URL('/v1/personas/'+encodeURIComponent(row.character_id)+'/portrait?revision='+encodeURIComponent(row.revision),portraitBaseUrl).href,sourceUrl:row.source_url,credit:row.credit,licenseLabel:'Administrator-confirmed rights'}}}:{}),avatarUrl:new URL('/v1/personas/'+encodeURIComponent(row.character_id)+'/portrait?revision='+encodeURIComponent(row.revision),portraitBaseUrl).href,portraitKey:prior?.portraitKey??null,following:prior?.following??false,socialChannels:prior?.socialChannels??[]}));}
+      }
+      const configurations=await db.query(`SELECT character_id,biography FROM agents.admin_persona_configs WHERE tenant_id=$1 AND character_id=ANY($2::text[]) AND state='active' AND biography<>''`,[tenantId,characterIds]);
+      for(const raw of configurations.rows){const row=raw as {character_id:string;biography:string};if(!characterIds.includes(row.character_id as CharacterId)||typeof row.biography!=='string')continue;const prior=result.get(row.character_id as CharacterId);result.set(row.character_id as CharacterId,Object.freeze({...prior,biography:row.biography,...(prior?.publicOfficial?{publicOfficial:{...prior.publicOfficial,biography:row.biography}}:{}),portraitKey:prior?.portraitKey??null,following:prior?.following??false,socialChannels:prior?.socialChannels??[]}));}
       return result;
     },
   });

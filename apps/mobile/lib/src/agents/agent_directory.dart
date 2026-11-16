@@ -1,3 +1,18 @@
+bool isAdminPersonaPortraitUrl(String raw) {
+  final u = Uri.tryParse(raw);
+  return u != null &&
+      u.scheme == 'https' &&
+      u.host == 'api.masanawa.com' &&
+      u.userInfo.isEmpty &&
+      !u.hasPort &&
+      !u.hasFragment &&
+      RegExp(r'^/v1/personas/character_[a-f0-9-]{36}/portrait$')
+          .hasMatch(u.path) &&
+      u.queryParameters.length == 1 &&
+      u.queryParametersAll['revision']?.length == 1 &&
+      RegExp(r'^[0-9]{1,16}$').hasMatch(u.queryParameters['revision'] ?? '');
+}
+
 bool isOfficialPublicMediaUrl(String raw) {
   final u = Uri.tryParse(raw);
   return u != null &&
@@ -27,7 +42,7 @@ class OfficialPortrait {
         credit = raw['credit'],
         label = raw['licenseLabel'];
     if (url is! String ||
-        !isOfficialPublicMediaUrl(url) ||
+        !(isOfficialPublicMediaUrl(url) || isAdminPersonaPortraitUrl(url)) ||
         source is! String ||
         Uri.tryParse(source)?.scheme != 'https' ||
         credit is! String ||
@@ -254,6 +269,7 @@ class AgentDirectoryEntry {
     required this.displayName,
     required this.roleLabel,
     required this.about,
+    this.biography,
     required this.presence,
     this.avatarUrl,
     this.greeting,
@@ -275,6 +291,7 @@ class AgentDirectoryEntry {
 
   final PublicOfficialIdentity? publicOfficial;
   final bool publicOfficialSimulation;
+
   /// Server-reviewed independent AI guide identity, never an official account.
   final String? civicAgencyId;
   final String characterId;
@@ -284,6 +301,7 @@ class AgentDirectoryEntry {
   /// Admin-configured presentation label. It is not a Skill or authority grant.
   final String roleLabel;
   final String about;
+  final String? biography;
   final AgentPresence presence;
   final String? avatarUrl;
   final String? greeting;
@@ -327,6 +345,7 @@ class AgentDirectoryEntry {
     displayName: displayName,
     roleLabel: roleLabel,
     about: about,
+    biography: biography,
     presence: AgentPresence.unknown,
     // Offline directory snapshots cannot assert a media grant is still
     // authorized. The approved portraitKey remains as stable metadata.
@@ -366,6 +385,7 @@ class AgentDirectoryEntry {
     if (civicAgencyId != null) 'civicAgencyId': civicAgencyId,
     'roleLabel': roleLabel,
     'about': about,
+    if (biography != null) 'biography': biography,
     'presence': switch (presence) {
       AgentPresence.available => 'available',
       AgentPresence.listening => 'listening',
@@ -404,14 +424,22 @@ class AgentDirectoryEntry {
       publicOfficialSimulation:
           json['publicOfficialSimulation'] == true ||
           json['publicOfficial'] is Map,
-      civicAgencyId: json['civicAgencyId'] is String &&
-          RegExp(r'^[a-z][a-z0-9-]{1,39}$').hasMatch(json['civicAgencyId'] as String)
-          ? json['civicAgencyId'] as String : null,
+      civicAgencyId:
+          json['civicAgencyId'] is String &&
+              RegExp(r'^[a-z][a-z0-9-]{1,39}$')
+                  .hasMatch(json['civicAgencyId'] as String)
+          ? json['civicAgencyId'] as String
+          : null,
       characterId: requiredString('characterId'),
       characterVersionId: requiredString('characterVersionId'),
       displayName: requiredString('displayName'),
       roleLabel: requiredString('roleLabel'),
       about: (json['about'] as String? ?? '').trim(),
+      biography:
+          json['biography'] is String &&
+              (json['biography'] as String).length <= 8000
+          ? json['biography'] as String
+          : null,
       presence: AgentPresence.parse(
         json['presence'] is String ? json['presence'] as String : null,
       ),
@@ -434,9 +462,8 @@ class AgentDirectoryEntry {
           : null,
       portraitKey:
           json['portraitKey'] is String &&
-              RegExp(
-                r'^[a-z][a-z0-9_-]{1,39}$',
-              ).hasMatch(json['portraitKey'] as String)
+              RegExp(r'^[a-z][a-z0-9_-]{1,39}$')
+                  .hasMatch(json['portraitKey'] as String)
           ? json['portraitKey'] as String
           : null,
       following: json['following'] == true,

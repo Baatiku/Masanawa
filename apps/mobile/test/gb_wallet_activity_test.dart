@@ -148,6 +148,25 @@ class _Activity implements GbActivityTransport {
 }
 
 void main() {
+  test(
+    'administrator adjustments retain NGN units and distinct receipt labels',
+    () {
+      final row = GbActivityItem.read({
+        'entryId': 'ngn:admin_original_123',
+        'operationId': 'admin_original_123',
+        'unit': 'NGN',
+        'amount': 500000,
+        'kind': 'admin_adjustment',
+        'status': 'completed',
+        'createdAt': '2026-11-16T00:00:00.000Z',
+      });
+      expect(row.title, 'Administrator balance adjustment');
+      expect(row.unit, 'NGN');
+      expect(row.amount, 500000);
+      expect(row.amountLabel, '+₦5,000.00');
+    },
+  );
+
   test('rejects invented/unsafe Activity units, amounts, and next cursors', () {
     final valid = {
       'items': [

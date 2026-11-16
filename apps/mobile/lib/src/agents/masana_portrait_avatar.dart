@@ -1,7 +1,9 @@
 import '../tokens/feature_colors.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
 import 'agent_directory.dart';
 
 /// Curated offline portraits. Server-approved identity keys take priority over labels.
@@ -195,14 +197,26 @@ class MasanaPortraitAvatar extends StatelessWidget {
         matchesIdentity && agent!.publicOfficial?.current == true
         ? agent!.publicOfficial?.portrait
         : null;
-    final url = canonical ? officialPhoto?.url : avatarUrl;
+    final selectedAgent = agent;
+    final managedPhoto =
+        matchesIdentity &&
+            selectedAgent != null &&
+            selectedAgent.avatarUrl != null &&
+            isAdminPersonaPortraitUrl(selectedAgent.avatarUrl!) &&
+            Uri.parse(selectedAgent.avatarUrl!).path ==
+                '/v1/personas/${selectedAgent.characterId}/portrait'
+        ? selectedAgent.avatarUrl
+        : null;
+    final url = canonical ? managedPhoto ?? officialPhoto?.url : avatarUrl;
     final initial = matchesIdentity
         ? agent!.initial
         : (name.isNotEmpty ? name[0].toUpperCase() : 'M');
 
     Widget fallbackSvgOrUrl() {
       if (url != null && url.isNotEmpty) {
-        if (isPublicMasanawaPortraitUrl(url) || isOfficialPublicMediaUrl(url)) {
+        if (isPublicMasanawaPortraitUrl(url) ||
+            isOfficialPublicMediaUrl(url) ||
+            isAdminPersonaPortraitUrl(url)) {
           return CachedNetworkImage(
             imageUrl: url,
             width: size,

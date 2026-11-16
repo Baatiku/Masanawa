@@ -3,6 +3,15 @@ import {
   createGeminiRecordedLiveAudioRenderer,
   type RecordedLiveSocket,
 } from "./recorded_live_audio.js";
+it('routes assigned custom voices to real TTS without opening a Live socket',async()=>{
+ const socketFactory=vi.fn();const provider=vi.fn<typeof fetch>(async(url,init)=>{
+  expect(String(url)).toBe('https://generativelanguage.googleapis.com/v1beta/interactions');
+  const body=JSON.parse(String(init?.body));expect(body.model).toBe('gemini-3.8-flash-tts');expect(body.generation_config.speech_config).toEqual([{voice:'voice_authorized_sample'}]);
+  return Response.json({steps:[{type:'model_output',content:[{type:'audio',mime_type:'audio/l16',data:Buffer.from([0,0,1,0,2,0,3,0]).toString('base64')}]}]});
+ });
+ vi.stubGlobal('fetch',provider);
+ try{const renderer=createGeminiRecordedLiveAudioRenderer({apiKey:'server-key',model:'gemini-3.8-live',voiceName:'Sulafat',socketFactory});const audio=await renderer.render('Hello there',undefined,undefined,{voiceName:'voice_authorized_sample'});expect(audio.dataBase64).toBeTruthy();expect(provider).toHaveBeenCalledOnce();expect(socketFactory).not.toHaveBeenCalled();}finally{vi.unstubAllGlobals();}
+});
 class Socket extends EventTarget {
   binaryType: RecordedLiveSocket["binaryType"] = "blob";
   sent: Record<string, any>[] = [];

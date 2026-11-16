@@ -233,6 +233,8 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0116_signup_contact_geography.sql",
       "security/0117_contact_phone_legacy_parser_parity.sql",
       "security/0118_ops_test_wallet.sql",
+      "security/0119_ops_admin_roles.sql",
+      "security/0120_ops_user_lifecycle.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",

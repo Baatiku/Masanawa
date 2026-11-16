@@ -1,0 +1,15 @@
+import {describe,it,expect,vi} from 'vitest';
+import type {Pool} from '@masanawa/postgres';
+import {createWalletAdmin} from './wallet_admin.js';
+import {mintPlatformSessionToken} from '@masanawa/security';
+const access='Bearer '+mintPlatformSessionToken('access');
+const actor={tenantId:'tenant_a',actorId:'user_admin',name:'Admin',capabilities:['wallet.adjust.write']};
+const request={userId:'user_target',operationId:'adjustment_123456789',mode:'credit' as const,amountKobo:500000,expectedVersion:0,reason:'Owner funded account credit',fundingReference:'bank-reference-123'};
+function fixture(){const query=vi.fn(async(_sql:string,_args:unknown[])=>({rows:[] as Record<string,unknown>[]}));const authorize=vi.fn(async()=>actor);return {query,authorize,service:createWalletAdmin({pool:{query} as unknown as Pick<Pool,'query'>,authorize})};}
+describe('real wallet administration',()=>{
+ it('requires the distinct financial-write capability before SQL',async()=>{const f=fixture();f.authorize.mockRejectedValue(new Error('denied'));await expect(f.service.adjust(access,request)).rejects.toThrow('denied');expect(f.authorize).toHaveBeenCalledWith({authorizationHeader:access,capability:'wallet.adjust.write'});expect(f.query).not.toHaveBeenCalled();});
+ it('requires a recently created authenticated session, never just a frontend flag',async()=>{const f=fixture();await expect(f.service.adjust(access,request)).rejects.toMatchObject({statusCode:403,code:'fresh_admin_sign_in_required'});expect(f.query).toHaveBeenCalledOnce();expect(f.query.mock.calls[0]?.[0]).toContain("interval '15 minutes'");expect(f.query.mock.calls[0]?.[1].slice(0,2)).toEqual(['tenant_a','user_admin']);});
+ it('rejects fractional kobo and missing funding explanation before SQL',async()=>{const f=fixture();await expect(f.service.adjust(access,{...request,amountKobo:0.5})).rejects.toMatchObject({statusCode:422});await expect(f.service.adjust(access,{...request,reason:'x'})).rejects.toMatchObject({statusCode:422});expect(f.query).not.toHaveBeenCalled();});
+ it('uses the canonical atomic adjustment and reads its real receipt',async()=>{const f=fixture();f.query.mockResolvedValueOnce({rows:[{}]}).mockResolvedValueOnce({rows:[{operation_id:request.operationId,account_id:'user_target',delta_kobo:'500000',before_kobo:'0',after_kobo:'500000',created_at:'2026-11-16T00:00:00Z'}]});await expect(f.service.adjust(access,request)).resolves.toMatchObject({operationId:request.operationId,afterKobo:'500000'});expect(f.query.mock.calls[1]?.[0]).toContain('apply_admin_ngn_adjustment');expect(f.query.mock.calls[1]?.[1].slice(0,7)).toEqual(['tenant_a','user_admin','user_target',request.operationId,'credit',500000,0]);});
+ it('scopes original-receipt recovery to the canonical tenant and target',async()=>{const f=fixture();await f.service.receipt(access,'user_target',request.operationId);expect(f.query.mock.calls[0]?.[1]).toEqual(['tenant_a','user_target',request.operationId]);});
+});

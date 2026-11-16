@@ -25,6 +25,7 @@ beforeAll(async()=>{
  CREATE TABLE agents.agent_presentations(tenant_id text,character_id text,character_version_id text,schema_version smallint DEFAULT 1,display_name text,role_label text,about text,greeting text,visible_in_user_app boolean,sort_order integer,revision bigint,PRIMARY KEY(tenant_id,character_id));`);
  await db.exec(await readFile(new URL("../../../packages/masana/migrations/0001_masana_profiles.sql",import.meta.url),"utf8"));
  await db.exec(await readFile(new URL("../../../packages/agents/migrations/0012_masana_country_identity.sql",import.meta.url),"utf8"));
+ await db.exec(await readFile(new URL("../../../packages/agents/migrations/0021_admin_persona_controls.sql",import.meta.url),"utf8"));
  await db.query("INSERT INTO identity.users(tenant_id,user_id) VALUES($1,$2),($1,$3)",[tenant,user,otherUser]);
  for(const [index,seed] of PROFESSIONAL_MASANA_CATALOG.entries()){
   const id=ids[index]!;

@@ -10,9 +10,9 @@ const biographyHosts=OFFICIAL_BIOGRAPHY_HOSTS.map(h=>h.replaceAll('.','[.]')).jo
 const referenceSql=`^https://(www[.])?(${biographyHosts})/[^?#[:space:]]+$`;
 const grokipediaSql="^https://(www[.])?grokipedia[.]com/page/[^/?#[:space:]]+$";
 /** Public evidence is deliberately separate from per-citizen conversational memory. */
-export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>){
+export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,research?:ReturnType<typeof import('./public_record_research.js').createPublicRecordResearch>){
  return {
-  async read(tenantId:string,characterId:string,characterVersionId:string,query=''):Promise<PublicOfficialPersona|null>{
+  async read(tenantId:string,characterId:string,characterVersionId:string,query='',allowResearch=false):Promise<PublicOfficialPersona|null>{
    const r=await pool.query(`SELECT d.*,c.active_character_version_id,c.state AS character_state,o.kind AS owner_kind FROM masana.public_official_dossiers d
     JOIN identity.characters c ON c.tenant_id=d.tenant_id AND c.character_id=d.character_id
     LEFT JOIN identity.character_ownership o ON o.tenant_id=c.tenant_id AND o.character_id=c.character_id
@@ -42,7 +42,7 @@ export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>){
    return {officialName:d.official_name,office:d.office,countryCode:'NG',
     identitySourceUrl:d.identity_source_url,reviewedAt:new Date(d.reviewed_at).toISOString(),
     reviewExpiresAt:new Date(d.review_expires_at).toISOString(),
-    evidence};
+    evidence:allowResearch&&query&&research?[...evidence,...await research(query,[d.identity_source_url,...e.rows.map(x=>String(x.source_url))])]:evidence};
   },
   async simulations(tenantId:string,ids:readonly string[]){
    if(!ids.length)return new Set<string>();

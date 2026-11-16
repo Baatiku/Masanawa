@@ -91,6 +91,7 @@ export interface ReadinessCheck {
 }
 
 export interface GatewayAppOptions {
+  readonly personaPortraits?:{read(characterId:string):Promise<Buffer|null>};
   /** Exact HTTPS browser origins; no wildcard and no implicit cookie access. */
   readonly webAllowedOrigins?: readonly string[];
   /** Staged product-gate; enable only after all retained MB routes qualify. */
@@ -195,6 +196,7 @@ const AgentDirectoryEntrySchema = Type.Object(
     voiceProvider: Type.Union([Type.String(), Type.Null()]),
     voiceName: Type.Union([Type.String(), Type.Null()]),
     avatarUrl:Type.Optional(Type.String({maxLength:2048})),
+    biography:Type.Optional(Type.String({maxLength:8000})),
     portraitKey: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9_-]{1,39}$'})),
     following: Type.Optional(Type.Boolean()),
     countryCode: Type.Optional(Type.Union([Type.String({pattern:'^[A-Z]{2}$'}),Type.Null()])),
@@ -943,6 +945,13 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     });
   }
 
+  if(options.personaPortraits){
+    app.get('/v1/personas/:characterId/portrait',async(request,reply)=>{
+      const id=(request.params as {characterId?:string}).characterId??'';if(!/^[a-zA-Z0-9_-]{1,128}$/.test(id))return reply.code(400).send({error:'invalid_persona'});
+      const image=await options.personaPortraits!.read(id);if(!image)return reply.code(404).send({error:'portrait_not_found'});
+      return reply.header('Content-Type','image/png').header('X-Content-Type-Options','nosniff').header('Cache-Control','public, max-age=300').send(image);
+    });
+  }
   if (options.agentDirectory) {
     const directory = options.agentDirectory;
     app.get(

@@ -15,12 +15,14 @@ export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials
       const raw: unknown = result.rows[0]?.constitution;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
       const value = raw as Record<string, unknown>;
+      const config=(await pool.query(`SELECT state,main_prompt,tone,biography,context,research_enabled,revision::text FROM agents.admin_persona_configs WHERE tenant_id=$1 AND character_id=$2`,[input.tenantId,input.characterId])).rows[0];
+      if(config&&config.state!=='active')throw Object.assign(new Error('persona_paused_or_disabled'),{statusCode:403});
       if (typeof value.biography !== 'string') return null;
       const list = (key: string, max: number, length: number) => Object.freeze(Array.isArray(value[key])
         ? (value[key] as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, max).map(v => v.slice(0, length)) : []);
-      const official=await officials?.read(input.tenantId,input.characterId,input.characterVersionId,input.query);
+      const official=await officials?.read(input.tenantId,input.characterId,input.characterVersionId,input.query,config?.research_enabled!==false);
       if(value.publicOfficial&&!official)throw Object.assign(new Error('official_dossier_review_required'),{statusCode:409});
-      return Object.freeze({...(official?{publicOfficial:official}:{}),biography: value.biography.slice(0, 8000), personality: list('personality', 8, 300), languages: list('languages', 12, 32)});
+      return Object.freeze({...(config?{adminInstructions:{mainPrompt:String(config.main_prompt),tone:String(config.tone),context:String(config.context),revision:String(config.revision)}}:{}),...(official?{publicOfficial:official}:{}),biography:config?.biography?String(config.biography):value.biography.slice(0,8000),personality:list('personality',8,300),languages:list('languages',12,32)});
     },
   });
 }

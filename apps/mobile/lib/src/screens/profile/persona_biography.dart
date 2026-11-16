@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../../tokens/feature_colors.dart';
+
 import 'package:intl/intl.dart';
+
 import '../../agents/agent_directory.dart';
 
 /// Displays only published directory facts. Missing dates, parties and career
@@ -25,7 +28,7 @@ class PersonaBiography extends StatelessWidget {
         : MasanawaFeatureColors.deepEmerald;
     final official = agent.publicOfficial;
     final simulation = agent.publicOfficialSimulation;
-    final biography = official?.biography ?? agent.about;
+    final biography = agent.biography ?? official?.biography ?? agent.about;
     Widget section(String title, Widget child) => Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
@@ -47,9 +50,8 @@ class PersonaBiography extends StatelessWidget {
         (
           icon: Icons.calendar_month_outlined,
           label: 'Date of birth',
-          value: DateFormat.yMMMd(
-            Localizations.localeOf(context).toString(),
-          ).format(DateTime.parse(birth)),
+          value: DateFormat.yMMMd(Localizations.localeOf(context).toString())
+              .format(DateTime.parse(birth)),
         ),
       if (official?.stateOfOrigin != null ||
           official?.cityOfOrigin != null ||
@@ -84,9 +86,8 @@ class PersonaBiography extends StatelessWidget {
       facts.add((
         icon: Icons.fact_check_outlined,
         label: 'Biography reviewed',
-        value: MaterialLocalizations.of(
-          context,
-        ).formatMediumDate(official.reviewedAt.toLocal()),
+        value: MaterialLocalizations.of(context)
+            .formatMediumDate(official.reviewedAt.toLocal()),
       ));
     }
     Widget fact(({IconData icon, String label, String value}) item) =>
