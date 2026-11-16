@@ -25,6 +25,7 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   const service=createWalletAdmin({pool,authorize:authority.authorize});const base={userId:target,operationId:'admin_'+createCanonicalId('operation'),mode:'credit' as const,amountKobo:500000,expectedVersion:0,reason:'Isolated owner-funded acceptance credit',fundingReference:'acceptance-only-no-bank-payment'};
   expect(await service.adjust(header,base)).toMatchObject({afterKobo:'500000'});expect(await service.adjust(header,base)).toMatchObject({afterKobo:'500000'});
   let account=await service.read(header,target);expect(account).toMatchObject({balanceKobo:'500000',version:'1'});expect((account.adjustments as unknown[]).length).toBe(1);
+  expect(await service.read(header,(target+'@example.invalid').toUpperCase())).toMatchObject({userId:target,balanceKobo:'500000',adjustments:expect.arrayContaining([expect.objectContaining({operationId:base.operationId})])});
   await pool.query(`UPDATE gb_wallet.ngn_accounts SET held_kobo=100000 WHERE tenant_id=$1 AND account_id=$2`,[tenant,target]);
   await expect(service.adjust(header,{...base,operationId:'admin_'+createCanonicalId('operation'),mode:'set_balance',amountKobo:50000,expectedVersion:1})).rejects.toMatchObject({code:'admin_balance_below_holds_or_overflow'});
   await service.adjust(header,{...base,operationId:'admin_'+createCanonicalId('operation'),mode:'set_balance',amountKobo:200000,expectedVersion:1});

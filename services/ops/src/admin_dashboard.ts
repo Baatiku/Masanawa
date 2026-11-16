@@ -22,6 +22,7 @@ export type AdminCapability =
   | "moderation.write"
   | "agents.presentation.read"
   | "agents.presentation.write"
+  | "agents.evidence.write"
   | "agents.skills.read"
   | "agents.skills.write"
   | "skills.catalog.read";
@@ -202,6 +203,7 @@ export function createOpsAdminDashboardService(input: {
         UNION ALL SELECT 'account:'||operation_id,'admin.account.'||next_state,'user',user_id,operation_id,created_at FROM security.ops_user_lifecycle_events WHERE tenant_id=$1
         UNION ALL SELECT 'data:'||revision,'admin.data.catalogue','catalogue',tenant_id,NULL,created_at FROM gb_wallet.admin_data_catalogue_events WHERE tenant_id=$1
         UNION ALL SELECT 'publisher:'||publisher_id||':'||revision,'admin.publisher.review','publisher',publisher_id,NULL,created_at FROM feed.publisher_review_events WHERE tenant_id=$1
+        UNION ALL SELECT 'evidence:'||id,'admin.persona.evidence','persona',character_id,id::text,reviewed_at FROM masana.public_official_review_receipts WHERE tenant_id=$1
       ) history ORDER BY "occurredAt" DESC,"auditEventId" DESC LIMIT $2 OFFSET $3`, [tenantId, limit, offset]);
       return result.rows;
     },

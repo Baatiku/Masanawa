@@ -7,6 +7,7 @@ import type {createRoleAdmin} from './role_admin.js';
 import type {createContentAdmin} from './content_admin.js';
 import type {createUserAdmin} from './user_admin.js';
 import type {createDataAdmin} from './data_admin.js';
+import type {createEvidenceAdmin} from './evidence_admin.js';
 import type { Instant } from "@masanawa/contracts";
 import { nowInstant, parseCanonicalId } from "@masanawa/contracts";
 import type { AgentAdminService } from "./agent_admin.js";
@@ -24,6 +25,7 @@ export interface ReadinessCheck {
 }
 
 export interface OpsAppOptions {
+  readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
   readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
@@ -191,8 +193,13 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     app.get('/v1/admin/data/catalogue',async(request,reply)=>execute(reply,()=>options.dataAdmin!.read(request.headers.authorization)));
     app.post('/v1/admin/data/catalogue',{schema:{body:Type.Object({bundles:Type.Array(Type.Unknown(),{maxItems:100}),expectedRevision:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),reason:Type.String({minLength:10,maxLength:1000})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.dataAdmin!.publish(request.headers.authorization,request.body)));
   }
+  if(options.evidenceAdmin){
+    const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{try{return await run();}catch(error){reply.code(error instanceof PersonaAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof PersonaAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'evidence_admin_unavailable'};}};
+    app.get('/v1/admin/persona/evidence',{schema:{querystring:Type.Object({characterId:Type.String({maxLength:128})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.evidenceAdmin!.read(request.headers.authorization,request.query.characterId)));
+    app.post('/v1/admin/persona/evidence',{schema:{body:Type.Object({characterId:Type.String({maxLength:128}),expectedReviewId:Type.Union([Type.String({maxLength:36}),Type.Null()]),packet:Type.Record(Type.String(),Type.Unknown()),confirmed:Type.Boolean()},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.evidenceAdmin!.publish(request.headers.authorization,request.body)));
+  }
   if(options.userAdmin){
-    app.get('/v1/admin/users/account',{schema:{querystring:Type.Object({userId:Type.String({maxLength:160})},{additionalProperties:false})}},async(request,reply)=>{try{return await options.userAdmin!.read(request.headers.authorization,request.query.userId);}catch(error){reply.code(error instanceof WalletAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof WalletAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'user_management_unavailable'};}});
+    app.get('/v1/admin/users/account',{schema:{querystring:Type.Object({userId:Type.String({maxLength:254})},{additionalProperties:false})}},async(request,reply)=>{try{return await options.userAdmin!.read(request.headers.authorization,request.query.userId);}catch(error){reply.code(error instanceof WalletAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof WalletAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'user_management_unavailable'};}});
     app.post('/v1/admin/users/state',{schema:{body:Type.Object({userId:Type.String({maxLength:160}),operationId:Type.String({minLength:16,maxLength:80}),state:Type.Union([Type.Literal('active'),Type.Literal('disabled')]),expectedRevision:Type.Integer({minimum:1,maximum:Number.MAX_SAFE_INTEGER}),reason:Type.String({minLength:10,maxLength:500})},{additionalProperties:false})}},async(request,reply)=>{try{return await options.userAdmin!.transition(request.headers.authorization,request.body);}catch(error){reply.code(error instanceof WalletAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof WalletAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'user_management_unavailable'};}});
   }
   if(options.contentAdmin){
@@ -224,7 +231,7 @@ export function createOpsApp(options: OpsAppOptions = {}) {
   }
   if(options.walletAdmin){
     const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{try{return await run();}catch(error){reply.code(error instanceof WalletAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof WalletAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'wallet_admin_unavailable'};}};
-    app.get('/v1/admin/wallet/account',{schema:{querystring:Type.Object({userId:Type.String({maxLength:160})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.read(request.headers.authorization,request.query.userId)));
+    app.get('/v1/admin/wallet/account',{schema:{querystring:Type.Object({userId:Type.String({maxLength:254})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.read(request.headers.authorization,request.query.userId)));
     app.get('/v1/admin/wallet/receipt',{schema:{querystring:Type.Object({userId:Type.String({maxLength:160}),operationId:Type.String({maxLength:160})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.receipt(request.headers.authorization,request.query.userId,request.query.operationId)));
     app.post('/v1/admin/wallet/adjust',{schema:{body:Type.Object({userId:Type.String({maxLength:160}),operationId:Type.String({minLength:16,maxLength:160}),mode:Type.Union([Type.Literal('credit'),Type.Literal('set_balance')]),amountKobo:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),expectedVersion:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),reason:Type.String({minLength:10,maxLength:1000}),fundingReference:Type.String({minLength:3,maxLength:200})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.adjust(request.headers.authorization,request.body)));
   }

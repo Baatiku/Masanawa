@@ -7,6 +7,7 @@ import {createRoleAdmin} from './role_admin.js';
 import {createContentAdmin} from './content_admin.js';
 import {createUserAdmin} from './user_admin.js';
 import {createDataAdmin} from './data_admin.js';
+import {createEvidenceAdmin} from './evidence_admin.js';
 import {PgHomeFeedRepository} from '@masanawa/postgres';
 import type {
   AgentPresentationRepository,
@@ -51,6 +52,7 @@ export interface ServiceProcess extends NodeSignalSource {
 }
 
 export interface ServiceDatabaseDependency {
+  readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
   readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
@@ -126,6 +128,7 @@ function createDefaultDatabaseDependency(
   });
   const adminDashboard=createOpsAdminDashboardService({sessions:createPostgresPlatformSessionRepository(database.pool),pool:database.pool,grants:parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),dynamicCapabilities:async(tenantId,userId)=>{const caps=(await database.pool.query(`SELECT capabilities FROM security.ops_admin_roles WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows[0]?.capabilities;return Array.isArray(caps)?caps.filter((c:unknown):c is string=>typeof c==='string'&&/^[a-z]+(?:\.[a-z]+)+$/.test(c)):[];}});
   return Object.freeze({
+    evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     walletAdmin:createWalletAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     personaAdmin:createPersonaAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     portraitAdmin:createPortraitAdmin({pool:database.pool,authorize:adminDashboard.authorize,publicBaseUrl:env.MASANAWA_PUBLIC_BASE_URL}),
@@ -184,6 +187,7 @@ export async function startOpsService(
     app = appFactory({
       ...(options.appOptions ?? {}),
       ...(database.voiceAdmin ? {voiceAdmin:database.voiceAdmin}:{}),
+      ...(database.evidenceAdmin ? {evidenceAdmin:database.evidenceAdmin}:{}),
       ...(database.walletAdmin ? {walletAdmin:database.walletAdmin}:{}),
       ...(database.personaAdmin ? {personaAdmin:database.personaAdmin}:{}),
       ...(database.portraitAdmin ? {portraitAdmin:database.portraitAdmin}:{}),

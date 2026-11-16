@@ -1,3 +1,4 @@
+import {createEvidenceAdmin} from '../../ops/src/evidence_admin.js';
 import {PGlite} from '@electric-sql/pglite';
 import {readFile} from 'node:fs/promises';
 import {expect,it} from 'vitest';
@@ -94,7 +95,16 @@ it('creates real canonical officials, admits an actual reviewed packet, activate
   expect(await activateAdmittedOfficialRoster(activation)).toMatchObject({active:1,activated:1,biographyPending:1});
   expect((await presentations.listVisible({tenantId})).map(p=>p.characterId)).toEqual([characterId]);
   expect((await db.query(`SELECT state FROM masana.character_revisions WHERE tenant_id=$1 AND character_id=$2`,[tenantId,specialist])).rows).toEqual([{state:'retired'}]);
+  const admin=createEvidenceAdmin({pool,authorize:async()=>({tenantId,actorId:'user_review_admin',name:'QA source reviewer',capabilities:['agents.evidence.write','agents.presentation.read']})});
+  const current=await admin.read('Bearer fixture',characterId);
+  const updatedBiography='Updated reviewed full biography and context for the canonical test persona.';
+  const edited={...packet,office:'Updated reviewed office',publicProfile:{...packet.publicProfile,lifeStory:updatedBiography,biographicalFacts:{dateOfBirth:'1964-05-14',birthPlace:'Synthetic test location'}}};
+  const review=await admin.publish('Bearer fixture',{characterId,expectedReviewId:String(current.reviewId),packet:edited,confirmed:true});
+  expect(review.reviewId).not.toBe(current.reviewId);
+  expect(await admin.read('Bearer fixture',characterId)).toMatchObject({identity:{office:'Updated reviewed office'},publicProfile:{lifeStory:updatedBiography,biographicalFacts:{birthPlace:'Synthetic test location'}}});
+  await expect(admin.publish('Bearer fixture',{characterId,expectedReviewId:String(current.reviewId),packet:{...edited,office:'Stale office'},confirmed:true})).rejects.toMatchObject({statusCode:409});
   const narrative=await createPublishedPersonaReader(pool,createOfficialKnowledgeReader(pool)).readPublished({tenantId,characterId,characterVersionId});
+  expect(narrative?.biography).toBe(updatedBiography);
   expect(narrative?.publicOfficial?.officialName).toBe(subject.officialName);
   expect(narrative?.publicOfficial?.evidence[0]?.content).toContain('Synthetic historical public record');
   expect((await db.query<{constitution:unknown}>(`SELECT constitution FROM identity.character_versions WHERE tenant_id=$1 AND character_id=$2`,[tenantId,specialist])).rows[0]?.constitution).toMatchObject({biography:'Fictional history'});

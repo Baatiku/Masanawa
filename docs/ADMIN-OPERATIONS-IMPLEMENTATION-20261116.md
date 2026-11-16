@@ -24,9 +24,12 @@ paid service or Worker activation was performed by this batch.
 - Production installation and privileged signed-in acceptance are pending. TCP
   access to the existing Droplet is refused from this workspace; public HTTPS
   availability is not an SSH connection. Use the existing console/update path.
-- Structured official fact/source admission still uses the reviewed dossier CLI.
-  Editable biography/context do not confer provenance, official status or a
-  verification badge. Canonical IDs and independent review stay authoritative.
+- The Facts and sources editor shares the existing transactional dossier admission
+  with the CLI. Source dates/expiry, approved URLs, excerpts, rights, full biography,
+  birth date and origin fields are editable with a separate evidence capability,
+  recent authentication and review revision checks. Canonical identity and social
+  account bindings cannot be reassigned. Ordinary context edits do not confer a
+  provenance badge; actual evidence review remains authoritative.
 - Provider credential rotation, host configuration and financial qualification
   switches remain private operations. The Providers screen reports actual Ops
   runtime configuration presence and flags, not successful provider authentication.
@@ -47,12 +50,12 @@ unrelated open requirements or retire any immutable financial history.
 
 ## Verification evidence
 
-The connected local matrix passes 124 tests (18 PostgreSQL-gated cases skipped
+The connected local matrix passes 132 tests (18 PostgreSQL-gated cases skipped
 in that run). A separate disposable PostgreSQL 18/pgvector instance applies the
-entire canonical migration composition and passes 52 tests, including real NGN
+entire canonical migration composition and passes 57 tests, including real NGN
 hold/adjustment/idempotency/audit and voice lifecycle/recovery records. Google
 HTTP responses in voice tests are explicit fixtures, not provider acceptance.
-The companion web passes 84 unit tests, TypeScript, ESLint (zero errors; existing
+The companion web passes 86 unit tests, TypeScript, ESLint (zero errors; existing
 warnings remain), production build and browser editor flows at 390/1440px.
 Browser HTTP fixtures exercise local WAV conversion, persona publication,
 voice assignment/default restoration/deletion and reviewed NGN submission;
@@ -76,7 +79,7 @@ Hosted CI, merge and live installation remain independent release gates.
   image validation and approved publishing; remove hardcoded portrait dependency.
 - [x] PER03 Enable, disable and pause a persona at server admission for text,
   voice and calls, with defined handling of already admitted operations.
-- [ ] PER04 Version main prompt, tone/style, biography, facts and source records;
+- [x] PER04 Version main prompt, tone/style, biography, facts and source records;
   preview, publish, roll back and audit changes.
 - [x] PER05 Feed complete approved persona context into all generation channels;
   align prompt versions, identity and memory boundaries across web and Flutter.
