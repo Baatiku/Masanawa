@@ -14,18 +14,35 @@ backup_remote="${MASANAWA_BACKUP_REMOTE:?Set a configured off-host rclone remote
 [[ -f "$compose_file" ]] || { echo 'digitalocean.backup.compose_env_missing' >&2; exit 1; }
 [[ -f "$runtime_file" ]] || { echo 'digitalocean.backup.runtime_env_missing' >&2; exit 1; }
 
-node "$deployment_dir/preflight.mjs" "$compose_file" "$runtime_file" >/dev/null
+if command -v node >/dev/null; then
+ node "$deployment_dir/preflight.mjs" "$compose_file" "$runtime_file" >/dev/null
+else
+ preflight_image="${MASANAWA_BACKUP_PREFLIGHT_IMAGE:?Set the verified immutable Gateway image}"
+ [[ "$preflight_image" =~ ^ghcr.io/baatiku/masanawa-do-pilot-gateway@sha256:[a-f0-9]{64}$ ]] || exit 1
+ docker run --rm --network none --read-only --memory 96m --user 0 \
+  --entrypoint node -v "$compose_file:$compose_file:ro" -v "$runtime_file:$runtime_file:ro" \
+  "$preflight_image" /app/infra/deployment/digitalocean/preflight.mjs "$compose_file" "$runtime_file" >/dev/null
+fi
 
 # Only one backup at a time, even if cron overlaps a slow object-storage upload.
 exec 9>"${MASANAWA_BACKUP_LOCK_FILE:-/tmp/masanawa-backup.lock}"
 flock -n 9 || { echo 'digitalocean.backup.already_running' >&2; exit 1; }
 filename="masanawa-$(date -u +%Y%m%dT%H%M%SZ).pgdump.age"
 
-# pg_dump's custom format is versioned and consistent without stopping writes.
-# rclone reads ciphertext only. pipefail aborts on dump, encryption or upload error.
-docker compose --env-file "$compose_file" -f "$deployment_dir/compose.yaml" exec -T postgres \
+# Spool ciphertext only. A bounded file permits standard signed PUT with known
+# Content-Length; some S3-compatible servers reject SDK streaming headers.
+spool=$(mktemp /etc/masanawa/backup-cipher-XXXXXXXX.age)
+chmod 600 "$spool"
+trap 'rm -f "$spool"' EXIT
+[[ "$(df --output=avail -B1 /etc/masanawa | tail -1)" -gt 3221225472 ]] || exit 1
+(
+ ulimit -f 262144
+ docker compose --env-file "$compose_file" -f "${MASANAWA_BACKUP_COMPOSE_FILE:-$deployment_dir/compose.yaml}" exec -T postgres \
   sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-acl' \
-  | age -r "$age_recipient" \
-  | rclone rcat "${backup_remote%/}/$filename"
-
-printf 'digitalocean.backup.encrypted_offhost_uploaded %s\n' "$filename"
+  | age -r "$age_recipient" >"$spool"
+)
+python3 "$deployment_dir/backup_object.py" "$spool" "$filename"
+# Only the dedicated backup prefix is eligible for retention cleanup.
+if [[ "$backup_remote" == */masanawa-backups ]]; then
+ rclone delete "$backup_remote" --min-age 7d --include 'masanawa-*.pgdump.age'
+fi

@@ -40,6 +40,8 @@ export type MobileTurnClaim =
   | { readonly state: "existing"; readonly command: MobileTurnCommand };
 
 export interface MobileHistoryMessage {
+  readonly controlRevision?:number;
+  readonly reaction?:string|null;
   readonly key: string;
   readonly direction: "user" | "assistant";
   readonly requestId: RequestId;
@@ -72,6 +74,7 @@ export interface MobileShellActionRecord {
 }
 
 export interface MobileShellRepository {
+  listHistoryPage?(input:{scope:MobileShellScope;limit:number;before?:string;cursor?:string}):Promise<{messages:readonly MobileHistoryMessage[];before:string|null;nextCursor:string|null;hasMore:boolean;removedKeys:readonly string[]}>;
   claimTurn(input: {
     readonly scope: MobileShellScope;
     readonly characterSessionId: CharacterSessionId;

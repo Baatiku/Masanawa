@@ -1,3 +1,6 @@
+import {registerOwnerMailboxRoutes} from './owner_mailbox_routes.js';
+import type {createOwnerMailbox} from './owner_mailbox.js';
+import type {createDataReconciliation} from './data_reconciliation.js';
 import Fastify from "fastify";
 import {VoiceAdminError,type createVoiceAdmin} from './voice_admin.js';
 import {WalletAdminError,type createWalletAdmin} from './wallet_admin.js';
@@ -33,6 +36,8 @@ export interface OpsAppOptions {
   readonly roleAdmin?: ReturnType<typeof createRoleAdmin>;
   readonly contentAdmin?: ReturnType<typeof createContentAdmin>;
   readonly userAdmin?: ReturnType<typeof createUserAdmin>;
+  readonly ownerMailbox?:ReturnType<typeof createOwnerMailbox>;
+  readonly dataReconciliation?:ReturnType<typeof createDataReconciliation>;
   readonly dataAdmin?: ReturnType<typeof createDataAdmin>;
   readonly runtimeMetadata?:{providers:readonly {name:string;configured:boolean;verification:string}[];flags:readonly {name:string;enabled:boolean}[]};
   readonly readinessChecks?: readonly ReadinessCheck[];
@@ -188,6 +193,12 @@ export function createOpsApp(options: OpsAppOptions = {}) {
 
   app.addHook('onSend',async(request,reply,payload)=>{if(request.url.startsWith('/v1/admin/'))reply.header('Cache-Control','private, no-store');return payload;});
 
+  if(options.ownerMailbox)registerOwnerMailboxRoutes(app,options.ownerMailbox);
+  if(options.dataReconciliation){
+    const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{try{return await run();}catch(e){const p=e as {statusCode?:number;code?:string};reply.code(p.statusCode??503);return {error:p.code??'reconciliation_unavailable'};}};
+    app.get('/v1/admin/data/orders',async(q,r)=>execute(r,()=>options.dataReconciliation!.list(q.headers.authorization)));
+    app.post('/v1/admin/data/reconcile',{schema:{body:Type.Object({userId:Type.String({maxLength:160}),operationId:Type.String({maxLength:160}),reviewId:Type.String({minLength:16,maxLength:128}),operatorId:Type.String({maxLength:160}),reason:Type.String({minLength:10,maxLength:1000})},{additionalProperties:false})}},async(q,r)=>execute(r,()=>options.dataReconciliation!.reconcile(q.headers.authorization,q.body)));
+  }
   if(options.dataAdmin){
     const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{try{return await run();}catch(error){reply.code(error instanceof PersonaAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof PersonaAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'data_admin_unavailable'};}};
     app.get('/v1/admin/data/provider',async(request,reply)=>execute(reply,()=>options.dataAdmin!.preview(request.headers.authorization)));

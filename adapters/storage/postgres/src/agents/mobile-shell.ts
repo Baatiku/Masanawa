@@ -75,6 +75,49 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
     operationId: "reply_" + createHash("sha256").update(JSON.stringify([
       input.scope.tenantId,input.scope.userId,input.requestId])).digest("hex"),
   });
+  async function historyPage(input:Parameters<NonNullable<MobileShellRepository['listHistoryPage']>>[0]){
+      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 200) {
+        throw new RangeError("history limit out of range");
+      }
+      let cursorTime:string|null=null,cursorId:string|null=null;
+      if(input.cursor){
+        if(!/^h_[A-Za-z0-9_-]{1,256}$/.test(input.cursor))throw new TypeError('invalid history cursor');
+        let value:unknown;try{value=JSON.parse(Buffer.from(input.cursor.slice(2),'base64url').toString('utf8'));}catch{throw new TypeError('invalid history cursor');}
+        if(!Array.isArray(value)||value.length!==2||typeof value[0]!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(value[0])||!Number.isFinite(Date.parse(value[0]))||typeof value[1]!=='string')throw new TypeError('invalid history cursor');
+        parseCanonicalId('request',value[1]);cursorTime=value[0];cursorId=value[1];
+      }
+      const before = !cursorTime&&input.before ? new Date(input.before) : null;
+      if (before && Number.isNaN(before.getTime())) throw new TypeError("invalid history cursor");
+      const result = await pool.query(
+        `SELECT *,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS page_created_at FROM agents.mobile_turn_commands
+          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
+            AND state='completed'
+            AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz OR ($6::text IS NOT NULL AND created_at=$5::timestamptz AND request_id<$6))
+          ORDER BY created_at DESC, request_id DESC LIMIT $7`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+         cursorTime??before?.toISOString()??null,cursorId,input.limit],
+      );
+      const oldest=result.rows.at(-1);
+      const nextCursor=result.rows.length===input.limit&&oldest?'h_'+Buffer.from(JSON.stringify([oldest.page_created_at,oldest.request_id])).toString('base64url'):null;
+      const controls=await pool.query(`SELECT request_id,direction,hidden,reaction,revision::text FROM agents.customer_message_controls WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND request_id=ANY($4::text[])`,[input.scope.tenantId,input.scope.userId,input.scope.characterId,result.rows.map(row=>row.request_id)]);
+      const annotations=new Map(controls.rows.map(row=>[row.request_id+':'+row.direction,row]));
+      const messages: any[] = [];
+      for (const row of result.rows.reverse()) {
+        const c = command(row);
+        const userControl=annotations.get(c.requestId+':user'),assistantControl=annotations.get(c.requestId+':assistant');
+        if(!userControl?.hidden)messages.push(Object.freeze({
+          controlRevision:Number(userControl?.revision??0),reaction:userControl?.reaction??null,
+          key: `user:${c.requestId}`, direction: "user" as const, requestId: c.requestId,
+          text: c.userText, parts: Object.freeze([]), agentRunId: null, createdAt: c.createdAt,
+        }));
+        if(!assistantControl?.hidden)messages.push(Object.freeze({
+          controlRevision:Number(assistantControl?.revision??0),reaction:assistantControl?.reaction??null,
+          key: `assistant:${c.requestId}`, direction: "assistant" as const, requestId: c.requestId,
+          text: c.reply ?? "", parts: c.parts, agentRunId: c.agentRunId, createdAt: c.updatedAt,
+        }));
+      }
+      return {messages:Object.freeze(messages),before:oldest?new Date(oldest.created_at).toISOString():null,nextCursor,hasMore:result.rows.length===input.limit,removedKeys:controls.rows.filter(row=>row.hidden).map(row=>row.direction+':'+row.request_id)};
+      }
   return Object.freeze({
     async claimTurn(input: Parameters<MobileShellRepository["claimTurn"]>[0]) {
       return withTransaction(pool, async client => {
@@ -210,35 +253,8 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
       return result.rows[0] ? command(result.rows[0]) : null;
     },
 
-    async listHistory(input: Parameters<MobileShellRepository["listHistory"]>[0]) {
-      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 200) {
-        throw new RangeError("history limit out of range");
-      }
-      const before = input.before ? new Date(input.before) : null;
-      if (before && Number.isNaN(before.getTime())) throw new TypeError("invalid history cursor");
-      const result = await pool.query(
-        `SELECT * FROM agents.mobile_turn_commands
-          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
-            AND state='completed'
-            AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
-          ORDER BY created_at DESC, request_id DESC LIMIT $6`,
-        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
-         before?.toISOString() ?? null,input.limit],
-      );
-      const messages: any[] = [];
-      for (const row of result.rows.reverse()) {
-        const c = command(row);
-        messages.push(Object.freeze({
-          key: `user:${c.requestId}`, direction: "user" as const, requestId: c.requestId,
-          text: c.userText, parts: Object.freeze([]), agentRunId: null, createdAt: c.createdAt,
-        }));
-        messages.push(Object.freeze({
-          key: `assistant:${c.requestId}`, direction: "assistant" as const, requestId: c.requestId,
-          text: c.reply ?? "", parts: c.parts, agentRunId: c.agentRunId, createdAt: c.updatedAt,
-        }));
-      }
-      return Object.freeze(messages);
-    },
+    listHistoryPage:historyPage,
+    async listHistory(input:Parameters<MobileShellRepository['listHistory']>[0]){return (await historyPage(input)).messages;},
 
     async appendEvent(input: Parameters<MobileShellRepository["appendEvent"]>[0]) {
       const result = await pool.query(

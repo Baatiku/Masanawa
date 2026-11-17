@@ -14,12 +14,13 @@ function fixture() {
   type RecordValue = {
     tenant_id:string;user_id:string;character_id:string;request_id:string;
     slot:number;kind:string;mime_type:string;filename:string|null;
-    payload:Buffer;sha256:string;
+    payload:Buffer;sha256:string;expires_at:string;
   };
   const rows:RecordValue[] = [];
   const queries:string[] = [];
   const query = vi.fn(async (sql:string, params:unknown[] = []) => {
     queries.push(sql);
+    if(sql.includes("FROM agents.mobile_turn_commands"))return {rows:[{completed:true}]};
     if (sql.startsWith("SELECT slot,sha256")) {
       const [tenant,user,character,request]=params;
       return {rows:rows.filter(x=>x.tenant_id===tenant&&x.user_id===user&&
@@ -39,7 +40,7 @@ function fixture() {
         character_id:String(character),request_id:String(request),
         slot:Number(slot),kind:String(kind),mime_type:String(mime),
         filename:name==null?null:String(name),payload:data as Buffer,
-        sha256:String(hash)});
+        sha256:String(hash),expires_at:new Date(Date.now()+86400000).toISOString()});
       return {rows:[]};
     }
     if (sql.startsWith("SELECT kind,mime_type,filename,payload")) {
@@ -76,13 +77,13 @@ function fixture() {
     characterId,requestId,slot:0,kind:"voice",mimeType:"audio/ogg",
     name:"greeting.ogg",dataBase64:Buffer.from(value).toString("base64"),
   });
-  return {service,file,rows,queries,query,authorize,release};
+  return {service,file,rows,queries,query,authorize,release,scope:{tenantId,userId:alice,characterId,relationshipId:createCanonicalId("relationship")}};
 }
 
 describe("private Masana cross-device media",()=>{
   it.each([true, false])("keeps customer quota independent of reply upload order (%s)",async(replyFirst)=>{
     const f=fixture();
-    const put=(slot:number,size:number)=>f.service.put("Bearer alice",{
+    const put=(slot:number,size:number)=>slot===8?f.service.saveReplyAudio(f.scope,requestId,{mimeType:"audio/wav",dataBase64:Buffer.alloc(size).toString("base64")}):f.service.put("Bearer alice",{
       characterId,requestId,slot,kind:"voice",mimeType:"audio/wav",
       dataBase64:Buffer.alloc(size).toString("base64"),
     });
@@ -122,10 +123,7 @@ describe("private Masana cross-device media",()=>{
     const f=fixture();
     await f.file("original customer voice");
     const voice=Buffer.from("assistant response");
-    await f.service.put("Bearer alice",{
-      characterId,requestId,slot:8,kind:"voice",mimeType:"audio/wav",
-      name:"masana-reply.wav",dataBase64:voice.toString("base64"),
-    });
+    await f.service.saveReplyAudio(f.scope,requestId,{mimeType:"audio/wav",dataBase64:voice.toString("base64")});
     expect(f.rows).toHaveLength(2);
     const reply=await f.service.get("Bearer alice",characterId,requestId,8);
     expect(Buffer.from(reply!.dataBase64,"base64").toString())

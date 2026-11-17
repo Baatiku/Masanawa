@@ -1,3 +1,5 @@
+import {createOwnerMailbox} from './owner_mailbox.js';
+import {createDataReconciliation} from './data_reconciliation.js';
 import {FlutterwaveBillsClient,FlutterwaveHttpTransport} from '@masanawa/providers';
 import { pathToFileURL } from "node:url";
 import {createVoiceAdmin} from './voice_admin.js';
@@ -61,6 +63,8 @@ export interface ServiceDatabaseDependency {
   readonly roleAdmin?: ReturnType<typeof createRoleAdmin>;
   readonly contentAdmin?: ReturnType<typeof createContentAdmin>;
   readonly userAdmin?: ReturnType<typeof createUserAdmin>;
+  readonly ownerMailbox?:ReturnType<typeof createOwnerMailbox>;
+  readonly dataReconciliation?:ReturnType<typeof createDataReconciliation>;
   readonly dataAdmin?: ReturnType<typeof createDataAdmin>;
   readonly readinessCheck: ReadinessCheck;
   readonly agentPresentations?: AgentPresentationRepository;
@@ -137,6 +141,8 @@ function createDefaultDatabaseDependency(
     roleAdmin:createRoleAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     contentAdmin:createContentAdmin({pool:database.pool,feed:new PgHomeFeedRepository(database.pool,true,true),authorize:adminDashboard.authorize}),
     userAdmin:createUserAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    ownerMailbox:createOwnerMailbox({pool:database.pool,authorize:adminDashboard.authorize,env}),
+    dataReconciliation:createDataReconciliation({pool:database.pool,authorize:adminDashboard.authorize,...(flutterwave?{status:(reference:string)=>flutterwave.getStatus(reference)}:{})}),
     dataAdmin:createDataAdmin({pool:database.pool,authorize:adminDashboard.authorize,initialApprovals:env.MASANAWA_NGN_DATA_APPROVALS_JSON,...(flutterwave?{listItems:(billerCode:string)=>flutterwave.listItems(billerCode)}:{})}),
     voiceAdmin:createVoiceAdmin({pool:database.pool,authorize:adminDashboard.authorize,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?{apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY}:{})}),
     readinessCheck: database.readinessCheck,
@@ -196,6 +202,8 @@ export async function startOpsService(
       ...(database.roleAdmin ? {roleAdmin:database.roleAdmin}:{}),
       ...(database.contentAdmin ? {contentAdmin:database.contentAdmin}:{}),
       ...(database.userAdmin ? {userAdmin:database.userAdmin}:{}),
+      ...(database.ownerMailbox?{ownerMailbox:database.ownerMailbox}:{}),
+      ...(database.dataReconciliation?{dataReconciliation:database.dataReconciliation}:{}),
       ...(database.dataAdmin ? {dataAdmin:database.dataAdmin}:{}),
       runtimeMetadata:{
         providers:[['Gemini',['MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY','MASANAWA_ALPHA_GEMINI_API_KEY']],['Billstack',['MASANAWA_BILLSTACK_SECRET_KEY','BILLSTACK_SECRET_KEY']],['Flutterwave',['FLUTTERWAVE_SECRET_KEY','MASANAWA_FLUTTERWAVE_SECRET_KEY']],['Resend',['RESEND_API_KEY','MASANAWA_RESEND_API_KEY']]].map(([name,keys])=>({name:String(name),configured:(keys as string[]).some(k=>Boolean(env[k]?.trim())),verification:'not_checked'})),

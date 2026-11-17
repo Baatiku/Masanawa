@@ -35,6 +35,7 @@ export interface AgentConversationAuthorizer {
 }
 
 export interface AgentConversationService {
+  preflight?(input:{authorizationHeader:string|undefined;characterSessionId:string;characterId:string}):Promise<void>;
   open(input: {
     readonly authorizationHeader: string | undefined;
     readonly characterId: string;

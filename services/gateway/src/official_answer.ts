@@ -65,3 +65,20 @@ export async function finalizeOfficialAnswer(raw:string,grounded:Awaited<ReturnT
  request.signal?.throwIfAborted();
  return renderOfficialAnswer(raw,fresh,grounded.language,grounded.conversation);
 }
+
+/** Emit only complete, independently checked paragraphs. Never expose the raw
+ * provider JSON, unchecked citations or partial official claims to a client. */
+export const officialParagraphContract=[...officialAnswerContract,
+ 'For streaming, output newline-delimited JSON instead: one complete object in the exact schema above per paragraph. No markdown fences. Each paragraph must carry its own evidence IDs and quotations. Maximum eight paragraphs. A nonfactual greeting may be one conversation object.'];
+export function createOfficialParagraphStream(grounded:Awaited<ReturnType<typeof prepareOfficialGrounding>>,request:AgentStrategyRequest){
+ let buffer='',chain=Promise.resolve(),count=0,total=0;const paragraphs:string[]=[];
+ async function paragraph(line:string){if(!line.trim())return;request.signal?.throwIfAborted();if(++count>8)throw Error('official_stream_limit');
+  // Fresh evidence is checked for every paragraph before it leaves the server.
+  const rendered=await finalizeOfficialAnswer(line,grounded,request);
+  const delta=(paragraphs.length?'\n\n':'')+rendered;paragraphs.push(rendered);await request.onTextDelta?.(delta);
+ }
+ return {
+  onTextDelta(delta:string){chain=chain.then(async()=>{total+=delta.length;if(total>64000)throw Error('official_stream_limit');buffer+=delta;while(true){buffer=buffer.trimStart();if(!buffer.startsWith('{'))break;let depth=0,quoted=false,escaped=false,end=-1;for(let i=0;i<buffer.length;i++){const char=buffer[i];if(quoted){if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char==='"')quoted=false;}else if(char==='"')quoted=true;else if(char==='{')depth++;else if(char==='}'&&--depth===0){end=i+1;break;}}if(end<0)break;const object=buffer.slice(0,end);buffer=buffer.slice(end);await paragraph(object);}});return chain;},
+  async finish(raw:string){await chain;if(total===0)buffer=raw;if(buffer.trim())await paragraph(buffer);if(!paragraphs.length)throw Error('official_stream_empty');return paragraphs.join('\n\n');}
+ };
+}

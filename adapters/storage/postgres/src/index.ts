@@ -71,3 +71,7 @@ export * from './gb_wallet/ngn_spending.js';
 export * from './gb_wallet/ngn_call_admissions.js';
 export * from './gb_wallet/ngn_data_journal.js';
 export * from './gb_wallet/ngn_request_repository.js';
+
+export {createNewsFeedPoller,ensurePlatformNewsPublishers,parseNewsFeed,type ParsedNews} from './home_feed/news_import.js';
+export {newsCatalog,safeNewsArticleUrl} from './home_feed/news_catalog.js';
+export {fetchGatewayNews,newsGatewayOrigin} from './home_feed/news_gateway.js';

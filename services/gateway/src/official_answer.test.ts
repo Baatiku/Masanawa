@@ -30,10 +30,10 @@ it.each([['ha','man fetur'],['yo','epo rọbì'],['ig','mmanụ ụgbọala']])(
   {generate:async()=>({text:JSON.stringify({query:'fuel subsidy public policy',language})})});
  expect(read).toHaveBeenCalledWith(expect.stringContaining('fuel subsidy'));
 });
-it('buffers structured official output and emits only checked final text, preserving legacy strategy behavior',async()=>{
+it('keeps complete structured replies compatible with checked paragraph streaming',async()=>{
  const deltas:string[]=[];let step=0;
  const inference={generate:vi.fn(async(_r:unknown,controls:unknown)=>{step++;if(step===1)return {text:JSON.stringify({query:'term office',language:'en'})};
-  expect((controls as {onTextDelta?:unknown}).onTextDelta).toBeUndefined();return {text:JSON.stringify({status:'answered',answer:'The recorded term was 1999–2007.',evidenceIds:['bio']})};})};
+  expect((controls as {onTextDelta?:unknown}).onTextDelta).toBeTypeOf('function');return {text:JSON.stringify({status:'answered',answer:'The recorded term was 1999–2007.',evidenceIds:['bio']})};})};
  const strategy=createProductionAgentStrategy({inference,skills:{} as never,guides:{} as never});
  const result=await strategy.execute({...request({kind:'text',text:'When did the official serve?'}),onTextDelta:text=>{deltas.push(text);}});
  expect(deltas).toEqual([result.reply]);expect(result.reply).toContain('1999–2007');expect(result.reply).not.toContain('evidenceIds');
@@ -42,4 +42,11 @@ it('rechecks cited evidence after model generation so withdrawal cannot leak a s
  let reads=0;const strategy=createProductionAgentStrategy({inference:{generate:async()=>({text:++reads===1?JSON.stringify({query:'record',language:'en'}):JSON.stringify({status:'answered',answer:'A factual answer.',evidenceIds:['record']})})},skills:{} as never,guides:{} as never});
  let queries=0;const req={...request({kind:'text',text:'What did they say?'}),readPublicEvidence:async()=>++queries===1?official:{...official,evidence:[official.evidence[0]!]}};
  expect((await strategy.execute(req)).reply).toContain('not have enough reviewed evidence');
+});
+it('streams complete source-checked paragraphs without exposing partial JSON or unchecked evidence',async()=>{
+ const {createOfficialParagraphStream}=await import('./official_answer.js');const deltas:string[]=[];const base={...request({kind:'text',text:'Tell me the record'}),onTextDelta:async(text:string)=>{deltas.push(text);}};const grounded={presentation:base.presentation,input:base.input,language:'en',conversation:false,query:'record'};const stream=createOfficialParagraphStream(grounded,base);const first=JSON.stringify({status:'answered',answer:'Served from 1999 to 2007.',evidenceIds:['bio'],quotations:[]});await stream.onTextDelta(first.slice(0,20));expect(deltas).toEqual([]);await stream.onTextDelta(first.slice(20)+'\n');expect(deltas[0]).toContain('grokipedia.com/page/Example');await stream.onTextDelta(JSON.stringify({status:'answered',answer:'Invented promise',evidenceIds:['missing'],quotations:[]})+'\n');const result=await stream.finish('');expect(result).not.toContain('Invented promise');expect(result).not.toContain('"evidenceIds"');expect(deltas.join('')).toBe(result);
+});
+
+it('accepts pretty-printed complete objects while withholding incomplete official paragraphs',async()=>{
+ const {createOfficialParagraphStream}=await import('./official_answer.js');const deltas:string[]=[];const base={...request({kind:'text',text:'Term record'}),onTextDelta:async(text:string)=>{deltas.push(text);}};const grounded={presentation:base.presentation,input:base.input,language:'en',conversation:false,query:'term'};const raw=JSON.stringify({status:'answered',answer:'The term is recorded in the biography.',evidenceIds:['bio'],quotations:[]},null,2);const stream=createOfficialParagraphStream(grounded,base);await stream.onTextDelta(raw.slice(0,-1));expect(deltas).toEqual([]);await stream.onTextDelta(raw.slice(-1));expect(deltas).toHaveLength(1);expect(await stream.finish(raw)).toBe(deltas[0]);
 });
