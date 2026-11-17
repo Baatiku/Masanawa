@@ -5,6 +5,7 @@ import {createPostgresPool,createPostgresPlatformSessionRepository,createPostgre
 import {createOpsAdminDashboardService,parseOpsAdminGrants} from './admin_dashboard.js';
 import {createWalletAdmin} from './wallet_admin.js';
 import {createPersonaAdmin} from './persona_admin.js';
+import {createDataAdmin} from './data_admin.js';
 import {createRoleAdmin} from './role_admin.js';
 import {createUserAdmin} from './user_admin.js';
 import {createVoiceAdmin} from './voice_admin.js';
@@ -39,6 +40,16 @@ const url=process.env.MASANAWA_TEST_DATABASE_URL;
   const service=createPersonaAdmin({pool,authorize:authority.authorize});const draft={characterId:character,state:'paused' as const,mainPrompt:'Explain thoughtfully',tone:'Calm and direct',biography:'Authorized acceptance context',context:'No fabricated history',expectedRevision:0};
   expect(await service.publish(header,draft)).toMatchObject({state:'paused',revision:'1'});expect((await pool.query(`SELECT visible_in_user_app FROM agents.agent_presentations WHERE tenant_id=$1 AND character_id=$2`,[tenant,character])).rows[0]).toEqual({visible_in_user_app:false});await expect(service.publish(header,draft)).rejects.toMatchObject({statusCode:409});
   await service.publish(header,{...draft,state:'active',expectedRevision:1});expect((await service.read(header,character)).versions).toHaveLength(2);
+ });
+ it('renews an exact live data match with real catalogue CAS and immutable audit',async()=>{
+  const bundle={version:'qa_1',country:'NG',network:'MTN',billerCode:'BIL001',itemCode:'MD001',allowanceGb:1,allowanceMb:1000,validityDays:30,providerAmount:'500',evidenceRef:'evidence_qa',reviewedBy:'qa_reviewer',reviewedAt:'2026-01-01T00:00:00Z',expiresAt:'2026-01-08T00:00:00Z',enabled:true};
+  const service=createDataAdmin({pool,authorize:authority.authorize,listItems:async()=>[{billerCode:'BIL001',itemCode:'MD001',name:'Provider fixture only',amount:'500.00',currency:'NGN',labelName:null}]});
+  await service.publish(header,{bundles:[bundle],expectedRevision:0,reason:'Explicit isolated provider fixture review'});
+  expect(await service.preview(header)).toMatchObject({revision:'1',items:[{expired:true,renewable:true}]});
+  expect(await service.renew(header,{ids:['BIL001:MD001'],expectedRevision:1,reason:'Reviewed exact fixture identity and amount'})).toMatchObject({revision:'2'});
+  await expect(service.renew(header,{ids:['BIL001:MD001'],expectedRevision:1,reason:'Stale fixture revision must be rejected'})).rejects.toMatchObject({code:'catalogue_revision_changed'});
+  const events=await pool.query(`SELECT revision::text,actor_id FROM gb_wallet.admin_data_catalogue_events WHERE tenant_id=$1 ORDER BY revision`,[tenant]);expect(events.rows).toEqual([{revision:'1',actor_id:admin},{revision:'2',actor_id:admin}]);
+  await expect(pool.query(`UPDATE gb_wallet.admin_data_catalogue_events SET reason='edited' WHERE tenant_id=$1`,[tenant])).rejects.toThrow();
  });
  it('creates a scoped role and records real account suspension without deleting money',async()=>{
   const roles=createRoleAdmin({pool,authorize:authority.authorize});expect(await roles.put(header,{userId:target,capabilities:['dashboard.read','wallet.read'],expectedRevision:0})).toMatchObject({revision:'1'});
