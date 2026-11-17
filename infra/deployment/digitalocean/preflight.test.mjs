@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { parseEnvFile, runPreflight, validatePilotConfig } from "./preflight.mjs";
+import { parseEnvFile, runPreflight, runBackupPreflight, validatePilotConfig } from "./preflight.mjs";
 
 function goodConfig() {
   const secret = "a-unique-secret-with-adequate-entropy-123456";
@@ -43,7 +43,7 @@ test("pilot schema validates one canonical Postgres, HTTPS API, pinned image and
   const { compose, runtime } = goodConfig();
   assert.deepEqual(validatePilotConfig(compose, runtime), {
     apiOrigin: "https://api.masanawa.com", imagePinned: true, workerDisabledByDefault: true,
-    qualifiedFeatures: { ngnCalls: false, ngnCatalog: false, ngnData: false, flutterwave: false, news: false },
+    qualifiedFeatures: { ngnCalls: false, ngnCatalog: false, ngnData: false, flutterwave: false, news: false, billstackDeposits: false },
   });
 });
 
@@ -129,4 +129,45 @@ test("preflight requires private mode-0600 real files and matching runtime path"
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+
+test("signed Billstack deposits are admitted with the existing private key alias; legacy spending stays disabled", () => {
+  for (const key of ["MASANAWA_BILLSTACK_SECRET_KEY", "BILLSTACK_SECRET_KEY"]) {
+    const {compose, runtime} = goodConfig();
+    runtime.set("MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED", "true");
+    runtime.set(key, "private-provider-regression-fixture");
+    assert.equal(validatePilotConfig(compose, runtime).qualifiedFeatures.billstackDeposits, true);
+    runtime.delete(key);
+    assert.throws(() => validatePilotConfig(compose, runtime), /billstack_secret_key_missing/u);
+    runtime.set(key, "CHANGE_ME");
+    assert.throws(() => validatePilotConfig(compose, runtime), /billstack_secret_key_missing/u);
+  }
+});
+
+test("backup survives broken app/provider settings while enforcing private files and exact database identity", () => {
+  const dir = mkdtempSync(join(tmpdir(), "masanawa-backup-preflight-"));
+  const composeFile = join(dir, "compose.env"), runtimeFile = join(dir, "runtime.env");
+  try {
+    const {compose, runtime} = goodConfig();
+    compose.set("MASANAWA_RUNTIME_ENV_FILE", runtimeFile);
+    runtime.set("MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED", "true");
+    runtime.set("FLUTTERWAVE_BILLS_ENABLED", "true");
+    runtime.delete("MASANAWA_GEMINI_API_KEY");
+    const save = () => {
+      for (const [path, values] of [[composeFile, compose], [runtimeFile, runtime]]) {
+        writeFileSync(path, [...values].map(([k,v]) => `${k}=${v}`).join("\n"), {mode:0o600});
+      }
+    };
+    save();
+    assert.throws(() => runPreflight(composeFile, runtimeFile));
+    assert.deepEqual(runBackupPreflight(composeFile, runtimeFile), {canonicalDatabase:true, privateFiles:true});
+    runtime.set("MASANAWA_DATABASE_URL", "postgres://masanawa:wrong@postgres:5432/masanawa");save();
+    assert.throws(() => runBackupPreflight(composeFile, runtimeFile), /connection_mismatch/u);
+    runtime.set("MASANAWA_DATABASE_URL", "postgres://masanawa:wrong@external.example:5432/masanawa");save();
+    assert.throws(() => runBackupPreflight(composeFile, runtimeFile), /connection_mismatch/u);
+    chmodSync(runtimeFile, 0o644);
+    assert.throws(() => runBackupPreflight(composeFile, runtimeFile), /file_permissions_invalid/u);
+    assert.throws(() => runBackupPreflight(composeFile, composeFile), /path_mismatch/u);
+  } finally { rmSync(dir, {recursive:true, force:true}); }
 });

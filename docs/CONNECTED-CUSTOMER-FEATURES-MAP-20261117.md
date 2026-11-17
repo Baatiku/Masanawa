@@ -73,3 +73,17 @@ real email delivery/routing, the actual Droplet backup/restore, and real
 Google/custom-voice account eligibility remain separate acceptance gates. No
 financial/provider success or full 189-item parity completion is inferred from
 local tests. Hausa/Arabic interface localization remains excluded by the owner.
+
+
+## Backup rollout correction
+
+Owner console evidence shows the first backup service failed before migrations
+and application rollback restored the previous images. A deterministic conflict
+exists in full preflight: its original Billstack-disabled rule rejects the
+owner-authorized enabled signed-webhook deposit configuration. Backups must also
+remain possible when an unrelated provider/application setting needs repair.
+Connected repair surfaces are the shared private-file/database validator, full
+feature qualification, backup host/container entrypoints, pinned preflight bind
+mount, progress stages and deployment regression tests. No financial admission,
+ledger history, image pinning, database credentials or filesystem protections are
+bypassed. Full deployment still requires a configured Billstack key when enabled.

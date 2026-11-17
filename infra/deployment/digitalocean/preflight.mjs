@@ -36,7 +36,6 @@ const unqualifiedFlags = [
   "MASANAWA_ALPHA_ENABLED",
   "MASANAWA_MB_REPLIES_ENABLED",
   "MASANAWA_MB_CALLS_ENABLED",
-  "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED",
   "MASANAWA_GB_DATA_PURCHASE_ENABLED",
   "MASANAWA_STATUS_PROMOTIONS_ENABLED",
   "MASANAWA_STATUS_TIPS_ENABLED",
@@ -57,6 +56,11 @@ function qualifyPilotFeatures(runtime) {
   const ngnData = binaryFlag(runtime, "MASANAWA_NGN_DATA_PURCHASE_ENABLED");
   const flutterwave = binaryFlag(runtime, "FLUTTERWAVE_BILLS_ENABLED");
   const news = binaryFlag(runtime, "MASANAWA_NEWS_INGEST_ENABLED");
+  const billstackDeposits = binaryFlag(runtime, "MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED");
+  if (billstackDeposits) {
+    const key = runtime.get("MASANAWA_BILLSTACK_SECRET_KEY") ? "MASANAWA_BILLSTACK_SECRET_KEY" : "BILLSTACK_SECRET_KEY";
+    required(runtime, key);
+  }
   if (ngnCalls && (runtime.get("MASANAWA_GB_SEND_REVIEW_SECRET") ?? "").length < 32)
     fail("ngn_calls.review_secret_missing");
   if (ngnData && (!ngnCatalog || !flutterwave)) fail("ngn_data.catalog_or_provider_missing");
@@ -75,28 +79,16 @@ function qualifyPilotFeatures(runtime) {
     // The canonical service independently validates the actual approved list,
     // webhook, settlement ledgers and provider before serving any purchase.
   }
-  return { ngnCalls, ngnCatalog, ngnData, flutterwave, news };
+  return { ngnCalls, ngnCatalog, ngnData, flutterwave, news, billstackDeposits };
 }
 
-export function validatePilotConfig(compose, runtime) {
-  const runtimeFile = required(compose, "MASANAWA_RUNTIME_ENV_FILE");
-  if (!isAbsolute(runtimeFile) || runtimeFile.endsWith(".env.example")) fail("runtime_file.not_private_path");
-  const hostname = required(compose, "MASANAWA_API_HOST");
-  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(hostname) || !hostname.includes(".") || hostname.endsWith(".invalid")) {
-    fail("api_host.invalid");
-  }
+function validateDatabaseTarget(compose, runtime) {
   const user = required(compose, "POSTGRES_USER");
   const database = required(compose, "POSTGRES_DB");
   const password = required(compose, "POSTGRES_PASSWORD");
   if (!/^[a-z_][a-z0-9_]*$/u.test(user) || !/^[a-z_][a-z0-9_]*$/u.test(database) || password.length < 24) {
     fail("postgres.credentials_invalid");
   }
-  const image = required(compose, "MASANAWA_GATEWAY_IMAGE");
-  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(image)) fail("gateway_image.not_commit_pinned");
-  const workerImage = required(compose, "MASANAWA_WORKER_IMAGE");
-  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(workerImage)) fail("worker_image.not_commit_pinned");
-  const opsImage = required(compose, "MASANAWA_OPS_IMAGE");
-  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(opsImage)) fail("ops_image.not_commit_pinned");
   let dbUrl;
   try {
     dbUrl = new URL(required(runtime, "MASANAWA_DATABASE_URL"));
@@ -107,6 +99,22 @@ export function validatePilotConfig(compose, runtime) {
   if (dbUrl.hostname !== "postgres" || dbUrl.port !== "5432" || dbUrl.username !== user ||
       decodeURIComponent(dbUrl.password) !== password || decodeURIComponent(dbUrl.pathname) !== `/${database}` ||
       dbUrl.search || dbUrl.hash) fail("postgres.connection_mismatch");
+}
+
+export function validatePilotConfig(compose, runtime) {
+  const runtimeFile = required(compose, "MASANAWA_RUNTIME_ENV_FILE");
+  if (!isAbsolute(runtimeFile) || runtimeFile.endsWith(".env.example")) fail("runtime_file.not_private_path");
+  const hostname = required(compose, "MASANAWA_API_HOST");
+  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(hostname) || !hostname.includes(".") || hostname.endsWith(".invalid")) {
+    fail("api_host.invalid");
+  }
+  validateDatabaseTarget(compose, runtime);
+  const image = required(compose, "MASANAWA_GATEWAY_IMAGE");
+  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(image)) fail("gateway_image.not_commit_pinned");
+  const workerImage = required(compose, "MASANAWA_WORKER_IMAGE");
+  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(workerImage)) fail("worker_image.not_commit_pinned");
+  const opsImage = required(compose, "MASANAWA_OPS_IMAGE");
+  if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(opsImage)) fail("ops_image.not_commit_pinned");
   const origin = `https://${hostname}`;
   if (required(runtime, "MASANAWA_PUBLIC_BASE_URL") !== origin ||
       required(runtime, "MASANAWA_AUTH_PUBLIC_BASE_URL") !== origin) {
@@ -143,6 +151,16 @@ function loadPrivateEnv(file) {
   return parseEnvFile(readFileSync(file, "utf8"));
 }
 
+/** Backups remain available when application/provider settings need repair.
+ * Keep the private-path, credentials and canonical database identity checks. */
+export function runBackupPreflight(composeFile, runtimeFile) {
+  const compose = loadPrivateEnv(composeFile);
+  if (runtimeFile !== required(compose, "MASANAWA_RUNTIME_ENV_FILE")) fail("runtime_file.path_mismatch");
+  const runtime = loadPrivateEnv(runtimeFile);
+  validateDatabaseTarget(compose, runtime);
+  return Object.freeze({ canonicalDatabase: true, privateFiles: true });
+}
+
 export function runPreflight(composeFile, runtimeFile) {
   const compose = loadPrivateEnv(composeFile);
   const expectedRuntimeFile = required(compose, "MASANAWA_RUNTIME_ENV_FILE");
@@ -153,8 +171,9 @@ export function runPreflight(composeFile, runtimeFile) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    if (process.argv.length !== 4) fail("usage_expected_compose_and_runtime_files");
-    const result = runPreflight(process.argv[2], process.argv[3]);
+    const backup = process.argv[2] === "--backup";
+    if (process.argv.length !== (backup ? 5 : 4)) fail("usage_expected_compose_and_runtime_files");
+    const result = backup ? runBackupPreflight(process.argv[3], process.argv[4]) : runPreflight(process.argv[2], process.argv[3]);
     process.stdout.write(`${JSON.stringify({ event: "digitalocean.preflight.ok", ...result })}\n`);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : "digitalocean.preflight.failed"}\n`);
