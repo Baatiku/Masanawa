@@ -40,8 +40,12 @@ jobs:
         # This script uses Node built-ins only; ubuntu-latest already ships
         # a modern Node runtime, so no setup-node download is necessary.
         run: node --test infra/deployment/digitalocean/preflight.test.mjs infra/deployment/digitalocean/release-origins.test.mjs
-      - name: Validate backup script syntax
-        run: bash -n infra/deployment/digitalocean/backup.sh
+      - name: Validate backup and payment activation tooling
+        run: |
+          bash -n infra/deployment/digitalocean/backup.sh
+          bash -n infra/deployment/digitalocean/activate-payments.template.sh
+          node --check infra/deployment/digitalocean/qualify-payments.mjs
+          python3 -m unittest discover -s infra/deployment/digitalocean -p activate_payments_test.py
       - name: Normalize all Compose profiles without secrets
         run: >-
           docker compose

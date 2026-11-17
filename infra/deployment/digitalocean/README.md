@@ -160,3 +160,14 @@ Note: a normal migration step is safe to run repeatedly; a failed migration **bl
 - [ ] Independently qualified biller/deposit/Gemini Live/news worker before switches change.
 
 **If the DigitalOcean account or payment authorization is not available, stop at source+CI checks. Do not state that a Droplet, DNS cutover, paid service or production deployment has been performed.**
+
+### 17 November: recovering a payment qualification failure
+
+The payment installer now deploys independently authorized core login/NGN
+transfer fixes and signed-webhook Billstack deposits when the existing private
+key is present, even when Flutterwave qualification is unavailable. Provider
+settings remain unchanged on that failure, with bounded stage/HTTP/missing-name
+diagnostics. Only full qualification prints PAYMENT UPDATE COMPLETE; otherwise
+CORE UPDATE COMPLETE explicitly leaves data pending. Existing backup, forward
+migration, resource and image/runtime rollback checks remain mandatory. See
+[the recovery map](../../../docs/PAYMENT-ACTIVATION-RECOVERY-20261117.md).
