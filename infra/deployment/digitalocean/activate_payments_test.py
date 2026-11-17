@@ -98,6 +98,16 @@ class QualificationSummaryTest(RuntimeFixture):
         self.assertIn('FLUTTERWAVE_SECRET_KEY', out.getvalue())
         self.assertNotIn('fixture-private-token', out.getvalue())
 
+    def test_database_failure_code_is_bounded_and_private_payload_is_not_printed(self):
+        log=self.root/'qualification.log'
+        for code,expected in [('42P01',True),('fixture-private-token',False)]:
+            log.write_text('MASANAWA_QUALIFICATION_RESULT '+json.dumps(dict(event='payments.qualification.failed',stage='approval_table',code='provider_or_catalogue_unavailable',failureCode=code,detail='private fixture payload')))
+            out=io.StringIO()
+            with contextlib.redirect_stdout(out):module.qualification_summary(log)
+            self.assertIn('approval_table',out.getvalue())
+            self.assertEqual('Failure code:' in out.getvalue(),expected)
+            self.assertNotIn('private',out.getvalue())
+
     def test_unclassified_or_unfinished_errors_never_print_log_payloads(self):
         log = self.root / 'qualification.log'
         for raw in ['private-provider-response', 'MASANAWA_QUALIFICATION_RESULT ' + json.dumps(dict(event='payments.qualification.failed',stage='secret-stage',code='secret-code',httpStatus='secret-status',missing='secret-missing'))]:
