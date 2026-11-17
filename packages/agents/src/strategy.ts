@@ -53,6 +53,8 @@ export type AgentConversationSurface = "mobile" | "whatsapp" | "telegram";
 export type AgentConversationRepresentation = "platform-agent" | "public-twin";
 
 export interface AgentStrategyRequest {
+  /** Confirmed, account/relationship-scoped memory supplied only by the server. */
+  readonly userMemory?:readonly {recordId:string;revision:number;type:string;content:string;sourceReference:string;expiresAt:string|null}[];
   /** Server-only, authorized read of current public evidence; never a customer DTO. */
   readonly readPublicEvidence?: (query:string)=>Promise<import('./public-official.js').PublicOfficialPersona>;
   readonly conversationHistory?: readonly AgentConversationHistoryMessage[];

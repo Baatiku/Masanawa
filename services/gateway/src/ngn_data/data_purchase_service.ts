@@ -1,3 +1,4 @@
+import {verifiedNgnDataOutcome} from '@masanawa/commerce';
 import {createHash} from 'node:crypto';
 import type {FlutterwaveBillReceipt,FlutterwaveBillItem} from '@masanawa/providers';
 import {normalizeNigerianMobile,quoteVerifiedWholeGb,type ApprovedWholeGbBundle} from './data_catalogue.js';
@@ -26,10 +27,6 @@ const validId=(v:string)=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9_:-]{0,159
 const validKey=(v:string)=>typeof v==='string'&&/^[A-Za-z0-9_-]{8,128}$/.test(v);
 const originalId=(a:NgnDataPurchaseActor,key:string)=>'ngndata_'+createHash('sha256').update(JSON.stringify([a.tenantId,a.userId,key])).digest('hex').slice(0,48);
 const actor=(a:NgnDataPurchaseActor)=>{if(!validId(a?.tenantId)||!validId(a?.userId))throw Error('unauthorized');};
-function exactNgn(value:string):bigint {
- if(typeof value!=='string'||!/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(value))throw Error('invalid_amount');
- const [whole,fraction='']=value.split('.');return BigInt(whole!)*100n+BigInt(fraction.padEnd(2,'0')||'0');
-}
 export function createNgnDataPurchaseService(p:NgnDataPurchasePorts){
  const reconcile=async(a:NgnDataPurchaseActor,id:string)=>{
   actor(a);if(!validId(id))throw Error('invalid_operation');
@@ -37,15 +34,9 @@ export function createNgnDataPurchaseService(p:NgnDataPurchasePorts){
   if(order.state!=='pending')return {operationId:id,state:order.state};
   let receipt:FlutterwaveBillReceipt|null;
   try{receipt=await p.status(id);}catch{return {operationId:id,state:'pending' as const};}
-  if(!receipt||['pending','unknown','reversed'].includes(receipt.status))return {operationId:id,state:'pending' as const};
-  // Failure, as well as delivery, must be independently bound to this exact
-  // order. Never release another customer's hold from a mismatched status.
-  if(receipt.reference!==id||!receipt.providerReference||receipt.currency!=='NGN'||receipt.customerId!==order.phone||receipt.amount===null||exactNgn(receipt.amount)!==exactNgn(order.amountNgn)||(receipt.itemCode!=null&&receipt.itemCode!==order.bundleId.split(':')[1]))return {operationId:id,state:'pending' as const,needsReview:true};
-  if(receipt.status==='failed'){
-   await p.release({...a,operationId:id});await p.resolve(a,id,'failed',receipt.providerReference);return {operationId:id,state:'failed' as const};
-  }
-  if(receipt.status!=='successful')return {operationId:id,state:'pending' as const};
-  await p.capture({...a,operationId:id},order.costKobo);await p.resolve(a,id,'delivered',receipt.providerReference);return {operationId:id,state:'delivered' as const};
+  const outcome=verifiedNgnDataOutcome(order,receipt);if(outcome.state==='pending')return {operationId:id,...outcome};
+  if(outcome.state==='failed')await p.release({...a,operationId:id});else await p.capture({...a,operationId:id},order.costKobo);
+  await p.resolve(a,id,outcome.state,outcome.providerReference??null);return {operationId:id,state:outcome.state};
  };
  return {reconcile,
   async readOriginal(a:NgnDataPurchaseActor,key:string){

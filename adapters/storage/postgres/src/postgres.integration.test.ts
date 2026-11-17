@@ -210,6 +210,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "memory/0005_memory_multisignal_projections.sql",
       "memory/0006_memory_tombstones.sql",
       "memory/0007_memory_reflections.sql",
+      "memory/0008_customer_memory_controls.sql",
       "security/0001_security_foundation.sql",
       "security/0002_approval_operation_integrity.sql",
       "security/0003_service_credentials.sql",

@@ -9,6 +9,20 @@
       "description": "Existing Railway Billstack merchant secret; fallback when MASANAWA_BILLSTACK_SECRET_KEY is absent. Never expose to mobile. Funding remains gated by verified applicant and settlement ports."
     },
     {
+      "name": "CLOUDFLARE_ACCOUNT_ID",
+      "owner": "news-gateway deployment",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit Cloudflare account selected by the standalone news deployment tool; not a Node service runtime requirement."
+    },
+    {
+      "name": "CLOUDFLARE_API_TOKEN",
+      "owner": "news-gateway deployment",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Scoped Workers Scripts and D1 deployment credential supplied securely outside Git; never sent to public news clients."
+    },
+    {
       "name": "CREDENTIAL_ENCRYPTION_KEY",
       "owner": "security/bootstrap",
       "classification": "secret",
@@ -354,6 +368,13 @@
       "description": "Canonical PostgreSQL bootstrap connection secret for deployable services."
     },
     {
+      "name": "MASANAWA_DEPLOY_ENV_FILE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Absolute host path to the mode-0600 Compose bootstrap interpolation file consumed by the backup script."
+    },
+    {
       "name": "MASANAWA_FIREBASE_SERVICE_ACCOUNT_JSON",
       "owner": "security/bootstrap",
       "classification": "secret",
@@ -373,13 +394,6 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Opt-in read-only IPv4 and Mobile Data catalogue startup observations using existing Railway-held credentials; never submits a payment or logs secrets/customer details."
-    },
-    {
-      "name": "MASANAWA_DEPLOY_ENV_FILE",
-      "owner": "infra/deployment/digitalocean",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Absolute host path to the mode-0600 Compose bootstrap interpolation file consumed by the backup script."
     },
     {
       "name": "MASANAWA_FLUTTERWAVE_RELAY_TOKEN",
@@ -452,27 +466,6 @@
       "description": "Only enable Flutterwave whole-GB redemption after approved current operator mapping, live Bills credentials, authenticated MB reservations, forward-only journal migration and independently qualified provider delivery GET are ready."
     },
     {
-      "name": "MASANAWA_NGN_DATA_APPROVALS_JSON",
-      "owner": "gateway/ngn-data",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Server-only reviewed provider bundle identities, NGN pricing, expiry and evidence. Required for canonical direct-NGN catalogue; never a client-selected debit authority."
-    },
-    {
-      "name": "MASANAWA_NGN_DATA_CATALOG_ENABLED",
-      "owner": "gateway/ngn-data",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Explicit new NGN data catalogue switch independent of retired GB/MB flags; requires approved mapping, live Flutterwave, canonical auth and PostgreSQL."
-    },
-    {
-      "name": "MASANAWA_NGN_DATA_PURCHASE_ENABLED",
-      "owner": "gateway/ngn-data",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Explicit NGN Buy Data purchase switch, effective only with the new NGN catalogue, reviewed live provider items and durable reserved NGN ledger."
-    },
-    {
       "name": "MASANAWA_GB_SEND_REVIEW_SECRET",
       "owner": "gateway/gb-wallet",
       "classification": "secret",
@@ -543,6 +536,48 @@
       "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MASANAWA_MAIL_INGEST_SECRET",
+      "owner": "pilot/customer-features",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "HMAC for private existing-Worker MIME queue ingestion; never browser-visible."
+    },
+    {
+      "name": "MASANAWA_MAIL_OWNER_EMAIL",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Verified initial owner identity used only to pin the canonical mailbox user ID."
+    },
+    {
+      "name": "MASANAWA_MAIL_R2_ACCESS_KEY",
+      "owner": "pilot/customer-features",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Dedicated existing-bucket-scoped R2 S3 access identity."
+    },
+    {
+      "name": "MASANAWA_MAIL_R2_BUCKET",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Existing private Masanawa R2 bucket; no new service is provisioned."
+    },
+    {
+      "name": "MASANAWA_MAIL_R2_ENDPOINT",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Private object service origin; signed URLs remain server-side."
+    },
+    {
+      "name": "MASANAWA_MAIL_R2_SECRET",
+      "owner": "pilot/customer-features",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Dedicated existing-bucket-scoped R2 S3 secret."
+    },
+    {
       "name": "MASANAWA_MB_CALLS_ENABLED",
       "owner": "gateway/gb-calls",
       "classification": "public",
@@ -571,6 +606,13 @@
       "description": "Recommended mobile application version."
     },
     {
+      "name": "MASANAWA_MONITOR_EMAIL",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Owner-only operational alert destination."
+    },
+    {
       "name": "MASANAWA_MSN_BALANCE_ENABLED",
       "owner": "services/gateway",
       "classification": "public",
@@ -585,11 +627,46 @@
       "description": "Optional feature configuration consumed by services/gateway/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MASANAWA_NEWS_GATEWAY_ORIGIN",
+      "owner": "worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Verified public workers.dev news origin. When set, canonical news ingestion reads Cloudflare metadata instead of publisher RSS directly."
+    },
+    {
       "name": "MASANAWA_NEWS_INGEST_ENABLED",
       "owner": "worker/home-feed",
       "classification": "public",
       "requiredIn": [],
       "description": "Default off. Enable reviewed and licensed publisher RSS metadata ingestion only after migration 0027, an approved unexpired tenant publisher registry and provider/feed qualification. This never authorizes unlicensed BBC or other copyrighted content."
+    },
+    {
+      "name": "MASANAWA_NGN_CALLS_ENABLED",
+      "owner": "gateway",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Enable reviewed NGN connected-call admissions and trusted relay; falls back to existing MB call enablement during direct-NGN cutover. Does not enable new MB charges."
+    },
+    {
+      "name": "MASANAWA_NGN_DATA_APPROVALS_JSON",
+      "owner": "gateway/ngn-data",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server-only reviewed provider bundle identities, NGN pricing, expiry and evidence. Required for canonical direct-NGN catalogue; never a client-selected debit authority."
+    },
+    {
+      "name": "MASANAWA_NGN_DATA_CATALOG_ENABLED",
+      "owner": "gateway/ngn-data",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit new NGN data catalogue switch independent of retired GB/MB flags; requires approved mapping, live Flutterwave, canonical auth and PostgreSQL."
+    },
+    {
+      "name": "MASANAWA_NGN_DATA_PURCHASE_ENABLED",
+      "owner": "gateway/ngn-data",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Explicit NGN Buy Data purchase switch, effective only with the new NGN catalogue, reviewed live provider items and durable reserved NGN ledger."
     },
     {
       "name": "MASANAWA_NGN_EXCHANGE_ENABLED",
@@ -739,6 +816,13 @@
       "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
     },
     {
+      "name": "MASANAWA_PILOT_NEWS_ENABLED",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Bounded one-source news scheduler in the existing Gateway; Worker stays off."
+    },
+    {
       "name": "MASANAWA_PLATFORM_POLICY_REVISION",
       "owner": "gateway",
       "classification": "public",
@@ -767,20 +851,6 @@
       "description": "Production configuration for MASANAWA_PUBLIC_BASE_URL."
     },
     {
-      "name": "MASANAWA_RUNTIME_ENV_FILE",
-      "owner": "infra/deployment/digitalocean",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Absolute path of private mode-0600 runtime environment file mounted into Gateway/migration containers."
-    },
-    {
-      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
-      "owner": "services/worker",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
-    },
-    {
       "name": "MASANAWA_ROOMS_MEMBERSHIP_ENABLED",
       "owner": "services/gateway",
       "classification": "public",
@@ -793,6 +863,20 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_RUNTIME_ENV_FILE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Absolute path of private mode-0600 runtime environment file mounted into Gateway/migration containers."
     },
     {
       "name": "MASANAWA_SHUTDOWN_TIMEOUT_MS",
@@ -993,6 +1077,27 @@
       "description": "Comma-separated exact HTTPS browser origins allowed to call the canonical Gateway with bearer auth; no wildcard, cookies or path components."
     },
     {
+      "name": "MASANAWA_WEB_PUSH_PRIVATE_KEY",
+      "owner": "pilot/customer-features",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Server VAPID private key."
+    },
+    {
+      "name": "MASANAWA_WEB_PUSH_PUBLIC_KEY",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Public VAPID subscription key; not an authorization principal."
+    },
+    {
+      "name": "MASANAWA_WEB_PUSH_SUBJECT",
+      "owner": "pilot/customer-features",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Owner contact URI for standards-based web push."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_ADMIN_TOKEN",
       "owner": "gateway/channels",
       "classification": "secret",
@@ -1161,6 +1266,13 @@
       "description": "Production configuration for NOWPAYMENTS_API_KEY."
     },
     {
+      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
+    },
+    {
       "name": "NOWPAYMENTS_CONVERSION_ENABLED",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -1173,13 +1285,6 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_CONVERSION_PROVIDER_CODES."
-    },
-    {
-      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_CUSTODY_ENABLED",
@@ -1231,6 +1336,13 @@
       "description": "Production configuration for NOWPAYMENTS_IPN_SECRET."
     },
     {
+      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
+    },
+    {
       "name": "NOWPAYMENTS_PAYOUT_2FA_READY",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -1278,13 +1390,6 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_PAYOUT_VERIFICATION_CODE."
-    },
-    {
-      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_RELAY_URL",
@@ -1390,34 +1495,6 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
-    },
-    {
-      "name": "MASANAWA_NEWS_GATEWAY_ORIGIN",
-      "owner": "worker",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Verified public workers.dev news origin. When set, canonical news ingestion reads Cloudflare metadata instead of publisher RSS directly."
-    },
-    {
-      "name": "CLOUDFLARE_ACCOUNT_ID",
-      "owner": "news-gateway deployment",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Explicit Cloudflare account selected by the standalone news deployment tool; not a Node service runtime requirement."
-    },
-    {
-      "name": "CLOUDFLARE_API_TOKEN",
-      "owner": "news-gateway deployment",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Scoped Workers Scripts and D1 deployment credential supplied securely outside Git; never sent to public news clients."
-    },
-    {
-      "name": "MASANAWA_NGN_CALLS_ENABLED",
-      "owner": "gateway",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Enable reviewed NGN connected-call admissions and trusted relay; falls back to existing MB call enablement during direct-NGN cutover. Does not enable new MB charges."
     }
   ]
 }

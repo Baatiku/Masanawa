@@ -31,9 +31,9 @@ function fixture() {
       if (!scoped) return { rows: [] };
       if (sql.includes("octet_length(payload) AS size_bytes"))
         return { rows: [{ request_id: requestId, slot: 0, kind: "voice",
-          mime_type: "audio/ogg", filename: null, size_bytes: payload.length }] };
+          expires_at:new Date(Date.now()+86400000).toISOString(),mime_type: "audio/ogg", filename: null, size_bytes: payload.length }] };
       if (sql.includes("SELECT kind,mime_type,filename,payload,sha256"))
-        return { rows: [{ kind: "voice", mime_type: "audio/ogg", filename: null,
+        return { rows: [{ kind: "voice", expires_at:new Date(Date.now()+86400000).toISOString(),mime_type: "audio/ogg", filename: null,
           payload, sha256 }] };
       return { rows: [] };
     },

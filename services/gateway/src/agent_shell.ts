@@ -59,6 +59,7 @@ export function createAgentShellService(input: {
   }
 
   const service: AgentShellService = {
+    async historyPage(request){const admitted=await admission(request.authorizationHeader,request.characterId);if(input.repository.listHistoryPage)return input.repository.listHistoryPage({scope:admitted.scope,limit:request.limit,...(request.before?{before:request.before}:{}),...(request.cursor?{cursor:request.cursor}:{})});const messages=await input.repository.listHistory({scope:admitted.scope,limit:request.limit,...(request.before?{before:request.before}:{})});return {messages,before:messages[0]?.createdAt??null,nextCursor:null,hasMore:messages.length>=request.limit*2,removedKeys:[]};},
     async config(request) {
       await admission(request.authorizationHeader, request.characterId);
       const capabilities = request.capabilities;

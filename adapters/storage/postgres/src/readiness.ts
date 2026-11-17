@@ -64,6 +64,7 @@ export function characterSessionMigrationRoots(): readonly MigrationRoot[] {
 export function platformProductMigrationRoots(): readonly MigrationRoot[] {
   return Object.freeze([
     ...characterSessionMigrationRoots(),
+    Object.freeze({owner:"memory",directory:packageMigrationDirectory("@masanawa/memory")}),
     Object.freeze({
       owner: "commerce",
       directory: packageMigrationDirectory("@masanawa/commerce"),

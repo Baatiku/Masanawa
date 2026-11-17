@@ -1,3 +1,9 @@
+import {registerBrowserPushRoutes} from './browser_push_routes.js';
+import type {createBrowserPushService} from './browser_push.js';
+import {registerCustomerMemoryRoutes} from './customer_memory_routes.js';
+import type {createCustomerMemoryService} from './customer_memory.js';
+import {registerMessageControlRoutes} from './message_control_routes.js';
+import type {createMessageControlService} from './message_controls.js';
 import {registerDirectNgnWalletRoutes,type DirectNgnWalletPorts} from './ngn_wallet/routes.js';
 import {registerNgnSendReviewRoutes} from './ngn_wallet/send_routes.js';
 import type {NgnSendPorts} from './ngn_wallet/send_review.js';
@@ -91,6 +97,9 @@ export interface ReadinessCheck {
 }
 
 export interface GatewayAppOptions {
+  readonly browserPush?:ReturnType<typeof createBrowserPushService>;
+  readonly customerMemory?:ReturnType<typeof createCustomerMemoryService>;
+  readonly messageControls?:ReturnType<typeof createMessageControlService>;
   readonly personaPortraits?:{read(characterId:string):Promise<Buffer|null>};
   /** Exact HTTPS browser origins; no wildcard and no implicit cookie access. */
   readonly webAllowedOrigins?: readonly string[];
@@ -997,6 +1006,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
     );
   }
 
+  if(options.browserPush)registerBrowserPushRoutes(app,options.browserPush);
+  if(options.customerMemory)registerCustomerMemoryRoutes(app,options.customerMemory);
+  if(options.messageControls)registerMessageControlRoutes(app,options.messageControls);
   if (options.agentConversation) {
     const conversation = options.agentConversation;
 
@@ -1074,7 +1086,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
           body: AgentTurnBodySchema,
         },
       },
-      async (request, reply) => streamConversationReply(reply, async (callbacks, signal) =>
+      async (request, reply) => {
+        await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+        return streamConversationReply(reply, async (callbacks, signal) =>
         resultBody(await conversation.turn({
           authorizationHeader: request.headers.authorization,
           characterSessionId: request.params.characterSessionId,
@@ -1083,13 +1097,15 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
           requestId: parseCanonicalId("request", request.headers["x-request-id"] as string),
           correlationId: parseCanonicalId("correlation", request.headers["x-correlation-id"] as string),
           ...callbacks, signal,
-        }))),
+        })));},
     );
 
     app.post("/agent/sessions/:characterSessionId/media-turn-stream", {
       bodyLimit: 13_000_000,
       schema: {params:AgentSessionParamsSchema,body:AgentMediaTurnBodySchema},
-    }, async (request,reply) => streamConversationReply(reply, async (callbacks,signal) =>
+    }, async (request,reply) => {
+      await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+      return streamConversationReply(reply, async (callbacks,signal) =>
       resultBody(await conversation.mediaTurn({
         authorizationHeader:request.headers.authorization,
         characterSessionId:request.params.characterSessionId,
@@ -1097,12 +1113,14 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
         correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
         ...callbacks,signal,
-      }))));
+      })));});
 
     app.post("/agent/sessions/:characterSessionId/media-set-turn-stream", {
       bodyLimit: 17_000_000,
       schema: {params:AgentSessionParamsSchema,body:AgentMediaSetTurnBodySchema},
-    }, async (request,reply) => streamConversationReply(reply, async (callbacks,signal) =>
+    }, async (request,reply) => {
+      await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+      return streamConversationReply(reply, async (callbacks,signal) =>
       resultBody(await conversation.mediaSetTurn({
         authorizationHeader:request.headers.authorization,
         characterSessionId:request.params.characterSessionId,
@@ -1110,7 +1128,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
         requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
         correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
         ...callbacks,signal,
-      }))));
+      })));});
 
     app.post(
       "/agent/sessions/:characterSessionId/media-turn",

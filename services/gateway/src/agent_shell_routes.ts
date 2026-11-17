@@ -72,20 +72,11 @@ export function registerAgentShellRoutes(app: FastifyInstance, options: ShellOpt
       });
     });
 
-    app.get("/agent/history", async (request) => {
-      const query = request.query as Record<string, unknown>;
-      return {
-        messages: [
-          ...(await shell.history({
-            authorizationHeader: request.headers.authorization,
-            characterId: text(query.characterId, "characterId", 160),
-            limit: query.limit === undefined ? 100 : integer(query.limit, "limit", 1, 200),
-            ...(typeof query.before === "string" && query.before
-              ? { before: query.before.slice(0, 64) }
-              : {}),
-          })),
-        ],
-      };
+    app.get('/agent/history',async request=>{
+      const q=request.query as Record<string,unknown>;
+      const query={authorizationHeader:request.headers.authorization,characterId:text(q.characterId,'characterId',160),limit:q.limit===undefined?100:integer(q.limit,'limit',1,200),...(typeof q.before==='string'&&q.before?{before:text(q.before,'before',64)}:{}),...(q.cursor!==undefined?{cursor:text(q.cursor,'cursor',258)}:{})};
+      if(shell.historyPage)return shell.historyPage(query);
+      return {messages:[...await shell.history(query)]};
     });
 
     app.get("/agent/turns/:requestId/status", async (request) => {

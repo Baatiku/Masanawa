@@ -25,6 +25,7 @@ describe.skipIf(!databaseUrl)("private chat media PostgreSQL lifecycle", () => {
   const bob = createCanonicalId("user");
   const quotaUser = createCanonicalId("user");
   const characterId = createCanonicalId("character");
+  const relationshipId = createCanonicalId("relationship");
   let admin: Pool;
   let pool: Pool;
   let temporaryMigrations: string;
@@ -40,7 +41,7 @@ describe.skipIf(!databaseUrl)("private chat media PostgreSQL lifecycle", () => {
           userId: input.authorizationHeader === "Bearer bob" ? bob
             : input.authorizationHeader === "Bearer quota" ? quotaUser : alice,
           characterId: input.characterId,
-          relationshipId: createCanonicalId("relationship"),
+          relationshipId,
         },
       };
     },
@@ -50,6 +51,11 @@ describe.skipIf(!databaseUrl)("private chat media PostgreSQL lifecycle", () => {
     characterId, requestId, slot, kind: "voice" as const,
     mimeType: "audio/ogg", name: `voice-${slot}.ogg`, dataBase64: bytes.toString("base64"),
   });
+
+  async function saveReply(service:ReturnType<typeof device>,requestId:string,bytes:Buffer){
+    await pool.query(`INSERT INTO agents.mobile_turn_commands(tenant_id,user_id,character_id,relationship_id,character_session_id,request_id,kind,user_text,payload_hash,state,reply) VALUES($1,$2,$3,$4,$5,$6,'text','Canonical fixture request',$7,'completed','Canonical fixture reply') ON CONFLICT DO NOTHING`,[tenantId,alice,characterId,relationshipId,createCanonicalId('character-session'),requestId,createHash('sha256').update('canonical fixture request').digest('hex')]);
+    return service.saveReplyAudio({tenantId,userId:alice,characterId,relationshipId},requestId,{mimeType:'audio/wav',dataBase64:bytes.toString('base64')});
+  }
 
   beforeAll(async () => {
     admin = createPostgresPool({ connectionString: databaseUrl!, applicationName: "ws2-media-test-admin" });
@@ -85,7 +91,8 @@ describe.skipIf(!databaseUrl)("private chat media PostgreSQL lifecycle", () => {
     await firstDevice.put("Bearer alice", upload(requestId));
     const applied = await runMigrations(pool, characterSessionMigrationRoots());
     expect(applied).toContain("agents/0011_private_masana_reply_audio.sql");
-    await firstDevice.put("Bearer alice", upload(requestId, 8, Buffer.from("Masana reply")));
+    await expect(firstDevice.put("Bearer alice",upload(requestId,8))).rejects.toThrow("chat.media.reply_server_only");
+    await saveReply(firstDevice,requestId,Buffer.from("Masana reply"));
     const secondDevice = device();
     expect((await secondDevice.list("Bearer alice", characterId, [requestId])).map(row => row.slot))
       .toEqual([0, 8]);
@@ -134,7 +141,7 @@ describe.skipIf(!databaseUrl)("private chat media PostgreSQL lifecycle", () => {
 
   it("enforces the customer envelope atomically while allowing independent reply audio", async () => {
     const requestId = createCanonicalId("request");
-    await device().put("Bearer alice", upload(requestId, 8, Buffer.alloc(1)));
+    await saveReply(device(),requestId,Buffer.alloc(1));
     const results = await Promise.allSettled([0, 1].map(slot =>
       device().put("Bearer alice", upload(requestId, slot, Buffer.alloc(7 * 1024 * 1024)))));
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);

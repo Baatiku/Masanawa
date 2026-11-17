@@ -1,3 +1,7 @@
+import {createNewsFeedPoller} from '@masanawa/postgres';
+import {createBrowserPushService} from './browser_push.js';
+import {createCustomerMemoryService} from './customer_memory.js';
+import {createMessageControlService} from './message_controls.js';
 import {ensureBillstackAccount} from './gb_wallet/billstack_funding_routes.js';
 import {createNgnSpending,createNgnCallAdmissions,createNgnDataJournal,createPostgresNgnTransferRepository,createPostgresNgnRequestRepository} from '@masanawa/postgres';
 import {ngnDataActivation} from './ngn_data/activation.js';
@@ -1152,6 +1156,7 @@ export async function startGatewayService(
       if (conversationAuthorizer) {
         liveVoiceTokens = createGeminiLiveTokenService({
           apiKey: liveApiKey,
+          readCustomerMemory:async scope=>composedCustomerMemory?.forScope(scope,'')??[],
           authorizer: conversationAuthorizer,
           ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
           ...(database.callHistory ? { callHistory: database.callHistory } : {}),
@@ -1166,6 +1171,7 @@ export async function startGatewayService(
         // Its provider grant is never returned directly to the phone.
         mbLiveVoiceTokens = createGeminiLiveTokenService({
           apiKey: liveApiKey,
+          readCustomerMemory:async scope=>composedCustomerMemory?.forScope(scope,'')??[],
           authorizer: conversationAuthorizer,
           ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
           ...(database.platformAgentProfiles ? {platformProfiles:database.platformAgentProfiles} : {}),
@@ -1517,6 +1523,9 @@ export async function startGatewayService(
         })
       : undefined;
 
+  const composedCustomerMemory=database.featurePool&&directoryAuthorizer&&conversationAuthorizer&&customerAuth?createCustomerMemoryService({pool:database.featurePool,directory:directoryAuthorizer,conversation:conversationAuthorizer,beforeWrite:header=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}):undefined;
+  const composedBrowserPush=options.appOptions?.browserPush??(database.featurePool&&directoryAuthorizer&&database.mobilePush&&customerAuth?createBrowserPushService({pool:database.featurePool,directory:directoryAuthorizer,preferences:database.mobilePush,beforeWrite:header=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header}),publicKey:env.MASANAWA_WEB_PUSH_PUBLIC_KEY,privateKey:env.MASANAWA_WEB_PUSH_PRIVATE_KEY,subject:env.MASANAWA_WEB_PUSH_SUBJECT}):undefined);
+  const composedMessageControls=database.featurePool&&conversationAuthorizer&&customerAuth?createMessageControlService({pool:database.featurePool,authorize:conversationAuthorizer,beforeWrite:header=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}):undefined;
   const composedPrivateChatMedia =
     options.appOptions?.privateChatMedia ??
     (database.featurePool && conversationAuthorizer
@@ -1559,6 +1568,8 @@ export async function startGatewayService(
             throw Object.assign(new Error('Persona voice configuration is unavailable'),{code:'agent.voice_unavailable'});
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
+          ...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),
+          ...(composedPrivateChatMedia?{saveReplyAudio:composedPrivateChatMedia.saveReplyAudio}:{}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),
           sessionDurationMs: 24 * 60 * 60 * 1000,
         })
@@ -2149,7 +2160,7 @@ export async function startGatewayService(
       },
       // Message history remains in the original J03 journal. Hides require a
       // separately qualified 0006 schema before they may be enabled.
-      inbox: createMasanaInboxRepository(featurePool, { hiddenTurnsReady: false }),
+      inbox: createMasanaInboxRepository(featurePool, { hiddenTurnsReady: false,messageControlsReady:true }),
     } : undefined);
 
   let app: ManagedNodeServer;
@@ -2257,6 +2268,7 @@ export async function startGatewayService(
       ...(options.appOptions ?? {}),
       productScope,
       directNgn:true,
+      ...(composedBrowserPush?{browserPush:composedBrowserPush}:{}),...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),...(composedMessageControls?{messageControls:composedMessageControls}:{}),
       ...(directNgnWallet?{directNgnWallet}:{}),...(ngnSendReview?{ngnSendReview}:{}),...(ngnRequests?{ngnRequests}:{}),...(ngnCalls?{ngnCalls}:{}),...(ngnRelay?{ngnCallRelay:ngnRelay}:{}),...(ngnDataCatalogue?{ngnDataCatalogue}:{}),...(ngnDataPurchases?{ngnDataPurchases}:{}),
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(gbDataPurchases ? { gbDataPurchases } : {}),
@@ -2334,6 +2346,9 @@ export async function startGatewayService(
     throw error;
   }
 
+  const newsAbort=new AbortController();
+  let newsTimer:ReturnType<typeof setInterval>|undefined;let newsRun:Promise<unknown>|undefined;
+  let browserPushTimer:ReturnType<typeof setInterval>|undefined;
   let officialSocialTimer:ReturnType<typeof setInterval>|undefined;
   let officialSocialRunning=false;
   let replyRecoveryTimer: ReturnType<typeof setInterval> | undefined;
@@ -2354,6 +2369,9 @@ export async function startGatewayService(
     ...(options.logger ? { logger: options.logger } : {}),
     onDraining: () => {
       drain.beginDraining();
+      newsAbort.abort();
+      clearInterval(newsTimer);
+      clearInterval(browserPushTimer);
       clearInterval(replyRecoveryTimer);
       clearInterval(officialSocialTimer);
       void statusRetention?.stop();
@@ -2363,6 +2381,9 @@ export async function startGatewayService(
       }
     },
     onAfterClose: async () => {
+      newsAbort.abort();
+      clearInterval(newsTimer);
+      clearInterval(browserPushTimer);
       clearInterval(replyRecoveryTimer);
       clearInterval(officialSocialTimer);
       await statusRetention?.stop();
@@ -2370,12 +2391,17 @@ export async function startGatewayService(
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
       }
+      await newsRun;
+      await composedBrowserPush?.stop();
       await database.close();
     },
     onFatalShutdown: () => {
       processRef.exitCode = 1;
     },
   });
+
+  if(database.featurePool&&env.MASANAWA_PILOT_NEWS_ENABLED==='true'&&env.MASANAWA_PLATFORM_TENANT_ID){const poller=createNewsFeedPoller(database.featurePool,(url,init)=>fetch(url,{...init,signal:AbortSignal.any([newsAbort.signal,...(init?.signal?[init.signal]:[])])}),env.MASANAWA_PLATFORM_TENANT_ID,env.MASANAWA_NEWS_GATEWAY_ORIGIN,1);const run=()=>{if(newsRun||drain.isDraining())return;newsRun=poller.runOnce().catch(()=>{console.error(JSON.stringify({event:'pilot.news.refresh_unavailable'}));}).finally(()=>{newsRun=undefined;});};newsTimer=setInterval(run,60000);newsTimer.unref();}
+  if(composedBrowserPush?.configured){const deliver=async()=>{if(drain.isDraining())return;try{await composedBrowserPush.pump();}catch{console.error(JSON.stringify({event:'browser.push.delivery_unavailable'}));}};browserPushTimer=setInterval(()=>{void deliver();},15000);browserPushTimer.unref();}
 
   if(database.featurePool&&env.MASANAWA_OFFICIAL_SOCIAL_IMPORT_ENABLED==='true'){
     const socialConfig={

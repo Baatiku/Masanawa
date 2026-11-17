@@ -42,6 +42,7 @@ export interface AgentShellActionExecutor {
 }
 
 export interface AgentShellService {
+  historyPage?(input:{authorizationHeader:string|undefined;characterId:string;limit:number;before?:string;cursor?:string}):Promise<{messages:readonly MobileHistoryMessage[];before:string|null;nextCursor:string|null;hasMore:boolean;removedKeys:readonly string[]}>;
   config(input: {
     readonly authorizationHeader: string | undefined;
     readonly characterId: string;

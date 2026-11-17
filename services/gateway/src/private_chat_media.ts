@@ -58,9 +58,8 @@ export function createPrivateChatMediaService(input: Readonly<{
     };
   }
 
-  async function put(authorizationHeader: string | undefined, request: PrivateChatMediaInput) {
-    const verified = validateMedia(request);
-    const who = await owner(authorizationHeader, request.characterId);
+  async function store(who:Owner,request:PrivateChatMediaInput,generatedReply=false){
+    const verified=validateMedia(request);
     const client = await input.pool.connect();
     let transaction = false;
     try {
@@ -92,6 +91,7 @@ export function createPrivateChatMediaService(input: Readonly<{
           throw new Error("chat.media.idempotency_conflict");
         }
       } else {
+        if(request.slot===8&&!generatedReply)throw new RangeError('chat.media.reply_server_only');
         // Customer inputs and the generated reply have independent envelopes.
         // A reply restored first on another device must not consume input quota.
         const total = current.rows.reduce((sum, row) =>
@@ -137,7 +137,7 @@ export function createPrivateChatMediaService(input: Readonly<{
     if (!ids.length) return Object.freeze([]);
     const records=await input.pool.query(
       "SELECT request_id,slot,kind,mime_type,filename," +
-      "octet_length(payload) AS size_bytes FROM agents.private_chat_media " +
+      "expires_at,octet_length(payload) AS size_bytes FROM agents.private_chat_media " +
       "WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 " +
       "AND request_id=ANY($4::text[]) AND expires_at>clock_timestamp() " +
       "ORDER BY request_id,slot",
@@ -146,7 +146,7 @@ export function createPrivateChatMediaService(input: Readonly<{
     return Object.freeze(records.rows.map(row => Object.freeze({
       requestId:row.request_id as string, slot:Number(row.slot),
       kind:row.kind as ChatMediaKind,mimeType:row.mime_type as string,
-      name:row.filename as string|null,sizeBytes:Number(row.size_bytes),
+      expiresAt:new Date(row.expires_at).toISOString(),name:row.filename as string|null,sizeBytes:Number(row.size_bytes),
     })));
   }
 
@@ -157,7 +157,7 @@ export function createPrivateChatMediaService(input: Readonly<{
     if(!Number.isSafeInteger(slot)||slot<0||slot>8)
       throw new RangeError("chat.media.slot_invalid");
     const r=await input.pool.query(
-      "SELECT kind,mime_type,filename,payload,sha256 FROM agents.private_chat_media " +
+      "SELECT kind,mime_type,filename,payload,sha256,expires_at FROM agents.private_chat_media " +
       "WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND request_id=$4 " +
       "AND slot=$5 AND expires_at>clock_timestamp()",
       [who.tenantId,who.userId,who.characterId,id,slot],
@@ -169,9 +169,18 @@ export function createPrivateChatMediaService(input: Readonly<{
       throw new Error("chat.media.checksum_invalid");
     return Object.freeze({kind:entry.kind as ChatMediaKind,
       mimeType:entry.mime_type as string,name:entry.filename as string|null,
-      sizeBytes:bytes.length,dataBase64:bytes.toString("base64")});
+      expiresAt:new Date(entry.expires_at).toISOString(),sizeBytes:bytes.length,dataBase64:bytes.toString("base64")});
   }
 
-  return Object.freeze({put,get,list,owner});
+  async function put(header:string|undefined,request:PrivateChatMediaInput){return store(await owner(header,request.characterId),request);}
+  async function saveReplyAudio(scope:import('@masanawa/agents').CharacterSessionScope,requestId:string,audio:{dataBase64:string;mimeType:string}){
+    const proof=(await input.pool.query(`SELECT 1 FROM agents.mobile_turn_commands WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4 AND request_id=$5 AND state='completed'`,[scope.tenantId,scope.userId,scope.characterId,scope.relationshipId,parseCanonicalId('request',requestId)])).rows[0];
+    if(!proof)throw new Error('chat.media.completed_reply_required');
+    audio={...audio,mimeType:audio.mimeType.toLowerCase()};
+    if(!['audio/wav','audio/pcm;rate=24000','audio/l16;rate=24000','audio/l16'].includes(audio.mimeType))throw new RangeError('chat.media.reply_audio_invalid');
+    if(audio.mimeType!=='audio/wav'){const pcm=Buffer.from(audio.dataBase64,'base64');if(pcm.length%2||pcm.length>8*1024*1024-44||pcm.toString('base64')!==audio.dataBase64)throw new RangeError('chat.media.reply_audio_invalid');const header=Buffer.alloc(44);header.write('RIFF');header.writeUInt32LE(36+pcm.length,4);header.write('WAVEfmt ',8);header.writeUInt32LE(16,16);header.writeUInt16LE(1,20);header.writeUInt16LE(1,22);header.writeUInt32LE(24000,24);header.writeUInt32LE(48000,28);header.writeUInt16LE(2,32);header.writeUInt16LE(16,34);header.write('data',36);header.writeUInt32LE(pcm.length,40);audio={mimeType:'audio/wav',dataBase64:Buffer.concat([header,pcm]).toString('base64')};}
+    return store(scope,{characterId:scope.characterId,requestId,slot:8,kind:'voice',mimeType:audio.mimeType,dataBase64:audio.dataBase64,name:'Voice reply'},true);
+  }
+  return Object.freeze({put,get,list,owner,saveReplyAudio});
 }
 

@@ -63,11 +63,16 @@ function mapped(row: Row): FanInboxItem {
 /** Never project another fan, unapproved Masana, or unpublished biography. */
 export function createMasanaInboxRepository(
   db: Pick<Pool, "query">,
-  options: { readonly hiddenTurnsReady?: boolean } = {},
+  options: { readonly hiddenTurnsReady?: boolean;readonly messageControlsReady?:boolean } = {},
 ) {
   // A missing 0006 migration must never break the pre-existing J03/C10 inbox.
   // AF00 enables this SQL only after a verified migration and before enabling
   // the C13 hide endpoint. The normal (pre-migration) query remains unchanged.
+  const controlFence=(table:string,direction:string)=>`NOT EXISTS(SELECT 1 FROM agents.customer_message_controls mc WHERE mc.tenant_id=${table}.tenant_id AND mc.user_id=${table}.user_id AND mc.character_id=${table}.character_id AND mc.request_id=${table}.request_id AND mc.direction='${direction}' AND mc.hidden)`;
+  const unreadControl=options.messageControlsReady?`AND ${controlFence('u','assistant')}`:'';
+  const previewControl=options.messageControlsReady?`AND (${controlFence('t','user')} OR ${controlFence('t','assistant')})`:'';
+  const userPreview=options.messageControlsReady?`CASE WHEN ${controlFence('t','user')} THEN t.user_text ELSE NULL END`:'user_text';
+  const replyPreview=options.messageControlsReady?`CASE WHEN ${controlFence('t','assistant')} THEN t.reply ELSE NULL END`:'reply';
   const unreadHideFence = options.hiddenTurnsReady === true ? `
               AND NOT EXISTS (SELECT 1 FROM masana.fan_hidden_turns h
                 WHERE h.tenant_id=u.tenant_id AND h.fan_user_id=u.user_id
@@ -109,6 +114,7 @@ export function createMasanaInboxRepository(
               AND u.state='completed' AND u.reply IS NOT NULL
               AND u.updated_at > COALESCE(p.last_read_at,to_timestamp(0))
 ${unreadHideFence}
+${unreadControl}
           )::text AS unread_count
         FROM latest l
         JOIN identity.users u ON u.tenant_id=$1
@@ -122,11 +128,12 @@ ${unreadHideFence}
         LEFT JOIN masana.fan_chat_preferences p ON p.tenant_id=$1
           AND p.fan_user_id=$2 AND p.character_id=l.character_id
         LEFT JOIN LATERAL (
-          SELECT user_text, reply, updated_at
+          SELECT ${userPreview} AS user_text, ${replyPreview} AS reply, updated_at
           FROM agents.mobile_turn_commands t
           WHERE t.tenant_id=$1 AND t.user_id=$2
             AND t.character_id=l.character_id
 ${previewHideFence}
+${previewControl}
           ORDER BY t.updated_at DESC, t.request_id DESC
           LIMIT 1
         ) t ON TRUE
