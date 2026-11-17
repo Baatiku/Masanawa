@@ -8,7 +8,9 @@ import {createLiveFlutterwaveGbDataItems} from '../../../services/gateway/dist/g
 const gateway=createRequire(new URL('../../../services/gateway/package.json',import.meta.url));
 const postgres=createRequire(new URL('../../../adapters/storage/postgres/package.json',import.meta.url));
 const {FlutterwaveBillsClient,FlutterwaveHttpTransport}=await import(gateway.resolve('@masanawa/providers'));
-const {Pool}=await import(postgres.resolve('pg'));
+// createRequire selects pg's CommonJS entry. Its dynamic-import namespace has
+// only default, so use the actual CommonJS export instead of a named ESM import.
+const {Pool}=postgres('pg');
 const env=process.env;
 let pool,stage='configuration',httpStatus=null,missingSettings=[];
 try{
@@ -20,11 +22,13 @@ try{
  if(!/^tenant_[0-9a-f-]{36}$/i.test(tenant))throw Error('Canonical tenant needs inspection');
  const webhookUrl='https://api.masanawa.com/v1/webhooks/flutterwave';
  if(env.FLUTTERWAVE_WEBHOOK_URL&&env.FLUTTERWAVE_WEBHOOK_URL!==webhookUrl)throw Error('FLUTTERWAVE_WEBHOOK_URL differs from the canonical callback; inspect before activation');
- stage='database';
+ stage='database_connection';
  pool=new Pool({connectionString:env.MASANAWA_DATABASE_URL||env.DATABASE_URL,max:1,connectionTimeoutMillis:10000,statement_timeout:20000});
  const client=await pool.connect();
  try{
+  stage='approval_table';
   const row=(await client.query('SELECT bundles,revision::text FROM gb_wallet.admin_data_catalogues WHERE tenant_id=$1',[tenant])).rows[0];
+  stage='approval_configuration';
   const raw=row?.bundles??(env.MASANAWA_NGN_DATA_APPROVALS_JSON?JSON.parse(env.MASANAWA_NGN_DATA_APPROVALS_JSON):JSON.parse(await readFile(new URL('../gateway/flutterwave-data-approved-20261027.json',import.meta.url),'utf8')));
   if(!Array.isArray(raw)||raw.length===0)throw Error('The existing approved catalogue is empty; an administrator must review it');
   const direct=new FlutterwaveHttpTransport({});
@@ -51,7 +55,8 @@ try{
  const message=error instanceof Error?error.message:'';
  const safe=/^(Missing private settings: |Canonical tenant |FLUTTERWAVE_WEBHOOK_URL differs|The existing approved catalogue |The authenticated Flutterwave category |No retained data bundle |The administrator catalogue changed)/.test(message);
  console.error(safe?message:'Payment qualification failed. Check provider credentials, the Droplet IP allowlist and catalogue availability privately. No purchase or balance credit was attempted.');
+ const failureCode=error&&typeof error==='object'&&'code' in error&&['ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','28P01','28000','3D000','42P01','42703','42501','ENOENT','EACCES'].includes(error.code)?error.code:null;
  const code=missingSettings.length?'missing_settings':message.startsWith('FLUTTERWAVE_WEBHOOK_URL differs')?'callback_mismatch':message.startsWith('Canonical tenant')?'tenant_invalid':message.startsWith('No retained data bundle')?'no_approved_matches':message.startsWith('The existing approved catalogue')?'approvals_empty':message.startsWith('The authenticated Flutterwave category')?'provider_catalogue_empty':message.startsWith('The administrator catalogue changed')?'catalogue_changed':'provider_or_catalogue_unavailable';
- console.error('MASANAWA_QUALIFICATION_RESULT '+JSON.stringify({event:'payments.qualification.failed',stage,code,httpStatus,missing:missingSettings}));
+ console.error('MASANAWA_QUALIFICATION_RESULT '+JSON.stringify({event:'payments.qualification.failed',stage,code,httpStatus,missing:missingSettings,failureCode}));
  process.exitCode=1;
 }finally{await pool?.end();}

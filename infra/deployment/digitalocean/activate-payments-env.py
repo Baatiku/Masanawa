@@ -89,7 +89,7 @@ def qualification_summary(logfile):
     with path.open('rb') as log:
         log.seek(max(0, path.stat().st_size - 65536))
         text = log.read(65536).decode(errors='replace')
-    stages = {'configuration', 'database', 'categories', 'items', 'approval_matching', 'catalogue_commit'}
+    stages = {'configuration', 'database', 'database_connection', 'approval_table', 'approval_configuration', 'categories', 'items', 'approval_matching', 'catalogue_commit'}
     codes = {'missing_settings', 'callback_mismatch', 'tenant_invalid', 'no_approved_matches', 'approvals_empty', 'provider_catalogue_empty', 'catalogue_changed', 'provider_or_catalogue_unavailable'}
     names = {'FLUTTERWAVE_SECRET_KEY', 'FLUTTERWAVE_WEBHOOK_SECRET_HASH', 'MASANAWA_PLATFORM_TENANT_ID', 'MASANAWA_BILLSTACK_SECRET_KEY'}
     for line in reversed(text.splitlines()):
@@ -107,6 +107,9 @@ def qualification_summary(logfile):
         status = result.get('httpStatus')
         if type(status) is int and 100 <= status <= 599:
             print('Provider HTTP status: ' + str(status))
+        failure = result.get('failureCode')
+        if isinstance(failure, str) and failure in {'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', '28P01', '28000', '3D000', '42P01', '42703', '42501', 'ENOENT', 'EACCES'}:
+            print('Failure code: ' + failure)
         missing = result.get('missing')
         if isinstance(missing, list):
             for name in sorted(names.intersection(v for v in missing if isinstance(v, str))):
