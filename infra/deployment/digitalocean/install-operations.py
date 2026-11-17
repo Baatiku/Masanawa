@@ -30,7 +30,7 @@ def main():
   schedule='OnCalendar=*-*-* 03:00:00 UTC\nPersistent=true\n' if name=='backup' else 'OnBootSec=5min\nOnUnitActiveSec=5min\n'
   write(Path('/etc/systemd/system/masanawa-'+name+'.timer'),'[Unit]\nDescription=Masanawa '+name+' schedule\n[Timer]\n'+schedule+'RandomizedDelaySec=30\n[Install]\nWantedBy=timers.target\n')
  subprocess.run(['systemctl','daemon-reload'],check=True)
- subprocess.run(['systemctl','enable','--now','masanawa-backup.timer','masanawa-monitor.timer'],check=True,stdout=subprocess.DEVNULL)
  subprocess.run(['systemctl','start','masanawa-backup.service'],check=True)
+ subprocess.run(['systemctl','enable','--now','masanawa-backup.timer','masanawa-monitor.timer'],check=True,stdout=subprocess.DEVNULL)
  print('Encrypted backup uploaded; private backup and monitoring timers enabled. Restore drill is still required.')
 if __name__=='__main__':main()
