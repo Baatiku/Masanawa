@@ -37,7 +37,7 @@ describe("Billstack reserved 9PSB and raw-body authenticated notification",()=>{
       {status:200})});
     await expect(client.reserve({reference:"customer123",email:"test@example.com",phone:"08012345678",firstName:"Mary",lastName:"Okafor"})).rejects.toMatchObject({code:"wrong_bank"});
     const payload={event:"PAYMENT_NOTIFICATION",data:{
-      type:"RESERVED_ACCOUNT_TRANSACTION",reference:"event-123",
+      type:"RESERVED_ACCOUNT_TRANSACTION",reference:"event-123",transaction_ref:"event-123",
       merchant_reference:"original-123",amount:"1500.25",
       created_at:"2026-10-25T00:00:00Z",
       account:{account_number:"0000000013",bank_name:"9PSB Bank"}}};
@@ -67,7 +67,7 @@ describe("Billstack reserved 9PSB and raw-body authenticated notification",()=>{
     const raw=Buffer.from(JSON.stringify(payload)),ts="1792886400",now=Number(ts)*1000;
     const signature=createHmac("sha256",key).update(ts).update(".").update(raw).digest("hex");
     expect(verifyBillstackWebhook(raw,{"x-wiaxy-timestamp":ts,"x-wiaxy-signature-256":signature},key,now))
-      .toMatchObject({eventId:"R-event123",merchantReference:"customer123",accountNumber:"0000000014",amountKobo:10000});
+      .toMatchObject({eventId:"MI123",merchantReference:"customer123",accountNumber:"0000000014",amountKobo:10000});
     expect(()=>verifyBillstackWebhook(raw,{},key,now)).toThrow();
   });
 });
@@ -82,4 +82,18 @@ it('looks up only the original merchant reference and selects its configured ban
  expect(fetcher.mock.calls[0]?.[0]).toBe('https://api.billstack.co/v2/thirdparty/getVirtualAccount/');
  const wrong=createBillstackReservedAccountClient({secretKey:'synthetic-secret-key',fetcher:async()=>Response.json({status:true,data:{merchant_reference:'another_owner',account:[]}})});
  await expect(wrong.lookup('gb_original_123')).rejects.toMatchObject({code:'reference_mismatch'});
+});
+
+it('uses the interbank session to distinguish payments into the same virtual account',()=>{
+ const ts='1792886400',now=Number(ts)*1000;
+ const verify=(session:string)=>{const raw=Buffer.from(JSON.stringify({event:'PAYMENT_NOTIFICATION',data:{type:'RESERVED_ACCOUNT_TRANSACTION',reference:'R-same-account',merchant_reference:'merchant-same',transaction_ref:session,wiaxy_ref:session,amount:100,created_at:'2026-10-25T00:00:00Z',account:{account_number:'0000000013',bank_name:'9PSB'}}}));return verifyBillstackWebhook(raw,{'x-wiaxy-timestamp':ts,'x-wiaxy-signature-256':createHmac('sha256',key).update(ts+'.').update(raw).digest('hex')},key,now);};
+ expect(verify('session-one')).toMatchObject({eventId:'session-one',legacyEventId:'R-same-account',amountKobo:10000});
+ expect(verify('session-two').eventId).toBe('session-two');
+});
+it('retrieves only independently settled matching transfer sessions without allocating an account',async()=>{
+ const session='100004000000000000000000000001';let payload={status:true,data:{reference:'R-account',session_id:session,transaction_ref:session,amount:100,status:'SUCCESS',is_settled:true,method:'TRANSFER',bank:'9PSB',nuban:'0000000013',created_at:'2026-11-17T16:41:32Z'}};
+ const fetcher=vi.fn(async(url:unknown,init:RequestInit|undefined)=>{expect(url).toBe('https://api.billstack.co/v2/thirdparty/getTransaction/');expect(JSON.parse(String(init?.body))).toEqual({session_id:session});return Response.json(payload);});
+ const client=createBillstackReservedAccountClient({secretKey:key,fetcher:fetcher as never});
+ expect(await client.transaction(session)).toMatchObject({eventId:session,accountNumber:'0000000013',amountKobo:10000});
+ for(const patch of [{is_settled:false},{status:'PENDING'},{transaction_ref:'other'},{amount:100.001},{nuban:'invalid'}]){payload={status:true,data:{...payload.data,...patch}} as typeof payload;await expect(client.transaction(session)).rejects.toBeInstanceOf(Error);payload={status:true,data:{reference:'R-account',session_id:session,transaction_ref:session,amount:100,status:'SUCCESS',is_settled:true,method:'TRANSFER',bank:'9PSB',nuban:'0000000013',created_at:'2026-11-17T16:41:32Z'}};}
 });

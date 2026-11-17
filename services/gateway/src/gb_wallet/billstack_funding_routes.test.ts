@@ -85,7 +85,7 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
  it("requires raw-body HMAC and passes exact bank reference to ledger once",async()=>{
   const {app,credit}=setup();
   const time="1792886400",payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{
-    type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-transaction",
+    type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-account",transaction_ref:"provider-transaction",
     merchant_reference:"merchant-ref",amount:"1000.00",
     created_at:"2026-10-25T00:00:00Z",
     account:{account_number:"0000000100",bank_name:"9PSB Bank"}}});
@@ -150,7 +150,7 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
  it("rejects independent settlement mismatch even with a valid webhook signature",async()=>{
   const f=setup({verifySettlement:async payment=>({...payment,amountKobo:payment.amountKobo+1})});
   const timestamp="1792886400";
-  const payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-transaction",merchant_reference:"merchant-ref",amount:"1000.00",created_at:"2026-10-25T00:00:00Z",account:{account_number:"0000000100",bank_name:"9PSB Bank"}}});
+  const payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-account",transaction_ref:"provider-transaction",merchant_reference:"merchant-ref",amount:"1000.00",created_at:"2026-10-25T00:00:00Z",account:{account_number:"0000000100",bank_name:"9PSB Bank"}}});
   const signature=createHmac("sha256",secret).update(timestamp+"."+payload).digest("hex");
   const result=await f.app.inject({method:"POST",url:"/webhooks/billstack/gb",headers:{"content-type":"application/json","x-wiaxy-timestamp":timestamp,"x-wiaxy-signature-256":signature},payload});
   expect(result.statusCode).toBe(503);expect(f.credit).not.toHaveBeenCalled();

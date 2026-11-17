@@ -51,6 +51,14 @@ const connectionString=process.env.MASANAWA_TEST_DATABASE_URL;
     .toMatchObject({state:"credited",creditedKobo:20_000_000});
   expect((await repo().read(actor)).balanceKobo).toBe(30_000_000);
  });
+ it('preserves old reference receipts while distinct new sessions credit once',async()=>{
+  const {actor,payment}=await account(10000);await repo().deposit(payment);
+  await expect(repo().deposit({...payment,eventId:'session_recovered_'+payment.eventId,legacyEventId:payment.eventId})).rejects.toThrow('ngn.legacy_deposit_identity_review_required');
+  expect((await repo().read(actor)).balanceKobo).toBe(10000);
+  const later={...payment,eventId:'session_next_'+payment.eventId,legacyEventId:payment.eventId,receivedAt:new Date(Date.parse(payment.receivedAt)+60000).toISOString()};
+  const receipts=await Promise.all([repo().deposit(later),repo().deposit(later)]);
+  expect(receipts.map(r=>r.state).sort()).toEqual(['credited','duplicate']);expect((await repo().read(actor)).balanceKobo).toBe(20000);
+ });
  it("keeps under/overpayment and fractional-naira cash exact without automatic MB conversion",async()=>{
   const under=await account(499999);await repo().deposit(under.payment);
   await expect(repo().exchange(exchange(under.actor))).rejects.toThrow('ngn.insufficient_balance');

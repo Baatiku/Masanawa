@@ -43,6 +43,20 @@ export function createBillstackReservedAccountClient(input:{secretKey:string; ba
   if(bankId!=="9PSB"&&bankId!=="PALMPAY")throw new TypeError("Unsupported Billstack bank");
   const fetcher=input.fetcher??fetch;
   return {
+    /** Independent, read-only bank transaction proof; never creates an account. */
+    async transaction(sessionId:string):Promise<{eventId:string;accountReference:string;accountNumber:string;amountKobo:number;receivedAt:string;bankName:string}>{
+      if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(sessionId))throw new BillstackProviderError('invalid_transaction_id');
+      let response:Response;
+      try{response=await fetcher('https://api.billstack.co/v2/thirdparty/getTransaction/',{method:'POST',headers:{authorization:'Bearer '+input.secretKey,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({session_id:sessionId}),signal:AbortSignal.timeout(15000),redirect:'error'});}catch{throw new BillstackProviderError('transaction_lookup_unavailable');}
+      if(!response.ok)throw new BillstackProviderError('transaction_lookup_unavailable');
+      const envelope=object(await response.json());if(envelope.status!==true)throw new BillstackProviderError('transaction_lookup_unavailable');
+      const data=object(envelope.data);
+      if(data.status!=='SUCCESS'||data.is_settled!==true||data.method!=='TRANSFER')throw new BillstackProviderError('transaction_not_settled');
+      if(data.session_id!==sessionId||data.transaction_ref!==sessionId)throw new BillstackProviderError('transaction_id_mismatch');
+      const accountNumber=text(data.nuban,10,10);if(!/^\d{10}$/.test(accountNumber))throw new BillstackProviderError('invalid_response');
+      const receivedAt=text(data.created_at,1,100);if(!Number.isFinite(Date.parse(receivedAt)))throw new BillstackProviderError('invalid_response');
+      return {eventId:sessionId,accountReference:text(data.reference),accountNumber,amountKobo:billstackAmountKobo(data.amount),receivedAt,bankName:text(data.bank,1,100)};
+    },
     /** Documented read-only lookup despite POST transport. Never allocate on
      * a lookup failure; bind the provider merchant reference to our owner row. */
     async lookup(reference:string):Promise<BillstackReservedAccount|null>{
@@ -94,7 +108,7 @@ export function createBillstackReservedAccountClient(input:{secretKey:string; ba
   };
 }
 export interface BillstackReceivedPayment {
-  eventId:string; merchantReference:string; accountNumber:string; bankName:string;
+  eventId:string; legacyEventId?:string; merchantReference:string; accountNumber:string; bankName:string;
   amountKobo:number; receivedAt:string;
 }
 /** HMAC-SHA256(secret, timestamp + "." + unmodified raw request bytes). */
@@ -122,15 +136,23 @@ export function verifyBillstackWebhook(
   }
   const data=object(envelope.data),account=object(data.account);
   if(data.type!=="RESERVED_ACCOUNT_TRANSACTION")throw new BillstackProviderError("webhook_event_unsupported");
-  const id=text(data.reference,1,160),ref=text(data.merchant_reference,1,160);
+  const legacyId=text(data.reference,1,160),ref=text(data.merchant_reference,1,160);
+  const id=text(data.transaction_ref??data.wiaxy_ref,1,160);
+  if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(id)||
+    data.transaction_ref!==undefined&&data.wiaxy_ref!==undefined&&data.transaction_ref!==data.wiaxy_ref)
+    throw new BillstackProviderError('webhook_transaction_invalid');
   const accountNumber=text(account.account_number,10,10);
   if(!/^\d{10}$/.test(accountNumber))throw new BillstackProviderError("webhook_invalid");
-  const value=typeof data.amount==="number"?String(data.amount):data.amount;
-  if(typeof value!=="string"||!/^(?:0|[1-9]\d{0,10})(?:\.\d{1,2})?$/.test(value))throw new BillstackProviderError("webhook_invalid");
-  const [naira,fraction=""]=value.split(".");
-  const kobo=BigInt(naira!)*100n+BigInt(fraction.padEnd(2,"0")||"0");
-  if(kobo<=0n||kobo>BigInt(Number.MAX_SAFE_INTEGER))throw new BillstackProviderError("webhook_invalid");
+  const kobo=billstackAmountKobo(data.amount);
   const receivedAt=text(data.created_at,1,100);
   if(!Number.isFinite(Date.parse(receivedAt)))throw new BillstackProviderError("webhook_invalid");
-  return {eventId:id,merchantReference:ref,accountNumber,bankName:text(account.bank_name,1,100),amountKobo:Number(kobo),receivedAt};
+  return {eventId:id,legacyEventId:legacyId,merchantReference:ref,accountNumber,bankName:text(account.bank_name,1,100),amountKobo:Number(kobo),receivedAt};
+}
+
+/** Parse naira without binary floating-point multiplication or rounding. */
+export function billstackAmountKobo(amount:unknown):number {
+ const value=typeof amount==='number'?String(amount):amount;
+ if(typeof value!=='string'||!/^(?:0|[1-9]\d{0,10})(?:\.\d{1,2})?$/.test(value))throw new BillstackProviderError('webhook_invalid');
+ const [naira,fraction='']=value.split('.');const kobo=BigInt(naira!)*100n+BigInt(fraction.padEnd(2,'0')||'0');
+ if(kobo<=0n||kobo>BigInt(Number.MAX_SAFE_INTEGER))throw new BillstackProviderError('webhook_invalid');return Number(kobo);
 }
