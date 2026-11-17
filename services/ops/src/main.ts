@@ -1,3 +1,4 @@
+import {FlutterwaveBillsClient,FlutterwaveHttpTransport} from '@masanawa/providers';
 import { pathToFileURL } from "node:url";
 import {createVoiceAdmin} from './voice_admin.js';
 import {createWalletAdmin} from './wallet_admin.js';
@@ -126,6 +127,7 @@ function createDefaultDatabaseDependency(
     connectionString,
     applicationName: "masanawa-ops",
   });
+  const flutterwave=env.FLUTTERWAVE_SECRET_KEY?.trim()?new FlutterwaveBillsClient({secretKey:env.FLUTTERWAVE_SECRET_KEY.trim(),country:'NG',transport:new FlutterwaveHttpTransport({timeoutMs:5000})}):undefined;
   const adminDashboard=createOpsAdminDashboardService({sessions:createPostgresPlatformSessionRepository(database.pool),pool:database.pool,grants:parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),dynamicCapabilities:async(tenantId,userId)=>{const caps=(await database.pool.query(`SELECT capabilities FROM security.ops_admin_roles WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows[0]?.capabilities;return Array.isArray(caps)?caps.filter((c:unknown):c is string=>typeof c==='string'&&/^[a-z]+(?:\.[a-z]+)+$/.test(c)):[];}});
   return Object.freeze({
     evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
@@ -135,7 +137,7 @@ function createDefaultDatabaseDependency(
     roleAdmin:createRoleAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     contentAdmin:createContentAdmin({pool:database.pool,feed:new PgHomeFeedRepository(database.pool,true,true),authorize:adminDashboard.authorize}),
     userAdmin:createUserAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
-    dataAdmin:createDataAdmin({pool:database.pool,authorize:adminDashboard.authorize,initialApprovals:env.MASANAWA_NGN_DATA_APPROVALS_JSON}),
+    dataAdmin:createDataAdmin({pool:database.pool,authorize:adminDashboard.authorize,initialApprovals:env.MASANAWA_NGN_DATA_APPROVALS_JSON,...(flutterwave?{listItems:(billerCode:string)=>flutterwave.listItems(billerCode)}:{})}),
     voiceAdmin:createVoiceAdmin({pool:database.pool,authorize:adminDashboard.authorize,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?{apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY}:{})}),
     readinessCheck: database.readinessCheck,
     adminDashboard,

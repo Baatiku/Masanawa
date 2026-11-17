@@ -190,6 +190,8 @@ export function createOpsApp(options: OpsAppOptions = {}) {
 
   if(options.dataAdmin){
     const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{try{return await run();}catch(error){reply.code(error instanceof PersonaAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof PersonaAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'data_admin_unavailable'};}};
+    app.get('/v1/admin/data/provider',async(request,reply)=>execute(reply,()=>options.dataAdmin!.preview(request.headers.authorization)));
+    app.post('/v1/admin/data/renew',{schema:{body:Type.Object({ids:Type.Array(Type.String({maxLength:260}),{minItems:1,maxItems:100}),expectedRevision:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),reason:Type.String({minLength:10,maxLength:1000})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.dataAdmin!.renew(request.headers.authorization,request.body)));
     app.get('/v1/admin/data/catalogue',async(request,reply)=>execute(reply,()=>options.dataAdmin!.read(request.headers.authorization)));
     app.post('/v1/admin/data/catalogue',{schema:{body:Type.Object({bundles:Type.Array(Type.Unknown(),{maxItems:100}),expectedRevision:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),reason:Type.String({minLength:10,maxLength:1000})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.dataAdmin!.publish(request.headers.authorization,request.body)));
   }
