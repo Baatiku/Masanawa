@@ -171,3 +171,13 @@ diagnostics. Only full qualification prints PAYMENT UPDATE COMPLETE; otherwise
 CORE UPDATE COMPLETE explicitly leaves data pending. Existing backup, forward
 migration, resource and image/runtime rollback checks remain mandatory. See
 [the recovery map](../../../docs/PAYMENT-ACTIVATION-RECOVERY-20261117.md).
+
+### Backup repair checkpoint — 17 November
+
+Backups validate private runtime permissions and the exact canonical PostgreSQL
+connection independently of application/provider activation. A broken payment
+setting must not prevent recovery backups. The full deployment preflight still
+validates feature prerequisites, including a configured private Billstack key
+when signed-webhook deposits are enabled. Backup progress emits only fixed stage
+names; environment files and provider responses remain private. The container
+fallback uses the reviewed installed preflight module with its pinned Node image.
