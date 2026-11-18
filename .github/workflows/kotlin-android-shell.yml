@@ -38,3 +38,10 @@ jobs:
       - name: Compile and test Kotlin Android shell
         working-directory: apps/android-shell
         run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+      - name: Publish side-by-side test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: masanawa-kotlin-shell-test-apk
+          path: apps/android-shell/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

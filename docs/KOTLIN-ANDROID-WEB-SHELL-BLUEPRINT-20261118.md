@@ -15,14 +15,14 @@ Date: 18 November 2026. Owner choice: **Option D — a small, custom Kotlin Andr
 
 ## First connected implementation batch (this branch)
 
-- [x] Standalone Kotlin/Gradle Android project with existing Masanawa package ID, icon assets and minimum Android API 24.
+- [x] Standalone Kotlin/Gradle Android project with existing Masanawa release package ID, icon assets and minimum Android API 24. The debug/test application has a `.shelltest` suffix so it can coexist with Flutter.
 - [x] Live HTTPS rendering of the approved `app.masanawa.com` origin, with persistent browser cookies and DOM storage.
 - [x] Fail-closed web navigation: only the owned origin stays in WebView; ordinary external web/contact links open through Android; no `intent:`, `file:`, untrusted JavaScript injection or certificate bypass.
 - [x] Microphone and camera web permission requests gated by native runtime permission and exact request origin; no blanket grants.
 - [x] File-input chooser with callback cleanup and Android back navigation.
 - [x] Retained page history across recreation, a truthful retry view for failed main-page loads and existing profile-sensitive backup disabled.
 - [x] Unit regression cases for origin lookalikes and dangerous schemes; an independent Android-shell CI workflow.
-- [ ] CI compile, unit tests, Android lint on exact feature-branch head; no installed-handset acceptance claimed by source changes.
+- [ ] CI compile, unit tests, Android lint on exact feature-branch head, then an installable, debug-signed APK artifact; no installed-handset acceptance claimed by source changes.
 
 The first batch intentionally does **not** declare a native JavaScript finance bridge, store provider credentials on-device, register unauthorized devices for alerts, request contacts or media-library permissions, or claim background audio works when WebView is paused.
 

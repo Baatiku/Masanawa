@@ -15,7 +15,7 @@
         android:label="Masanawa"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:theme="@style/NormalTheme">
+        android:theme="@style/ShellTheme">
         <activity
             android:name=".shell.ShellActivity"
             android:exported="true"

@@ -18,6 +18,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep testing reversible: the preview installs alongside the
+            // Flutter app instead of replacing it or wiping its local data.
+            applicationIdSuffix = ".shelltest"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = false
             // There is intentionally no release-signing fallback. Signing comes
@@ -30,7 +36,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    sourceSets.getByName("main").res.srcDir("../../mobile/android/app/src/main/res")
+    // Reuse only the approved binary Masanawa icon artwork, not old Flutter
+    // themes/XML that have different min-SDK assumptions and lint failures.
+    val brandIconSource = file("../../mobile/android/app/src/main/res")
+    val generatedBrandIcons = layout.buildDirectory.dir("generated/masanawa-brand-icons")
+    val copyBrandIcons = tasks.register<Copy>("copyMasanawaBrandIcons") {
+        from(brandIconSource) { include("mipmap-*/ic_launcher.png") }
+        into(generatedBrandIcons)
+    }
+    sourceSets.getByName("main").res.srcDir(generatedBrandIcons)
+    tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(copyBrandIcons) }
 }
 
 kotlin {
