@@ -420,6 +420,12 @@ export function createWhatsAppWorker(input:Input){
     await enqueueReply(row,answer);
   }
   async function processSend(row:Row){
+    if(row.message_kind==='audio'&&!row.media_payload_ciphertext){
+      // Older TTS-based replies may remain queued after an upgrade. They do
+      // not contain a native Live transcript/audio pair and must not produce
+      // delayed canned speech that diverges from the new voice-first model.
+      await complete(row.job_id,'failed','legacy_audio_requires_live_generation');return;
+    }
     if(row.mode==='closed'||(row.reply_to_message_id&&row.mode!=='ai')){
       await complete(row.job_id,'failed','conversation_taken_over');return;
     }
