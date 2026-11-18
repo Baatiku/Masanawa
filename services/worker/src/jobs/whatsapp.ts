@@ -3,7 +3,7 @@ import type { Pool } from '@masanawa/postgres';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
-  body:string|null;direction:string;message_kind:string;media_payload_ciphertext:Buffer|null;
+  body:string|null;direction:string;message_kind:string;media_payload_ciphertext:Buffer|null;reply_to_message_id:string|null;
   thread_id:string;customer_wa_id:string;mode:string;
   enabled:boolean;state:string;
   assistant_name:string;greeting:string;personality:string;instructions:string;language:string;
@@ -194,6 +194,9 @@ export function createWhatsAppWorker(input:Input){
     await enqueueReply(row,answer);
   }
   async function processSend(row:Row){
+    if(row.mode==='closed'||(row.reply_to_message_id&&row.mode!=='ai')){
+      await complete(row.job_id,'failed','conversation_taken_over');return;
+    }
     if(!row.enabled||row.state!=='connected'||!row.body){await complete(row.job_id,'failed','channel_disabled');return;}
     // A linked device can send within a conversation without Cloud API templates.
     // Unknown send outcomes are *never* blindly replayed, since the remote may
@@ -229,7 +232,7 @@ export function createWhatsAppWorker(input:Input){
       let completed=0;
       for(const claimed of claims.rows){
         const q=await input.pool.query(`SELECT j.job_id,j.kind,j.message_id,j.tenant_id,j.channel_id,
-          m.body,m.direction,m.kind AS message_kind,m.media_payload_ciphertext,m.thread_id,
+          m.body,m.direction,m.kind AS message_kind,m.media_payload_ciphertext,m.reply_to_message_id,m.thread_id,
           t.customer_wa_id,t.mode,t.last_message_at,
           c.enabled,c.state,
           a.name AS assistant_name,a.greeting,a.personality,a.instructions,a.language,
