@@ -2143,6 +2143,13 @@ export async function startGatewayService(
         ready:()=>independentSettlementReady||signedWebhookLive,
         canAssign:()=>true,
         webhookSecret:billstackSecret,
+        // Fastify's general request logger is disabled to protect private
+        // traffic. Explicitly retain only webhook outcome codes in Docker logs.
+        reportWebhookOutcome:result=>{
+          console.info(JSON.stringify({event:'billstack.webhook',
+            ...(result.state==='rejected'?{billstackCode:result.code}: {billstackResult:result.state}),
+            at:new Date().toISOString()}));
+        },
       };
     })() : undefined);
   signupFunding=billstackFunding?async(actor)=>{
