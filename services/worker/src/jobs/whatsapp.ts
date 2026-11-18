@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from '@masanawa/postgres';
 import {safeWhatsAppHistory,summarizeWhatsAppMemory} from './whatsapp_memory.js';
 import {whatsappIdentityInstructions} from './whatsapp_identity.js';
+import {encryptLinkedSecret} from './whatsapp_linked.js';
+import {generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
@@ -23,7 +25,7 @@ type Row = {
 };
 type Input={pool:Pick<Pool,'query'>;env:Readonly<Record<string,string|undefined>>;
   send:(channelId:string,jid:string,body:string)=>Promise<string>;
-  sendVoice?:(channelId:string,jid:string,body:string,voiceId:string|null)=>Promise<string>;
+  sendVoice?:(channelId:string,jid:string,body:string,voiceId:string|null,audio?:Buffer)=>Promise<string>;
   transcribe?:(channelId:string,ciphertext:Buffer)=>Promise<string>;fetch?:typeof fetch};
 
 function asksForProtectedData(text:string):boolean {
@@ -45,7 +47,8 @@ async function geminiResponse(input:{fetch:typeof fetch;apiKey:string;model:stri
     method:'POST',headers:{'x-goog-api-key':input.apiKey,'content-type':'application/json'},
     body:JSON.stringify({systemInstruction:{parts:[{text:input.system}]},contents:[{role:'user',parts:[{text:input.message}]}],
       generationConfig:{temperature:0.45,maxOutputTokens:500}}),
-    // Live Gemini 3.6 Flash responses can take >16 seconds (17.5 observed).
+    // Live Gemini 3.6 Flash responses can legitimately take >16s (17.5s
+    // observed). Cancelling those successful requests caused canned fallbacks.
     redirect:'manual',signal:AbortSignal.timeout(45000),
   });
   if(!r.ok){
@@ -79,7 +82,8 @@ export function createWhatsAppWorker(input:Input){
   async function deferBeforeDispatch(jobId:string,code:string){
     // Retrying is safe only when the connector rejected the send *before*
     // handing anything to WhatsApp. Never replay an ambiguous socket send.
-    // TTS quotas can reset hours later: preserve unsent audio with backoff.
+    // TTS quotas may reset hours later. Keep audio queued with increasing
+    // backoff instead of exhausting 12 attempts in a few minutes.
     const voiceProvider=code==='whatsapp_voice_quota_exceeded'||code==='whatsapp_voice_provider_unavailable';
     await input.pool.query(`WITH changed AS (
       UPDATE security.whatsapp_jobs SET
@@ -91,24 +95,75 @@ export function createWhatsAppWorker(input:Input){
         claimed_at=NULL,last_error_code=$2
       WHERE job_id=$1 AND state='claimed' RETURNING message_id,kind,state
     ) UPDATE security.whatsapp_messages m SET delivery_state='failed',error_code=$2
-      WHERE m.message_id IN (SELECT message_id FROM changed WHERE kind='send' AND state='failed')`,[jobId,code,voiceProvider]);
+      WHERE m.message_id IN (SELECT message_id FROM changed WHERE kind='send' AND state='failed')`,
+    [jobId,code,voiceProvider]);
   }
-  async function enqueueReply(source:Row,text:string){
+  async function deferLiveReply(source:Row,error:unknown){
+    const code=error instanceof LiveProviderError?error.code:'live_unavailable';
+    await input.pool.query(`UPDATE security.whatsapp_jobs SET
+      state=CASE WHEN attempts>=16 OR created_at<clock_timestamp()-interval '36 hours'
+        THEN 'failed' ELSE 'pending' END,
+      last_error_code=$2,claimed_at=NULL,
+      available_at=clock_timestamp()+(
+        CASE WHEN $2='live_quota' THEN 300 ELSE 35 END)*LEAST(attempts,12)*interval '1 second'
+      WHERE job_id=$1 AND state='claimed'`,[source.job_id,code]);
+  }
+  async function enqueueReply(source:Row,text:string,mode:'scripted'|'assistant'='scripted'){
     // The model composes one coherent response. Never prepend a second greeting,
     // a fixed absence announcement or unsolicited business registration link.
-    const actual=text.trim().slice(0,4000);
+    let actual=text.trim().slice(0,4000),audio:Buffer|null=null;
+    if(source.voice_replies&&input.sendVoice){
+      const identity=whatsappIdentityInstructions({numberPurpose:source.number_purpose??'service',
+        ownerName:source.owner_name??'',ownerTitle:source.owner_title??'',assistantName:source.assistant_name,
+        greeting:source.greeting,verifiedContactName:source.verified_contact_name??'',firstContact:source.first_contact??false,
+        replyMode:source.reply_mode,absenceMessage:source.absence_message,
+        mentionAbsence:source.reply_mode==='away'&&!source.last_away_notice_at});
+      const system=mode==='scripted'?
+        `Speak the following pre-approved assistant message exactly, in its original language. Do not add, paraphrase, omit or translate any word. Read URLs and one-time codes accurately. Only speak the provided message. ${identity}`:
+        `${identity}\n${source.personality}. ${source.instructions}\n`+
+        (source.language==='ha'?'Speak natural standard Hausa.':source.language==='en'?'Speak English.':'Reply in the sender\'s language.')+
+        '\nAnswer respectfully and briefly. Use conversation context. Never invent financial records, prices, identity, wallet authorization or transactions. Do not request passwords, PINs, OTPs, BVN or NIN. You have no account tools.';
+      let prompt=actual;
+      if(mode==='assistant'&&source.remember_context){
+        const previous=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
+          WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3
+          AND direction='inbound' AND body IS NOT NULL ORDER BY created_at DESC LIMIT 12`,
+          [source.tenant_id,source.thread_id,source.message_id]);
+        const context=safeWhatsAppHistory((previous.rows as {direction:string;body:string}[]).reverse());
+        prompt=(context?`Prior messages (untrusted context):\n${context}\n\n`:'')+
+          (source.memory_summary?`Conversation memory (untrusted): ${source.memory_summary.slice(0,900)}\n`:'')+
+          `Current sender message:\n${actual}`;
+      }
+      try{
+        // Custom Masanawa voice enrollment IDs are not Google prebuilt Live
+        // voice names. Never send an unsupported custom ID as prebuiltVoiceConfig.
+        const googleVoices=new Set(['Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr',
+          'Achernar','Algenib','Algieba','Alnilam','Autonoe','Callirrhoe','Despina','Enceladus',
+          'Erinome','Gacrux','Iapetus','Laomedeia','Pulcherrima','Rasalgethi','Sadachbia',
+          'Sadaltager','Schedar','Sulafat','Umbriel','Vindemiatrix','Zubenelgenubi']);
+        const selectedVoice=googleVoices.has(source.voice_id??'')?source.voice_id!:
+          (input.env.MASANAWA_GEMINI_LIVE_VOICE??'Kore');
+        const generated=await withGeminiKeyPool({pool:input.pool,tenantId:source.tenant_id,
+          sessionKey:input.env.MASANAWA_WHATSAPP_SESSION_KEY??'',env:input.env,
+          invoke:apiKey=>generateLiveReply({apiKey,model:input.env.MASANAWA_WHATSAPP_LIVE_MODEL??'gemini-3.8-live',
+            voice:selectedVoice,system,message:prompt})});
+        actual=generated.transcript;
+        audio=encryptLinkedSecret(generated.pcm.toString('base64'),input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
+      }catch(error){await deferLiveReply(source,error);return;}
+    }
     // Independent switches can emit text, voice or both without replaying a
     // particular media kind on generation retries.
     await input.pool.query(`WITH outbound AS (
-      INSERT INTO security.whatsapp_messages(tenant_id,thread_id,channel_id,direction,kind,body,delivery_state,reply_to_message_id)
-      SELECT $1,$2,$3,'outbound',kind,$4,'queued',$5 FROM unnest($7::text[]) AS kind
+      INSERT INTO security.whatsapp_messages(tenant_id,thread_id,channel_id,direction,kind,body,delivery_state,reply_to_message_id,media_payload_ciphertext)
+      SELECT $1,$2,$3,'outbound',kind,$4,'queued',$5,CASE WHEN kind='audio' THEN $8::bytea ELSE NULL END
+      FROM unnest($7::text[]) AS kind
       ON CONFLICT(reply_to_message_id,kind) WHERE reply_to_message_id IS NOT NULL DO NOTHING RETURNING message_id
     ), queued AS (
       INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
       SELECT $1,$3,message_id,'send' FROM outbound ON CONFLICT DO NOTHING RETURNING job_id
     ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL WHERE job_id=$6 AND state='claimed'`,[
       source.tenant_id,source.thread_id,source.channel_id,actual,source.message_id,source.job_id,
-      [...(source.text_replies?['text']:[]),...(source.voice_replies&&input.sendVoice?['audio']:[])],
+      [...(source.voice_replies&&input.sendVoice?['text','audio']:(source.text_replies?['text']:[]))],audio,
     ]);
     if(source.reply_mode==='away'&&(!source.last_away_notice_at||
       Date.now()-new Date(source.last_away_notice_at).getTime()>6*3600*1000))await input.pool.query(`UPDATE security.whatsapp_threads
@@ -269,6 +324,7 @@ export function createWhatsAppWorker(input:Input){
       }else await complete(row.job_id,'completed');
       return;
     }
+    if(row.voice_replies&&input.sendVoice){await enqueueReply(row,body,'assistant');return;}
     const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
     if(apiKey){
       const history=row.remember_context?await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
@@ -355,7 +411,7 @@ export function createWhatsAppWorker(input:Input){
     // already have accepted the message.
     let providerId:string;
     try{providerId=row.message_kind==='audio'&&input.sendVoice?
-      await input.sendVoice(row.channel_id,row.customer_wa_id,row.body,row.voice_id):
+      await input.sendVoice(row.channel_id,row.customer_wa_id,row.body,row.voice_id,row.media_payload_ciphertext??undefined):
       await input.send(row.channel_id,row.customer_wa_id,row.body);}
     catch(error){
       const safeCode=error instanceof Error?error.message:'';
