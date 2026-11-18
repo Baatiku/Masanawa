@@ -6,7 +6,7 @@ import makeWASocket,{
 } from '@whiskeysockets/baileys';
 import type {Pool} from '@masanawa/postgres';
 import {pino} from 'pino';
-import {synthesizeWhatsAppVoice,toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
+import {toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
 import {withGeminiKeyPool} from './whatsapp_live.js';
 
 type Db=Pick<Pool,'query'>;
@@ -315,26 +315,14 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       const permission=await input.pool.query(`SELECT 1 FROM security.whatsapp_channels WHERE tenant_id=$1
         AND channel_id=$2 AND enabled=true AND state='connected' AND lease_owner=$3`,[slot.tenantId,channelId,slot.owner]);
       if(!permission.rows.length)throw Error('whatsapp_channel_disabled');
-      const env=input.env??{};
       let encoded:Buffer;
       try {
-        if(preparedAudio){
-          const pcm=Buffer.from(decryptLinkedSecret(preparedAudio,input.sessionKey),'base64');
-          if(!pcm.length||pcm.length>8*1024*1024)throw Error('voice_input_invalid');
-          encoded=await toWhatsAppOpus(pcm,'audio/pcm;rate=24000');
-        }else{
-          const result=await withGeminiKeyPool({pool:input.pool,tenantId:slot.tenantId,
-            sessionKey:input.sessionKey,env,invoke:apiKey=>synthesizeWhatsAppVoice({text:body,
-              voice:voiceId??env.MASANAWA_GEMINI_LIVE_VOICE??'Kore',apiKey,
-              model:env.MASANAWA_WHATSAPP_TTS_MODEL??'gemini-3.8-flash-tts'})});
-          encoded=await toWhatsAppOpus(result.data,result.mimeType);
-        }
+        if(!preparedAudio)throw Error('live_audio_payload_required');
+        const pcm=Buffer.from(decryptLinkedSecret(preparedAudio,input.sessionKey),'base64');
+        if(!pcm.length||pcm.length>8*1024*1024)throw Error('voice_input_invalid');
+        encoded=await toWhatsAppOpus(pcm,'audio/pcm;rate=24000');
       }catch(error){
-        // No WhatsApp send was attempted: bounded retry cannot duplicate audio.
-        if(error instanceof Error&&error.message==='voice_synthesis_quota_exceeded')
-          throw Error('whatsapp_voice_quota_exceeded');
-        if(error instanceof Error&&error.message==='voice_synthesis_provider_unavailable')
-          throw Error('whatsapp_voice_provider_unavailable');
+        // No WhatsApp send was attempted; caller can safely classify the failure.
         throw Error('whatsapp_audio_preparation_failed');
       }
       const sent=await slot.socket.sendMessage(jid,{audio:encoded,mimetype:'audio/ogg; codecs=opus',ptt:true});
