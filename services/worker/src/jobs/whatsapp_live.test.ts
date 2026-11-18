@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
 import {encryptLinkedSecret} from './whatsapp_linked.js';
-import {generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
+import {formatWhatsAppTranscript,generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
 
 class FakeSocket extends EventTarget {
   sent:unknown[]=[];
@@ -11,6 +11,9 @@ class FakeSocket extends EventTarget {
 }
 
 describe('WhatsApp Gemini Live audio-first replies',()=>{
+  it('converts headings and emphasis to WhatsApp Markdown without rewriting the spoken words',()=>{
+    expect(formatWhatsAppTranscript('## Help\n\n**Contact us**')).toBe('*Help*\n\n*Contact us*');
+  });
   it('sends one audio-modal Live request and returns its native output transcription',async()=>{
     const socket=new FakeSocket();
     const reply=generateLiveReply({apiKey:'key',model:'gemini-3.8-live',voice:'Kore',system:'Safe assistant',
