@@ -451,7 +451,8 @@ export function createWhatsAppWorker(input:Input){
     }
     if(!providerId||providerId.length>255){await complete(row.job_id,'uncertain','linked_receipt_invalid');return;}
     await input.pool.query(`WITH sent AS (
-      UPDATE security.whatsapp_messages SET provider_message_id=$2,delivery_state='sent'
+      UPDATE security.whatsapp_messages SET provider_message_id=$2,delivery_state='sent',
+        media_payload_ciphertext=NULL
       WHERE message_id=$1 AND provider_message_id IS NULL RETURNING message_id
     ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL,last_error_code=NULL
       WHERE job_id=$3 AND state='claimed' AND EXISTS(SELECT 1 FROM sent)`,[row.message_id,providerId,row.job_id]);
