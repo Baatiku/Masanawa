@@ -2270,6 +2270,12 @@ export async function startGatewayService(
       directNgn:true,
       ...(composedBrowserPush?{browserPush:composedBrowserPush}:{}),...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),...(composedMessageControls?{messageControls:composedMessageControls}:{}),
       ...(directNgnWallet?{directNgnWallet}:{}),...(ngnSendReview?{ngnSendReview}:{}),...(ngnRequests?{ngnRequests}:{}),...(ngnCalls?{ngnCalls}:{}),...(ngnRelay?{ngnCallRelay:ngnRelay}:{}),...(ngnDataCatalogue?{ngnDataCatalogue}:{}),...(ngnDataPurchases?{ngnDataPurchases}:{}),
+      ...(directNgnWallet&&featurePool&&customerAuth?{whatsappLinks:{pool:featurePool,authorize:directNgnWallet.authorize,
+        beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}}:{}),
+      ...(directNgnWallet&&featurePool&&customerAuth&&ngnDataCatalogue&&ngnDataPurchases?{whatsappData:{
+        pool:featurePool,authorize:directNgnWallet.authorize,
+        beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header}),
+        catalogue:ngnDataCatalogue,purchases:ngnDataPurchases}}:{}),
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(gbDataPurchases ? { gbDataPurchases } : {}),
       ...(billstackFunding ? { billstackFunding } : {}),

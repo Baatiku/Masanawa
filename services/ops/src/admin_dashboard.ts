@@ -2,6 +2,8 @@ import { hashPlatformSessionToken, type PlatformSessionRepository } from "@masan
 import type { Pool } from "@masanawa/postgres";
 
 export type AdminCapability =
+  | "whatsapp.read"
+  | "whatsapp.write"
   | "mail.read"
   | "mail.write"
   | "dashboard.read"
