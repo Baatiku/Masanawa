@@ -13,8 +13,8 @@ android {
         applicationId = "ng.unigeria.unigeria"
         minSdk = 24
         targetSdk = 36
-        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 8
-        versionName = "1.1.1-shell-preview"
+        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 9
+        versionName = "1.2.0-shell"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Firebase Android app identifiers come from the same managed values used
         // by the existing Flutter app. Never commit provider credentials.
@@ -88,6 +88,7 @@ dependencies {
     implementation("androidx.fragment:fragment:1.9.1")
     implementation("androidx.webkit:webkit:1.18.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.core:core-telecom:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.google.firebase:firebase-messaging:26.0.2")
