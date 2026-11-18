@@ -10,6 +10,7 @@ export class WhatsAppAdminError extends Error {
 
 type Config = {
   name:string; personality:string; instructions:string; greeting:string; language:'auto'|'en'|'ha';
+  numberPurpose?:'service'|'personal';ownerName?:string;ownerTitle?:string;
   roleLevel:WhatsAppRoleLevel; permissions:WhatsAppPermission[]; personaId:string|null; voiceId:string|null;
   textReplies:boolean; voiceReplies:boolean; transcribeVoice:boolean;
   replyMode:'always'|'away'|'manual';awayAfterSeconds:number;absenceMessage:string;rememberContext:boolean;
@@ -44,6 +45,9 @@ function validConfig(value:unknown): value is Config {
     typeof c.personality==='string'&&c.personality.length<=1000&&
     typeof c.instructions==='string'&&c.instructions.length<=8000&&
     typeof c.greeting==='string'&&c.greeting.length<=1000&&
+    (c.numberPurpose===undefined||['service','personal'].includes(String(c.numberPurpose)))&&
+    (c.ownerName===undefined||(typeof c.ownerName==='string'&&c.ownerName.length<=100&&!/[\r\n\x00-\x1f]/.test(c.ownerName)))&&
+    (c.ownerTitle===undefined||(typeof c.ownerTitle==='string'&&c.ownerTitle.length<=120&&!/[\r\n\x00-\x1f]/.test(c.ownerTitle)))&&
     ['auto','en','ha'].includes(String(c.language))&&
     validateWhatsAppPermissions(Number(c.roleLevel),c.permissions)&&
     (c.personaId===null||(typeof c.personaId==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(c.personaId)))&&
@@ -73,7 +77,8 @@ export function createWhatsAppAdmin(input:Input){
       const actor=await read(auth);
       const rows=await input.pool.query(`SELECT c.channel_id AS "channelId",c.linked_jid AS "linkedJid",
         c.display_phone AS "displayPhone",c.verified_name AS "verifiedName",c.state,c.enabled,c.last_message_at AS "lastMessageAt",
-        c.last_error_code AS "lastErrorCode",c.revision::int AS "revision",a.name AS "assistantName",a.role_level AS "roleLevel"
+        c.last_error_code AS "lastErrorCode",c.revision::int AS "revision",a.name AS "assistantName",a.role_level AS "roleLevel",
+        a.number_purpose AS "numberPurpose"
         FROM security.whatsapp_channels c JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
         WHERE c.tenant_id=$1 ORDER BY c.created_at DESC LIMIT 100`,[actor.tenantId]);
       return {channels:rows.rows,linkedDeviceConfigured:configured(),qrPairingSupported:true,
@@ -110,6 +115,7 @@ export function createWhatsAppAdmin(input:Input){
     async config(auth:string|undefined,id:string){
       const actor=await read(auth);if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       const rows=await input.pool.query(`SELECT a.name,a.personality,a.instructions,a.greeting,a.language,a.role_level AS "roleLevel",
+        a.number_purpose AS "numberPurpose",a.owner_name AS "ownerName",a.owner_title AS "ownerTitle",
         a.permissions,a.persona_id AS "personaId",a.voice_id AS "voiceId",a.text_replies AS "textReplies",
         a.voice_replies AS "voiceReplies",a.transcribe_voice AS "transcribeVoice",
         a.reply_mode AS "replyMode",a.away_after_seconds AS "awayAfterSeconds",
@@ -131,12 +137,15 @@ export function createWhatsAppAdmin(input:Input){
         language=$7,role_level=$8,permissions=$9::jsonb,persona_id=$10,voice_id=$11,text_replies=$12,voice_replies=$13,
         transcribe_voice=$14,working_hours=$15::jsonb,escalation_keywords=$16::jsonb,
         reply_mode=$17,away_after_seconds=$18,absence_message=$19,remember_context=$20,
+        number_purpose=COALESCE($22,number_purpose),owner_name=COALESCE($23,owner_name),
+        owner_title=COALESCE($24,owner_title),
         revision=revision+1,updated_at=clock_timestamp()
         WHERE tenant_id=$1 AND channel_id=$2 AND revision=$21 RETURNING revision::int`,[
           actor.tenantId,id,config.name.trim(),config.personality,config.instructions,config.greeting,config.language,
           config.roleLevel,JSON.stringify(config.permissions),config.personaId,config.voiceId,config.textReplies,
           config.voiceReplies,config.transcribeVoice,JSON.stringify(config.workingHours),JSON.stringify(config.escalationKeywords),
           config.replyMode,config.awayAfterSeconds,config.absenceMessage,config.rememberContext,expectedRevision,
+          config.numberPurpose??null,config.ownerName?.trim()??null,config.ownerTitle?.trim()??null,
         ]);
       if(!rows.rows.length)throw new WhatsAppAdminError(409,'assistant_revision_changed');
       await audit(actor.tenantId,id,actor.actorId,'assistant.updated',{revision:rows.rows[0]!.revision,roleLevel:config.roleLevel,permissions:config.permissions});
@@ -164,10 +173,25 @@ export function createWhatsAppAdmin(input:Input){
     async threads(auth:string|undefined,id:string){
       const actor=await read(auth);if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       const result=await input.pool.query(`SELECT t.thread_id AS "threadId",t.customer_wa_id AS "customerWaId",
-        t.customer_name AS "customerName",t.mode,t.assigned_operator AS "assignedOperator",
+        t.customer_name AS "customerName",t.verified_contact_name AS "verifiedContactName",
+        t.mode,t.assigned_operator AS "assignedOperator",
         t.unread_count AS "unreadCount",t.last_message_at AS "lastMessageAt"
         FROM security.whatsapp_threads t JOIN security.whatsapp_channels c USING(tenant_id,channel_id)
         WHERE t.tenant_id=$1 AND t.channel_id=$2 ORDER BY t.last_message_at DESC LIMIT 100`,[actor.tenantId,id]);return result.rows;
+    },
+    async verifyContactName(auth:string|undefined,threadId:string,name:string){
+      const actor=await write(auth);
+      if(!isId(threadId)||typeof name!=='string'||name.length>80||
+        (name.trim()!==''&&!/^[\p{L}][\p{L}\p{M}'’.\-]*(?: [\p{L}][\p{L}\p{M}'’.\-]*){0,4}$/u.test(name.trim())))
+        throw new WhatsAppAdminError(422,'invalid_contact_name');
+      const result=await input.pool.query(`UPDATE security.whatsapp_threads
+        SET verified_contact_name=$3 WHERE tenant_id=$1 AND thread_id=$2
+        RETURNING thread_id AS "threadId",verified_contact_name AS "verifiedContactName"`,
+      [actor.tenantId,threadId,name.trim()]);
+      if(!result.rows[0])throw new WhatsAppAdminError(404,'thread_not_found');
+      await audit(actor.tenantId,null,actor.actorId,
+        name.trim()?'contact_name.verified':'contact_name.cleared',{threadId});
+      return result.rows[0];
     },
     async messages(auth:string|undefined,threadId:string){
       const actor=await read(auth);if(!isId(threadId))throw new WhatsAppAdminError(422,'invalid_thread');
