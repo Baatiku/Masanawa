@@ -23,7 +23,7 @@ it('scopes reviewed public facts to active exact versions and excludes expired/w
  const result=await reader.read('t','official','v1');expect(result?.evidence).toHaveLength(1);
  expect(JSON.stringify(result)).not.toContain('UNTRUSTED_ALTERNATE_HOST');expect(JSON.stringify(result)).not.toContain('STALE');expect(JSON.stringify(result)).not.toContain('Dated official public record');expect(await reader.read('foreign','official','v1')).toBeNull();
  await expect(reader.read('t','official','old')).rejects.toThrow('review_required');
- const prompt=officialPersonaInstructions(result!).join('\n');expect(prompt).toContain('AI simulation');expect(prompt).toContain('Do not invent');
+ const prompt=officialPersonaInstructions(result!).join('\n');expect(prompt).toContain('AI persona of "Example Official"');expect(prompt).toContain('Do not invent');
  expect((await reader.directory('t',['official'])).get('official')).toMatchObject({verification:'source_reviewed',representation:'ai_simulation'});
  await db.exec(`INSERT INTO masana.public_official_evidence(tenant_id,character_id,source_url,source_kind,title,content,content_sha256,source_date,valid_until,state,license_basis,reviewed_by)
   SELECT 't','official','https://grokipedia.com/page/example','grokipedia','Recent speech','School buildings and community programmes','${'d'.repeat(64)}','2026-10-01',now()+interval '7 days','approved','Reviewed permission','reviewer' FROM generate_series(1,8) AS i;
