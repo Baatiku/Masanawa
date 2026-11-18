@@ -25,8 +25,9 @@ function setup(overrides:Record<string,unknown>,options:{env?:Record<string,stri
     return {rows:[]};
   }};
   const send=vi.fn(async()=> 'wa-receipt');
-  return {calls,send,worker:createWhatsAppWorker({pool:pool as never,env:options.env??{},
-    ...(options.fetch?{fetch:options.fetch}:{}),send})};
+  const sendVoice=vi.fn(async()=> 'wa-voice-receipt');
+  return {calls,send,sendVoice,worker:createWhatsAppWorker({pool:pool as never,env:options.env??{},
+    ...(options.fetch?{fetch:options.fetch}:{}),send,sendVoice})};
 }
 
 describe('WhatsApp availability and owner takeover',()=>{
@@ -127,5 +128,27 @@ describe('WhatsApp availability and owner takeover',()=>{
     await mock.worker.runOnce();
     expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(true);
     expect(mock.calls.some(c=>c.sql.includes("THEN 'failed' ELSE 'pending'"))).toBe(false);
+  });
+  it('allows Gemini up to 45 seconds instead of cancelling 17.5-second responses',async()=>{
+    const provider=vi.fn(async()=>Response.json({candidates:[{content:{parts:[{text:'Wa alaikum assalam.'}]}}]}));
+    const timer=vi.spyOn(AbortSignal,'timeout');
+    try{
+      const mock=setup({body:'Salam',number_purpose:'personal',owner_name:'Bello'},
+        {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider as unknown as typeof fetch});
+      await mock.worker.runOnce();
+      expect(timer).toHaveBeenCalledWith(45000);
+      expect(mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))?.parameters[3])
+        .toBe('Wa alaikum assalam.');
+    }finally{timer.mockRestore();}
+  });
+  it('backs off an unsent audio reply when provider quota is exhausted',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',body:'Wa alaikum assalam.',
+      reply_to_message_id:'message-0'});
+    mock.sendVoice.mockRejectedValueOnce(Error('whatsapp_voice_quota_exceeded'));
+    await mock.worker.runOnce();
+    expect(mock.sendVoice).toHaveBeenCalledOnce();
+    expect(mock.calls.some(c=>c.sql.includes('300*LEAST(attempts,12)')&&
+      c.parameters.includes('whatsapp_voice_quota_exceeded')&&c.parameters.includes(true))).toBe(true);
+    expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(false);
   });
 });
