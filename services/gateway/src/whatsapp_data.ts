@@ -47,6 +47,25 @@ export function registerWhatsAppDataRoutes(app:FastifyInstance,input:Input){
     if(message.includes('insufficient')){r.code(409);return {error:'insufficient_balance'};}
     r.code(503);return {error:'whatsapp_data_unavailable'};
   };
+  const queueReceipt=async(a:Customer,b:{threadId:string;bundleId:string;recipientPhone:string;
+    reviewedCostKobo:number;idempotencyKey:string},operationId:string)=>{
+    await input.pool.query(`WITH verified AS (
+      SELECT t.tenant_id,t.thread_id,t.channel_id FROM security.whatsapp_account_links l
+      JOIN security.whatsapp_threads t USING(tenant_id,thread_id)
+      JOIN security.whatsapp_channels c USING(tenant_id,channel_id)
+      JOIN security.whatsapp_assistants s USING(tenant_id,channel_id)
+      WHERE l.tenant_id=$1 AND l.user_id=$2 AND l.thread_id=$3 AND l.revoked_at IS NULL
+        AND c.enabled AND c.state='connected' AND s.role_level>=4 AND s.permissions ? 'receipts'
+    ), outbound AS (
+      INSERT INTO security.whatsapp_messages(tenant_id,thread_id,channel_id,direction,kind,body,delivery_state,operator_request_id)
+      SELECT tenant_id,thread_id,channel_id,'outbound','text',$4,'queued',$5 FROM verified
+      ON CONFLICT(operator_request_id) DO NOTHING RETURNING message_id,tenant_id,channel_id
+    ) INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
+      SELECT tenant_id,channel_id,message_id,'send' FROM outbound ON CONFLICT DO NOTHING`,
+      [a.tenantId,a.userId,b.threadId,
+        `Masanawa Buy Data receipt: ${b.bundleId} for ${b.recipientPhone}. Amount: ₦${(b.reviewedCostKobo/100).toFixed(2)}. Status: delivered. Reference: ${operationId}.`,
+        messageKey(a,b.idempotencyKey)]);
+  };
   app.get('/v1/whatsapp/link/data/bundles',{schema:{querystring:Type.Object({threadId:uuid},{additionalProperties:false})}},async(q,r)=>{
     r.header('cache-control','private, no-store');
     try{
@@ -102,19 +121,7 @@ export function registerWhatsAppDataRoutes(app:FastifyInstance,input:Input){
       await input.pool.query(`INSERT INTO security.whatsapp_audit(tenant_id,actor_id,action,metadata)
         VALUES($1,$2,'customer.data_purchase',$3::jsonb)`,[a.tenantId,a.userId,
         JSON.stringify({threadId:b.threadId,operationId:result.operationId,state:result.state,costKobo:b.reviewedCostKobo})]);
-      if(result.state==='delivered'){
-        await input.pool.query(`WITH verified AS (
-          SELECT t.tenant_id,t.thread_id,t.channel_id FROM security.whatsapp_account_links l
-          JOIN security.whatsapp_threads t USING(tenant_id,thread_id)
-          WHERE l.tenant_id=$1 AND l.user_id=$2 AND l.thread_id=$3 AND l.revoked_at IS NULL
-        ), outbound AS (
-          INSERT INTO security.whatsapp_messages(tenant_id,thread_id,channel_id,direction,kind,body,delivery_state,operator_request_id)
-          SELECT tenant_id,thread_id,channel_id,'outbound','text',$4,'queued',$5 FROM verified
-          ON CONFLICT(operator_request_id) DO NOTHING RETURNING message_id,tenant_id,channel_id
-        ) INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
-          SELECT tenant_id,channel_id,message_id,'send' FROM outbound ON CONFLICT DO NOTHING`,
-        [a.tenantId,a.userId,b.threadId,`Masanawa Buy Data receipt: ${b.bundleId} for ${b.recipientPhone}. Amount: ₦${(b.reviewedCostKobo/100).toFixed(2)}. Status: delivered. Reference: ${result.operationId}.`,messageKey(a,b.idempotencyKey)]);
-      }
+      if(result.state==='delivered')await queueReceipt(a,b,result.operationId);
       return {currency:'NGN',unit:'kobo',...result};
     }catch(e){return deny(e,r);}
   });
@@ -124,13 +131,16 @@ export function registerWhatsAppDataRoutes(app:FastifyInstance,input:Input){
     try{
       const a=await actor(q.headers.authorization);const {threadId,idempotencyKey}=q.query as {threadId:string;idempotencyKey:string};
       await linked(a,threadId,'transaction_status');
-      const approval=await input.pool.query(`SELECT operation_id,reviewed_cost_kobo FROM security.whatsapp_purchase_approvals
+      const approval=await input.pool.query(`SELECT operation_id,reviewed_cost_kobo,bundle_id,recipient_phone FROM security.whatsapp_purchase_approvals
         WHERE tenant_id=$1 AND user_id=$2 AND thread_id=$3 AND idempotency_key=$4`,[a.tenantId,a.userId,threadId,idempotencyKey]);
       const operationId=approval.rows[0]?.operation_id as string|undefined;
       if(!operationId){r.code(404);return {error:'purchase_not_found'};}
       const result=await service.reconcile(a,operationId);
       await input.pool.query(`UPDATE security.whatsapp_purchase_approvals SET state=$5
         WHERE tenant_id=$1 AND user_id=$2 AND thread_id=$3 AND idempotency_key=$4`,[a.tenantId,a.userId,threadId,idempotencyKey,result.state]);
+      if(result.state==='delivered')await queueReceipt(a,{threadId,idempotencyKey,
+        bundleId:String(approval.rows[0]!.bundle_id),recipientPhone:String(approval.rows[0]!.recipient_phone),
+        reviewedCostKobo:Number(approval.rows[0]!.reviewed_cost_kobo)},operationId);
       return {operationId,state:result.state,costKobo:Number(approval.rows[0]?.reviewed_cost_kobo)};
     }catch(e){return deny(e,r);}
   });
