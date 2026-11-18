@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "ng.unigeria.unigeria"
     compileSdk = 36
+    buildFeatures { resValues = true }
 
     defaultConfig {
         // The existing Flutter package ID is retained for a future in-place migration.
