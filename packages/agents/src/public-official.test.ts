@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {isGrokipediaArticleUrl,isApprovedBiographySourceUrl,isApprovedBiographyEvidence} from './public-official.js';
+import {isGrokipediaArticleUrl,isApprovedBiographySourceUrl,isApprovedBiographyEvidence,officialPersonaInstructions} from './public-official.js';
 it('admits approved attributed launch references without admitting social posts, wrappers or spoofed hosts',()=>{
  for(const sourceUrl of ['https://en.wikipedia.org/wiki/Bola_Tinubu','https://www.premiumtimesng.com/news/profile.html']){
   expect(isApprovedBiographySourceUrl(sourceUrl)).toBe(true);
@@ -17,4 +17,12 @@ it('accepts only direct HTTPS Grokipedia article URLs without wrappers or altern
   'https://grokipedia.com/page/name?redirect=evil','https://grokipedia.com/page/name#fragment',
   'https://grokipedia.com/','https://grokipedia.com/page/','https://grokipedia.com/page/a/b',
   'https://grokipedia.com/page/a%2Fb','https://grokipedia.com/page/%00','https://grokipedia.com/page/%ZZ'])expect(isGrokipediaArticleUrl(url)).toBe(false);
+});
+
+it('describes a reviewed civic identity as an AI persona without fictional framing',()=>{
+ const instructions=officialPersonaInstructions({officialName:'Ada Test',office:'Public office',countryCode:'NG',identitySourceUrl:'https://example.gov.ng/ada',reviewedAt:'2026-11-18',reviewExpiresAt:'2026-12-18',evidence:[]}).join('\n');
+ expect(instructions).toContain('AI persona of "Ada Test"');
+ expect(instructions).not.toMatch(/simulation/i);
+ expect(instructions).toContain('not the actual person');
+ expect(instructions).toContain('speaker authorization and consent controls');
 });
