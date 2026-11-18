@@ -4,6 +4,40 @@ import {describe,expect,it} from 'vitest';
 import {createWhatsAppWorker} from './whatsapp.js';
 
 describe('WhatsApp outbox PostgreSQL recovery',()=>{
+  it('generates and queues an actual first-contact greeting using the production SQL',async()=>{
+    const db=new PGlite();
+    try{
+      await db.exec(`CREATE SCHEMA identity; CREATE SCHEMA security;
+        CREATE TABLE identity.users(tenant_id text NOT NULL,user_id text NOT NULL,state text NOT NULL,
+          PRIMARY KEY(tenant_id,user_id));`);
+      await db.exec(await readFile(new URL('../../../../packages/security/migrations/0123_whatsapp_ai.sql',import.meta.url),'utf8'));
+      const created=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
+        (tenant_id,enabled,state,linked_jid) VALUES('tenant',true,'connected','2348012345678@s.whatsapp.net')
+        RETURNING channel_id`);
+      const channelId=created.rows[0]!.channel_id;
+      await db.query(`INSERT INTO security.whatsapp_assistants(tenant_id,channel_id,voice_replies)
+        VALUES('tenant',$1,false)`,[channelId]);
+      const thread=await db.query<{thread_id:string}>(`INSERT INTO security.whatsapp_threads
+        (tenant_id,channel_id,customer_wa_id) VALUES('tenant',$1,'2348098765432@s.whatsapp.net')
+        RETURNING thread_id`,[channelId]);
+      const threadId=thread.rows[0]!.thread_id;
+      const message=await db.query<{message_id:string}>(`INSERT INTO security.whatsapp_messages
+        (tenant_id,thread_id,channel_id,direction,kind,body)
+        VALUES('tenant',$1,$2,'inbound','text','Hi') RETURNING message_id`,[threadId,channelId]);
+      await db.query(`INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
+        VALUES('tenant',$1,$2,'reply')`,[channelId,message.rows[0]!.message_id]);
+      const worker=createWhatsAppWorker({pool:db as never,env:{},send:async()=> 'receipt'});
+      expect((await worker.runOnce()).claimed).toBe(1);
+      expect((await db.query<{state:string;last_error_code:string}>(`SELECT state,last_error_code
+        FROM security.whatsapp_jobs WHERE message_id=$1`,[message.rows[0]!.message_id])).rows[0])
+        .toMatchObject({state:'completed',last_error_code:null});
+      const out=await db.query<{body:string;kind:string;delivery_state:string}>(`SELECT body,kind,delivery_state
+        FROM security.whatsapp_messages WHERE direction='outbound'`);
+      expect(out.rows).toHaveLength(1);
+      expect(out.rows[0]!.body).toContain('Welcome to Masanawa');
+      expect(out.rows[0]).toMatchObject({kind:'text',delivery_state:'queued'});
+    }finally{await db.close();}
+  },30000);
   it('safely retries a pre-dispatch socket outage but never replays an uncertain send',async()=>{
     const db=new PGlite();
     try{
