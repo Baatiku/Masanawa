@@ -27,6 +27,21 @@ describe('WhatsApp encrypted Gemini key administration',()=>{
     expect(JSON.stringify(await mock.admin.geminiKeys('Bearer test'))).not.toContain(key);
     expect(mock.authorize).toHaveBeenCalledWith(expect.objectContaining({capability:'whatsapp.write'}));
   });
+  it('accepts modern AQ. auth keys beyond the legacy length limit and encrypts the original',async()=>{
+    const mock=setup(),key='AQ.'+'AbCd09_-'.repeat(45);
+    expect(key.length).toBeGreaterThan(256);
+    expect(await mock.admin.addGeminiKey('Bearer test',key)).toEqual({added:true});
+    const inserted=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_gemini_keys'))!;
+    expect(decryptWhatsAppToken(inserted.params[2] as Buffer,secret)).toBe(key);
+    expect(JSON.stringify(await mock.admin.geminiKeys('Bearer test'))).not.toContain(key);
+  });
+  it('rejects embedded whitespace and quotes even for an AQ. auth key',async()=>{
+    const mock=setup(),key='AQ.'+'AbCd09_-'.repeat(12);
+    for(const bad of ['"'+key+'"',key+'\nextra',key+' extra'])
+      await expect(mock.admin.addGeminiKey('Bearer test',bad))
+        .rejects.toMatchObject({statusCode:422,code:'invalid_gemini_key_details'});
+    expect(mock.calls).toHaveLength(0);
+  });
   it('rejects a short credential without requiring label or project ID',async()=>{
     const mock=setup();
     await expect(mock.admin.addGeminiKey('Bearer test','short'))
