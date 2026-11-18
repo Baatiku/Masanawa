@@ -68,7 +68,8 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation("androidx.fragment:fragment:1.9.1")
     implementation("androidx.webkit:webkit:1.18.0")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("com.google.firebase:firebase-messaging:26.0.2")

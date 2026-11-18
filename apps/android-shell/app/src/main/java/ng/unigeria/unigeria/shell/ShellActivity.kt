@@ -219,6 +219,11 @@ class ShellActivity : ComponentActivity() {
                 if (!request.isForMainFrame) return false
                 val url = request.url.toString()
                 if (WebOriginPolicy.isTrusted(url)) return false
+                val route = ShellDeepLinks.route(url)
+                if (route != null) {
+                    view.loadUrl(route)
+                    return true
+                }
                 openOutside(url)
                 return true
             }
