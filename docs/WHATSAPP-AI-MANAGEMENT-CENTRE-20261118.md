@@ -24,6 +24,7 @@
 3. QR updates are encrypted and expire after 55 seconds. Admin polls the private QR endpoint. On the phone: **WhatsApp → Linked Devices → Link a device → Scan**.
 4. WhatsApp may force a socket restart after the QR scan. Worker saves credentials and reconnects using the same encrypted keys without asking the admin to rescan.
 5. Incoming individual messages (including eligible LID addresses) are deduplicated by `(channel_id, provider_message_id)`, persisted and queued. No group/status automation or history import.
+   A recent two-minute `append` event after a reconnect is eligible for ingestion if it was never seen before; older synced history is never treated as a new customer request.
 6. AI and human outbound replies pass through one durable outbox. Unknown send outcomes are marked `uncertain` and require reconciliation; they are not blindly retransmitted.
 7. If the account logs out, the system erases invalid Signal keys, records `needs_pairing`, and requires admin Reconnect + fresh QR. Disconnect erases encrypted keys but preserves audit/history.
 
