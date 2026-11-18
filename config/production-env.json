@@ -1098,6 +1098,13 @@
       "description": "Owner contact URI for standards-based web push."
     },
     {
+      "name": "MASANAWA_WHATSAPP_LIVE_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Gemini Live native audio model for WhatsApp paired audio and output transcription; defaults to gemini-3.8-live."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
       "owner": "worker/whatsapp",
       "classification": "public",
