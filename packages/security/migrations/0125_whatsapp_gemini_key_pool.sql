@@ -17,3 +17,9 @@ CREATE TABLE security.whatsapp_gemini_keys (
 );
 CREATE INDEX whatsapp_gemini_active ON security.whatsapp_gemini_keys
   (tenant_id,enabled,cooldown_until,last_used_at);
+
+-- Gemini Live exposes a provider-controlled prebuilt voice library; these
+-- names are not interchangeable with authorized custom Masanawa voice IDs.
+ALTER TABLE security.whatsapp_assistants
+  ADD COLUMN live_voice_name text NOT NULL DEFAULT 'Kore'
+  CHECK(live_voice_name IN ('Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr'));
