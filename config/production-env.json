@@ -1105,6 +1105,48 @@
       "description": "Bearer token protecting linked-device WhatsApp QR, status, and reset administration routes."
     },
     {
+      "name": "MASANAWA_META_APP_ID",
+      "owner": "ops/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Meta app identifier used only for the opt-in WhatsApp Business Platform Embedded Signup flow."
+    },
+    {
+      "name": "MASANAWA_META_APP_SECRET",
+      "owner": "ops/whatsapp",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Meta app secret for server-side Embedded Signup code exchange and webhook signature validation."
+    },
+    {
+      "name": "MASANAWA_META_EMBEDDED_CONFIG_ID",
+      "owner": "ops/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Meta business login configuration ID for authorized WhatsApp Business onboarding."
+    },
+    {
+      "name": "MASANAWA_META_WEBHOOK_VERIFY_TOKEN",
+      "owner": "ops/whatsapp",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Independent webhook GET challenge verification token for the official Meta Cloud API callback."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional WhatsApp-specific text inference model, disabled until worker activation."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_TOKEN_KEY",
+      "owner": "ops/whatsapp",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "32-byte encryption key for per-phone-number official Meta access tokens at rest."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_AUTH_DIR",
       "owner": "gateway/channels",
       "classification": "secret",

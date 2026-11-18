@@ -2270,6 +2270,8 @@ export async function startGatewayService(
       directNgn:true,
       ...(composedBrowserPush?{browserPush:composedBrowserPush}:{}),...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),...(composedMessageControls?{messageControls:composedMessageControls}:{}),
       ...(directNgnWallet?{directNgnWallet}:{}),...(ngnSendReview?{ngnSendReview}:{}),...(ngnRequests?{ngnRequests}:{}),...(ngnCalls?{ngnCalls}:{}),...(ngnRelay?{ngnCallRelay:ngnRelay}:{}),...(ngnDataCatalogue?{ngnDataCatalogue}:{}),...(ngnDataPurchases?{ngnDataPurchases}:{}),
+      ...(directNgnWallet&&featurePool&&customerAuth?{whatsappLinks:{pool:featurePool,authorize:directNgnWallet.authorize,
+        beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}}:{}),
       ...(gbDataCatalogue ? { gbDataCatalogue } : {}),
       ...(gbDataPurchases ? { gbDataPurchases } : {}),
       ...(billstackFunding ? { billstackFunding } : {}),

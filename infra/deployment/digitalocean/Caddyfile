@@ -4,7 +4,7 @@
     X-Content-Type-Options nosniff
     Referrer-Policy strict-origin-when-cross-origin
   }
-  @ops path /v1/admin /v1/admin/* /v1/agents /v1/agents/* /v1/skills /v1/skills/*
+  @ops path /v1/admin /v1/admin/* /v1/agents /v1/agents/* /v1/skills /v1/skills/* /webhooks/whatsapp
   handle @ops {
     header Cache-Control no-store
     reverse_proxy ops:3002
