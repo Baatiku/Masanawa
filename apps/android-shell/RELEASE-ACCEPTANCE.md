@@ -26,6 +26,28 @@ credential required to send FCM messages. Backend sending credentials and
 test notifications must be verified separately; a compiled APK alone does not
 prove that cloud push delivery has been configured.
 
+### Notification implementation audit — 2026-11-18
+
+| Item | State |
+| --- | --- |
+| Firebase Android client identity and generated resources | Implemented from owner JSON; debug and release compile checks |
+| Android 13+ runtime permission | Implemented with explicit user opt-in; automatic rebind never re-prompts |
+| Account-scoped token opt-in, revocation, and renewal | Implemented in web Gateway binding; refresh on app resume; verify on phone |
+| Incoming push and separate work/call channels | Implemented; call channel requires valid call ID, as on the server |
+| Notification destination isolation | Implemented unique request code per deep-link destination |
+| Small monochrome icon, color and lock-screen privacy | Implemented, including active Telecom call notification |
+| Foreground and background notification delivery | Code path present; real FCM sends remain to be tested on device |
+| Server FCM v1 sender | Implemented in `packages/mobile-push`; verify server-side service account belongs to `masanawa-mobile` before production |
+| Debug/release signature and App Links association | Owner-dependent fingerprint verification; debug cannot claim release association |
+| Notification action reply, per-chat quick controls, and enhanced call controls | Not implemented; separate feature design and abuse/authorization review needed |
+
+Required end-to-end device scenarios: opted-in account receives two distinct
+contact notifications (each opens its own conversation); a legitimate incoming
+call uses the call channel; dismissing notifications does not alter unread
+history; opt-out stops delivery; denied/revoked Android permission does not
+trigger an unsolicited prompt on resume; FCM token rotation binds to the
+correct logged-in account; locked-screen text reveals no contact or balance.
+
 ## Managed GitHub Actions secrets (never add to source or a chat)
 
 - `SHELL_RELEASE_KEYSTORE_BASE64`: base64 of the authorized **upload**
