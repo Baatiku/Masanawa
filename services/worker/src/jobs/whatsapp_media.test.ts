@@ -1,4 +1,5 @@
 import {describe,expect,it,vi} from 'vitest';
+import {spawnSync} from 'node:child_process';
 import {transcribeWhatsAppAudio,synthesizeWhatsAppVoice,toWhatsAppOpus} from './whatsapp_media.js';
 
 describe('WhatsApp Gemini audio boundary',()=>{
@@ -27,6 +28,11 @@ describe('WhatsApp Gemini audio boundary',()=>{
       type:'audio',mime_type:'audio/l16',data:audio.toString('base64')}]}]})}));
     const result=await synthesizeWhatsAppVoice({text:'Sannu!',voice:'Kore',apiKey:'stub',model:'gemini-3.8-flash-tts',fetch:mock as never});
     expect(result.data).toEqual(audio);
+    // Foundation CI has no system FFmpeg; the production Worker Docker image
+    // explicitly installs it. Both environments verify their real behavior.
+    if(spawnSync('ffmpeg',['-version'],{stdio:'ignore'}).status!==0){
+      await expect(toWhatsAppOpus(result.data,result.mimeType)).rejects.toThrow('voice_encoder_unavailable');return;
+    }
     const opus=await toWhatsAppOpus(result.data,result.mimeType);
     expect(opus.subarray(0,4).toString('ascii')).toBe('OggS');
     expect(opus.length).toBeGreaterThan(50);

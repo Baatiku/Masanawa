@@ -12,6 +12,7 @@ type Config = {
   name:string; personality:string; instructions:string; greeting:string; language:'auto'|'en'|'ha';
   roleLevel:WhatsAppRoleLevel; permissions:WhatsAppPermission[]; personaId:string|null; voiceId:string|null;
   textReplies:boolean; voiceReplies:boolean; transcribeVoice:boolean;
+  replyMode:'always'|'away'|'manual';awayAfterSeconds:number;absenceMessage:string;rememberContext:boolean;
   workingHours:{timezone:string;days:number[];start:string;end:string}; escalationKeywords:string[];
 };
 type Input = {
@@ -48,6 +49,10 @@ function validConfig(value:unknown): value is Config {
     (c.personaId===null||(typeof c.personaId==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(c.personaId)))&&
     (c.voiceId===null||(typeof c.voiceId==='string'&&/^voice_[A-Za-z0-9_-]{1,160}$/.test(c.voiceId)))&&
     ['textReplies','voiceReplies','transcribeVoice'].every(k=>typeof c[k]==='boolean')&&
+    ['always','away','manual'].includes(String(c.replyMode))&&
+    Number.isInteger(c.awayAfterSeconds)&&Number(c.awayAfterSeconds)>=30&&Number(c.awayAfterSeconds)<=3600&&
+    typeof c.absenceMessage==='string'&&c.absenceMessage.length<=1000&&c.absenceMessage.trim().length>0&&
+    typeof c.rememberContext==='boolean'&&
     !!hours&&hours.timezone==='Africa/Lagos'&&Array.isArray(hours.days)&&hours.days.length<=7&&
     new Set(hours.days).size===hours.days.length&&hours.days.every(d=>Number.isInteger(d)&&d>=0&&d<=6)&&
     typeof hours.start==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(hours.start)&&
@@ -106,7 +111,9 @@ export function createWhatsAppAdmin(input:Input){
       const actor=await read(auth);if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       const rows=await input.pool.query(`SELECT a.name,a.personality,a.instructions,a.greeting,a.language,a.role_level AS "roleLevel",
         a.permissions,a.persona_id AS "personaId",a.voice_id AS "voiceId",a.text_replies AS "textReplies",
-        a.voice_replies AS "voiceReplies",a.transcribe_voice AS "transcribeVoice",a.working_hours AS "workingHours",
+        a.voice_replies AS "voiceReplies",a.transcribe_voice AS "transcribeVoice",
+        a.reply_mode AS "replyMode",a.away_after_seconds AS "awayAfterSeconds",
+        a.absence_message AS "absenceMessage",a.remember_context AS "rememberContext",a.working_hours AS "workingHours",
         a.escalation_keywords AS "escalationKeywords",a.revision::int AS revision
         FROM security.whatsapp_assistants a WHERE a.tenant_id=$1 AND a.channel_id=$2`,[actor.tenantId,id]);
       if(!rows.rows[0])throw new WhatsAppAdminError(404,'channel_not_found');return rows.rows[0];
@@ -122,11 +129,14 @@ export function createWhatsAppAdmin(input:Input){
       }
       const rows=await input.pool.query(`UPDATE security.whatsapp_assistants SET name=$3,personality=$4,instructions=$5,greeting=$6,
         language=$7,role_level=$8,permissions=$9::jsonb,persona_id=$10,voice_id=$11,text_replies=$12,voice_replies=$13,
-        transcribe_voice=$14,working_hours=$15::jsonb,escalation_keywords=$16::jsonb,revision=revision+1,updated_at=clock_timestamp()
-        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$17 RETURNING revision::int`,[
+        transcribe_voice=$14,working_hours=$15::jsonb,escalation_keywords=$16::jsonb,
+        reply_mode=$17,away_after_seconds=$18,absence_message=$19,remember_context=$20,
+        revision=revision+1,updated_at=clock_timestamp()
+        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$21 RETURNING revision::int`,[
           actor.tenantId,id,config.name.trim(),config.personality,config.instructions,config.greeting,config.language,
           config.roleLevel,JSON.stringify(config.permissions),config.personaId,config.voiceId,config.textReplies,
-          config.voiceReplies,config.transcribeVoice,JSON.stringify(config.workingHours),JSON.stringify(config.escalationKeywords),expectedRevision,
+          config.voiceReplies,config.transcribeVoice,JSON.stringify(config.workingHours),JSON.stringify(config.escalationKeywords),
+          config.replyMode,config.awayAfterSeconds,config.absenceMessage,config.rememberContext,expectedRevision,
         ]);
       if(!rows.rows.length)throw new WhatsAppAdminError(409,'assistant_revision_changed');
       await audit(actor.tenantId,id,actor.actorId,'assistant.updated',{revision:rows.rows[0]!.revision,roleLevel:config.roleLevel,permissions:config.permissions});
@@ -170,6 +180,10 @@ export function createWhatsAppAdmin(input:Input){
       const result=await input.pool.query(`UPDATE security.whatsapp_threads SET mode=$3,assigned_operator=CASE WHEN $3='human' THEN $4 ELSE NULL END,
         unread_count=0 WHERE tenant_id=$1 AND thread_id=$2 RETURNING thread_id AS "threadId",mode`,[actor.tenantId,threadId,mode,actor.actorId]);
       if(!result.rows[0])throw new WhatsAppAdminError(404,'thread_not_found');
+      if(mode!=='ai')await input.pool.query(`UPDATE security.whatsapp_jobs SET state='completed',last_error_code='human_takeover'
+        WHERE tenant_id=$1 AND state='pending' AND kind='reply'
+          AND message_id IN (SELECT message_id FROM security.whatsapp_messages
+            WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound')`,[actor.tenantId,threadId]);
       await audit(actor.tenantId,null,actor.actorId,'thread.handoff',{threadId,mode});return result.rows[0];
     },
     async send(auth:string|undefined,threadId:string,message:string,requestId:string){
@@ -193,6 +207,8 @@ export function createWhatsAppAdmin(input:Input){
         if(replay.rows[0])return replay.rows[0];
         throw new WhatsAppAdminError(409,'human_takeover_or_request_conflict');
       }
+      await input.pool.query(`UPDATE security.whatsapp_threads SET last_human_reply_at=clock_timestamp()
+        WHERE tenant_id=$1 AND thread_id=$2`,[actor.tenantId,threadId]);
       await audit(actor.tenantId,null,actor.actorId,'human.reply.queued',{threadId});return result.rows[0];
     },
     async analytics(auth:string|undefined,id:string){

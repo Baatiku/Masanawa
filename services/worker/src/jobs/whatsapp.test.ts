@@ -1,0 +1,51 @@
+import {describe,expect,it,vi} from 'vitest';
+import {createWhatsAppWorker} from './whatsapp.js';
+
+const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-1',channel_id:'channel-1',
+  thread_id:'thread-1',customer_wa_id:'2348012345678@s.whatsapp.net',mode:'ai',body:'Hello',direction:'inbound',
+  message_kind:'text',reply_to_message_id:null,media_payload_ciphertext:null,
+  inbound_created_at:'2026-11-18T08:00:00Z',last_human_reply_at:null,last_away_notice_at:null,
+  welcome_sent_at:null,account_match:'unregistered',memory_summary:'',memory_updated_at:null,
+  enabled:true,state:'connected',assistant_name:'Assistant',personality:'Helpful',instructions:'',greeting:'Welcome',language:'en',
+  permissions:['greet','faq'],role_level:1,text_replies:true,voice_replies:false,transcribe_voice:false,voice_id:null,
+  reply_mode:'always',away_after_seconds:120,absence_message:'I am away',remember_context:true,
+  escalation_keywords:['human'],last_message_at:'2026-11-18T08:00:00Z',
+  working_hours:{timezone:'Africa/Lagos',days:[0,1,2,3,4,5,6],start:'00:00',end:'23:59'},
+};
+
+function setup(overrides:Record<string,unknown>){
+  const calls:{sql:string;parameters:unknown[]}[]=[];
+  const pool={query:async(sql:string,params:unknown[]=[])=>{
+    calls.push({sql,parameters:params});
+    if(sql.includes('RETURNING j.job_id'))return {rows:[{job_id:'job-1'}]};
+    if(sql.includes('SELECT j.job_id,j.kind'))return {rows:[{...row,...overrides}]};
+    if(sql.includes('created_at>$3'))return {rows:[]};
+    if(sql.includes('count(*)::int'))return {rows:[{count:1}]};
+    return {rows:[]};
+  }};
+  const send=vi.fn(async()=> 'wa-receipt');
+  return {calls,send,worker:createWhatsAppWorker({pool:pool as never,env:{},send})};
+}
+
+describe('WhatsApp availability and owner takeover',()=>{
+  it('never starts AI generation in manual/off mode',async()=>{
+    const mock=setup({reply_mode:'manual'});
+    await mock.worker.runOnce();
+    expect(mock.send).not.toHaveBeenCalled();
+    expect(mock.calls.some(c=>c.sql.includes("SET state=$2,last_error_code")&&c.parameters[1]==='completed')).toBe(true);
+  });
+  it('cancels away-mode AI when the real owner has replied since the customer message',async()=>{
+    const mock=setup({reply_mode:'away',last_human_reply_at:'2026-11-18T08:00:30Z'});
+    await mock.worker.runOnce();
+    expect(mock.calls.some(c=>c.parameters.includes('owner_replied'))).toBe(true);
+    expect(mock.calls.some(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))).toBe(false);
+  });
+  it('responds to a first-time contact with an introduction and registration link',async()=>{
+    const mock=setup({body:'Hi'});
+    await mock.worker.runOnce();
+    const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
+    expect(outgoing).toBeDefined();
+    expect(outgoing!.parameters[3]).toBe('Welcome');
+    expect(mock.send).not.toHaveBeenCalled(); // queued for the outbox
+  });
+});

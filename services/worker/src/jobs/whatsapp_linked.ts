@@ -10,7 +10,7 @@ import {synthesizeWhatsAppVoice,toWhatsAppOpus,transcribeWhatsAppAudio} from './
 
 type Db=Pick<Pool,'query'>;
 type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null};
-type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean};
+type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>};
 const linkedJid=(jid:string)=>/^[0-9]{5,32}@(s\.whatsapp\.net|lid)$/.test(jid);
 
 export function encryptLinkedSecret(text:string,base64Key:string):Buffer {
@@ -100,7 +100,8 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     if(msg.key.fromMe||!msg.key.id||msg.key.id.length>255)return;
     const jid=msg.key.remoteJid;
     if(!jid||!linkedJid(jid))return; // No groups, status broadcasts or unverified arbitrary JIDs.
-    const active=await input.pool.query(`SELECT c.enabled,a.transcribe_voice FROM security.whatsapp_channels c
+    const active=await input.pool.query(`SELECT c.enabled,a.transcribe_voice,a.reply_mode,a.away_after_seconds
+      FROM security.whatsapp_channels c
       JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
       WHERE c.tenant_id=$1 AND c.channel_id=$2 AND c.lease_owner=$3 AND c.state='connected'`,
       [slot.tenantId,slot.channelId,slot.owner]);
@@ -110,29 +111,81 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     const thread=await input.pool.query(`INSERT INTO security.whatsapp_threads(tenant_id,channel_id,customer_wa_id,customer_name)
       VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,channel_id,customer_wa_id)
       DO UPDATE SET customer_name=CASE WHEN EXCLUDED.customer_name<>'' THEN EXCLUDED.customer_name
-        ELSE security.whatsapp_threads.customer_name END RETURNING thread_id AS "threadId",mode`,
+        ELSE security.whatsapp_threads.customer_name END RETURNING thread_id AS "threadId",mode,
+          account_match,account_match_checked_at`,
       [slot.tenantId,slot.channelId,jid,name]);
-    const media=kind==='audio'&&active.rows[0]?.transcribe_voice===true&&thread.rows[0]?.mode==='ai'?
+    // A WhatsApp JID can identify a possibly registered contact but is not a
+    // wallet principal. Never auto-link, expose identity or authorize spending.
+    const lastMatch=thread.rows[0]?.account_match_checked_at?new Date(thread.rows[0].account_match_checked_at).getTime():0;
+    if((thread.rows[0]?.account_match==='unknown'||Date.now()-lastMatch>60_000)&&jid.endsWith('@s.whatsapp.net')){
+      const phone='+'+jid.split('@')[0];
+      const registered=await input.pool.query(`SELECT 1 FROM security.platform_user_profiles p
+        JOIN identity.users u ON u.tenant_id=p.tenant_id AND u.user_id=p.user_id AND u.state='active'
+        WHERE p.tenant_id=$1 AND p.phone=$2 LIMIT 1`,[slot.tenantId,phone]);
+      await input.pool.query(`UPDATE security.whatsapp_threads SET account_match=$3,
+        account_match_checked_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2`,
+        [slot.tenantId,thread.rows[0]!.threadId,registered.rows.length?'registered':'unregistered']);
+    }
+    const media=kind==='audio'&&active.rows[0]?.enabled===true&&active.rows[0]?.reply_mode!=='manual'&&
+      active.rows[0]?.transcribe_voice===true&&thread.rows[0]?.mode==='ai'?
       encryptLinkedSecret(JSON.stringify(msg,BufferJSON.replacer),input.sessionKey):null;
     const saved=await input.pool.query(`INSERT INTO security.whatsapp_messages
       (tenant_id,thread_id,channel_id,provider_message_id,direction,kind,body,media_id,media_payload_ciphertext)
       VALUES($1,$2,$3,$4,'inbound',$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING message_id AS "messageId"`,
       [slot.tenantId,thread.rows[0]!.threadId,slot.channelId,msg.key.id,kind,body,mediaId,media]);
     if(!saved.rows.length)return;
-    await input.pool.query(`UPDATE security.whatsapp_threads SET unread_count=unread_count+1,last_message_at=clock_timestamp()
+    await input.pool.query(`UPDATE security.whatsapp_threads SET unread_count=unread_count+1,
+      last_message_at=clock_timestamp(),last_inbound_at=clock_timestamp()
       WHERE tenant_id=$1 AND thread_id=$2`,[slot.tenantId,thread.rows[0]!.threadId]);
     await input.pool.query(`UPDATE security.whatsapp_channels SET last_message_at=clock_timestamp()
       WHERE tenant_id=$1 AND channel_id=$2`,[slot.tenantId,slot.channelId]);
-    if(((kind==='text'&&body)||(kind==='audio'&&media))&&active.rows[0]?.enabled===true&&thread.rows[0]?.mode==='ai')await input.pool.query(`INSERT INTO security.whatsapp_jobs
-      (tenant_id,channel_id,message_id,kind) VALUES($1,$2,$3,'reply') ON CONFLICT DO NOTHING`,
-      [slot.tenantId,slot.channelId,saved.rows[0]!.messageId]);
+    if(((kind==='text'&&body)||(kind==='audio'&&media))&&active.rows[0]?.enabled===true&&
+      active.rows[0]?.reply_mode!=='manual'&&thread.rows[0]?.mode==='ai')await input.pool.query(`INSERT INTO security.whatsapp_jobs
+      (tenant_id,channel_id,message_id,kind,available_at)
+      VALUES($1,$2,$3,'reply',clock_timestamp()+($4::int * interval '1 second')) ON CONFLICT DO NOTHING`,
+      [slot.tenantId,slot.channelId,saved.rows[0]!.messageId,
+        active.rows[0]?.reply_mode==='away'?Number(active.rows[0]?.away_after_seconds??120):0]);
+  }
+  async function ingestOwnerReply(slot:Slot,msg:WAMessage){
+    const jid=msg.key.remoteJid;
+    if(!msg.key.fromMe||!msg.key.id||!jid||!linkedJid(jid)||slot.botMessageIds.has(msg.key.id))return;
+    // Let the bot's own outbox commit its provider receipt first. A bot echo is
+    // not evidence that the human owner is online or answering personally.
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    if(slot.botMessageIds.has(msg.key.id))return;
+    const active=await input.pool.query(`SELECT 1 FROM security.whatsapp_channels
+      WHERE tenant_id=$1 AND channel_id=$2 AND lease_owner=$3 AND state='connected'`,
+      [slot.tenantId,slot.channelId,slot.owner]);
+    if(!active.rows.length)return;
+    const known=await input.pool.query(`SELECT 1 FROM security.whatsapp_messages
+      WHERE tenant_id=$1 AND channel_id=$2 AND provider_message_id=$3`,[slot.tenantId,slot.channelId,msg.key.id]);
+    if(known.rows.length)return;
+    const {kind,body,mediaId}=contentOf(msg);
+    const thread=await input.pool.query(`INSERT INTO security.whatsapp_threads
+      (tenant_id,channel_id,customer_wa_id) VALUES($1,$2,$3)
+      ON CONFLICT(tenant_id,channel_id,customer_wa_id) DO UPDATE SET last_message_at=clock_timestamp()
+      RETURNING thread_id AS "threadId"`,[slot.tenantId,slot.channelId,jid]);
+    const sent=await input.pool.query(`INSERT INTO security.whatsapp_messages
+      (tenant_id,thread_id,channel_id,provider_message_id,direction,kind,body,media_id,delivery_state)
+      VALUES($1,$2,$3,$4,'outbound',$5,$6,$7,'sent') ON CONFLICT DO NOTHING
+      RETURNING created_at AS "createdAt"`,
+      [slot.tenantId,thread.rows[0]!.threadId,slot.channelId,msg.key.id,kind,body,mediaId]);
+    if(!sent.rows.length)return;
+    await input.pool.query(`UPDATE security.whatsapp_threads
+      SET last_human_reply_at=$3,last_message_at=$3 WHERE tenant_id=$1 AND thread_id=$2`,
+      [slot.tenantId,thread.rows[0]!.threadId,sent.rows[0]!.createdAt]);
+    await input.pool.query(`UPDATE security.whatsapp_jobs SET state='completed',last_error_code='owner_replied'
+      WHERE tenant_id=$1 AND channel_id=$2 AND state='pending' AND kind='reply'
+        AND message_id IN (SELECT m.message_id FROM security.whatsapp_messages m
+          WHERE m.tenant_id=$1 AND m.thread_id=$3 AND m.direction='inbound' AND m.created_at<$4)`,
+      [slot.tenantId,slot.channelId,thread.rows[0]!.threadId,sent.rows[0]!.createdAt]);
   }
   async function launch(channel:Channel,leaseOwner:string){
     const auth=await createLinkedAuthState(input.pool,channel.tenant_id,channel.channel_id,input.sessionKey,leaseOwner);
     const socket=makeWASocket({auth:auth.state,browser:Browsers.ubuntu('Masanawa'),
       syncFullHistory:false,markOnlineOnConnect:false,
       getMessage:async()=>undefined});
-    const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,connected:false};
+    const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,connected:false,botMessageIds:new Set()};
     sockets.set(channel.channel_id,slot);
     socket.ev.on('creds.update',update=>{
       Object.assign(auth.state.creds,update);
@@ -172,7 +225,10 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     })().catch(()=>markError(slot,'connection_update_failed'));});
     socket.ev.on('messages.upsert',event=>{
       if(event.type!=='notify')return;
-      for(const msg of event.messages)void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
+      for(const msg of event.messages){
+        if(msg.key.fromMe)void ingestOwnerReply(slot,msg).catch(()=>markError(slot,'owner_reply_persistence_failed'));
+        else void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
+      }
     });
     socket.ev.on('messages.update',events=>{
       for(const event of events){
@@ -223,7 +279,9 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         [slot.tenantId,channelId,slot.owner]);
       if(!permission.rows.length)throw Error('whatsapp_channel_disabled');
       const sent=await slot.socket.sendMessage(jid,{text:body});
-      const id=sent?.key.id;if(!id)throw Error('whatsapp_send_receipt_unknown');return id;
+      const id=sent?.key.id;if(!id)throw Error('whatsapp_send_receipt_unknown');
+      slot.botMessageIds.add(id);if(slot.botMessageIds.size>2000)slot.botMessageIds.delete(slot.botMessageIds.values().next().value??'');
+      return id;
     },
     async transcribe(channelId:string,ciphertext:Buffer){
       const slot=sockets.get(channelId);
@@ -249,7 +307,9 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_TTS_MODEL??'gemini-3.8-flash-tts'});
       const encoded=await toWhatsAppOpus(result.data,result.mimeType);
       const sent=await slot.socket.sendMessage(jid,{audio:encoded,mimetype:'audio/ogg; codecs=opus',ptt:true});
-      const id=sent?.key.id;if(!id)throw Error('whatsapp_voice_receipt_unknown');return id;
+      const id=sent?.key.id;if(!id)throw Error('whatsapp_voice_receipt_unknown');
+      slot.botMessageIds.add(id);if(slot.botMessageIds.size>2000)slot.botMessageIds.delete(slot.botMessageIds.values().next().value??'');
+      return id;
     },
     async stop(){for(const id of [...sockets.keys()])close(id);},
   };

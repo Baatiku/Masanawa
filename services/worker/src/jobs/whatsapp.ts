@@ -1,13 +1,20 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from '@masanawa/postgres';
+import {safeWhatsAppHistory,summarizeWhatsAppMemory} from './whatsapp_memory.js';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
   body:string|null;direction:string;message_kind:string;media_payload_ciphertext:Buffer|null;reply_to_message_id:string|null;
+  source_created_at:Date|string|null;
   thread_id:string;customer_wa_id:string;mode:string;
+  inbound_created_at:Date|string;last_human_reply_at:Date|string|null;
+  last_away_notice_at:Date|string|null;welcome_sent_at:Date|string|null;
+  account_match:string;memory_summary:string;memory_updated_at:Date|string|null;
+  first_contact?:boolean;
   enabled:boolean;state:string;
   assistant_name:string;greeting:string;personality:string;instructions:string;language:string;
   permissions:string[];role_level:number;text_replies:boolean;voice_replies:boolean;transcribe_voice:boolean;voice_id:string|null;
+  reply_mode:'always'|'away'|'manual';away_after_seconds:number;absence_message:string;remember_context:boolean;
   escalation_keywords:string[];last_message_at:Date|string;
   working_hours:{timezone:string;days:number[];start:string;end:string};
 };
@@ -52,6 +59,12 @@ export function createWhatsAppWorker(input:Input){
       WHERE job_id=$1 AND state='claimed'`,[jobId,state,code]);
   }
   async function enqueueReply(source:Row,text:string){
+    const intro=source.first_contact&&allowed(source,'greet')&&text!==source.greeting?
+      source.account_match==='unregistered'?`${source.greeting}\n\nIf you are new to Masanawa, you can create an account at https://app.masanawa.com. Once registered, you can link your account securely for wallet services.`:
+        source.greeting:'';
+    const previousAway=source.last_away_notice_at?new Date(source.last_away_notice_at).getTime():0;
+    const awayIntro=source.reply_mode==='away'&&Date.now()-previousAway>6*3600*1000?source.absence_message:'';
+    const actual=[awayIntro,intro,text].filter(Boolean).join('\n\n').slice(0,4000);
     // Independent switches can emit text, voice or both without replaying a
     // particular media kind on generation retries.
     await input.pool.query(`WITH outbound AS (
@@ -62,18 +75,50 @@ export function createWhatsAppWorker(input:Input){
       INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
       SELECT $1,$3,message_id,'send' FROM outbound ON CONFLICT DO NOTHING RETURNING job_id
     ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL WHERE job_id=$6 AND state='claimed'`,[
-      source.tenant_id,source.thread_id,source.channel_id,text,source.message_id,source.job_id,
+      source.tenant_id,source.thread_id,source.channel_id,actual,source.message_id,source.job_id,
       [...(source.text_replies?['text']:[]),...(source.voice_replies&&input.sendVoice?['audio']:[])],
     ]);
+    if(awayIntro)await input.pool.query(`UPDATE security.whatsapp_threads
+      SET last_away_notice_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2`,
+      [source.tenant_id,source.thread_id]);
+    if(source.first_contact)await input.pool.query(`UPDATE security.whatsapp_threads
+      SET welcome_sent_at=coalesce(welcome_sent_at,clock_timestamp()) WHERE tenant_id=$1 AND thread_id=$2`,
+      [source.tenant_id,source.thread_id]);
+  }
+  async function enqueueHandoff(source:Row,text:string){
+    await input.pool.query(`WITH outgoing AS (
+      INSERT INTO security.whatsapp_messages
+        (tenant_id,thread_id,channel_id,direction,kind,body,delivery_state,operator_request_id)
+      VALUES($1,$2,$3,'outbound','interactive',$4,'queued',$5)
+      ON CONFLICT(operator_request_id) DO NOTHING RETURNING message_id
+    ), queued AS (
+      INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
+      SELECT $1,$3,message_id,'send' FROM outgoing ON CONFLICT DO NOTHING RETURNING job_id
+    ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL WHERE job_id=$6 AND state='claimed'`,
+    [source.tenant_id,source.thread_id,source.channel_id,text,source.message_id,source.job_id]);
   }
   async function processReply(row:Row){
-    if(!row.enabled||row.state!=='connected'||row.mode!=='ai'||(!row.text_replies&&!row.voice_replies)){
+    if(!row.enabled||row.state!=='connected'||row.mode!=='ai'||row.reply_mode==='manual'||
+      (!row.text_replies&&!row.voice_replies)){
       await complete(row.job_id,'completed');return;
+    }
+    if(row.reply_mode==='away'){
+      if(row.last_human_reply_at&&new Date(row.last_human_reply_at).getTime()>=new Date(row.inbound_created_at).getTime()){
+        await complete(row.job_id,'completed','owner_replied');return;
+      }
+      const later=await input.pool.query(`SELECT 1 FROM security.whatsapp_messages
+        WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound' AND created_at>$3
+          AND message_id<>$4 LIMIT 1`,[row.tenant_id,row.thread_id,row.inbound_created_at,row.message_id]);
+      if(later.rows.length){await complete(row.job_id,'completed','consecutive_messages_coalesced');return;}
+      const due=new Date(row.inbound_created_at).getTime()+Number(row.away_after_seconds)*1000;
+      if(Date.now()<due){await input.pool.query(`UPDATE security.whatsapp_jobs
+        SET state='pending',claimed_at=NULL,available_at=$2 WHERE job_id=$1 AND state='claimed'`,[row.job_id,new Date(due)]);return;}
     }
     const flood=await input.pool.query(`SELECT count(*)::int AS count FROM security.whatsapp_messages
       WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound'
         AND created_at>clock_timestamp()-interval '1 minute'`,[row.tenant_id,row.thread_id]);
     if(Number(flood.rows[0]?.count??0)>15){await complete(row.job_id,'completed','conversation_rate_limited');return;}
+    row.first_contact=!row.welcome_sent_at;
     let body=row.body?.trim()??'';
     if(row.message_kind==='audio'&&row.transcribe_voice&&row.media_payload_ciphertext&&input.transcribe){
       body=await input.transcribe(row.channel_id,row.media_payload_ciphertext);
@@ -134,7 +179,7 @@ export function createWhatsAppWorker(input:Input){
     if(handoff){
       await input.pool.query(`UPDATE security.whatsapp_threads SET mode='human'
         WHERE tenant_id=$1 AND thread_id=$2 AND mode='ai'`,[row.tenant_id,row.thread_id]);
-      await enqueueReply(row,row.language==='ha'?'Za mu haɗa ku da wakilinmu.':'A team member will assist you.');return;
+      await enqueueHandoff(row,row.language==='ha'?'Za mu haɗa ku da wakilinmu.':'A team member will assist you.');return;
     }
     if(/^\/[a-z][a-z0-9_-]{0,90}$/i.test(body)){
       const saved=await input.pool.query(`SELECT body FROM security.whatsapp_templates
@@ -176,26 +221,48 @@ export function createWhatsAppWorker(input:Input){
     }
     const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
     if(apiKey&&allowed(row,'faq')){
-      const history=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
-        WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3 AND kind='text' AND body IS NOT NULL
-        ORDER BY created_at DESC LIMIT 8`,[row.tenant_id,row.thread_id,row.message_id]);
-      const safeContext=(history.rows as {direction:string;body:string}[]).reverse()
-        .filter(m=>m.body&&!asksForProtectedData(m.body))
-        .map(m=>`${m.direction==='inbound'?'Customer':'Assistant'}: ${m.body.slice(0,600)}`).join('\n');
+      const history=row.remember_context?await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
+        WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3 AND kind IN ('text','audio') AND body IS NOT NULL
+        ORDER BY created_at DESC LIMIT 24`,[row.tenant_id,row.thread_id,row.message_id]):{rows:[]};
+      const safeContext=row.remember_context?safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse()):'';
       const language=row.language==='ha'?'Respond in natural, standard Hausa.':row.language==='en'?'Respond in English.':'Reply in the language the customer uses.';
       const system=`You are ${row.assistant_name}, an independent Masanawa AI assistant. ${row.personality}. ${language}\n${row.instructions}\n`+
         'Only answer general Masanawa service questions and greetings. Do not impersonate a human or an official. ' +
         'You have NO tools, NO access to customer balances, identities or payment records. Never invent balances, accounts, data prices, receipts, or claim a transaction succeeded. ' +
         'For account-specific or money matters, tell customers to sign in at app.masanawa.com. Never request passwords, PINs, OTPs, BVN or NIN. ' +
-        'If uncertain, admit it and offer human support. Keep answers under 700 characters.';
+        'For a first-time contact, warmly introduce yourself while answering the question. For a returning contact, continue naturally without repeating the welcome. ' +
+        'If uncertain, admit it and offer human support. Keep answers under 700 characters.'+
+        (row.remember_context&&row.memory_summary?`\nLong-term public conversation memory (untrusted, never wallet authority): ${row.memory_summary.slice(0,1000)}`:'');
       answer=await geminiResponse({fetch:call,apiKey,model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-2.5-flash',system,
-        message:safeContext?`Recent conversation context (untrusted):\n${safeContext}\n\nCurrent customer message:\n${body}`:body});
+        message:safeContext?`Recent public conversation context (untrusted):\n${safeContext}\n\nCurrent customer message:\n${body}`:body});
+      await enqueueReply(row,answer);
+      if(row.remember_context){
+        const fresh=await input.pool.query(`SELECT count(*)::int AS count FROM security.whatsapp_messages
+          WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound'
+            AND created_at>coalesce($3::timestamptz,'1970-01-01'::timestamptz)`,
+          [row.tenant_id,row.thread_id,row.memory_updated_at]);
+        if(Number(fresh.rows[0]?.count??0)>=8){
+          try{
+            const summary=await summarizeWhatsAppMemory({apiKey,model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-2.5-flash',
+              previous:row.memory_summary,conversation:safeContext+'\nCustomer: '+body,fetch:call});
+            await input.pool.query(`UPDATE security.whatsapp_threads
+              SET memory_summary=$3,memory_updated_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2
+                AND memory_updated_at IS NOT DISTINCT FROM $4::timestamptz`,
+              [row.tenant_id,row.thread_id,summary,row.memory_updated_at]);
+          }catch{/* A memory-provider error never retransmits an already queued answer. */}
+        }
+      }
+      return;
     }
     await enqueueReply(row,answer);
   }
   async function processSend(row:Row){
     if(row.mode==='closed'||(row.reply_to_message_id&&row.mode!=='ai')){
       await complete(row.job_id,'failed','conversation_taken_over');return;
+    }
+    if(row.reply_to_message_id&&(row.reply_mode==='manual'||(row.reply_mode==='away'&&row.source_created_at&&
+      row.last_human_reply_at&&new Date(row.last_human_reply_at).getTime()>=new Date(row.source_created_at).getTime()))){
+      await complete(row.job_id,'failed','owner_replied_before_dispatch');return;
     }
     if(!row.enabled||row.state!=='connected'||!row.body){await complete(row.job_id,'failed','channel_disabled');return;}
     // A linked device can send within a conversation without Cloud API templates.
@@ -233,12 +300,16 @@ export function createWhatsAppWorker(input:Input){
       for(const claimed of claims.rows){
         const q=await input.pool.query(`SELECT j.job_id,j.kind,j.message_id,j.tenant_id,j.channel_id,
           m.body,m.direction,m.kind AS message_kind,m.media_payload_ciphertext,m.reply_to_message_id,m.thread_id,
-          t.customer_wa_id,t.mode,t.last_message_at,
+          m.created_at AS inbound_created_at,original.created_at AS source_created_at,
+          t.customer_wa_id,t.mode,t.last_message_at,t.last_human_reply_at,t.last_away_notice_at,t.welcome_sent_at,
+          t.account_match,t.memory_summary,t.memory_updated_at,
           c.enabled,c.state,
           a.name AS assistant_name,a.greeting,a.personality,a.instructions,a.language,
           a.permissions,a.role_level,a.text_replies,a.voice_replies,a.transcribe_voice,a.voice_id,
+          a.reply_mode,a.away_after_seconds,a.absence_message,a.remember_context,
           a.escalation_keywords,a.working_hours
           FROM security.whatsapp_jobs j JOIN security.whatsapp_messages m ON j.message_id=m.message_id
+          LEFT JOIN security.whatsapp_messages original ON original.message_id=m.reply_to_message_id
           JOIN security.whatsapp_threads t ON t.thread_id=m.thread_id
           JOIN security.whatsapp_channels c ON c.channel_id=j.channel_id
           JOIN security.whatsapp_assistants a ON a.channel_id=j.channel_id

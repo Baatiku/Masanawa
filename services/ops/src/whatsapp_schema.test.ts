@@ -23,8 +23,10 @@ describe('WhatsApp linked-device canonical PostgreSQL migration',()=>{
       const result=await db.query<{channel_id:string}>('SELECT channel_id FROM security.whatsapp_channels');
       expect(result.rows).toHaveLength(1);
       await db.query(`INSERT INTO security.whatsapp_assistants(tenant_id,channel_id) VALUES('tenant_1',$1)`,[result.rows[0]!.channel_id]);
-      const assistant=await db.query<{voice_replies:boolean;transcribe_voice:boolean}>(`SELECT voice_replies,transcribe_voice FROM security.whatsapp_assistants WHERE channel_id=$1`,[result.rows[0]!.channel_id]);
-      expect(assistant.rows[0]).toMatchObject({voice_replies:true,transcribe_voice:true});
+      const assistant=await db.query<{voice_replies:boolean;transcribe_voice:boolean;reply_mode:string;away_after_seconds:number;remember_context:boolean}>(
+        `SELECT voice_replies,transcribe_voice,reply_mode,away_after_seconds,remember_context FROM security.whatsapp_assistants WHERE channel_id=$1`,
+        [result.rows[0]!.channel_id]);
+      expect(assistant.rows[0]).toMatchObject({voice_replies:true,transcribe_voice:true,reply_mode:'always',away_after_seconds:120,remember_context:true});
       await db.query(`INSERT INTO security.whatsapp_auth_keys(tenant_id,channel_id,key_type,key_id,ciphertext)
         VALUES('tenant_1',$1,'creds','main',$2)`,[result.rows[0]!.channel_id,Buffer.from('encrypted-signal-credential')]);
       await db.query(`INSERT INTO security.whatsapp_audit(tenant_id,actor_id,action)
