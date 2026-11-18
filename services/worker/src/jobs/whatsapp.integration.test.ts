@@ -13,6 +13,7 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
       await db.exec(await readFile(new URL('../../../../packages/security/migrations/0123_whatsapp_ai.sql',import.meta.url),'utf8'));
       await db.exec(await readFile(new URL('../../../../packages/security/migrations/0124_whatsapp_number_identity.sql',import.meta.url),'utf8'));
       await db.exec(await readFile(new URL('../../../../packages/security/migrations/0125_whatsapp_gemini_key_pool.sql',import.meta.url),'utf8'));
+      await db.exec(await readFile(new URL('../../../../packages/security/migrations/0126_whatsapp_gemini_keys_key_only.sql',import.meta.url),'utf8'));
       const created=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
         (tenant_id,enabled,state,linked_jid) VALUES('tenant',true,'connected','2348012345678@s.whatsapp.net')
         RETURNING channel_id`);
@@ -51,6 +52,7 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
       await db.exec(migration);
       await db.exec(await readFile(new URL('../../../../packages/security/migrations/0124_whatsapp_number_identity.sql',import.meta.url),'utf8'));
       await db.exec(await readFile(new URL('../../../../packages/security/migrations/0125_whatsapp_gemini_key_pool.sql',import.meta.url),'utf8'));
+      await db.exec(await readFile(new URL('../../../../packages/security/migrations/0126_whatsapp_gemini_keys_key_only.sql',import.meta.url),'utf8'));
       const channel=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
         (tenant_id,enabled,state,linked_jid) VALUES('tenant',true,'connected','2348012345678@s.whatsapp.net')
         RETURNING channel_id`);
