@@ -7,6 +7,7 @@ export type LiveRequest={apiKey:string;model:string;voice:string;system:string;m
   createSocket?:(url:string)=>WebSocket;deadlineMs?:number};
 
 const MAX_PCM=8*1024*1024;
+const MAX_FRAME=12*1024*1024;
 /** Render native spoken transcript with WhatsApp-supported Markdown delimiters.
  * This never asks another model to rewrite what was said. */
 export function formatWhatsAppTranscript(speech:string):string{
@@ -26,7 +27,10 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
   const url='wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key='+encodeURIComponent(input.apiKey);
   const socket=(input.createSocket??(address=>new WebSocket(address)))(url);
   return new Promise<LiveReply>((resolve,reject)=>{
-    let settled=false,opened=false,configured=false,bytes=0;
+    let settled=false,configured=false,bytes=0;
+    // Raw Live WebSockets may deliver JSON in binary frames. Decoding a Blob
+    // asynchronously must not let a later turnComplete overtake its audio.
+    let received:Promise<void>=Promise.resolve();
     const pcm:Buffer[]=[],transcript:string[]=[];
     const timer=setTimeout(()=>finish(new LiveProviderError('live_unavailable')),input.deadlineMs??65000);
     function finish(error?:Error,value?:LiveReply){
@@ -35,15 +39,28 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
       if(error)reject(error);else resolve(value!);
     }
     socket.addEventListener('open',()=>{
-      opened=true;
       socket.send(JSON.stringify({setup:{model:'models/'+input.model,
         generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:input.voice}}}},
         systemInstruction:{parts:[{text:input.system}]},outputAudioTranscription:{}}}));
     });
     socket.addEventListener('message',event=>{
-      if(settled)return;
-      try{
-        const result=JSON.parse(typeof event.data==='string'?event.data:String(event.data)) as {
+      received=received.then(async()=>{
+        if(settled)return;
+        const frame:unknown=event.data;
+        let raw:string;
+        if(typeof frame==='string')raw=frame;
+        else if(frame instanceof Blob){
+          if(frame.size>MAX_FRAME)throw new LiveProviderError('live_invalid');
+          raw=await frame.text();
+        }else if(frame instanceof ArrayBuffer){
+          if(frame.byteLength>MAX_FRAME)throw new LiveProviderError('live_invalid');
+          raw=Buffer.from(frame).toString('utf8');
+        }else if(ArrayBuffer.isView(frame)){
+          if(frame.byteLength>MAX_FRAME)throw new LiveProviderError('live_invalid');
+          raw=Buffer.from(frame.buffer,frame.byteOffset,frame.byteLength).toString('utf8');
+        }else throw new LiveProviderError('live_invalid');
+        if(raw.length>MAX_FRAME)throw new LiveProviderError('live_invalid');
+        const result=JSON.parse(raw) as {
           setupComplete?:unknown;
           error?:{code?:number;status?:string};
           serverContent?:{outputTranscription?:{text?:string};turnComplete?:boolean;
@@ -76,14 +93,18 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
           if(!speech||!pcm.length||bytes%2!==0){finish(new LiveProviderError('live_invalid'));return;}
           finish(undefined,{transcript:speech,pcm:Buffer.concat(pcm,bytes)});
         }
-      }catch{finish(new LiveProviderError('live_invalid'));}
+      }).catch(()=>finish(new LiveProviderError('live_invalid')));
     });
-    socket.addEventListener('error',()=>finish(new LiveProviderError('live_unavailable')));
+    socket.addEventListener('error',()=>{
+      void received.then(()=>finish(new LiveProviderError('live_unavailable')));
+    });
     socket.addEventListener('close',(event:CloseEvent)=>{
-      if(settled)return;
-      // Some providers indicate quota/unauthorized before emitting a JSON error.
-      const code=event.code===1008?'live_quota':'live_unavailable';
-      finish(new LiveProviderError(code));
+      void received.then(()=>{
+        if(settled)return;
+        // Some providers indicate quota/unauthorized before emitting a JSON error.
+        const code=event.code===1008?'live_quota':'live_unavailable';
+        finish(new LiveProviderError(code));
+      });
     });
   });
 }
@@ -104,7 +125,8 @@ export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessio
       const result=await input.invoke(secret);
       await input.pool.query(`UPDATE security.whatsapp_gemini_keys
         SET last_used_at=clock_timestamp(),last_error_code=NULL,cooldown_until=NULL
-        WHERE tenant_id=$1 AND key_id=$2`,[input.tenantId,row.key_id]);
+        WHERE tenant_id=$1 AND key_id=$2`,
+      [input.tenantId,row.key_id]);
       return result;
     }catch(error){
       lastError=error;
