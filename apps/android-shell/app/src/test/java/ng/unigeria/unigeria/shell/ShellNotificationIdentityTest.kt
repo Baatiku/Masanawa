@@ -23,4 +23,11 @@ class ShellNotificationIdentityTest {
         assertNotEquals(ShellNotificationIdentity.requestCode(route, true),
             ShellNotificationIdentity.requestCode(route, false))
     }
+
+    @Test fun onlyValidatedCallInvitationsUseTheCallChannel() {
+        val id = "12345678-1234-1234-1234-123456789abc"
+        assertEquals(true, ShellNotificationIdentity.isIncomingCall("incoming_call", id))
+        assertEquals(false, ShellNotificationIdentity.isIncomingCall("incoming_call", "bad-id"))
+        assertEquals(false, ShellNotificationIdentity.isIncomingCall("wallet_notice", id))
+    }
 }
