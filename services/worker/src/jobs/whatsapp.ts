@@ -44,7 +44,14 @@ async function geminiResponse(input:{fetch:typeof fetch;apiKey:string;model:stri
       generationConfig:{temperature:0.45,maxOutputTokens:500}}),
     redirect:'manual',signal:AbortSignal.timeout(16000),
   });
-  if(!r.ok)throw new Error('gemini_unavailable');
+  if(!r.ok){
+    // Never expose provider bodies, URLs or credentials in persisted job errors.
+    const code=r.status===401||r.status===403?'gemini_auth_rejected':
+      r.status===429?'gemini_quota_exceeded':r.status===400||r.status===404?'gemini_model_rejected':
+      r.status>=500?'gemini_provider_unavailable':'gemini_request_rejected';
+    await r.body?.cancel();
+    throw new Error(code);
+  }
   const j=await r.json() as {candidates?:{content?:{parts?:{text?:string}[]}}[]};
   const output=j.candidates?.[0]?.content?.parts?.map(p=>p.text??'').join('').trim()??'';
   if(!output||output.length>5000)throw new Error('gemini_response_invalid');
@@ -258,8 +265,20 @@ export function createWhatsAppWorker(input:Input){
         'For a first-time contact, warmly introduce yourself while answering the question. For a returning contact, continue naturally without repeating the welcome. ' +
         'If uncertain, admit it and offer human support. Keep answers under 700 characters.'+
         (row.remember_context&&row.memory_summary?`\nLong-term public conversation memory (untrusted, never wallet authority): ${row.memory_summary.slice(0,1000)}`:'');
-      answer=await geminiResponse({fetch:call,apiKey,model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-2.5-flash',system,
-        message:safeContext?`Recent public conversation context (untrusted):\n${safeContext}\n\nCurrent customer message:\n${body}`:body});
+      try{
+        answer=await geminiResponse({fetch:call,apiKey,model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-2.5-flash',system,
+          message:safeContext?`Recent public conversation context (untrusted):\n${safeContext}\n\nCurrent customer message:\n${body}`:body});
+      }catch(error){
+        const code=error instanceof Error&&/^gemini_(?:auth_rejected|quota_exceeded|model_rejected|provider_unavailable|request_rejected|response_invalid)$/.test(error.message)?
+          error.message:'gemini_transport_unavailable';
+        await input.pool.query(`UPDATE security.whatsapp_jobs SET last_error_code=$2
+          WHERE job_id=$1 AND state='claimed'`,[row.job_id,code]);
+        // A temporary model/credential outage must not silence a connected
+        // number. This is a truthful, non-transactional response, not AI output.
+        answer=row.language==='ha'?
+          'Assalamu alaikum. Ni ne mataimakin Masanawa. A yanzu ba zan iya samar da cikakkiyar amsa ba saboda matsalar sabis. Don Allah ka sake tambaya daga baya ko ka rubuta HUMAN domin a haɗa ka da wakili.':
+          'Hello, this is the Masanawa assistant. I received your message, but I cannot generate a detailed answer right now. Please try again shortly, or reply HUMAN for assistance.';
+      }
       await enqueueReply(row,answer);
       if(row.remember_context){
         const fresh=await input.pool.query(`SELECT count(*)::int AS count FROM security.whatsapp_messages
@@ -354,11 +373,15 @@ export function createWhatsAppWorker(input:Input){
         const row=q.rows[0] as Row|undefined;
         if(!row){await complete(claimed.job_id,'failed','missing_job_dependency');continue;}
         try{if(row.kind==='reply')await processReply(row);else await processSend(row);completed++;}
-        catch{
+        catch(error){
           if(row.kind==='send')await complete(row.job_id,'uncertain','delivery_commit_unknown');
-          else await input.pool.query(`UPDATE security.whatsapp_jobs SET state=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,
-            available_at=clock_timestamp()+interval '30 seconds',claimed_at=NULL,last_error_code='reply_generation_unavailable'
-            WHERE job_id=$1 AND state='claimed'`,[row.job_id]);
+          else {
+            const sqlState=error&&typeof error==='object'&&'code' in error?String(error.code):'';
+            const errorCode=/^[0-9A-Z]{5}$/.test(sqlState)?`reply_database_${sqlState}`:'reply_generation_unavailable';
+            await input.pool.query(`UPDATE security.whatsapp_jobs SET state=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,
+              available_at=clock_timestamp()+interval '30 seconds',claimed_at=NULL,last_error_code=$2
+              WHERE job_id=$1 AND state='claimed'`,[row.job_id,errorCode]);
+          }
         }
       }
       return {claimed:claims.rows.length,completed};
