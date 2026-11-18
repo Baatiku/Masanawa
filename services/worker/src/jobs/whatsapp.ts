@@ -55,8 +55,27 @@ async function geminiResponse(input:{fetch:typeof fetch;apiKey:string;model:stri
 export function createWhatsAppWorker(input:Input){
   const call=input.fetch??fetch;
   async function complete(jobId:string,state:'completed'|'failed'|'uncertain',code:string|null=null){
-    await input.pool.query(`UPDATE security.whatsapp_jobs SET state=$2,last_error_code=$3,claimed_at=NULL
-      WHERE job_id=$1 AND state='claimed'`,[jobId,state,code]);
+    await input.pool.query(`WITH changed AS (
+      UPDATE security.whatsapp_jobs SET state=$2,last_error_code=$3,claimed_at=NULL
+      WHERE job_id=$1 AND state='claimed' RETURNING message_id,kind
+    ) UPDATE security.whatsapp_messages m SET
+        delivery_state=CASE WHEN $2='uncertain' THEN 'uncertain' ELSE 'failed' END,
+        error_code=$3
+      WHERE $2<>'completed' AND m.message_id IN (
+        SELECT message_id FROM changed WHERE kind='send'
+      )`,[jobId,state,code]);
+  }
+  async function deferBeforeDispatch(jobId:string,code:string){
+    // Retrying is safe only when the connector rejected the send *before*
+    // handing anything to WhatsApp. Never replay an ambiguous socket send.
+    await input.pool.query(`WITH changed AS (
+      UPDATE security.whatsapp_jobs SET
+        state=CASE WHEN attempts>=12 OR created_at<clock_timestamp()-interval '15 minutes'
+          THEN 'failed' ELSE 'pending' END,
+        available_at=clock_timestamp()+interval '20 seconds',claimed_at=NULL,last_error_code=$2
+      WHERE job_id=$1 AND state='claimed' RETURNING message_id,kind,state
+    ) UPDATE security.whatsapp_messages m SET delivery_state='failed',error_code=$2
+      WHERE m.message_id IN (SELECT message_id FROM changed WHERE kind='send' AND state='failed')`,[jobId,code]);
   }
   async function enqueueReply(source:Row,text:string){
     const intro=source.first_contact&&allowed(source,'greet')&&text!==source.greeting?source.greeting:'';
@@ -98,9 +117,15 @@ export function createWhatsAppWorker(input:Input){
     [source.tenant_id,source.thread_id,source.channel_id,text,source.message_id,source.job_id]);
   }
   async function processReply(row:Row){
-    if(!row.enabled||row.state!=='connected'||row.mode!=='ai'||row.reply_mode==='manual'||
+    if(!row.enabled||row.mode!=='ai'||row.reply_mode==='manual'||
       (!row.text_replies&&!row.voice_replies)){
       await complete(row.job_id,'completed');return;
+    }
+    if(row.state!=='connected'){
+      if(['degraded','connecting','pending','qr_ready'].includes(row.state))
+        await deferBeforeDispatch(row.job_id,'linked_socket_reconnecting');
+      else await complete(row.job_id,'failed','linked_device_requires_pairing');
+      return;
     }
     if(row.reply_mode==='away'){
       if(row.last_human_reply_at&&new Date(row.last_human_reply_at).getTime()>=new Date(row.inbound_created_at).getTime()){
@@ -264,7 +289,13 @@ export function createWhatsAppWorker(input:Input){
       row.last_human_reply_at&&new Date(row.last_human_reply_at).getTime()>=new Date(row.source_created_at).getTime()))){
       await complete(row.job_id,'failed','owner_replied_before_dispatch');return;
     }
-    if(!row.enabled||row.state!=='connected'||!row.body){await complete(row.job_id,'failed','channel_disabled');return;}
+    if(!row.enabled||!row.body){await complete(row.job_id,'failed','channel_disabled_or_empty');return;}
+    if(row.state!=='connected'){
+      if(['degraded','connecting','pending','qr_ready'].includes(row.state))
+        await deferBeforeDispatch(row.job_id,'linked_socket_reconnecting');
+      else await complete(row.job_id,'failed','linked_device_requires_pairing');
+      return;
+    }
     // A linked device can send within a conversation without Cloud API templates.
     // Unknown send outcomes are *never* blindly replayed, since the remote may
     // already have accepted the message.
@@ -272,7 +303,13 @@ export function createWhatsAppWorker(input:Input){
     try{providerId=row.message_kind==='audio'&&input.sendVoice?
       await input.sendVoice(row.channel_id,row.customer_wa_id,row.body,row.voice_id):
       await input.send(row.channel_id,row.customer_wa_id,row.body);}
-    catch{await complete(row.job_id,'uncertain','linked_send_outcome_unknown');return;}
+    catch(error){
+      const safeCode=error instanceof Error?error.message:'';
+      if(safeCode==='whatsapp_linked_socket_unavailable'||safeCode==='whatsapp_audio_preparation_failed')
+        await deferBeforeDispatch(row.job_id,safeCode);
+      else await complete(row.job_id,'uncertain','linked_send_outcome_unknown');
+      return;
+    }
     if(!providerId||providerId.length>255){await complete(row.job_id,'uncertain','linked_receipt_invalid');return;}
     await input.pool.query(`WITH sent AS (
       UPDATE security.whatsapp_messages SET provider_message_id=$2,delivery_state='sent'
