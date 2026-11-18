@@ -7,6 +7,14 @@ export type LiveRequest={apiKey:string;model:string;voice:string;system:string;m
   createSocket?:(url:string)=>WebSocket;deadlineMs?:number};
 
 const MAX_PCM=8*1024*1024;
+/** Render native spoken transcript with WhatsApp-supported Markdown delimiters.
+ * This never asks another model to rewrite what was said. */
+export function formatWhatsAppTranscript(speech:string):string{
+  return speech.replace(/\r\n?/g,'\n')
+    .replace(/^\s{0,3}#{1,4}\s+(.+)$/gm,'*$1*')
+    .replace(/\*\*([^*\n]+)\*\*/g,'*$1*')
+    .replace(/\n{3,}/g,'\n\n').trim();
+}
 export class LiveProviderError extends Error {
   constructor(readonly code:'live_quota'|'live_unavailable'|'live_auth'|'live_invalid') {super(code);}
 }
