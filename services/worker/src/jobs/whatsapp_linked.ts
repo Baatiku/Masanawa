@@ -318,8 +318,12 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         const result=await synthesizeWhatsAppVoice({text:body,voice:voiceId??env.MASANAWA_GEMINI_LIVE_VOICE??'Kore',
           apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_TTS_MODEL??'gemini-3.8-flash-tts'});
         encoded=await toWhatsAppOpus(result.data,result.mimeType);
-      }catch{
+      }catch(error){
         // No WhatsApp send was attempted: bounded retry cannot duplicate audio.
+        if(error instanceof Error&&error.message==='voice_synthesis_quota_exceeded')
+          throw Error('whatsapp_voice_quota_exceeded');
+        if(error instanceof Error&&error.message==='voice_synthesis_provider_unavailable')
+          throw Error('whatsapp_voice_provider_unavailable');
         throw Error('whatsapp_audio_preparation_failed');
       }
       const sent=await slot.socket.sendMessage(jid,{audio:encoded,mimetype:'audio/ogg; codecs=opus',ptt:true});

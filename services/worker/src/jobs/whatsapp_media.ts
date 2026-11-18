@@ -51,7 +51,12 @@ export async function synthesizeWhatsAppVoice(input:{text:string;voice:string;ap
     await response.body?.cancel();
     response=await request(false);
   }
-  if(!response.ok)throw Error('voice_synthesis_provider_failed');
+  if(!response.ok){
+    // A quota failure precedes WhatsApp dispatch; retry after provider reset.
+    if(response.status===429)throw Error('voice_synthesis_quota_exceeded');
+    if(response.status>=500)throw Error('voice_synthesis_provider_unavailable');
+    throw Error('voice_synthesis_provider_failed');
+  }
   const result=await response.json() as {steps?:{type?:string;content?:{type?:string;data?:string;mime_type?:string}[]}[];
     candidates?:{content?:{parts?:{inlineData?:{data?:string;mimeType?:string};inline_data?:{data?:string;mime_type?:string}}[]}}[]};
   const interactionAudio=result.steps?.filter(s=>s.type==='model_output').flatMap(s=>s.content??[]).filter(c=>c.type==='audio').at(-1);

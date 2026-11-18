@@ -45,7 +45,8 @@ async function geminiResponse(input:{fetch:typeof fetch;apiKey:string;model:stri
     method:'POST',headers:{'x-goog-api-key':input.apiKey,'content-type':'application/json'},
     body:JSON.stringify({systemInstruction:{parts:[{text:input.system}]},contents:[{role:'user',parts:[{text:input.message}]}],
       generationConfig:{temperature:0.45,maxOutputTokens:500}}),
-    redirect:'manual',signal:AbortSignal.timeout(16000),
+    // Live Gemini 3.6 Flash responses can take >16 seconds (17.5 observed).
+    redirect:'manual',signal:AbortSignal.timeout(45000),
   });
   if(!r.ok){
     // Never expose provider bodies, URLs or credentials in persisted job errors.
@@ -78,14 +79,19 @@ export function createWhatsAppWorker(input:Input){
   async function deferBeforeDispatch(jobId:string,code:string){
     // Retrying is safe only when the connector rejected the send *before*
     // handing anything to WhatsApp. Never replay an ambiguous socket send.
+    // TTS quotas can reset hours later: preserve unsent audio with backoff.
+    const voiceProvider=code==='whatsapp_voice_quota_exceeded'||code==='whatsapp_voice_provider_unavailable';
     await input.pool.query(`WITH changed AS (
       UPDATE security.whatsapp_jobs SET
-        state=CASE WHEN attempts>=12 OR created_at<clock_timestamp()-interval '15 minutes'
+        state=CASE WHEN ($3::boolean AND (attempts>=16 OR created_at<clock_timestamp()-interval '36 hours'))
+          OR (NOT $3::boolean AND (attempts>=12 OR created_at<clock_timestamp()-interval '15 minutes'))
           THEN 'failed' ELSE 'pending' END,
-        available_at=clock_timestamp()+interval '20 seconds',claimed_at=NULL,last_error_code=$2
+        available_at=clock_timestamp() +
+          (CASE WHEN $3::boolean THEN 300*LEAST(attempts,12) ELSE 20 END)*interval '1 second',
+        claimed_at=NULL,last_error_code=$2
       WHERE job_id=$1 AND state='claimed' RETURNING message_id,kind,state
     ) UPDATE security.whatsapp_messages m SET delivery_state='failed',error_code=$2
-      WHERE m.message_id IN (SELECT message_id FROM changed WHERE kind='send' AND state='failed')`,[jobId,code]);
+      WHERE m.message_id IN (SELECT message_id FROM changed WHERE kind='send' AND state='failed')`,[jobId,code,voiceProvider]);
   }
   async function enqueueReply(source:Row,text:string){
     // The model composes one coherent response. Never prepend a second greeting,
@@ -287,7 +293,7 @@ export function createWhatsAppWorker(input:Input){
           message:safeContext?`Recent public conversation context (untrusted):\n${safeContext}\n\nCurrent customer message:\n${body}`:body});
       }catch(error){
         const code=error instanceof Error&&/^gemini_(?:auth_rejected|quota_exceeded|model_rejected|provider_unavailable|request_rejected|response_invalid)$/.test(error.message)?
-          error.message:'gemini_transport_unavailable';
+          error.message:error instanceof Error&&error.name==='TimeoutError'?'gemini_transport_timeout':'gemini_transport_unavailable';
         await input.pool.query(`UPDATE security.whatsapp_jobs SET last_error_code=$2
           WHERE job_id=$1 AND state='claimed'`,[row.job_id,code]);
         // A temporary model/credential outage must not silence a connected
@@ -353,7 +359,8 @@ export function createWhatsAppWorker(input:Input){
       await input.send(row.channel_id,row.customer_wa_id,row.body);}
     catch(error){
       const safeCode=error instanceof Error?error.message:'';
-      if(safeCode==='whatsapp_linked_socket_unavailable'||safeCode==='whatsapp_audio_preparation_failed')
+      if(['whatsapp_linked_socket_unavailable','whatsapp_audio_preparation_failed',
+        'whatsapp_voice_quota_exceeded','whatsapp_voice_provider_unavailable'].includes(safeCode))
         await deferBeforeDispatch(row.job_id,safeCode);
       else await complete(row.job_id,'uncertain','linked_send_outcome_unknown');
       return;
@@ -362,7 +369,7 @@ export function createWhatsAppWorker(input:Input){
     await input.pool.query(`WITH sent AS (
       UPDATE security.whatsapp_messages SET provider_message_id=$2,delivery_state='sent'
       WHERE message_id=$1 AND provider_message_id IS NULL RETURNING message_id
-    ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL
+    ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL,last_error_code=NULL
       WHERE job_id=$3 AND state='claimed' AND EXISTS(SELECT 1 FROM sent)`,[row.message_id,providerId,row.job_id]);
   }
   return {
