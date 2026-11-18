@@ -163,7 +163,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
         !Number.isFinite(Date.parse(settlement.receivedAt)))throw new Error("provider_settlement_mismatch");
       const receipt=await ports.credit(settlement);
       request.log.info({billstackResult:receipt.state},"Billstack notification processed");
-      return {accepted:true,duplicate:receipt.state==="duplicate"};
+      return {status:true,message:"successful",accepted:true,duplicate:receipt.state==="duplicate"};
     }catch(error){
       // Unknown event remains retryable; never acknowledge a forged or
       // unmatched event as credited. Never echo private signing data.

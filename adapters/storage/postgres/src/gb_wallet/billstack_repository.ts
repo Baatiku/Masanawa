@@ -10,7 +10,7 @@ export type GbBillstackApplicant = Readonly<{
   reference:string;email:string;phone:string;firstName:string;lastName:string;
 }>;
 export type GbBillstackDeposit = Readonly<{
-  eventId:string;merchantReference:string;accountNumber:string;amountKobo:number;receivedAt:string;
+  eventId:string;legacyEventId?:string;merchantReference:string;accountNumber:string;amountKobo:number;receivedAt:string;
 }>;
 export type GbBillstackQuote = Readonly<{
   rateVersion:string;creditedMb:number;remainder:{numerator:string;denominator:string};

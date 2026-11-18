@@ -50,7 +50,7 @@ export function createNgnWalletRepository(pool:Pool){
    return r?{balanceKobo:Number(r.balance_kobo),debtKobo:Number(r.debt_kobo),frozen:r.frozen}:{balanceKobo:0,debtKobo:0,frozen:false};
   },
   async deposit(p:GbBillstackDeposit):Promise<{state:"credited"|"duplicate";eventId:string;creditedKobo:number}>{
-   if(!validId(p.eventId)||!validId(p.merchantReference)||!/^\d{10}$/.test(p.accountNumber)||!positive(p.amountKobo)||!Number.isFinite(Date.parse(p.receivedAt)))throw new TypeError("ngn.invalid_deposit");
+   if(!validId(p.eventId)||p.legacyEventId!==undefined&&!validId(p.legacyEventId)||!validId(p.merchantReference)||!/^\d{10}$/.test(p.accountNumber)||!positive(p.amountKobo)||!Number.isFinite(Date.parse(p.receivedAt)))throw new TypeError("ngn.invalid_deposit");
    return retry(()=>withTransaction(pool,async c=>{
     await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",["gb-deposit:"+p.eventId]);
     // Same receiving-account row lock as historical MB funding; delayed events
@@ -68,6 +68,14 @@ export function createNgnWalletRepository(pool:Pool){
      const r=existing.rows[0];
      if(r.tenant_id!==a.tenant_id||r.account_id!==a.account_id||r.merchant_reference!==p.merchantReference||r.receiving_account!==p.accountNumber||Number(r.amount_kobo)!==p.amountKobo)throw new Error("ngn.deposit_conflict");
      return {state:"duplicate" as const,eventId:p.eventId,creditedKobo:p.amountKobo};
+    }
+    // Old code keyed payments by the virtual-account reference. Never credit
+    // that same historical receipt again under its newly recovered session id.
+    // Identical amount/time is ambiguous: retain records and require review.
+    if(p.legacyEventId&&p.legacyEventId!==p.eventId){
+     const legacy=await c.query(`SELECT 1 FROM gb_wallet.ngn_deposit_events WHERE provider_event_id=$1 AND merchant_reference=$2 AND receiving_account=$3 AND amount_kobo=$4 AND received_at=$5::timestamptz
+       UNION ALL SELECT 1 FROM gb_wallet.billstack_deposits WHERE event_id=$1 AND merchant_reference=$2 AND receiving_account=$3 AND amount_kobo=$4 AND received_at=$5::timestamptz LIMIT 1`,[p.legacyEventId,p.merchantReference,p.accountNumber,p.amountKobo,p.receivedAt]);
+     if(legacy.rows.length)throw new Error('ngn.legacy_deposit_identity_review_required');
     }
     await c.query("INSERT INTO gb_wallet.ngn_accounts(tenant_id,account_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[a.tenant_id,a.account_id]);
     const operationId="ngnd_"+digest(p.eventId);
