@@ -95,5 +95,8 @@ it('retrieves only independently settled matching transfer sessions without allo
  const fetcher=vi.fn(async(url:unknown,init:RequestInit|undefined)=>{expect(url).toBe('https://api.billstack.co/v2/thirdparty/getTransaction/');expect(JSON.parse(String(init?.body))).toEqual({session_id:session});return Response.json(payload);});
  const client=createBillstackReservedAccountClient({secretKey:key,fetcher:fetcher as never});
  expect(await client.transaction(session)).toMatchObject({eventId:session,accountNumber:'0000000013',amountKobo:10000});
+ payload={status:true,data:{...payload.data,status:'PAID',method:'INWARD'}};
+ expect(await client.transaction(session)).toMatchObject({eventId:session,accountNumber:'0000000013',amountKobo:10000});
+ payload={status:true,data:{reference:'R-account',session_id:session,transaction_ref:session,amount:100,status:'SUCCESS',is_settled:true,method:'TRANSFER',bank:'9PSB',nuban:'0000000013',created_at:'2026-11-17T16:41:32Z'}};
  for(const patch of [{is_settled:false},{status:'PENDING'},{transaction_ref:'other'},{amount:100.001},{nuban:'invalid'}]){payload={status:true,data:{...payload.data,...patch}} as typeof payload;await expect(client.transaction(session)).rejects.toBeInstanceOf(Error);payload={status:true,data:{reference:'R-account',session_id:session,transaction_ref:session,amount:100,status:'SUCCESS',is_settled:true,method:'TRANSFER',bank:'9PSB',nuban:'0000000013',created_at:'2026-11-17T16:41:32Z'}};}
 });
