@@ -129,8 +129,9 @@ export function createWhatsAppWorker(input:Input){
       if(mode==='assistant'&&source.remember_context){
         const previous=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
           WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3
-          AND kind IN ('text','audio') AND body IS NOT NULL
-          AND (direction='inbound' OR delivery_state IN ('sent','delivered','read'))
+          AND body IS NOT NULL
+          AND (direction='inbound' OR (direction='outbound' AND kind='text'
+            AND delivery_state IN ('sent','delivered','read')))
           ORDER BY created_at DESC LIMIT 24`,
           [source.tenant_id,source.thread_id,source.message_id]);
         const context=safeWhatsAppHistory((previous.rows as {direction:string;body:string}[]).reverse());
@@ -337,7 +338,10 @@ export function createWhatsAppWorker(input:Input){
         if(Number(fresh.rows[0]?.count??0)>=6){
             try{
               const history=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
-                WHERE tenant_id=$1 AND thread_id=$2 AND body IS NOT NULL ORDER BY created_at DESC LIMIT 24`,
+                WHERE tenant_id=$1 AND thread_id=$2 AND body IS NOT NULL
+                  AND (direction='inbound' OR (direction='outbound' AND kind='text'
+                    AND delivery_state IN ('sent','delivered','read')))
+                ORDER BY created_at DESC LIMIT 24`,
                 [row.tenant_id,row.thread_id]);
               const context=safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse());
               const summary=await withGeminiKeyPool({pool:input.pool,tenantId:row.tenant_id,
@@ -357,7 +361,9 @@ export function createWhatsAppWorker(input:Input){
     const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
     if(apiKey){
       const history=row.remember_context?await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
-        WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3 AND kind IN ('text','audio') AND body IS NOT NULL
+        WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3 AND body IS NOT NULL
+          AND (direction='inbound' OR (direction='outbound' AND kind='text'
+            AND delivery_state IN ('sent','delivered','read')))
         ORDER BY created_at DESC LIMIT 24`,[row.tenant_id,row.thread_id,row.message_id]):{rows:[]};
       const safeContext=row.remember_context?safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse()):'';
       const language=row.language==='ha'?'Respond in natural, standard Hausa.':row.language==='en'?'Respond in English.':'Reply in the language the customer uses.';

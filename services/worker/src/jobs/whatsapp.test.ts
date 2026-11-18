@@ -31,6 +31,14 @@ function setup(overrides:Record<string,unknown>,options:{env?:Record<string,stri
 }
 
 describe('WhatsApp availability and owner takeover',()=>{
+  it('loads human and assistant context without double-counting a spoken reply as text plus audio',async()=>{
+    const mock=setup({voice_replies:true,body:'Could we continue our earlier discussion?',welcome_sent_at:'2026-11-18T07:00:00Z'});
+    await mock.worker.runOnce();
+    const lookup=mock.calls.find(c=>c.sql.includes('ORDER BY created_at DESC LIMIT 24')&&
+      c.sql.includes('message_id<>$3'));
+    expect(lookup?.sql).toContain("direction='outbound' AND kind='text'");
+    expect(lookup?.sql).toContain("delivery_state IN ('sent','delivered','read')");
+  });
   it('never starts AI generation in manual/off mode',async()=>{
     const mock=setup({reply_mode:'manual'});
     await mock.worker.runOnce();

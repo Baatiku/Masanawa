@@ -18,7 +18,8 @@ the underlying two applications use identical generation or billing flows.
 
 - WhatsApp stores messages and per-thread summaries in PostgreSQL, scoped to
   tenant + linked number + conversation. Recent prompt history now includes
-  **both incoming and successfully sent outgoing messages** (24 most recent).
+  **both incoming and successfully sent outgoing text messages** (24 most recent).
+  The companion voice note shares that reply's text, so it is counted once.
 - `remember_context` controls whether the assistant retrieves that history and
   the compact long-term summary. Summaries are refreshed after six new inbound
   messages using an eligible server-side Gemini key, with a safe rate/cooldown
