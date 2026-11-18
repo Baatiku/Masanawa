@@ -1,4 +1,4 @@
-import {createCipheriv,createDecipheriv,randomBytes,randomUUID} from 'node:crypto';
+import {createCipheriv,createDecipheriv,createHash,randomBytes,randomUUID} from 'node:crypto';
 import makeWASocket,{
   Browsers,BufferJSON,DisconnectReason,initAuthCreds,jidNormalizedUser,proto,
   downloadMediaMessage,
@@ -13,6 +13,19 @@ type Db=Pick<Pool,'query'>;
 type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null};
 type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>;flushAuth:()=>Promise<void>};
 const linkedJid=(jid:string)=>/^[0-9]{5,32}@(s\.whatsapp\.net|lid)$/.test(jid);
+
+/** Linked-device Baileys exposes call signaling, but NOT a supported audio
+ * answer/dial media stream. Record genuine events for the owner's inbox without
+ * faking answered calls or promising a callable AI line. */
+export async function recordLinkedCallEvent(pool:Db,identity:{tenantId:string;channelId:string},
+  call:{id:string;status:string;isVideo?:boolean;isGroup?:boolean}):Promise<void>{
+  if(call.isGroup||!call.id||!['offer','ringing','accept','reject','terminate','timeout'].includes(call.status))return;
+  const reference=createHash('sha256').update(identity.channelId+'|'+call.id).digest('hex').slice(0,16);
+  await pool.query(`INSERT INTO security.whatsapp_audit
+    (tenant_id,channel_id,actor_id,action,metadata) VALUES($1,$2,'linked-device', $3,$4::jsonb)`,
+    [identity.tenantId,identity.channelId,call.status==='offer'?'call.incoming':'call.signaling',
+      JSON.stringify({reference,status:call.status,video:call.isVideo===true})]);
+}
 
 export function encryptLinkedSecret(text:string,base64Key:string):Buffer {
   const key=Buffer.from(base64Key,'base64');if(key.length!==32)throw Error('invalid_whatsapp_session_key');
@@ -249,6 +262,13 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         void input.pool.query(`UPDATE security.whatsapp_messages SET delivery_state=$3
           WHERE tenant_id=$1 AND channel_id=$2 AND provider_message_id=$4 AND delivery_state NOT IN ('read','failed')`,
           [slot.tenantId,slot.channelId,state,id]).catch(()=>undefined);
+      }
+    });
+    socket.ev.on('call',events=>{
+      if(sockets.get(slot.channelId)!==slot||!slot.connected)return;
+      for(const call of events.slice(0,20)){
+        void recordLinkedCallEvent(input.pool,{tenantId:slot.tenantId,channelId:slot.channelId},call)
+          .catch(()=>undefined); // A call log failure must not break the paired session.
       }
     });
   }

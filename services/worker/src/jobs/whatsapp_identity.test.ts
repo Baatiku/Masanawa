@@ -14,10 +14,13 @@ describe('WhatsApp conversational identity policy',()=>{
     expect(policy).toContain('has not personally answered');
     expect(policy).not.toContain('Optional personal greeting guidance (never prepend literally): "Welcome to Masanawa');
     expect(policy).toContain('Do not use their WhatsApp profile name');
+    expect(policy).toContain('MUST explicitly identify yourself as an AI assistant');
+    expect(policy).toContain('you can help or pass a message on');
   });
   it('does not claim the owner is offline when away-mode conditions were not met',()=>{
     const policy=whatsappIdentityInstructions({...base,replyMode:'always',mentionAbsence:false,firstContact:false});
     expect(policy).toContain('Continue their conversation naturally');
+    expect(policy).not.toContain('MUST explicitly identify yourself');
     expect(policy).toContain('Do not claim that they are offline or away');
   });
   it('includes a verified contact name without inferring gender',()=>{

@@ -19,7 +19,9 @@ export function whatsappIdentityInstructions(info:WhatsAppIdentity):string {
     `The contact's name has been confirmed by an administrator as "${verifiedName}". You may address them by it naturally, but never infer their gender.`:
     'The contact has no verified name. Do not use their WhatsApp profile name, guess a real name, infer gender, or use gendered titles or pronouns.';
   const arrival=info.firstContact?
-    'This is your first AI response in this conversation. Introduce yourself briefly only where appropriate, without a boilerplate welcome or repeating the same greeting.':
+    `This is your first AI reply to this contact. You MUST explicitly identify yourself as an AI assistant in the reply, including your configured name (${assistant}). `+
+    'For a personal number, say you are helping the owner with messages, and explain that you can help or pass a message on. ' +
+    'Give this disclosure naturally in one or two short sentences, immediately after an appropriate reply to their greeting; do not use a canned company welcome.':
     'This contact has spoken with this number before. Continue their conversation naturally; do not introduce yourself, repeat a welcome, or claim that this is a new contact.';
 
   const common=`${addressing} ${arrival} Match the sender's language and level of formality; use natural English or standard Hausa as appropriate. `+

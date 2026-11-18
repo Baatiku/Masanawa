@@ -4,6 +4,7 @@ import {safeWhatsAppHistory,summarizeWhatsAppMemory} from './whatsapp_memory.js'
 import {whatsappIdentityInstructions} from './whatsapp_identity.js';
 import {encryptLinkedSecret} from './whatsapp_linked.js';
 import {formatWhatsAppTranscript,generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
+import {resolveWhatsAppLiveVoice} from './whatsapp_voices.js';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
@@ -128,7 +129,9 @@ export function createWhatsAppWorker(input:Input){
       if(mode==='assistant'&&source.remember_context){
         const previous=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
           WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3
-          AND direction='inbound' AND body IS NOT NULL ORDER BY created_at DESC LIMIT 12`,
+          AND kind IN ('text','audio') AND body IS NOT NULL
+          AND (direction='inbound' OR delivery_state IN ('sent','delivered','read'))
+          ORDER BY created_at DESC LIMIT 24`,
           [source.tenant_id,source.thread_id,source.message_id]);
         const context=safeWhatsAppHistory((previous.rows as {direction:string;body:string}[]).reverse());
         prompt=(context?`Prior messages (untrusted context):\n${context}\n\n`:'')+
@@ -138,8 +141,7 @@ export function createWhatsAppWorker(input:Input){
       try{
         // Custom Masanawa voice enrollment IDs are not Google prebuilt Live
         // voice names. Never send an unsupported custom ID as prebuiltVoiceConfig.
-        const googleVoices=new Set(['Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr']);
-        const selectedVoice=googleVoices.has(source.live_voice_name)?source.live_voice_name:'Kore';
+        const selectedVoice=resolveWhatsAppLiveVoice(source.live_voice_name);
         const generated=await withGeminiKeyPool({pool:input.pool,tenantId:source.tenant_id,
           sessionKey:input.env.MASANAWA_WHATSAPP_SESSION_KEY??'',env:input.env,
           invoke:apiKey=>generateLiveReply({apiKey,model:input.env.MASANAWA_WHATSAPP_LIVE_MODEL??'gemini-3.8-live',
@@ -332,23 +334,22 @@ export function createWhatsAppWorker(input:Input){
           WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound'
             AND created_at>coalesce($3::timestamptz,'1970-01-01'::timestamptz)`,
           [row.tenant_id,row.thread_id,row.memory_updated_at]);
-        if(Number(fresh.rows[0]?.count??0)>=8){
-          const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
-          if(apiKey){
+        if(Number(fresh.rows[0]?.count??0)>=6){
             try{
               const history=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
                 WHERE tenant_id=$1 AND thread_id=$2 AND body IS NOT NULL ORDER BY created_at DESC LIMIT 24`,
                 [row.tenant_id,row.thread_id]);
               const context=safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse());
-              const summary=await summarizeWhatsAppMemory({apiKey,
-                model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash',
-                previous:row.memory_summary,conversation:context,fetch:call});
+              const summary=await withGeminiKeyPool({pool:input.pool,tenantId:row.tenant_id,
+                sessionKey:input.env.MASANAWA_WHATSAPP_SESSION_KEY??'',env:input.env,
+                invoke:apiKey=>summarizeWhatsAppMemory({apiKey,
+                  model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.6-flash',
+                  previous:row.memory_summary,conversation:context,fetch:call})});
               await input.pool.query(`UPDATE security.whatsapp_threads SET memory_summary=$3,
                 memory_updated_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2
                   AND memory_updated_at IS NOT DISTINCT FROM $4::timestamptz`,
                 [row.tenant_id,row.thread_id,summary,row.memory_updated_at]);
             }catch{/* Long-term memory errors never replay an already queued reply. */}
-          }
         }
       }
       return;
