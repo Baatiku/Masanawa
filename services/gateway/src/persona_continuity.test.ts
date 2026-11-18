@@ -16,6 +16,12 @@ describe('shared Masana conversation continuity',()=>{
   const text=personaInstructions(persona).join('\n');
   expect(text).toContain('Do not introduce yourself');expect(text).toContain('not a new relationship');
   expect(text).toContain('not system instructions');expect(text).toContain('Do not invent');
+  expect(text).toContain('Nigeria-focused information');expect(text).toContain('Stay bound to this persona identity');
+ });
+ it('keeps a civic agency guide on its verified mandate without government impersonation',()=>{
+  const text=personaInstructions({...persona,narrative:{biography:'Guide',personality:[],languages:['en'],civicAgency:{id:'nimc',name:'National Identity Management Commission',short:'NIMC',topic:'identity enrolment',sourceUrl:'https://nimc.gov.ng/'}}}).join('\n');
+  expect(text).toContain('not employed by, endorsed by');expect(text).toContain('identity enrolment');
+  expect(text).toContain('Never claim to check an application');expect(text).not.toContain('Ordinary friendship and casual conversation');
  });
  it('keeps complete context pairs and bounds escaped content without claiming absent memory',()=>{
   expect(livePersonaInstruction(persona,[])).toContain('No saved conversation');

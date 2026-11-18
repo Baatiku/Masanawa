@@ -9,6 +9,18 @@ export function createVoiceAdmin(input:{pool:Pick<Pool,'query'>;authorize:OpsAdm
  const call=input.fetch??fetch;
  const authorize=(authorizationHeader:string|undefined)=>input.authorize({authorizationHeader,capability:'agents.presentation.write'});
  const valid=(s:string)=>/^[a-zA-Z0-9_-]{1,128}$/.test(s);
+ /** A new, consent-verified voice becomes this persona's default only when no
+  * active voice has already been chosen. A deliberate manual assignment is
+  * never silently replaced by another enrollment or a recovery poll. */
+ async function autoAssignReadyVoice(tenant:string,character:string,requestId:string,actorId:string):Promise<boolean>{
+  const assigned=await input.pool.query(`INSERT INTO agents.admin_voice_assignments(tenant_id,character_id,request_id,actor_id)
+   SELECT $1,$2,$3,$4 FROM agents.admin_voice_enrollments WHERE tenant_id=$1 AND character_id=$2 AND request_id=$3 AND state='ready'
+   ON CONFLICT(tenant_id,character_id) DO UPDATE SET request_id=EXCLUDED.request_id,actor_id=EXCLUDED.actor_id,
+    active=true,revision=agents.admin_voice_assignments.revision+1,updated_at=clock_timestamp()
+    WHERE agents.admin_voice_assignments.active=false
+   RETURNING revision`,[tenant,character,requestId,actorId]);
+  return assigned.rows.length>0;
+ }
  async function read(tenant:string,character:string){return (await input.pool.query(`SELECT request_id AS "requestId",display_name AS "displayName",state,voice_id AS "voiceId",created_at AS "createdAt" FROM agents.admin_voice_enrollments WHERE tenant_id=$1 AND character_id=$2 ORDER BY created_at DESC LIMIT 20`,[tenant,character])).rows;}
  async function reconcile(tenant:string,character:string,actorId:string){
   if(!input.apiKey)return;
@@ -17,6 +29,7 @@ export function createVoiceAdmin(input:{pool:Pick<Pool,'query'>;authorize:OpsAdm
   try{const response=await call('https://generativelanguage.googleapis.com/v1beta/voices?type=replicated',{headers:{'x-goog-api-key':input.apiKey},signal:AbortSignal.timeout(8000),redirect:'error'});if(!response.ok)return;const result=await response.json() as {voices?:{id?:string;type?:string;display_name?:string;displayName?:string}[]};if(!Array.isArray(result.voices)||result.voices.length>200)return;
    for(const pending of unresolved){const matches=result.voices.filter(v=>v.type==='replicated'&&(v.display_name??v.displayName)===pending.provider_display_name&&typeof v.id==='string'&&/^voice_[a-zA-Z0-9_-]{1,160}$/.test(v.id));if(matches.length!==1)continue;
     await input.pool.query(`WITH changed AS(UPDATE agents.admin_voice_enrollments SET state='ready',voice_id=$4,updated_at=clock_timestamp() WHERE tenant_id=$1 AND character_id=$2 AND request_id=$3 AND state IN('pending','unknown') AND provider_display_name=$5 RETURNING request_id) INSERT INTO agents.admin_voice_lifecycle_events(tenant_id,character_id,request_id,actor_id,action) SELECT $1,$2,request_id,$6,'provider_enrollment_recovered' FROM changed`,[tenant,character,pending.request_id,matches[0]!.id,pending.provider_display_name,actorId]);
+    await autoAssignReadyVoice(tenant,character,pending.request_id,actorId);
    }
   }catch{/* Keep the original unresolved request, without creating another voice. */}
  }
@@ -31,7 +44,7 @@ export function createVoiceAdmin(input:{pool:Pick<Pool,'query'>;authorize:OpsAdm
    if(removed)await input.pool.query(`WITH changed AS(UPDATE agents.admin_voice_enrollments SET state='revoked',updated_at=clock_timestamp() WHERE tenant_id=$1 AND character_id=$2 AND request_id=$3 AND state='revoking' RETURNING request_id) INSERT INTO agents.admin_voice_lifecycle_events(tenant_id,character_id,request_id,actor_id,action) SELECT $1,$2,request_id,$4,'provider_voice_deleted' FROM changed`,[actor.tenantId,p.characterId,p.requestId,actor.actorId]);
    return {state:removed?'revoked':'revoking'};
   },
-  async list(auth:string|undefined,character:string){const actor=await authorize(auth);if(!valid(character))throw new VoiceAdminError(400,'invalid_character');await reconcile(actor.tenantId,character,actor.actorId);const assignment=await input.pool.query(`SELECT request_id AS "requestId",revision,active AND EXISTS(SELECT 1 FROM agents.admin_voice_enrollments e WHERE e.tenant_id=agents.admin_voice_assignments.tenant_id AND e.request_id=agents.admin_voice_assignments.request_id AND e.state='ready') AS active FROM agents.admin_voice_assignments WHERE tenant_id=$1 AND character_id=$2`,[actor.tenantId,character]);return {items:await read(actor.tenantId,character),assignment:assignment.rows[0]??null,customTts:true,customLiveCalls:false};},
+  async list(auth:string|undefined,character:string){const actor=await authorize(auth);if(!valid(character))throw new VoiceAdminError(400,'invalid_character');await reconcile(actor.tenantId,character,actor.actorId);const assignment=await input.pool.query(`SELECT request_id AS "requestId",revision,active AND EXISTS(SELECT 1 FROM agents.admin_voice_enrollments e WHERE e.tenant_id=agents.admin_voice_assignments.tenant_id AND e.request_id=agents.admin_voice_assignments.request_id AND e.state='ready') AS active FROM agents.admin_voice_assignments WHERE tenant_id=$1 AND character_id=$2`,[actor.tenantId,character]);return {items:await read(actor.tenantId,character),assignment:assignment.rows[0]??null,customTts:!!input.apiKey,customLiveCalls:false};},
   async audition(auth:string|undefined,p:{characterId:string;requestId:string}){
    const actor=await authorize(auth);if(!input.apiKey)throw new VoiceAdminError(503,'google_voice_not_configured');
    if(!valid(p.characterId)||!/^[a-zA-Z0-9_-]{16,80}$/.test(p.requestId))throw new VoiceAdminError(400,'invalid_voice_request');
@@ -39,9 +52,10 @@ export function createVoiceAdmin(input:{pool:Pick<Pool,'query'>;authorize:OpsAdm
    if(!row)throw new VoiceAdminError(404,'verified_voice_not_found');
    const r=await call('https://generativelanguage.googleapis.com/v1beta/interactions',{method:'POST',headers:{'x-goog-api-key':input.apiKey,'Content-Type':'application/json'},signal:AbortSignal.timeout(25000),redirect:'error',body:JSON.stringify({model:'gemini-3.8-flash-tts',store:false,input:[{type:'user_input',content:[{type:'text',text:'Hello. This is a preview of the authorized custom voice.'}]}],response_format:{type:'audio'},generation_config:{speech_config:[{voice:row.voice_id}]}})});
    if(!r.ok)throw new VoiceAdminError(502,'voice_preview_failed');
-   const result=await r.json() as {steps?:{type?:string;content?:{type?:string;data?:string;mime_type?:string}[]}[]};
-   const audio=result.steps?.filter(s=>s.type==='model_output').flatMap(s=>s.content??[]).filter(c=>c.type==='audio').at(-1);
-   if(!audio?.data||audio.data.length>8_000_000||!['audio/wav','audio/l16','audio/l16;rate=24000','audio/pcm;rate=24000'].includes(audio.mime_type??''))throw new VoiceAdminError(502,'invalid_voice_preview');
+   const result=await r.json() as {output_audio?:{data?:string;mime_type?:string};steps?:{type?:string;content?:{type?:string;data?:string;mime_type?:string}[]}[]};
+   const audio=result.output_audio?.data?result.output_audio:result.steps?.filter(s=>s.type==='model_output').flatMap(s=>s.content??[]).filter(c=>c.type==='audio').at(-1);
+   if(!audio?.data||audio.data.length>8_000_000||!['audio/wav','audio/l16','audio/l16;rate=24000','audio/pcm;rate=24000'].includes(audio.mime_type??'')||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(audio.data)||Buffer.from(audio.data,'base64').toString('base64')!==audio.data)throw new VoiceAdminError(502,'invalid_voice_preview');
    return {data:audio.data,mimeType:audio.mime_type};
   },
   async enroll(auth:string|undefined,p:Enrollment){
@@ -57,7 +71,8 @@ export function createVoiceAdmin(input:{pool:Pick<Pool,'query'>;authorize:OpsAdm
    if(!claim.rows.length){
     const old=await input.pool.query(`SELECT character_id,input_hash,state,voice_id AS "voiceId" FROM agents.admin_voice_enrollments WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,p.requestId]);
     const row=old.rows[0];if(!row||row.input_hash!==hash||row.character_id!==p.characterId)throw new VoiceAdminError(409,'voice_request_conflict');
-    return {requestId:p.requestId,state:row.state,voiceId:row.voiceId??null};
+    const autoAssigned=row.state==='ready'?await autoAssignReadyVoice(actor.tenantId,p.characterId,p.requestId,actor.actorId):false;
+    return {requestId:p.requestId,state:row.state,voiceId:row.voiceId??null,autoAssigned};
    }
    let state='unknown',voiceId:string|null=null;
    try{
@@ -67,7 +82,9 @@ export function createVoiceAdmin(input:{pool:Pick<Pool,'query'>;authorize:OpsAdm
    }catch{/* Preserve uncertainty: never automatically repeat provider enrollment. */}
    await input.pool.query(`UPDATE agents.admin_voice_enrollments SET state=$3,voice_id=$4,updated_at=clock_timestamp() WHERE tenant_id=$1 AND request_id=$2 AND state='pending'`,[actor.tenantId,p.requestId,state,voiceId]);
    const committed=(await input.pool.query(`SELECT state,voice_id AS "voiceId" FROM agents.admin_voice_enrollments WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,p.requestId])).rows[0];
-   return {requestId:p.requestId,state:committed?.state??state,voiceId:committed?.voiceId??voiceId};
+   const settled=committed?.state??state;
+   const autoAssigned=settled==='ready'?await autoAssignReadyVoice(actor.tenantId,p.characterId,p.requestId,actor.actorId):false;
+   return {requestId:p.requestId,state:settled,voiceId:committed?.voiceId??voiceId,autoAssigned};
   },
   async assign(auth:string|undefined,p:{characterId:string;requestId:string;expectedRevision:number}){
    const actor=await authorize(auth);
