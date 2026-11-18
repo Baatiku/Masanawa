@@ -23,8 +23,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
+      # GitHub's Android runner already includes cmdline-tools. The legacy
+      # setup-android action still installs the removed `tools` SDK package.
+      - name: Install Android SDK platform
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
