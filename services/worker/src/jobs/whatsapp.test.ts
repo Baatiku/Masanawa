@@ -6,6 +6,7 @@ const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-
   message_kind:'text',reply_to_message_id:null,media_payload_ciphertext:null,
   inbound_created_at:'2026-11-18T08:00:00Z',last_human_reply_at:null,last_away_notice_at:null,
   welcome_sent_at:null,account_match:'unregistered',memory_summary:'',memory_updated_at:null,
+  verified_contact_name:'',number_purpose:'service',owner_name:'',owner_title:'',
   enabled:true,state:'connected',assistant_name:'Assistant',personality:'Helpful',instructions:'',greeting:'Welcome',language:'en',
   permissions:['greet','faq'],role_level:1,text_replies:true,voice_replies:false,transcribe_voice:false,voice_id:null,
   reply_mode:'always',away_after_seconds:120,absence_message:'I am away',remember_context:true,
@@ -41,13 +42,14 @@ describe('WhatsApp availability and owner takeover',()=>{
     expect(mock.calls.some(c=>c.parameters.includes('owner_replied'))).toBe(true);
     expect(mock.calls.some(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))).toBe(false);
   });
-  it('responds to a first-time contact with an introduction and registration link',async()=>{
+  it('responds to a first-time contact without duplicating a welcome or advertising signup',async()=>{
     const mock=setup({body:'Hi'});
     await mock.worker.runOnce();
     const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
     expect(outgoing).toBeDefined();
-    expect(outgoing!.parameters[3]).toContain('Welcome');
-    expect(outgoing!.parameters[3]).toContain('https://app.masanawa.com');
+    expect(outgoing!.parameters[3]).toContain('I am Assistant');
+    expect(outgoing!.parameters[3]).not.toContain('Welcome');
+    expect(outgoing!.parameters[3]).not.toContain('https://app.masanawa.com');
     expect(mock.send).not.toHaveBeenCalled(); // queued for the outbox
   });
   it('queues a safe customer reply and a precise error code when Gemini rejects the request',async()=>{
@@ -69,8 +71,40 @@ describe('WhatsApp availability and owner takeover',()=>{
     await mock.worker.runOnce();
     const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
     expect(outgoing).toBeDefined();
-    expect(outgoing!.parameters[3]).toContain('I am away');
+    expect(outgoing!.parameters[3]).not.toContain('I am away');
     expect(mock.calls.some(c=>c.sql.includes('last_away_notice_at=clock_timestamp()'))).toBe(true);
+  });
+  it('lets Gemini compose one coherent personal-number salam without a Masanawa welcome',async()=>{
+    const provider=vi.fn(async(_url:unknown,_init?:RequestInit)=>Response.json({candidates:[{content:{parts:[{text:
+      'Wa alaikum assalam. I am Hassan, helping Bello with messages. How may I assist?'}]}}]}));
+    const mock=setup({body:'Salam',number_purpose:'personal',owner_name:'Bello Abubakar',owner_title:'Founder',
+      greeting:'Welcome to Masanawa. How may I help you?',account_match:'unregistered'},
+    {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider as unknown as typeof fetch});
+    await mock.worker.runOnce();
+    expect(provider).toHaveBeenCalledOnce();
+    const request=provider.mock.calls[0]![1] as RequestInit;
+    const payload=JSON.parse(String(request.body));
+    const prompt=String(payload.systemInstruction.parts[0].text);
+    expect(prompt).toContain('personal WhatsApp number of Bello Abubakar, Founder');
+    expect(prompt).toContain('do not advertise Masanawa');
+    expect(prompt).not.toContain('Optional personal greeting guidance: "Welcome to Masanawa');
+    expect(prompt).toContain('no verified name');
+    const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
+    expect(outgoing?.parameters[3]).toBe('Wa alaikum assalam. I am Hassan, helping Bello with messages. How may I assist?');
+    expect(outgoing?.parameters[3]).not.toContain('https://app.masanawa.com');
+  });
+  it('continues returning conversations with only an administrator-verified name',async()=>{
+    const provider=vi.fn(async(_url:unknown,_init?:RequestInit)=>Response.json({candidates:[{content:{parts:[{text:'Certainly, Amina. Here is the answer.'}]}}]}));
+    const mock=setup({body:'Can you clarify?',welcome_sent_at:'2026-11-17T12:00:00Z',
+      verified_contact_name:'Amina',number_purpose:'personal',owner_name:'Bello Abubakar'},
+    {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider as unknown as typeof fetch});
+    await mock.worker.runOnce();
+    const prompt=String(JSON.parse(String((provider.mock.calls[0]![1] as RequestInit).body)).systemInstruction.parts[0].text);
+    expect(prompt).toContain('confirmed by an administrator as "Amina"');
+    expect(prompt).toContain('do not introduce yourself');
+    expect(prompt).toContain('Do not claim that they are offline or away');
+    expect(mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))?.parameters[3])
+      .toBe('Certainly, Amina. Here is the answer.');
   });
   it('preserves a delayed reply during a temporary linked-device reconnection',async()=>{
     const mock=setup({reply_mode:'away',state:'degraded'});
