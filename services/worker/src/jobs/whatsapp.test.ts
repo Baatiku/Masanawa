@@ -57,4 +57,26 @@ describe('WhatsApp availability and owner takeover',()=>{
     expect(outgoing!.parameters[3]).toContain('I am away');
     expect(mock.calls.some(c=>c.sql.includes('last_away_notice_at=clock_timestamp()'))).toBe(true);
   });
+  it('preserves a delayed reply during a temporary linked-device reconnection',async()=>{
+    const mock=setup({reply_mode:'away',state:'degraded'});
+    await mock.worker.runOnce();
+    expect(mock.calls.some(c=>c.sql.includes("THEN 'failed' ELSE 'pending'")&&
+      c.parameters.includes('linked_socket_reconnecting'))).toBe(true);
+    expect(mock.calls.some(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))).toBe(false);
+  });
+  it('requeues a definitely unsent outbound message when the socket is not ready',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',reply_to_message_id:'message-0'});
+    mock.send.mockRejectedValueOnce(Error('whatsapp_linked_socket_unavailable'));
+    await mock.worker.runOnce();
+    expect(mock.calls.some(c=>c.sql.includes("THEN 'failed' ELSE 'pending'")&&
+      c.parameters.includes('whatsapp_linked_socket_unavailable'))).toBe(true);
+    expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(false);
+  });
+  it('holds genuinely ambiguous send outcomes for reconciliation, never automatic replay',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',reply_to_message_id:'message-0'});
+    mock.send.mockRejectedValueOnce(Error('whatsapp_send_receipt_unknown'));
+    await mock.worker.runOnce();
+    expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(true);
+    expect(mock.calls.some(c=>c.sql.includes("THEN 'failed' ELSE 'pending'"))).toBe(false);
+  });
 });
