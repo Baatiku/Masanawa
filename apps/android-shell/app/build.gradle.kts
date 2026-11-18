@@ -16,6 +16,7 @@ android {
         targetSdk = 36
         versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 10
         versionName = "1.2.1-shell"
+        resValue("string", "masanawa_app_label", "Masanawa")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The Google Services plugin reads the exact provided JSON config.
         // It fails the build if the app's package does not match a JSON client.
@@ -40,6 +41,9 @@ android {
             // suffix would not match the supplied JSON client; the old Flutter
             // app uses a different package and is not replaced.
             versionNameSuffix = "-debug"
+            // The previous .shelltest build remains installed under a
+            // different package. Make the new test launcher distinguishable.
+            resValue("string", "masanawa_app_label", "Masanawa Test")
         }
         release {
             isMinifyEnabled = false
