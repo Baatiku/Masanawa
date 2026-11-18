@@ -91,19 +91,20 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
 type Db=Pick<Pool,'query'>;
 export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessionKey:string;
   env:Readonly<Record<string,string|undefined>>;invoke:(apiKey:string)=>Promise<T>}):Promise<T>{
-  const available=await input.pool.query(`SELECT key_id,project_id,key_ciphertext
+  const available=await input.pool.query(`SELECT key_id,key_ciphertext
     FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 AND enabled
       AND (cooldown_until IS NULL OR cooldown_until<=clock_timestamp())
     ORDER BY last_used_at ASC NULLS FIRST,created_at ASC`,[input.tenantId]);
-  const quotaBlocked=new Set<string>();let lastError:unknown;
-  for(const row of available.rows as {key_id:string;project_id:string;key_ciphertext:Buffer}[]){
-    if(quotaBlocked.has(row.project_id))continue;
+  let lastError:unknown;
+  // Each credential is independently eligible; the administrator needs only
+  // paste the key, and the provider decides which project's quota applies.
+  for(const row of available.rows as {key_id:string;key_ciphertext:Buffer}[]){
     try{
       const secret=decryptLinkedSecret(row.key_ciphertext,input.sessionKey);
       const result=await input.invoke(secret);
       await input.pool.query(`UPDATE security.whatsapp_gemini_keys
-        SET last_used_at=clock_timestamp(),last_error_code=NULL WHERE tenant_id=$1 AND key_id=$2`,
-      [input.tenantId,row.key_id]);
+        SET last_used_at=clock_timestamp(),last_error_code=NULL,cooldown_until=NULL
+        WHERE tenant_id=$1 AND key_id=$2`,[input.tenantId,row.key_id]);
       return result;
     }catch(error){
       lastError=error;
@@ -111,17 +112,14 @@ export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessio
       const code=error instanceof LiveProviderError?error.code:
         reason==='voice_synthesis_quota_exceeded'?'live_quota':
         reason==='voice_synthesis_provider_unavailable'?'live_unavailable':'live_unavailable';
-      if(code==='live_quota')quotaBlocked.add(row.project_id);
-      const byProject=code==='live_quota'||code==='live_unavailable';
       await input.pool.query(`UPDATE security.whatsapp_gemini_keys
         SET cooldown_until=clock_timestamp()+($3::int*interval '1 second'),
           last_error_code=$4,last_used_at=clock_timestamp()
-          WHERE tenant_id=$1 AND (CASE WHEN $5::boolean THEN project_id=$2 ELSE key_id=$6::uuid END)`,
-        [input.tenantId,row.project_id,code==='live_quota'?300:code==='live_auth'?3600:30,code,byProject,row.key_id]);
+        WHERE tenant_id=$1 AND key_id=$2`,
+        [input.tenantId,row.key_id,code==='live_quota'?300:code==='live_auth'?3600:30,code]);
     }
   }
-  // One existing server key remains a valid last resort. Pooling keys within the
-  // same Google Cloud project never increases the project's shared quota.
+  // Keep the original private runtime key as a final fallback if configured.
   const legacy=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
   if(legacy){
     try{return await input.invoke(legacy);}catch(error){lastError=error;}
