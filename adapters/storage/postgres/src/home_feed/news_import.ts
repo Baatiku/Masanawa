@@ -103,7 +103,7 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
   try{
    if(!canonical)throw Error('unapproved_news_feed_url');
    const stories=upstream
-    ?await fetchGatewayNews(upstream,canonical.id,fetchImpl).catch(()=>parseNewsFeed(await boundedFeedFetch(canonical.feed,fetchImpl),canonical.id))
+    ?await fetchGatewayNews(upstream,canonical.id,fetchImpl).catch(async()=>parseNewsFeed(await boundedFeedFetch(canonical.feed,fetchImpl),canonical.id))
     :parseNewsFeed(await boundedFeedFetch(canonical.feed,fetchImpl),canonical.id);
    for(const story of stories){
     // Gate again for upstream providers: an old cached gateway response must

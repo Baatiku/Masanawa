@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "family": "storage",
-  "implementation": "postgres",
-  "package": "@masanawa/postgres",
-  "registration": "explicit"
-}
