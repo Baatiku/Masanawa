@@ -25,6 +25,18 @@ describe('read-only provider settlement proof',()=>{
     fetcher:async()=>Response.json({status:true,data:{...settled,...patch}})})).rejects.toThrow();
   }
  });
+ it('accepts the actual settled 9PSB PAID / INWARD collection while rejecting outward and unconfirmed records',async()=>{
+  const inward={...data,status:'PAID',method:'INWARD'};
+  expect(await getSettledBillstackTransfer({sessionId:session,secretKey:key,
+   fetcher:async()=>Response.json({status:true,data:inward})}))
+   .toMatchObject({eventId:session,amountKobo:10000,accountNumber:'6650000147',bankName:'9PSB'});
+  for(const patch of [{method:'OUTWARD'},{method:'CARD'},{method:'REVERSAL'},
+   {is_settled:false},{status:'PENDING'},{transaction_ref:'wrong'},
+   {session_id:'wrong'},{amount:'100.001'},{nuban:'0000000000x'}]){
+   await expect(getSettledBillstackTransfer({sessionId:session,secretKey:key,
+    fetcher:async()=>Response.json({status:true,data:{...inward,...patch}})})).rejects.toThrow();
+  }
+ });
  it('rejects unconfirmed, mismatching and malformed financial evidence',async()=>{
   for(const patch of [{is_settled:false},{status:'PENDING'},{status:'COMPLETED'},{transaction_ref:'other'},{amount:100.001},{nuban:'invalid'},{method:'CARD'}]){
    await expect(getSettledBillstackTransfer({sessionId:session,secretKey:key,fetcher:async()=>Response.json({status:true,data:{...data,...patch}})})).rejects.toThrow();
