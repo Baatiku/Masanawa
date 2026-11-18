@@ -93,7 +93,10 @@ export function createWhatsAppAdmin(input:Input){
     async addGeminiKey(auth:string|undefined,secret:string){
       const actor=await write(auth);
       const normalized=secret.trim();
-      if(!/^[A-Za-z0-9_-]{20,256}$/.test(normalized))
+      // AI Studio's current authorization keys begin with "AQ." and may be
+      // longer than legacy "AIza" standard keys. Only accept printable
+      // URL-safe key characters; never log or send the secret to the browser.
+      if(!/^[A-Za-z0-9._~+\/=-]{20,4096}$/.test(normalized))
         throw new WhatsAppAdminError(422,'invalid_gemini_key_details');
       const suffix=normalized.slice(-4);
       const encrypted=encryptWhatsAppToken(normalized,input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
