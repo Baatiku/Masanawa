@@ -101,6 +101,9 @@ class ShellCallService : Service() {
     }
 
     private suspend fun registerConnectedCall() {
+        // Core-Telecom's minimum supported platform is Android 8 (API 26).
+        // Android 7 keeps the ordinary microphone foreground notification.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         var registered = false
         try {
             val manager = CallsManager(this)
