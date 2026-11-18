@@ -86,7 +86,7 @@ export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessio
   const available=await input.pool.query(`SELECT key_id,project_id,key_ciphertext
     FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 AND enabled
       AND (cooldown_until IS NULL OR cooldown_until<=clock_timestamp())
-    ORDER BY last_used_at ASC NULLS FIRST,created_at ASC LIMIT 80`,[input.tenantId]);
+    ORDER BY last_used_at ASC NULLS FIRST,created_at ASC`,[input.tenantId]);
   const quotaBlocked=new Set<string>();let lastError:unknown;
   for(const row of available.rows as {key_id:string;project_id:string;key_ciphertext:Buffer}[]){
     if(quotaBlocked.has(row.project_id))continue;
