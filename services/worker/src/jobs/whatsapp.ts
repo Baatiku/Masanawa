@@ -70,6 +70,10 @@ export function createWhatsAppWorker(input:Input){
     if(!row.enabled||row.state!=='connected'||row.mode!=='ai'||(!row.text_replies&&!row.voice_replies)){
       await complete(row.job_id,'completed');return;
     }
+    const flood=await input.pool.query(`SELECT count(*)::int AS count FROM security.whatsapp_messages
+      WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound'
+        AND created_at>clock_timestamp()-interval '1 minute'`,[row.tenant_id,row.thread_id]);
+    if(Number(flood.rows[0]?.count??0)>15){await complete(row.job_id,'completed','conversation_rate_limited');return;}
     let body=row.body?.trim()??'';
     if(row.message_kind==='audio'&&row.transcribe_voice&&row.media_payload_ciphertext&&input.transcribe){
       body=await input.transcribe(row.channel_id,row.media_payload_ciphertext);
@@ -134,7 +138,7 @@ export function createWhatsAppWorker(input:Input){
     }
     if(/^\/[a-z][a-z0-9_-]{0,90}$/i.test(body)){
       const saved=await input.pool.query(`SELECT body FROM security.whatsapp_templates
-        WHERE tenant_id=$1 AND channel_id=$2 AND lower(name)=lower($3) AND enabled
+        WHERE tenant_id=$1 AND channel_id=$2 AND lower(regexp_replace(name,'[^a-zA-Z0-9_-]+','-','g'))=lower($3) AND enabled
           AND (language='auto' OR language=$4) LIMIT 1`,[row.tenant_id,row.channel_id,body.slice(1),row.language]);
       if(saved.rows[0]?.body){await enqueueReply(row,String(saved.rows[0].body));return;}
     }

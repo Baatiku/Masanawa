@@ -138,6 +138,7 @@ export function createWhatsAppAdmin(input:Input){
       const rows=await input.pool.query(`UPDATE security.whatsapp_channels SET
         enabled=CASE WHEN $3 IN ('enable','reconnect') THEN true ELSE false END,
         state=CASE WHEN $3='disconnect' THEN 'disconnected' WHEN $3='reconnect' THEN 'pending' ELSE state END,
+        linked_jid=CASE WHEN $3='disconnect' THEN NULL ELSE linked_jid END,
         qr_ciphertext=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE qr_ciphertext END,
         qr_expires_at=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE qr_expires_at END,
         lease_owner=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE lease_owner END,
