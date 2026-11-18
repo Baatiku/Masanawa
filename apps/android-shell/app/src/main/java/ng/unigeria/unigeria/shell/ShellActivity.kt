@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.content.Context
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -58,6 +59,7 @@ class ShellActivity : ComponentActivity() {
     private var pendingSharedText: String? = null
     private var pendingSharedAttachment: Uri? = null
     private var protectScreen = false
+    private var callActive = false
     private var pendingPushReply: JavaScriptReplyProxy? = null
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -118,6 +120,7 @@ class ShellActivity : ComponentActivity() {
                 putExtra(Intent.EXTRA_TITLE, name)
             })
         }, { message -> Toast.makeText(this, message, Toast.LENGTH_LONG).show() })
+        ShellPush.ensureChannels(this)
         webView = newWebView()
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setupFailureView()
@@ -141,7 +144,8 @@ class ShellActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         collectSharedInput(intent)
-        if (intent.action == Intent.ACTION_VIEW) webView.loadUrl(launchUrl(intent))
+        if (intent.action == Intent.ACTION_VIEW || intent.hasExtra("deepLink") || intent.hasExtra("characterId"))
+            webView.loadUrl(launchUrl(intent))
         else dispatchSharedText()
     }
 
@@ -153,7 +157,9 @@ class ShellActivity : ComponentActivity() {
     override fun onPause() {
         // Keep sensitive content out of the Android recent-apps thumbnail.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        webView.onPause()
+        // A customer-authorized foreground microphone session must not be
+        // paused with the UI while the foreground call service is active.
+        if (!callActive) webView.onPause()
         super.onPause()
     }
 
@@ -169,6 +175,7 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        stopCallService()
         pendingMediaRequest?.deny()
         pendingMediaRequest = null
         fileCallback?.onReceiveValue(null)
@@ -292,6 +299,8 @@ class ShellActivity : ComponentActivity() {
 
     private fun launchUrl(intent: Intent?): String =
         ShellDeepLinks.route(intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString)
+            ?: ShellDeepLinks.route(intent?.getStringExtra("deepLink"))
+            ?: ShellDeepLinks.route(intent?.getStringExtra("characterId")?.let { "masanawa://chat/$it" })
             ?: WebOriginPolicy.HOME
 
     private fun collectSharedInput(intent: Intent?) {
@@ -331,6 +340,16 @@ class ShellActivity : ComponentActivity() {
                 } else sendPushToken(reply)
             }
             "push-token-delete" -> ShellPush.deleteToken(this)
+            "call-state" -> {
+                val active = payload.optBoolean("active", false)
+                if (active && !callActive &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        ContextCompat.startForegroundService(this, Intent(this, ShellCallService::class.java).apply { action = ShellCallService.START })
+                        callActive = true
+                    } catch (_: RuntimeException) { callActive = false }
+                } else if (!active) stopCallService()
+            }
             "share-text" -> {
                 val value = payload.optString("text").take(4_000)
                 if (value.isNotBlank()) startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
@@ -339,6 +358,12 @@ class ShellActivity : ComponentActivity() {
                 }, "Share from Masanawa"))
             }
         }
+    }
+
+    private fun stopCallService() {
+        if (!callActive) return
+        callActive = false
+        stopService(Intent(this, ShellCallService::class.java))
     }
 
     private fun sendPushToken(reply: JavaScriptReplyProxy) {

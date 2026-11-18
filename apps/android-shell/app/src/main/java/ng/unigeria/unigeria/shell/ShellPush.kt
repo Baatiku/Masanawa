@@ -17,7 +17,8 @@ import java.util.UUID
 
 /** The web client binds the token to the authenticated account via the Gateway. */
 internal object ShellPush {
-    private const val channel = "masanawa_work"
+    private const val updatesChannel = "masanawa_work"
+    private const val callsChannel = "masanawa_calls"
 
     fun initialize(context: Context): Boolean {
         if (FirebaseApp.getApps(context).isNotEmpty()) return true
@@ -56,13 +57,24 @@ internal object ShellPush {
         if (initialize(context)) FirebaseMessaging.getInstance().deleteToken()
     }
 
-    fun showNotification(context: Context, route: String) {
+    fun ensureChannels(context: Context) {
+        if (Build.VERSION.SDK_INT < 26) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(
-            channel, "Masanawa updates", NotificationManager.IMPORTANCE_HIGH).apply {
+        manager.createNotificationChannel(NotificationChannel(
+            updatesChannel, "Masanawa updates", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Messages, account notices and call alerts"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
         })
+        manager.createNotificationChannel(NotificationChannel(
+            callsChannel, "Masanawa incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Incoming Masanawa call invitations"
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+        })
+    }
+
+    fun showNotification(context: Context, route: String, incomingCall: Boolean = false) {
+        ensureChannels(context)
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val intent = Intent(context, ShellActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             data = android.net.Uri.parse(route)
@@ -70,10 +82,10 @@ internal object ShellPush {
         }
         val pending = PendingIntent.getActivity(context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = NotificationCompat.Builder(context, channel)
+        val notification = NotificationCompat.Builder(context, if (incomingCall) callsChannel else updatesChannel)
             .setSmallIcon(ng.unigeria.unigeria.R.mipmap.ic_launcher)
-            .setContentTitle("Masanawa")
-            .setContentText("Open the app to view your update")
+            .setContentTitle(if (incomingCall) "Incoming call" else "Masanawa")
+            .setContentText(if (incomingCall) "Open Calls to respond" else "Open the app to view your update")
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -87,10 +99,11 @@ internal object ShellPush {
 class ShellFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val type = message.data["type"] ?: return
-        if (type !in setOf("agent_reply", "wallet", "account", "message", "incoming_call", "human_call", "human_message", "status")) return
+        if (!Regex("^[a-z][a-z0-9_]{0,63}$").matches(type) || type.startsWith("human_") ||
+            type.startsWith("room_") || type.startsWith("p2p_")) return
         val route = ShellDeepLinks.route(message.data["deepLink"])
             ?: message.data["characterId"]?.let { ShellDeepLinks.route("masanawa://chat/$it") }
             ?: WebOriginPolicy.HOME
-        ShellPush.showNotification(this, route)
+        ShellPush.showNotification(this, route, incomingCall = type == "incoming_call")
     }
 }
