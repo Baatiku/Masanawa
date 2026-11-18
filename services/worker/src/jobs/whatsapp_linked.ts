@@ -224,10 +224,14 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       }
     })().catch(()=>markError(slot,'connection_update_failed'));});
     socket.ev.on('messages.upsert',event=>{
-      if(event.type!=='notify')return;
       for(const msg of event.messages){
+        // Some linked-device owner sends arrive as append rather than notify.
+        // Process only recent appends; never import old history as fresh replies.
+        const messageTime=Number(msg.messageTimestamp?.toString()??0);
+        const recentAppend=event.type==='append'&&messageTime>Math.floor(Date.now()/1000)-120;
+        if(event.type!=='notify'&&!recentAppend)continue;
         if(msg.key.fromMe)void ingestOwnerReply(slot,msg).catch(()=>markError(slot,'owner_reply_persistence_failed'));
-        else void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
+        else if(event.type==='notify')void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
       }
     });
     socket.ev.on('messages.update',events=>{

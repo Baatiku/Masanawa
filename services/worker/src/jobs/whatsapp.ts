@@ -59,12 +59,12 @@ export function createWhatsAppWorker(input:Input){
       WHERE job_id=$1 AND state='claimed'`,[jobId,state,code]);
   }
   async function enqueueReply(source:Row,text:string){
-    const intro=source.first_contact&&allowed(source,'greet')&&text!==source.greeting?
-      source.account_match==='unregistered'?`${source.greeting}\n\nIf you are new to Masanawa, you can create an account at https://app.masanawa.com. Once registered, you can link your account securely for wallet services.`:
-        source.greeting:'';
+    const intro=source.first_contact&&allowed(source,'greet')&&text!==source.greeting?source.greeting:'';
+    const signup=source.first_contact&&source.account_match==='unregistered'?
+      'If you are new to Masanawa, create your account at https://app.masanawa.com. Once registered, you can securely link this WhatsApp conversation for wallet services.':'';
     const previousAway=source.last_away_notice_at?new Date(source.last_away_notice_at).getTime():0;
     const awayIntro=source.reply_mode==='away'&&Date.now()-previousAway>6*3600*1000?source.absence_message:'';
-    const actual=[awayIntro,intro,text].filter(Boolean).join('\n\n').slice(0,4000);
+    const actual=[awayIntro,intro,text,signup].filter(Boolean).join('\n\n').slice(0,4000);
     // Independent switches can emit text, voice or both without replaying a
     // particular media kind on generation retries.
     await input.pool.query(`WITH outbound AS (

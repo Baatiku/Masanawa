@@ -45,7 +45,16 @@ describe('WhatsApp availability and owner takeover',()=>{
     await mock.worker.runOnce();
     const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
     expect(outgoing).toBeDefined();
-    expect(outgoing!.parameters[3]).toBe('Welcome');
+    expect(outgoing!.parameters[3]).toContain('Welcome');
+    expect(outgoing!.parameters[3]).toContain('https://app.masanawa.com');
     expect(mock.send).not.toHaveBeenCalled(); // queued for the outbox
+  });
+  it('introduces the assistant after the configured unanswered delay',async()=>{
+    const mock=setup({reply_mode:'away',account_match:'registered',body:'Hello'});
+    await mock.worker.runOnce();
+    const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
+    expect(outgoing).toBeDefined();
+    expect(outgoing!.parameters[3]).toContain('I am away');
+    expect(mock.calls.some(c=>c.sql.includes('last_away_notice_at=clock_timestamp()'))).toBe(true);
   });
 });
