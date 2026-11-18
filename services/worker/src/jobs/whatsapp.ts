@@ -149,7 +149,7 @@ export function createWhatsAppWorker(input:Input){
             voice:selectedVoice,system,message:prompt})});
         actual=generated.transcript;
         audio=encryptLinkedSecret(generated.pcm.toString('base64'),input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
-      }catch(error){await deferLiveReply(source,error);return;}
+      }catch(error){await deferLiveReply(source,error);return false;}
     }
     // Independent switches can emit text, voice or both without replaying a
     // particular media kind on generation retries.
@@ -172,6 +172,7 @@ export function createWhatsAppWorker(input:Input){
     if(source.first_contact)await input.pool.query(`UPDATE security.whatsapp_threads
       SET welcome_sent_at=coalesce(welcome_sent_at,clock_timestamp()) WHERE tenant_id=$1 AND thread_id=$2`,
       [source.tenant_id,source.thread_id]);
+    return true;
   }
   async function enqueueHandoff(source:Row,text:string){
     await input.pool.query(`WITH outgoing AS (
@@ -324,7 +325,37 @@ export function createWhatsAppWorker(input:Input){
       }else await complete(row.job_id,'completed');
       return;
     }
-    if(row.voice_replies&&input.sendVoice){await enqueueReply(row,body,'assistant');return;}
+    if(row.voice_replies&&input.sendVoice){
+      if(!await enqueueReply(row,body,'assistant'))return;
+      // Keep the existing durable long-term memory pipeline. This infrequent
+      // summarization never generates a user-facing reply; spoken replies and
+      // their companion text are exclusively the Live audio/transcript pair.
+      if(row.remember_context){
+        const fresh=await input.pool.query(`SELECT count(*)::int AS count FROM security.whatsapp_messages
+          WHERE tenant_id=$1 AND thread_id=$2 AND direction='inbound'
+            AND created_at>coalesce($3::timestamptz,'1970-01-01'::timestamptz)`,
+          [row.tenant_id,row.thread_id,row.memory_updated_at]);
+        if(Number(fresh.rows[0]?.count??0)>=8){
+          const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
+          if(apiKey){
+            try{
+              const history=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
+                WHERE tenant_id=$1 AND thread_id=$2 AND body IS NOT NULL ORDER BY created_at DESC LIMIT 24`,
+                [row.tenant_id,row.thread_id]);
+              const context=safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse());
+              const summary=await summarizeWhatsAppMemory({apiKey,
+                model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash',
+                previous:row.memory_summary,conversation:context,fetch:call});
+              await input.pool.query(`UPDATE security.whatsapp_threads SET memory_summary=$3,
+                memory_updated_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2
+                  AND memory_updated_at IS NOT DISTINCT FROM $4::timestamptz`,
+                [row.tenant_id,row.thread_id,summary,row.memory_updated_at]);
+            }catch{/* Long-term memory errors never replay an already queued reply. */}
+          }
+        }
+      }
+      return;
+    }
     const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
     if(apiKey){
       const history=row.remember_context?await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
