@@ -11,6 +11,7 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
         CREATE TABLE identity.users(tenant_id text NOT NULL,user_id text NOT NULL,state text NOT NULL,
           PRIMARY KEY(tenant_id,user_id));`);
       await db.exec(await readFile(new URL('../../../../packages/security/migrations/0123_whatsapp_ai.sql',import.meta.url),'utf8'));
+      await db.exec(await readFile(new URL('../../../../packages/security/migrations/0124_whatsapp_number_identity.sql',import.meta.url),'utf8'));
       const created=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
         (tenant_id,enabled,state,linked_jid) VALUES('tenant',true,'connected','2348012345678@s.whatsapp.net')
         RETURNING channel_id`);
@@ -34,7 +35,8 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
       const out=await db.query<{body:string;kind:string;delivery_state:string}>(`SELECT body,kind,delivery_state
         FROM security.whatsapp_messages WHERE direction='outbound'`);
       expect(out.rows).toHaveLength(1);
-      expect(out.rows[0]!.body).toContain('Welcome to Masanawa');
+      expect(out.rows[0]!.body).toContain('Masanawa Assistant');
+      expect(out.rows[0]!.body).not.toContain('Welcome to Masanawa');
       expect(out.rows[0]).toMatchObject({kind:'text',delivery_state:'queued'});
     }finally{await db.close();}
   },30000);
@@ -46,6 +48,7 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
           PRIMARY KEY(tenant_id,user_id));`);
       const migration=await readFile(new URL('../../../../packages/security/migrations/0123_whatsapp_ai.sql',import.meta.url),'utf8');
       await db.exec(migration);
+      await db.exec(await readFile(new URL('../../../../packages/security/migrations/0124_whatsapp_number_identity.sql',import.meta.url),'utf8'));
       const channel=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
         (tenant_id,enabled,state,linked_jid) VALUES('tenant',true,'connected','2348012345678@s.whatsapp.net')
         RETURNING channel_id`);
