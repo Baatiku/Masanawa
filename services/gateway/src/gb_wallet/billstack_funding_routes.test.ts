@@ -83,7 +83,8 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   expect(start).not.toHaveBeenCalled();expect(f.create).not.toHaveBeenCalled();
  });
  it("requires raw-body HMAC and passes exact bank reference to ledger once",async()=>{
-  const {app,credit}=setup();
+  const outcomes=vi.fn();
+  const {app,credit}=setup({reportWebhookOutcome:outcomes});
   const time="1792886400",payload=JSON.stringify({event:"PAYMENT_NOTIFICATION",data:{
     type:"RESERVED_ACCOUNT_TRANSACTION",reference:"provider-account",transaction_ref:"provider-transaction",
     merchant_reference:"merchant-ref",amount:"1000.00",
@@ -95,12 +96,26 @@ describe("Billstack GB wallet assigned 9PSB and signed payment admission",()=>{
   const invalid=await app.inject({method:"POST",url:"/webhooks/billstack/gb",
     headers:{...headers,"x-wiaxy-signature-256":"0".repeat(64)},payload});
   expect(invalid.statusCode).toBe(503);
+  expect(outcomes).toHaveBeenCalledWith({state:'rejected',code:'webhook_signature_invalid'});
   expect(credit).not.toHaveBeenCalled();
   const valid=await app.inject({method:"POST",url:"/webhooks/billstack/gb",
     headers,payload});
   expect(valid.statusCode).toBe(200);
   expect(credit).toHaveBeenCalledTimes(1);
   expect(credit).toHaveBeenCalledWith(expect.objectContaining({eventId:"provider-transaction",merchantReference:"merchant-ref",amountKobo:100000}));
+  expect(outcomes).toHaveBeenCalledWith({state:'credited'});
+ });
+ it('does not fail an otherwise valid deposit when diagnostic logging fails',async()=>{
+  const {app,credit}=setup({reportWebhookOutcome:()=>{throw Error('logging unavailable');}});
+  const timestamp='1792886400';
+  const payload=JSON.stringify({event:'PAYMENT_NOTIFIFICATION',data:{
+   type:'RESERVED_ACCOUNT_TRANSACTION',reference:'R-provider',wiaxy_ref:'provider-transaction',
+   merchant_reference:'merchant-ref',amount:'100.00',created_at:'2026-10-25T00:00:00Z',
+   account:{account_number:'0000000100',bank_name:'9PSB Bank'}}});
+  const signature=createHmac('sha256',secret).update(timestamp+'.'+payload).digest('hex');
+  const r=await app.inject({method:'POST',url:'/webhooks/billstack/gb',payload,
+   headers:{'content-type':'application/json','x-wiaxy-timestamp':timestamp,'x-wiaxy-signature-256':signature}});
+  expect(r.statusCode).toBe(200);expect(credit).toHaveBeenCalledOnce();
  });
  it("fails closed on unverified funding while retaining assigned-account readback",async()=>{
   const f=setup({ready:()=>false});

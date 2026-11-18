@@ -32,6 +32,8 @@ export interface BillstackFundingPorts {
  /** Independent provider transaction final-state/amount/account verification. */
  verifySettlement:(payment:BillstackReceivedPayment)=>Promise<BillstackReceivedPayment>;
  webhookSecret:string;
+ /** Safe operator telemetry: never include raw payloads, accounts or keys. */
+ reportWebhookOutcome?:(result:{state:'credited'|'duplicate'|'rejected';code?:string})=>void;
  now?:()=>number;
 }
 
@@ -145,6 +147,10 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
   });
   scope.post("/webhooks/billstack/gb",async(request,reply)=>{
     reply.header("cache-control","no-store");
+    // Telemetry must not change whether a verified payment is committed.
+    const report=(result:{state:'credited'|'duplicate'|'rejected';code?:string})=>{
+      try{ports.reportWebhookOutcome?.(result);}catch{/* Never affect payment acceptance. */}
+    };
     try{
       if(ports.ready && !ports.ready())throw new Error("funding_not_verified");
       const raw=request.body;
@@ -163,6 +169,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
         !Number.isFinite(Date.parse(settlement.receivedAt)))throw new Error("provider_settlement_mismatch");
       const receipt=await ports.credit(settlement);
       request.log.info({billstackResult:receipt.state},"Billstack notification processed");
+      report({state:receipt.state});
       return {status:true,message:"successful",accepted:true,duplicate:receipt.state==="duplicate"};
     }catch(error){
       // Unknown event remains retryable; never acknowledge a forged or
@@ -171,6 +178,7 @@ export function registerBillstackFundingRoutes(app:FastifyInstance,ports:Billsta
         error instanceof Error&&/^(?:ngn|billstack)\.[a-z_]+$/.test(error.message)
           ? error.message:"settlement_or_credit_failed";
       request.log.warn({billstackCode:code},"Billstack notification rejected");
+      report({state:'rejected',code});
       reply.code(503);
       return {error:{code:"provider_notification_unverified"}};
     }

@@ -58,7 +58,11 @@ export async function getSettledBillstackTransfer(input: {
   catch { throw new BillstackTransactionError('billstack.invalid_response'); }
   if (envelope.status !== true) throw new BillstackTransactionError('billstack.transaction_lookup_unavailable');
   const data = record(envelope.data);
-  if (data.status !== 'SUCCESS' || data.is_settled !== true || data.method !== 'TRANSFER')
+  // Billstack's merchant statement reports settled transfers as PAID. The
+  // transaction lookup can also report SUCCESS; neither status alone proves
+  // funding without the independent is_settled flag and matching references.
+  const status = typeof data.status === 'string' ? data.status.trim().toUpperCase() : '';
+  if (!['SUCCESS', 'PAID'].includes(status) || data.is_settled !== true || data.method !== 'TRANSFER')
     throw new BillstackTransactionError('billstack.transaction_not_settled');
   if (data.session_id !== input.sessionId || data.transaction_ref !== input.sessionId)
     throw new BillstackTransactionError('billstack.transaction_id_mismatch');

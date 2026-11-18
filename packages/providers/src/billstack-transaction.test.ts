@@ -16,8 +16,17 @@ describe('read-only provider settlement proof',()=>{
    .toMatchObject({eventId:session,amountKobo:10000,accountNumber:'6650000147'});
   expect(fetcher).toHaveBeenCalledOnce();
  });
+ it('accepts PAID only when the provider independently confirms settlement and exact transfer identity',async()=>{
+  const settled={...data,status:'PAID'};
+  expect(await getSettledBillstackTransfer({sessionId:session,secretKey:key,
+   fetcher:async()=>Response.json({status:true,data:settled})})).toMatchObject({eventId:session,amountKobo:10000});
+  for(const patch of [{is_settled:false},{method:'CARD'},{session_id:'different'},{transaction_ref:'different'}]){
+   await expect(getSettledBillstackTransfer({sessionId:session,secretKey:key,
+    fetcher:async()=>Response.json({status:true,data:{...settled,...patch}})})).rejects.toThrow();
+  }
+ });
  it('rejects unconfirmed, mismatching and malformed financial evidence',async()=>{
-  for(const patch of [{is_settled:false},{status:'PENDING'},{transaction_ref:'other'},{amount:100.001},{nuban:'invalid'},{method:'CARD'}]){
+  for(const patch of [{is_settled:false},{status:'PENDING'},{status:'COMPLETED'},{transaction_ref:'other'},{amount:100.001},{nuban:'invalid'},{method:'CARD'}]){
    await expect(getSettledBillstackTransfer({sessionId:session,secretKey:key,fetcher:async()=>Response.json({status:true,data:{...data,...patch}})})).rejects.toThrow();
   }
   await expect(getSettledBillstackTransfer({sessionId:'wrong',secretKey:key,fetcher:async()=>{throw Error('must not call');}})).rejects.toMatchObject({code:'billstack.invalid_transaction_id'});
