@@ -10,7 +10,7 @@ import {synthesizeWhatsAppVoice,toWhatsAppOpus,transcribeWhatsAppAudio} from './
 
 type Db=Pick<Pool,'query'>;
 type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null};
-type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>};
+type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>;flushAuth:()=>Promise<void>};
 const linkedJid=(jid:string)=>/^[0-9]{5,32}@(s\.whatsapp\.net|lid)$/.test(jid);
 
 export function encryptLinkedSecret(text:string,base64Key:string):Buffer {
@@ -73,7 +73,7 @@ export async function createLinkedAuthState(pool:Db,tenantId:string,channelId:st
       DO UPDATE SET ciphertext=EXCLUDED.ciphertext,updated_at=clock_timestamp()`,
       [tenantId,channelId,encryptLinkedSecret(JSON.stringify(creds,BufferJSON.replacer),key),leaseOwner]);
   });
-  return {state,saveCreds};
+  return {state,saveCreds,flush:()=>pending};
 }
 
 function contentOf(msg:WAMessage):{kind:'text'|'audio'|'image'|'document'|'unsupported';body:string|null;mediaId:string|null}{
@@ -185,7 +185,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     const socket=makeWASocket({auth:auth.state,browser:Browsers.ubuntu('Masanawa'),
       syncFullHistory:false,markOnlineOnConnect:false,
       getMessage:async()=>undefined});
-    const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,connected:false,botMessageIds:new Set()};
+    const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,connected:false,botMessageIds:new Set(),flushAuth:auth.flush};
     sockets.set(channel.channel_id,slot);
     socket.ev.on('creds.update',update=>{
       Object.assign(auth.state.creds,update);
@@ -307,14 +307,26 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         AND channel_id=$2 AND enabled=true AND state='connected' AND lease_owner=$3`,[slot.tenantId,channelId,slot.owner]);
       if(!permission.rows.length)throw Error('whatsapp_channel_disabled');
       const env=input.env??{};
-      const result=await synthesizeWhatsAppVoice({text:body,voice:voiceId??env.MASANAWA_GEMINI_LIVE_VOICE??'Kore',
-        apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_TTS_MODEL??'gemini-3.8-flash-tts'});
-      const encoded=await toWhatsAppOpus(result.data,result.mimeType);
+      let encoded:Buffer;
+      try {
+        const result=await synthesizeWhatsAppVoice({text:body,voice:voiceId??env.MASANAWA_GEMINI_LIVE_VOICE??'Kore',
+          apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_TTS_MODEL??'gemini-3.8-flash-tts'});
+        encoded=await toWhatsAppOpus(result.data,result.mimeType);
+      }catch{
+        // No WhatsApp send was attempted: bounded retry cannot duplicate audio.
+        throw Error('whatsapp_audio_preparation_failed');
+      }
       const sent=await slot.socket.sendMessage(jid,{audio:encoded,mimetype:'audio/ogg; codecs=opus',ptt:true});
       const id=sent?.key.id;if(!id)throw Error('whatsapp_voice_receipt_unknown');
       slot.botMessageIds.add(id);if(slot.botMessageIds.size>2000)slot.botMessageIds.delete(slot.botMessageIds.values().next().value??'');
       return id;
     },
-    async stop(){for(const id of [...sockets.keys()])close(id);},
+    async stop(){
+      const active=[...sockets.values()];
+      for(const id of [...sockets.keys()])close(id);
+      // Compose restarts must drain every encrypted Signal key write before
+      // the Worker closes its PostgreSQL pool, otherwise a scan may be lost.
+      await Promise.allSettled(active.map(slot=>slot.flushAuth()));
+    },
   };
 }
