@@ -77,7 +77,8 @@ export async function createLinkedAuthState(pool:Db,tenantId:string,channelId:st
 }
 
 function contentOf(msg:WAMessage):{kind:'text'|'audio'|'image'|'document'|'unsupported';body:string|null;mediaId:string|null}{
-  const content=msg.message?.ephemeralMessage?.message??msg.message?.viewOnceMessage?.message??msg.message;
+  const content=msg.message?.ephemeralMessage?.message??msg.message?.viewOnceMessage?.message??
+    msg.message?.viewOnceMessageV2?.message??msg.message;
   if(!content)return {kind:'unsupported',body:null,mediaId:null};
   const text=content.conversation??content.extendedTextMessage?.text;
   if(typeof text==='string')return {kind:'text',body:text.slice(0,4000),mediaId:null};
@@ -85,6 +86,13 @@ function contentOf(msg:WAMessage):{kind:'text'|'audio'|'image'|'document'|'unsup
   if(content.imageMessage)return {kind:'image',body:content.imageMessage.caption?.slice(0,4000)??null,mediaId:msg.key.id??null};
   if(content.documentMessage)return {kind:'document',body:content.documentMessage.fileName?.slice(0,255)??null,mediaId:msg.key.id??null};
   return {kind:'unsupported',body:null,mediaId:null};
+}
+
+/** Offline catch-up can use `append`; limit it to recent messages and dedupe in PostgreSQL. */
+export function eligibleWhatsAppUpsert(type:'notify'|'append',messageTimestamp:number,nowMs=Date.now()):boolean{
+  if(type==='notify')return true;
+  const now=Math.floor(nowMs/1000);
+  return Number.isFinite(messageTimestamp)&&messageTimestamp>=now-120&&messageTimestamp<=now+30;
 }
 
 /** One managed socket per number; leases prevent two Workers owning one session. */
@@ -225,13 +233,10 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     })().catch(()=>markError(slot,'connection_update_failed'));});
     socket.ev.on('messages.upsert',event=>{
       for(const msg of event.messages){
-        // Some linked-device owner sends arrive as append rather than notify.
-        // Process only recent appends; never import old history as fresh replies.
         const messageTime=Number(msg.messageTimestamp?.toString()??0);
-        const recentAppend=event.type==='append'&&messageTime>Math.floor(Date.now()/1000)-120;
-        if(event.type!=='notify'&&!recentAppend)continue;
+        if(!eligibleWhatsAppUpsert(event.type,messageTime))continue;
         if(msg.key.fromMe)void ingestOwnerReply(slot,msg).catch(()=>markError(slot,'owner_reply_persistence_failed'));
-        else if(event.type==='notify')void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
+        else void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
       }
     });
     socket.ev.on('messages.update',events=>{
@@ -291,7 +296,8 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       const slot=sockets.get(channelId);
       if(!slot?.connected)throw Error('whatsapp_media_socket_unavailable');
       const payload=JSON.parse(decryptLinkedSecret(ciphertext,input.sessionKey),BufferJSON.reviver) as WAMessage;
-      const content=payload.message?.ephemeralMessage?.message??payload.message;
+      const content=payload.message?.ephemeralMessage?.message??payload.message?.viewOnceMessage?.message??
+        payload.message?.viewOnceMessageV2?.message??payload.message;
       const media=content?.audioMessage;
       if(!media||!media.mimetype||Number(media.fileLength?.toString()??0)>8*1024*1024)throw Error('whatsapp_audio_invalid');
       const audio=await downloadMediaMessage(payload,'buffer',{},
