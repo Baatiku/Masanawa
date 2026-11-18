@@ -8,7 +8,7 @@ describe("lite product worker scope", () => {
   });
 
   it("activates reviewed publisher ingestion without P2P or paid Status jobs", () => {
-    const scoped = workerProductJobs({ MASANAWA_PRODUCT_SCOPE: "masana-lite", MASANAWA_NEWS_INGEST_ENABLED: "true" });
+    const scoped = workerProductJobs({ MASANAWA_PRODUCT_SCOPE: "masana-lite", MASANAWA_NEWS_INGEST_ENABLED: "true", MASANAWA_PLATFORM_TENANT_ID: "tenant_platform" });
     expect(scoped.publisherNews).toBe(true);
     expect(scoped.legacyFinanceAndStatus).toBe(false);
   });
