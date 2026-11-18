@@ -83,17 +83,19 @@ export function createWhatsAppAdmin(input:Input){
         FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 ORDER BY created_at DESC`,[actor.tenantId]);
       return {keys:result.rows,quotaPolicy:'Gemini rate limits apply per Google Cloud project, not per API key.'};
     },
-    async addGeminiKey(auth:string|undefined,label:string,projectId:string,secret:string){
+    async addGeminiKey(auth:string|undefined,secret:string){
       const actor=await write(auth);
-      if(!/^[a-z][a-z0-9-]{4,62}$/.test(projectId)||!label.trim()||label.length>80||
-        !/^[A-Za-z0-9_-]{20,256}$/.test(secret))throw new WhatsAppAdminError(422,'invalid_gemini_key_details');
-      const encrypted=encryptWhatsAppToken(secret,input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
+      const normalized=secret.trim();
+      if(!/^[A-Za-z0-9_-]{20,256}$/.test(normalized))
+        throw new WhatsAppAdminError(422,'invalid_gemini_key_details');
+      const suffix=normalized.slice(-4);
+      const encrypted=encryptWhatsAppToken(normalized,input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
       const inserted=await input.pool.query(`INSERT INTO security.whatsapp_gemini_keys
-        (tenant_id,label,project_id,key_ciphertext,key_suffix)
-        VALUES($1,$2,$3,$4,$5) RETURNING key_id`,
-        [actor.tenantId,label.trim(),projectId,encrypted,secret.slice(-4)]);
+        (tenant_id,label,key_ciphertext,key_suffix)
+        VALUES($1,$2,$3,$4) RETURNING key_id`,
+        [actor.tenantId,'Gemini key',encrypted,suffix]);
       await audit(actor.tenantId,null,actor.actorId,'gemini_key_added',
-        {keyId:inserted.rows[0]?.key_id,projectId});
+        {keyId:inserted.rows[0]?.key_id});
       return {added:true};
     },
     async removeGeminiKey(auth:string|undefined,keyId:string){
