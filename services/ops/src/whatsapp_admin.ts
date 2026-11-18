@@ -73,6 +73,37 @@ export function createWhatsAppAdmin(input:Input){
     await input.pool.query('INSERT INTO security.whatsapp_audit(tenant_id,channel_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5::jsonb)',[tenant,id,actor,action,JSON.stringify(metadata)]);
   };
   return {
+    async geminiKeys(auth:string|undefined){
+      const actor=await read(auth);
+      const result=await input.pool.query(`SELECT key_id AS "keyId",label,project_id AS "projectId",
+        key_suffix AS "keySuffix",enabled,cooldown_until AS "cooldownUntil",
+        last_error_code AS "lastErrorCode",last_used_at AS "lastUsedAt",created_at AS "createdAt"
+        FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200`,[actor.tenantId]);
+      return {keys:result.rows,quotaPolicy:'Gemini rate limits apply per Google Cloud project, not per API key.'};
+    },
+    async addGeminiKey(auth:string|undefined,label:string,projectId:string,secret:string){
+      const actor=await write(auth);
+      if(!/^[a-z][a-z0-9-]{4,62}$/.test(projectId)||!label.trim()||label.length>80||
+        !/^[A-Za-z0-9_-]{20,256}$/.test(secret))throw new WhatsAppAdminError(422,'invalid_gemini_key_details');
+      const encrypted=encryptWhatsAppToken(secret,input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
+      const inserted=await input.pool.query(`INSERT INTO security.whatsapp_gemini_keys
+        (tenant_id,label,project_id,key_ciphertext,key_suffix)
+        VALUES($1,$2,$3,$4,$5) RETURNING key_id`,
+        [actor.tenantId,label.trim(),projectId,encrypted,secret.slice(-4)]);
+      await audit(actor.tenantId,null,actor.actorId,'gemini_key_added',
+        {keyId:inserted.rows[0]?.key_id,projectId});
+      return {added:true};
+    },
+    async removeGeminiKey(auth:string|undefined,keyId:string){
+      const actor=await write(auth);
+      if(!isId(keyId))throw new WhatsAppAdminError(422,'invalid_gemini_key_id');
+      const updated=await input.pool.query(`DELETE FROM security.whatsapp_gemini_keys
+        WHERE tenant_id=$1 AND key_id=$2 RETURNING key_id,project_id`,[actor.tenantId,keyId]);
+      if(!updated.rows.length)throw new WhatsAppAdminError(404,'gemini_key_not_found');
+      await audit(actor.tenantId,null,actor.actorId,'gemini_key_removed',
+        {keyId,projectId:updated.rows[0]?.project_id});
+      return {removed:true};
+    },
     async list(auth:string|undefined){
       const actor=await read(auth);
       const rows=await input.pool.query(`SELECT c.channel_id AS "channelId",c.linked_jid AS "linkedJid",
