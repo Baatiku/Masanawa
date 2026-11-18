@@ -82,7 +82,7 @@ class ShellCallService : Service() {
         val hangup = PendingIntent.getService(this, 1, Intent(this, ShellCallService::class.java)
             .setAction(HANG_UP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(ng.unigeria.unigeria.R.mipmap.ic_launcher)
+            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
             .setContentTitle("Masanawa voice call")
             .setContentText("Voice call in progress")
             .setContentIntent(open)
