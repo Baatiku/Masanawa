@@ -108,13 +108,20 @@ describe('WhatsApp availability and owner takeover',()=>{
   });
   it('backs off voice-only jobs for exhausted provider quota without an uncertain WhatsApp send',async()=>{
     const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',body:'Wa alaikum assalam.',
-      reply_to_message_id:'message-0'});
+      reply_to_message_id:'message-0',media_payload_ciphertext:Buffer.from([1,2])});
     mock.sendVoice.mockRejectedValueOnce(Error('whatsapp_voice_quota_exceeded'));
     await mock.worker.runOnce();
     expect(mock.sendVoice).toHaveBeenCalledOnce();
     expect(mock.calls.some(c=>c.sql.includes('300*LEAST(attempts,12)')&&
       c.parameters.includes('whatsapp_voice_quota_exceeded')&&c.parameters.includes(true))).toBe(true);
     expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(false);
+  });
+  it('does not replay old TTS audio jobs without a Live generation payload',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',
+      body:'Old canned fallback',reply_to_message_id:'message-0',media_payload_ciphertext:null});
+    await mock.worker.runOnce();
+    expect(mock.sendVoice).not.toHaveBeenCalled();
+    expect(mock.calls.some(c=>c.parameters.includes('legacy_audio_requires_live_generation'))).toBe(true);
   });
   it('erases the encrypted voice payload after the WhatsApp provider confirms a send',async()=>{
     const payload=Buffer.from([1,2,3]);
