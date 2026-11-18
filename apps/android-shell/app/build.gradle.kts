@@ -13,8 +13,8 @@ android {
         applicationId = "ng.unigeria.unigeria"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.1.0-shell-preview"
+        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 8
+        versionName = "1.1.1-shell-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Firebase Android app identifiers come from the same managed values used
         // by the existing Flutter app. Never commit provider credentials.
@@ -28,6 +28,19 @@ android {
         }
     }
 
+    val keyFile = System.getenv("SHELL_RELEASE_KEYSTORE_PATH")?.let(::file)?.takeIf { it.isFile }
+    val ownerKeyAlias = System.getenv("SHELL_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+    val ownerStorePassword = System.getenv("SHELL_RELEASE_STORE_PASSWORD")?.takeIf { it.isNotBlank() }
+    val ownerKeyPassword = System.getenv("SHELL_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+    if (keyFile != null && ownerKeyAlias != null && ownerStorePassword != null && ownerKeyPassword != null) {
+        signingConfigs.create("ownerRelease") {
+            storeFile = keyFile
+            storePassword = ownerStorePassword
+            keyAlias = ownerKeyAlias
+            keyPassword = ownerKeyPassword
+        }
+    }
+
     buildTypes {
         debug {
             // Keep testing reversible: the preview installs alongside the
@@ -37,8 +50,11 @@ android {
         }
         release {
             isMinifyEnabled = false
-            // There is intentionally no release-signing fallback. Signing comes
-            // only after package migration is approved and keys are configured.
+            // Release signing is intentionally impossible without explicit
+            // owner-provided signing material; see the gated bundle workflow.
+            if (signingConfigs.names.contains("ownerRelease")) {
+                signingConfig = signingConfigs.getByName("ownerRelease")
+            }
         }
     }
 
@@ -72,6 +88,8 @@ dependencies {
     implementation("androidx.fragment:fragment:1.9.1")
     implementation("androidx.webkit:webkit:1.18.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.core:core-telecom:1.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.google.firebase:firebase-messaging:26.0.2")
     testImplementation("junit:junit:4.13.2")
 }
