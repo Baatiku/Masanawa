@@ -64,5 +64,14 @@
             android:name=".shell.ShellCallService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.shellfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/masanawa_capture_paths" />
+        </provider>
     </application>
 </manifest>

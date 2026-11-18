@@ -4,11 +4,13 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.ClipData
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.provider.MediaStore
 import android.os.Build
 import android.os.Bundle
 import android.content.Context
@@ -36,10 +38,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import androidx.webkit.JavaScriptReplyProxy
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Small, replaceable Android host for the existing Cloudflare-hosted UI.
@@ -57,6 +65,9 @@ class ShellActivity : ComponentActivity() {
     private lateinit var downloads: ShellDownloads
     private var pendingSharedText: String? = null
     private var pendingSharedAttachment: Uri? = null
+    private var pendingCameraUri: Uri? = null
+    private var pendingCameraFile: File? = null
+    private var pendingCameraPicker: Intent? = null
     private var protectScreen = false
     private var callActive = false
     private var pendingPushReply: JavaScriptReplyProxy? = null
@@ -74,11 +85,23 @@ class ShellActivity : ComponentActivity() {
         downloads.onDestinationSelected(if (result.resultCode == RESULT_OK) result.data?.data else null)
     }
 
+    private val capturePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        val picker = pendingCameraPicker
+        pendingCameraPicker = null
+        if (picker != null) launchFileChooser(picker, allowed)
+    }
+
     private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        fileCallback?.onReceiveValue(
-            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-        )
+        val selected = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        val photo = pendingCameraFile
+        val uri = pendingCameraUri
+        val captured = selected.isNullOrEmpty() && result.resultCode == RESULT_OK && (photo?.length() ?: 0L) > 0 && uri != null
+        val resultUris = if (captured) arrayOf(uri!!) else selected
+        fileCallback?.onReceiveValue(resultUris)
         fileCallback = null
+        if (resultUris?.contains(uri) != true) photo?.delete()
+        pendingCameraFile = null
+        pendingCameraUri = null
     }
 
     private val mediaPermissions = registerForActivityResult(
@@ -107,11 +130,18 @@ class ShellActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.WHITE
-        window.navigationBarColor = Color.BLACK
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        // Android 15/16 enforce edge-to-edge. Reserve system-bar/keyboard space
+        // for the web viewport instead of letting the chat composer sit beneath it.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
 
         container = FrameLayout(this)
+        ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            insets
+        }
         downloads = ShellDownloads(this, { name, mime ->
             saveDocument.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -120,6 +150,9 @@ class ShellActivity : ComponentActivity() {
             })
         }, { message -> Toast.makeText(this, message, Toast.LENGTH_LONG).show() })
         ShellPush.ensureChannels(this)
+        File(cacheDir, "capture").listFiles()?.filter {
+            it.name.startsWith("masanawa-capture-") && System.currentTimeMillis() - it.lastModified() > 3_600_000
+        }?.forEach { it.delete() }
         webView = newWebView()
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setupFailureView()
@@ -291,13 +324,44 @@ class ShellActivity : ComponentActivity() {
                     return true
                 }
                 try {
-                    filePicker.launch(fileChooserParams.createIntent())
-                } catch (_: ActivityNotFoundException) {
+                    val chooser = fileChooserParams.createIntent()
+                    val capture = fileChooserParams.isCaptureEnabled &&
+                        fileChooserParams.acceptTypes.any { it.startsWith("image/") }
+                    if (capture && ContextCompat.checkSelfPermission(this@ShellActivity,
+                            Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                        pendingCameraPicker = chooser
+                        capturePermission.launch(Manifest.permission.CAMERA)
+                    } else launchFileChooser(chooser, capture)
+                } catch (_: RuntimeException) {
                     fileCallback?.onReceiveValue(null)
                     fileCallback = null
                 }
                 return true
             }
+        }
+    }
+
+    private fun launchFileChooser(picker: Intent, offerCamera: Boolean) {
+        try {
+            if (!offerCamera) { filePicker.launch(picker); return }
+            val dir = File(cacheDir, "capture").apply { mkdirs() }
+            val photo = File.createTempFile("masanawa-capture-", ".jpg", dir)
+            val uri = FileProvider.getUriForFile(this, "$packageName.shellfiles", photo)
+            pendingCameraFile = photo
+            pendingCameraUri = uri
+            val camera = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                clipData = ClipData.newRawUri("Masanawa photo", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+            filePicker.launch(Intent.createChooser(picker, "Choose or take a photo").apply {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(camera))
+            })
+        } catch (_: Exception) {
+            pendingCameraFile?.delete()
+            pendingCameraFile = null
+            pendingCameraUri = null
+            try { filePicker.launch(picker) } catch (_: Exception) { fileCallback?.onReceiveValue(null); fileCallback = null }
         }
     }
 
