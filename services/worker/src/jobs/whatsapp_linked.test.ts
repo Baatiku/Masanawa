@@ -1,6 +1,6 @@
 import {randomBytes} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState,eligibleWhatsAppUpsert,recordLinkedCallEvent} from './whatsapp_linked.js';
+import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState,eligibleWhatsAppUpsert,recordLinkedCallEvent,persistLinkedHistory} from './whatsapp_linked.js';
 
 describe('encrypted WhatsApp linked-device session',()=>{
   const key=randomBytes(32).toString('base64');
@@ -26,6 +26,40 @@ describe('encrypted WhatsApp linked-device session',()=>{
     expect(eligibleWhatsAppUpsert('append',seconds-500,now)).toBe(false);
     expect(eligibleWhatsAppUpsert('append',seconds+500,now)).toBe(false);
     expect(eligibleWhatsAppUpsert('append',0,now)).toBe(false);
+  });
+  it('imports historical inbound and owner messages once without replying or modifying unread counts',async()=>{
+    const seen=new Set<string>(),queries:{sql:string;params:unknown[]}[]=[];
+    const pool={query:async(sql:string,params:unknown[]=[])=>{
+      queries.push({sql,params});
+      if(sql.includes('lease_owner=$3'))return {rows:[{present:1}]};
+      if(sql.includes('RETURNING thread_id'))return {rows:[{threadId:'thread-1'}]};
+      if(sql.includes('RETURNING message_id')){
+        const id=String(params[3]);if(seen.has(id))return {rows:[]};
+        seen.add(id);return {rows:[{message_id:id}]};
+      }
+      return {rows:[]};
+    }};
+    const identity={tenantId:'tenant-a',channelId:'channel-a',owner:'lease-a'};
+    const messages=[
+      {key:{remoteJid:'2348012345678@s.whatsapp.net',id:'historical-1',fromMe:false},
+        messageTimestamp:1660000000,message:{conversation:'Assalamualaikum'}},
+      {key:{remoteJid:'2348012345678@s.whatsapp.net',id:'historical-2',fromMe:true},
+        messageTimestamp:1660000010,message:{conversation:'Wa alaikum salam'}},
+      {key:{remoteJid:'12036312345@g.us',id:'group-1',fromMe:false},
+        messageTimestamp:1660000020,message:{conversation:'private group'}},
+      {key:{remoteJid:'2348012345678@s.whatsapp.net',id:'ephemeral-1',fromMe:false},
+        messageTimestamp:1660000030,message:{ephemeralMessage:{message:{conversation:'disappearing'}}}},
+    ];
+    expect(await persistLinkedHistory(pool as never,identity,messages as never))
+      .toEqual({imported:2,ignored:2});
+    expect(await persistLinkedHistory(pool as never,identity,messages as never))
+      .toEqual({imported:0,ignored:4});
+    const inserts=queries.filter(q=>q.sql.includes('INSERT INTO security.whatsapp_messages'));
+    expect(inserts).toHaveLength(4);
+    expect(inserts[0]!.params.slice(3,9)).toEqual([
+      'historical-1','inbound','text','Assalamualaikum','read',new Date(1660000000*1000)]);
+    expect(inserts[1]!.params[4]).toBe('outbound');
+    expect(queries.some(q=>q.sql.includes('whatsapp_jobs')||q.sql.includes('unread_count'))).toBe(false);
   });
   it('encrypts every QR and Signal secret with authenticated randomized ciphertext',()=>{
     const a=encryptLinkedSecret('session credential',key);

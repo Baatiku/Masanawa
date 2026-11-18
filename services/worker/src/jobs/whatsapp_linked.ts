@@ -109,6 +109,45 @@ export function eligibleWhatsAppUpsert(type:'notify'|'append',messageTimestamp:n
   return Number.isFinite(messageTimestamp)&&messageTimestamp>=now-120&&messageTimestamp<=now+30;
 }
 
+/** Import WhatsApp-supplied history as context ONLY. Historical messages never
+ * enqueue AI replies, change unread counts or grant wallet/account authority.
+ * A linked device receives only the subset of history WhatsApp chooses to sync.
+ */
+export async function persistLinkedHistory(pool:Db,identity:{tenantId:string;channelId:string;owner:string},
+  messages:readonly WAMessage[]):Promise<{imported:number;ignored:number}>{
+  let imported=0,ignored=0;
+  for(const msg of messages){
+    const jid=msg.key.remoteJid;
+    const key=msg.key.id;
+    const timestamp=Number(msg.messageTimestamp?.toString()??0);
+    // Exclude group/status messages, ephemeral and view-once content from durable AI memory.
+    if(!jid||!linkedJid(jid)||!key||key.length>255||!msg.message||
+      msg.message.ephemeralMessage||msg.message.viewOnceMessage||msg.message.viewOnceMessageV2||
+      !Number.isSafeInteger(timestamp)||timestamp<1262304000||timestamp>Date.now()/1000+300){
+      ignored++;continue;
+    }
+    const {kind,body}=contentOf(msg);
+    if(kind==='unsupported'){ignored++;continue;}
+    const active=await pool.query(`SELECT 1 FROM security.whatsapp_channels
+      WHERE tenant_id=$1 AND channel_id=$2 AND lease_owner=$3 AND state<>'disconnected'`,
+      [identity.tenantId,identity.channelId,identity.owner]);
+    if(!active.rows.length)break;
+    const at=new Date(timestamp*1000);
+    const thread=await pool.query(`INSERT INTO security.whatsapp_threads
+      (tenant_id,channel_id,customer_wa_id,last_message_at)
+      VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,channel_id,customer_wa_id)
+      DO UPDATE SET last_message_at=GREATEST(security.whatsapp_threads.last_message_at,$4)
+      RETURNING thread_id AS "threadId"`,[identity.tenantId,identity.channelId,jid,at]);
+    const row=await pool.query(`INSERT INTO security.whatsapp_messages
+      (tenant_id,thread_id,channel_id,provider_message_id,direction,kind,body,delivery_state,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING RETURNING message_id`,
+      [identity.tenantId,thread.rows[0]!.threadId,identity.channelId,key,
+        msg.key.fromMe?'outbound':'inbound',kind,body,msg.key.fromMe?'sent':'read',at]);
+    if(row.rows.length)imported++;else ignored++;
+  }
+  return {imported,ignored};
+}
+
 /** One managed socket per number; leases prevent two Workers owning one session. */
 export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:Readonly<Record<string,string|undefined>>;maxSockets?:number}){
   const sockets=new Map<string,Slot>(),retryAfter=new Map<string,number>();
@@ -252,6 +291,30 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         if(msg.key.fromMe)void ingestOwnerReply(slot,msg).catch(()=>markError(slot,'owner_reply_persistence_failed'));
         else void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
       }
+    });
+    socket.ev.on('messaging-history.set',event=>{
+      if(sockets.get(slot.channelId)!==slot)return;
+      // Process sequentially in small asynchronous slices on a 2-GiB pilot;
+      // never turn imported old messages into outbound replies.
+      void (async()=>{
+        let imported=0,ignored=0;
+        for(let i=0;i<event.messages.length;i+=40){
+          if(sockets.get(slot.channelId)!==slot)break;
+          const result=await persistLinkedHistory(input.pool,
+            {tenantId:slot.tenantId,channelId:slot.channelId,owner:slot.owner},
+            event.messages.slice(i,i+40));
+          imported+=result.imported;ignored+=result.ignored;
+        }
+        await input.pool.query(`INSERT INTO security.whatsapp_audit
+          (tenant_id,channel_id,actor_id,action,metadata)
+          VALUES($1,$2,'linked-device','history.imported',$3::jsonb)`,
+          [slot.tenantId,slot.channelId,JSON.stringify({imported,ignored})]);
+      })().catch(()=>{
+        void input.pool.query(`INSERT INTO security.whatsapp_audit
+          (tenant_id,channel_id,actor_id,action,metadata)
+          VALUES($1,$2,'linked-device','history.import_failed','{}'::jsonb)`,
+          [slot.tenantId,slot.channelId]).catch(()=>undefined);
+      });
     });
     socket.ev.on('messages.update',events=>{
       for(const event of events){
