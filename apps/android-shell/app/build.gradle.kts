@@ -44,7 +44,9 @@ android {
         from(brandIconSource) { include("mipmap-*/ic_launcher.png") }
         into(generatedBrandIcons)
     }
-    sourceSets.getByName("main").res.srcDir(generatedBrandIcons)
+    // AGP 9 rejects Provider values in SourceSet.srcDir; preBuild supplies the
+    // generation dependency and this resolves to a concrete directory path.
+    sourceSets.getByName("main").res.srcDir(generatedBrandIcons.get().asFile)
     tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(copyBrandIcons) }
 }
 
