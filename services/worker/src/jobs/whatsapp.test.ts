@@ -56,6 +56,8 @@ describe('WhatsApp availability and owner takeover',()=>{
       {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider});
     await mock.worker.runOnce();
     expect(provider).toHaveBeenCalledOnce();
+    expect(provider).toHaveBeenCalledWith(expect.stringContaining('/models/gemini-3.8-flash:generateContent'),
+      expect.any(Object));
     const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
     expect(outgoing?.parameters[3]).toContain('I received your message');
     expect(mock.calls.some(c=>c.sql.includes('last_error_code=$2')&&

@@ -304,7 +304,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         {logger:pino({level:'silent'}),reuploadRequest:slot.socket.updateMediaMessage}) as Buffer;
       const env=input.env??{};
       return transcribeWhatsAppAudio({audio,mimeType:media.mimetype,
-        apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-2.5-flash'});
+        apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash'});
     },
     async sendVoice(channelId:string,jid:string,body:string,voiceId:string|null){
       const slot=sockets.get(channelId);
