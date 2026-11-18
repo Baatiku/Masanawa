@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/color_f8f8fb" android:paddingTop="24.0dp" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/result_list" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent" />
+    <com.google.android.material.button.MaterialButton android:id="@id/btn_done" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginBottom="24.0dp" android:text="@string/done_label" app:layout_constraintBottom_toBottomOf="parent" style="@style/Material.Button.Common_Confirm" />
+    <team.opay.pay.kyc.view.EmptyView android:id="@id/empty_view" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center" android:orientation="horizontal" android:background="@color/printer_white" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/ivTop" android:layout_width="42.0dp" android:layout_height="42.0dp" android:src="@drawable/printer_icon_notice_title4" />
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@id/layoutRight" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8.0dp" android:layout_marginEnd="10.0dp">
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/printer_color_222f3e" android:id="@id/tvTitle1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4.0dp" app:layout_constraintBottom_toTopOf="@id/tvTitle2" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:layout_constraintVertical_chainStyle="packed" />
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="11.0sp" android:textColor="@color/printer_color_222f3e" android:id="@id/tvTitle2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="4.0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="@id/tvTitle1" app:layout_constraintTop_toBottomOf="@id/tvTitle1" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

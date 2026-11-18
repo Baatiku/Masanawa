@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="@color/osdk_B33A4D5A" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.cardview.widget.CardView android:layout_gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="32.0dp" android:layout_marginEnd="32.0dp" app:cardBackgroundColor="@color/osdk_color_white" app:cardCornerRadius="3.0dp">
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <androidx.appcompat.widget.AppCompatTextView android:textSize="18.0sp" android:textColor="@color/color_515f68" android:gravity="center_horizontal" android:id="@id/title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24.0dp" android:text="@string/auth_cancel_tip" android:lineSpacingExtra="8.0sp" android:layout_marginStart="@dimen/_16dp" android:layout_marginEnd="@dimen/_16dp" />
+            <team.opay.pay.android.views.ProgressableActionButton android:textSize="16.0sp" android:textColor="@color/osdk_color_white" android:gravity="center" android:layout_gravity="center" android:id="@id/ensure" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginTop="@dimen/margin_24_dp" android:lineSpacingExtra="8.0sp" android:layout_marginStart="@dimen/_16dp" android:layout_marginEnd="@dimen/_16dp" app:buttonTitle="@string/security_confirm_button" />
+            <androidx.appcompat.widget.AppCompatTextView android:textSize="16.0sp" android:textStyle="normal" android:textColor="@color/omain_8497a4" android:gravity="center" android:id="@id/cancel" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginTop="10.0dp" android:layout_marginBottom="20.0dp" android:text="@string/cancel" android:lineSpacingExtra="8.0sp" android:layout_marginStart="@dimen/_16dp" android:layout_marginEnd="@dimen/_16dp" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+</FrameLayout>

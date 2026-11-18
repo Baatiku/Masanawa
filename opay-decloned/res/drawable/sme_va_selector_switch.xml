@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/sme_va_swith_open" android:state_activated="true" />
+    <item android:state_selected="true" android:drawable="@drawable/sme_va_swith_open" />
+    <item android:state_checked="true" android:drawable="@drawable/sme_va_swith_open" />
+    <item android:drawable="@drawable/sme_va_swith_close" />
+</selector>

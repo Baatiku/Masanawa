@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.pay.ad.OpayAdBannerView android:id="@id/ad_banner" android:layout_width="match_parent" android:layout_height="72.0dp" android:layout_marginLeft="16.0dp" android:layout_marginRight="16.0dp" app:banner_background_drawable="@drawable/osdk_bg_white_radius_12" app:content_max_lines="2" app:intercept_touch="false" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintTop_toTopOf="parent" app:show_go_btn="true" />
+</androidx.constraintlayout.widget.ConstraintLayout>

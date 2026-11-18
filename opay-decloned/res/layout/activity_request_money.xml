@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/osdk_color_white" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.core.android.views.OpayActionBar android:id="@id/action_bar" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:oab_title="@string/request_money_header" style="@style/ActionBar" />
+    <com.google.android.material.tabs.TabLayout android:id="@id/tab_layout" android:background="@color/content_background" android:layout_width="match_parent" android:layout_height="48.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/action_bar" app:tabBackground="@color/transparent" app:tabIndicator="@null" app:tabRippleColor="@color/transparent" />
+    <androidx.core.widget.NestedScrollView android:id="@id/scroll_view" android:layout_width="match_parent" android:layout_height="0.0dp" android:fillViewport="true" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/tab_layout">
+        <FrameLayout android:id="@id/fragment_container" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    </androidx.core.widget.NestedScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

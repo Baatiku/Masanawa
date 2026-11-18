@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/recyclerView" android:layout_width="match_parent" android:layout_height="match_parent" android:nestedScrollingEnabled="false" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textColor="#dc0c48" android:id="@id/searchError" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16.0dp" android:text="@string/payroll_search_beneficiary_empty" app:fontFamily="@font/roboto_400" app:layout_constraintTop_toTopOf="parent" />
+    <team.opay.core.widget.HttpViewGroup android:id="@id/httpViewGroup" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" app:http_background="@color/white" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="24.0dp" android:width="24.0dp" android:viewportWidth="25.0" android:viewportHeight="25.0"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <path android:fillColor="@drawable/$easemoni_ic_contact_us_phone__0" android:pathData="M18.3244,20.9851C12.4459,20.9851 3.0082,11.5298 3.0082,6.567C3.0082,4.8697 5.5963,3.0148 6.6746,3.0148C7.7529,3.0148 10.3417,7.1422 10.3414,7.8189C10.3414,8.7608 9.4796,9.2049 9.4796,10.1174C9.4796,11.0336 13.3629,14.7147 14.225,14.7147C15.0877,14.7147 15.8174,13.8786 16.8144,13.8786C17.7854,13.8786 21.9918,16.7786 21.9918,17.4322C21.9918,19.3382 19.9433,20.9851 18.3244,20.9851Z" android:strokeColor="#00000000" android:strokeWidth="1.0" android:fillType="evenOdd" />
+</vector>

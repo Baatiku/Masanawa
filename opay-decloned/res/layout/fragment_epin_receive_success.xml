@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardBackgroundColor="@color/osdk_color_white"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/_16dp" android:paddingEnd="@dimen/_16dp">
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="@dimen/_16sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/_16dp" android:text="@string/epin_retrieve_pin" android:includeFontPadding="false" android:lineSpacingExtra="0.0dp" />
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="15.0sp" android:textColor="@color/blue_grey_41" android:gravity="center" android:id="@id/pin" android:background="@drawable/gray_24_radius_bg" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginTop="@dimen/_16dp" android:lineSpacingExtra="3.0sp" />
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/blue_grey_64" android:gravity="center_horizontal" android:id="@id/desc" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" android:includeFontPadding="false" android:lineSpacingExtra="4.0dp" />
+        <team.opay.pay.android.views.ProgressableActionButton android:id="@id/button" android:layout_width="match_parent" android:layout_marginTop="24.0dp" app:buttonTitle="@string/epin_copy_pin" style="@style/Button" />
+        <androidx.appcompat.widget.AppCompatTextView android:textSize="16.0sp" android:textColor="@color/blue_grey_64" android:gravity="center" android:id="@id/close" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginTop="8.0dp" android:text="@string/epin_close_button" android:includeFontPadding="false" android:lineSpacingExtra="12.0sp" />
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

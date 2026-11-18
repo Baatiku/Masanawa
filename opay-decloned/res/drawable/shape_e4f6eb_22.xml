@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape android:color="?android:colorControlHighlight"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/osdk_E4F6EB" />
+    <corners android:radius="22.0dp" />
+</shape>

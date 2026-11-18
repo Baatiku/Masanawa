@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.easemoni.widget.OKashActionBar android:id="@id/action_bar" android:elevation="@dimen/easemoni_dimen_0" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:okash_ab_bg_color="@color/easemoni_color_white" app:okash_ab_start_tint_color="@color/easemoni_color_theme" app:okash_ab_title="@string/easemoni_menu_my_coupon" app:okash_ab_title_color="@color/easemoni_color_theme" style="@style/EaseMoniActionBar" />
+    <View android:background="@color/easemoni_color_f8f8fb" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_1" />
+    <com.google.android.material.tabs.TabLayout android:id="@id/withdrawal_tab_layout" android:background="@color/easemoni_color_white" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabIndicatorColor="@color/easemoni_color_theme" app:tabIndicatorFullWidth="false" app:tabIndicatorHeight="@dimen/easemoni_dimen_2" app:tabSelectedTextColor="@color/easemoni_color_222f3e" app:tabTextAppearance="@style/EaseMoniTabLayoutTextStyle" app:tabTextColor="@color/easemoni_color_8497a4" app:tabUnboundedRipple="true" />
+    <View android:background="@color/easemoni_color_white" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_4" />
+    <androidx.viewpager.widget.ViewPager android:id="@id/coupons_view_pager" android:layout_width="match_parent" android:layout_height="match_parent" />
+</LinearLayout>

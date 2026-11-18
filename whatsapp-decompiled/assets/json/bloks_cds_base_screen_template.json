@@ -1,0 +1,201 @@
+{
+  "layout": {
+    "bloks_payload": {
+      "ft": {
+        "D0n59eWCozA276NIoHtlFg:lw16qbmyg": "\t(e2f (e2e 0 (f4i (dkc \"errorMessage\" \"errorCode\") (dkc null null))) (e2a (h9h (dnt \"query_info_lw16qbmxs\")) (e25 0) (e1z (f4g (igq (dnt \"query_info_lw16qbmxs\")) \"error_info\") (e25 0))))"
+      },
+      "data": [],
+      "embedded_payloads": [
+        {
+          "id": "ScJOy2N48d03efdqdK5KwA:lw16qbmy3",
+          "payload": {
+            "layout": {
+              "bloks_payload": {
+                "tree": {
+                  "\u41d3": {
+                    " ": [],
+                    "\u0087": [
+                      " ",
+                      "\t(dkc (igq (f4g (dnv \"lw16qbmxx-0\" 1) \"errorFallbackUI\")))"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "kxZHDj1WTRCPl8WYfbzs1w:lw16qbmy1",
+          "payload": {
+            "layout": {
+              "bloks_payload": {
+                "tree": {
+                  "\u3408": {
+                    " ": []
+                  }
+                },
+                "preparse_payload": true
+              }
+            }
+          }
+        }
+      ],
+      "error_attribution": {
+        "logging_id": "{\"callsite\":\"{\\\"product\\\":\\\"bloks_entrypoints_infra\\\",\\\"feature\\\":\\\"screen_query_root_template\\\",\\\"oncall\\\":\\\"bloks_www\\\"}\",\"push_phase\":\"C2\",\"version\":1,\"request_id\":\"AU_qnj2-gbaejE66UAJwaRT\",\"www_revision\":1036717186}",
+        "source_map_id": "rMyIHYcg5shYrrXta43LNQ"
+      },
+      "tree": {
+        "\u3408": {
+          ")": "column",
+          " ": [
+            {
+              "\u3408": {
+                " ": [
+                  {
+                    "\u3408": {
+                      " ": [
+                        {
+                          "\u3408": {
+                            " ": [
+                              {
+                                "\u3408": {
+                                  ",": "center",
+                                  "$": "center",
+                                  " ": [
+                                    {
+                                      "\u3408": {
+                                        "$": "center",
+                                        " ": [
+                                          {
+                                            "\u3408": {
+                                              "$": "center",
+                                              " ": [
+                                                {
+                                                  "\u5db6": {
+                                                    "#": {
+                                                      "\u5db7": {
+                                                        "(": "60dp",
+                                                        ")": {
+                                                          "\u3435": {
+                                                            "$": "#FFCCD3DB",
+                                                            "#": "#FF354855"
+                                                          }
+                                                        },
+                                                        "&": {
+                                                          "\u3435": {
+                                                            "$": "#FF0082FB",
+                                                            "#": "#FF0082FB"
+                                                          }
+                                                        },
+                                                        "$": {
+                                                          "\u3435": {
+                                                            "$": "#FF2694FE",
+                                                            "#": "#FF2694FE"
+                                                          }
+                                                        },
+                                                        "#": {
+                                                          "\u3435": {
+                                                            "$": "#FF0064E0",
+                                                            "#": "#FF0064E0"
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              ],
+                                              "\u0085": [
+                                                {
+                                                  "\u3401": {
+                                                    "#": true,
+                                                    "$": "Loading",
+                                                    "&": "Image"
+                                                  }
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        ],
+                                        "\u0085": [
+                                          {
+                                            "\u4083": {
+                                              "#": 300041
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ],
+                                  "\u0084": {
+                                    "\u3438": {
+                                      "D": "100%",
+                                      "*": "100%"
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "!": "a7nxej:1"
+                          }
+                        }
+                      ],
+                      "\u0085": [
+                        {
+                          "\u3fb6": {
+                            "#": "\t(e1w (e24 (e2f (e2a (e56 \"failed\" (e25 1)) (e2f (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (fow (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (e1z (f4g (e1w (dnk \"D0n59eWCozA276NIoHtlFg:lw16qbmyg\")) \"errorMessage\") \"\") null)) (f43 \"bloks_async_component_failure\" \"bloks_infra\" (f4i (dkc \"bloks_app_id\" \"error_message\" \"error_code\") (dkc (dng \"__infra__app_id\") (e1z (f4g (e1w (dnk \"D0n59eWCozA276NIoHtlFg:lw16qbmyg\")) \"errorMessage\") \"\") (e2a (h9h (f4g (e1w (dnk \"D0n59eWCozA276NIoHtlFg:lw16qbmyg\")) \"errorCode\")) null (fmu (igq (f4g (e1w (dnk \"D0n59eWCozA276NIoHtlFg:lw16qbmyg\")) \"errorCode\"))))))) (e2e 2 (e1w (e24 (e2f (fjm false) (e2e 2 (e2a (h9h (dng \"__infra__on_failure\")) 1 (f4g (e1w (igq (dng \"__infra__on_failure\")) (e25 0) (e25 1)) \"onErrorAction\"))) (f4i (dkc \"onErrorAction\" \"errorFallbackUI\") (dkc (e25 2) (fna \"kxZHDj1WTRCPl8WYfbzs1w:lw16qbmy1\" (f6m 6) \"custom-fallback-ui-specified-on-client\"))))) (e25 0) (e1w (dnk \"D0n59eWCozA276NIoHtlFg:lw16qbmyg\")))) (f4g (e25 2) \"onErrorAction\") (e2a (h9h (f4g (e25 2) \"errorFallbackUI\")) null (dpp \"a7nxej:1\" (dkc (dnh \"ScJOy2N48d03efdqdK5KwA:lw16qbmy3\" (f6m 6 \"lw16qbmxx-0\" (e25 2)))) (e25 0)))) null) (e2a (e2a (e56 \"resolved_sync\" (e25 1)) true (e56 \"resolved_async\" (e25 1))) (e1w (e24 (fjm true)) (e25 0)) null))) (e25 0) (e25 2))",
+                            "\u0087": [
+                              ")",
+                              "\t(e2a (h9h (dnt \"query_info_lw16qbmxs\")) null (f4g (igq (dnt \"query_info_lw16qbmxs\")) \"resolution_type\"))"
+                            ]
+                          }
+                        },
+                        {
+                          "\u365a": {
+                            ")": "\t(dn1 (dng \"__infra__app_id\") (f6m 6 \"__infra__container_config_id\" (dng \"__infra__container_config_id\")) (dng \"__infra__cache_ttl\") (fom 16376 36 \"fetch\" 38 \"lw16qbmxs\" 41 false 40 (dng \"__infra__enable_disk_cache\") 43 (dkc \"__infra__container_config_id\")))"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "!": "__infra_sq_content_id:0",
+                "\u0084": {
+                  "\u3438": {
+                    ")": 1
+                  }
+                }
+              }
+            }
+          ],
+          "!": "__infra_sq_root_id:0",
+          "\u0085": [
+            {
+              "\u365a": {
+                ")": "\t(e2f (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (foz (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (dng \"__infra__ttrc_timestamp\") null)) (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (foo (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (f6m 6 \"app_id\" (dng \"__infra__app_id\")))) (e2a (h9h (dng \"__infra__ttrc_analytics_extras\")) null (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (foo (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (dng \"__infra__ttrc_analytics_extras\")))) (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (fop (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") \"load_root_template\" (f6m 6))) (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (for (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (dng \"__infra__app_id\") (e1z (dng \"__infra__cache_ttl\") 86400))))"
+              }
+            },
+            {
+              "\u34e2": {
+                "&": "S:a7nxej:18",
+                "$": "\t(e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (fp1 (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") null))"
+              }
+            }
+          ]
+        }
+      },
+      "component_queries": [
+        {
+          "id": "lw16qbmxs",
+          "targets": {
+            "genScreenContent": "a7nxej:1"
+          },
+          "app_id_expr": "\t(dng \"__infra__app_id\")",
+          "params": "\t(f6m 6 \"__infra__container_config_id\" (dng \"__infra__container_config_id\"))",
+          "client_params": "\t(f6m 6 \"__infra_component_did_render\" (dyx (e24 (e2f (dod (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (dng \"__infra__app_id\") (f4g (igq (dnt \"query_info_lw16qbmxs\")) \"response_summary\")) (e1w (e24 (e2a (e56 (f4g (igq (dnt \"query_info_lw16qbmxs\")) \"resolution_type\") \"resolved_sync\") (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (fot (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (dng \"__infra__app_id\") (e1z (f4g (igq (dnt \"query_info_lw16qbmxs\")) \"cache_age\") (eud 0)) (fom 16524 35 true))) (e2a (h9h (dng \"__infra__ttrc_instance_id\")) null (fp0 (dng \"__infra__ttrc_marker_id\") (dng \"__infra__ttrc_instance_id\") (dng \"__infra__app_id\"))))))))))",
+          "cache_ttl_expr": "\t(dng \"__infra__cache_ttl\")",
+          "is_scoped": false
+        }
+      ]
+    }
+  }
+}

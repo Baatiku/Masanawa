@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/guide_2" android:focusable="true" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/guide_2_top" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginStart="16.0dp" app:layout_constraintDimensionRatio="168:86" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@mipmap/omain_ic_home_guide_2_top" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/btn_guide_2" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginTop="12.0dp" app:layout_constraintDimensionRatio="168:139" app:layout_constraintEnd_toEndOf="@id/guide_2_top" app:layout_constraintStart_toStartOf="@id/guide_2_top" app:layout_constraintTop_toBottomOf="@id/guide_2_top" app:srcCompat="@mipmap/omain_ic_home_guide_2_btn" />
+</androidx.constraintlayout.widget.ConstraintLayout>

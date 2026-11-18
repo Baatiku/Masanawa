@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neither cloud backup nor device-to-device transfer may migrate sessions,
+     financial recovery journals, private chat caches, or encryption wrappers.
+     This applies to Android 12+ and complements allowBackup=false. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

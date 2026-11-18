@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@id/ll_item_account_bank_content" android:background="@drawable/easemoni_bg_corner_12_f8f8fb" android:paddingLeft="@dimen/okash_dimen_12" android:paddingTop="@dimen/okash_dimen_16" android:paddingRight="@dimen/okash_dimen_12" android:paddingBottom="@dimen/okash_dimen_16" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/iv_bank_name" android:layout_width="@dimen/okash_dimen_42" android:layout_height="@dimen/okash_dimen_42" />
+    <LinearLayout android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/okash_dimen_20">
+        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_d9000000" android:id="@id/tv_account_item_bank_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" />
+        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_73000000" android:id="@id/tv_account_item_bank_code" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+    </LinearLayout>
+    <View android:layout_width="wrap_content" android:layout_height="@dimen/okash_dimen_0" android:layout_weight="1.0" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/aciv_account_item_bank_checked" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" app:srcCompat="@drawable/easemoni_icon_account_selected" />
+</LinearLayout>

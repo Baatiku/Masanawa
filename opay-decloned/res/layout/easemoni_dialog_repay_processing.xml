@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:background="@drawable/easemoni_bg_corner_12_white" android:paddingTop="@dimen/easemoni_dimen_24" android:paddingBottom="@dimen/easemoni_dimen_24" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/easemoni_dimen_24" android:paddingEnd="@dimen/easemoni_dimen_24"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/aciv_processing" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/easemoni_icon_circle_processing" android:tint="@color/easemoni_color_theme" />
+    <TextView android:textSize="@dimen/easemoni_dimen_16" android:textColor="@color/easemoni_color_theme" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_10" android:text="@string/easemoni_processing_payment" android:fontFamily="sans-serif-medium" />
+    <TextView android:textSize="@dimen/easemoni_tv_size_14" android:textColor="@color/easemoni_color_222f3e" android:gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_13" android:text="@string/easemoni_processing_remind" />
+</LinearLayout>

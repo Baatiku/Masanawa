@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="50.0dp" android:width="50.0dp" android:viewportWidth="50.0" android:viewportHeight="50.0"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <path android:fillColor="#f8f8fb" android:pathData="M18,0L32,0A18,18 0,0 1,50 18L50,32A18,18 0,0 1,32 50L18,50A18,18 0,0 1,0 32L0,18A18,18 0,0 1,18 0z" android:fillType="evenOdd" />
+    <path android:fillColor="#00000000" android:pathData="M16,13L34,13A6,6 0,0 1,40 19L40,31A6,6 0,0 1,34 37L16,37A6,6 0,0 1,10 31L10,19A6,6 0,0 1,16 13z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$svg_cashier_bank__0" android:pathData="M16,13L34,13A6,6 0,0 1,40 19L40,31A6,6 0,0 1,34 37L16,37A6,6 0,0 1,10 31L10,19A6,6 0,0 1,16 13z" android:fillType="evenOdd" />
+    <path android:fillColor="#fff" android:pathData="M17.5,28L21.5,28A1.5,1.5 0,0 1,23 29.5L23,29.5A1.5,1.5 0,0 1,21.5 31L17.5,31A1.5,1.5 0,0 1,16 29.5L16,29.5A1.5,1.5 0,0 1,17.5 28z" android:fillType="evenOdd" />
+    <path android:fillColor="#f8f8fb" android:pathData="M10,19H40V22H10z" android:strokeAlpha="0.6" android:fillAlpha="0.6" android:fillType="evenOdd" />
+</vector>

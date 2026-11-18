@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:background="@drawable/easemoni_bg_corner_16_white" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <androidx.appcompat.widget.AppCompatImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_22" app:srcCompat="@drawable/easemoni_svg_warning" />
+        <TextView android:textSize="@dimen/okash_dimen_16" android:textColor="@color/easemoni_color_30414f" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_12" android:text="@string/easemoni_balance_note" android:fontFamily="sans-serif-medium" />
+        <TextView android:textSize="@dimen/okash_dimen_14" android:textColor="@color/easemoni_color_a6000000" android:id="@id/easemoni_balance_dialog_tip" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_8" android:layout_marginStart="@dimen/okash_dimen_16" android:layout_marginEnd="@dimen/okash_dimen_16" />
+        <Button android:layout_gravity="bottom" android:id="@id/btn_ok" android:layout_width="match_parent" android:layout_height="@dimen/okash_dimen_44" android:layout_marginTop="@dimen/easemoni_dimen_16" android:layout_marginBottom="@dimen/easemoni_dimen_16" android:text="@string/ok" style="@style/EaseMoniLargeBtnStyle" />
+    </LinearLayout>
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/easemoni_balance_dialog_close" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_24" android:layout_marginBottom="@dimen/easemoni_dimen_24" app:srcCompat="@drawable/easemoni_icon_close" />
+</LinearLayout>

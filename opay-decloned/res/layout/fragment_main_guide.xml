@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:layout_gravity="center" android:orientation="vertical" android:background="@drawable/ripple_white_6" android:paddingTop="@dimen/margin_24_dp" android:paddingBottom="@dimen/margin_24_dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="32.0dp" android:layout_marginRight="32.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="16.0sp" android:textColor="@color/omain_29303a" android:gravity="center_horizontal" android:layout_gravity="center_horizontal" android:id="@id/register_back_desc" android:layout_width="264.0dp" android:layout_height="wrap_content" android:text="@string/osdk_this_phone_number_has_been_registered" android:maxLines="2" />
+    <TextView android:textColor="@color/osdk_color_white" android:gravity="center" android:id="@id/register_go" android:background="@drawable/button_background" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginLeft="@dimen/dp_16" android:layout_marginTop="@dimen/margin_24_dp" android:layout_marginRight="@dimen/dp_16" />
+    <TextView android:textColor="@color/osdk_color_white" android:gravity="center" android:id="@id/register_back" android:background="@drawable/button_background" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginLeft="@dimen/dp_16" android:layout_marginTop="@dimen/margin_24_dp" android:layout_marginRight="@dimen/dp_16" />
+</LinearLayout>

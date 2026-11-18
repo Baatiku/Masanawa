@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="#f9f9f9" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <RelativeLayout android:id="@id/toolbar_ll" android:background="@android:color/white" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <ImageView android:id="@id/feedback_back_button" android:layout_width="24.0dp" android:layout_height="wrap_content" android:src="@drawable/ic_arrow_back" android:layout_centerVertical="true" android:layout_marginStart="15.0dp" android:layout_alignParentStart="true" />
+        <TextView android:textSize="18.0sp" android:textColor="#000000" android:gravity="center" android:padding="15.0dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/feedback_title" android:layout_centerInParent="true" />
+    </RelativeLayout>
+    <EditText android:gravity="top" android:id="@id/et_problem" android:background="#f0f0f0" android:padding="10.0dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="15.0dp" android:hint="@string/problem_desc" android:maxLines="10" android:minLines="6" />
+    <Button android:textColor="@android:color/white" android:id="@id/btn_submit" android:background="#62da00" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/submit_feedback" android:layout_marginStart="15.0dp" android:layout_marginEnd="15.0dp" />
+</LinearLayout>

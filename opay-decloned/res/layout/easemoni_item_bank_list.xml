@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/easemoni_tv_size_12" android:textColor="@color/easemoni_color_515f68" android:id="@id/tv_index" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/easemoni_dimen_18" android:layout_marginTop="@dimen/easemoni_dimen_8" android:layout_marginBottom="@dimen/easemoni_dimen_8" />
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:background="@color/easemoni_color_white" android:paddingLeft="@dimen/easemoni_dimen_18" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_75">
+        <ImageView android:id="@id/iv_bank_name" android:layout_width="@dimen/easemoni_dimen_42" android:layout_height="@dimen/easemoni_dimen_42" />
+        <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_2f2f2f" android:id="@id/tv_bank_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/easemoni_dimen_20" />
+    </LinearLayout>
+</LinearLayout>

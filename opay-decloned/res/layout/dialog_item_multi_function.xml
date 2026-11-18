@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.button.MaterialButton android:textSize="16.0sp" android:textColor="@color/mint" android:id="@id/actionConfirm" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginTop="16.0dp" android:text="@string/common_next" android:textAllCaps="false" android:fontFamily="@font/roboto_medium" app:backgroundTint="@color/white" app:cornerRadius="24.0dp" app:strokeColor="@color/mint" app:strokeWidth="1.0dp" style="@style/Material.Button.OutlinedButton"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" />

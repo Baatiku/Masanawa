@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:background="@drawable/message_snack_background" android:layout_width="match_parent" android:layout_height="match_parent">
+        <androidx.constraintlayout.widget.ConstraintLayout android:id="@id/message_force_remind_root" android:layout_width="match_parent" android:layout_height="match_parent">
+            <ImageView android:id="@id/message_snack_img" android:layout_width="40.0dp" android:layout_height="40.0dp" android:layout_marginLeft="@dimen/dp_10" android:scaleType="fitCenter" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintLeft_toLeftOf="parent" app:layout_constraintTop_toTopOf="parent" />
+            <TextView android:textSize="16.0sp" android:textStyle="bold" android:textColor="@color/message_515f68" android:ellipsize="end" android:id="@id/message_snack_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="8.0dp" android:maxEms="10" android:singleLine="true" app:layout_constraintLeft_toRightOf="@id/message_snack_img" app:layout_constraintTop_toTopOf="@id/message_snack_img" />
+            <TextView android:textSize="14.0sp" android:textColor="@color/message_515f68" android:ellipsize="end" android:id="@id/message_snack_body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="8.0dp" android:maxEms="15" android:singleLine="true" app:layout_constraintBottom_toBottomOf="@id/message_snack_img" app:layout_constraintLeft_toRightOf="@id/message_snack_img" app:layout_constraintTop_toBottomOf="@id/message_snack_title" />
+            <ImageView android:id="@id/message_snack_close" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_margin="@dimen/message_dp_6" android:src="@drawable/message_ic_delete_snackbar" app:layout_constraintRight_toRightOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

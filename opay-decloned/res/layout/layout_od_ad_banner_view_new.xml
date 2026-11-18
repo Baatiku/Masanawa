@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.pay.widget.LoopViewPager android:id="@id/loop_pager" android:layout_width="match_parent" android:layout_height="match_parent" android:animateLayoutChanges="true" app:loop_indicator_color_normal="@color/od_color_00B876_10" app:loop_indicator_color_select="@color/od_00B876" app:loop_indicator_margin_bottom="8.0dp" app:loop_indicator_position="pager_middle" app:loop_indicator_radius="3.0dp" app:loop_indicator_visible="true" app:loop_xml_w_h="true"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" />

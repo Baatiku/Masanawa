@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="16.0sp" android:textColor="@color/color_515f68" android:gravity="center" android:layout_gravity="center_horizontal" android:id="@id/country_name" android:background="@color/osdk_color_white" android:layout_width="match_parent" android:layout_height="72.0dp" android:drawablePadding="16.0dp" android:paddingStart="16.0dp" android:paddingEnd="16.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/divider" android:background="@color/osdk_66B6CBD9" android:layout_width="match_parent" android:layout_height="1.0dp" android:scaleType="fitXY" app:layout_constraintTop_toBottomOf="@id/country_name" />
+</androidx.constraintlayout.widget.ConstraintLayout>

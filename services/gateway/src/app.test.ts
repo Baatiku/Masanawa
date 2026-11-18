@@ -1,0 +1,246 @@
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  createCanonicalId,
+  isCanonicalId,
+  toInstant,
+} from "@masanawa/contracts";
+import { parseTraceparent } from "@masanawa/telemetry";
+import { createGatewayApp } from "./app.js";
+import { CustomerAuthError, type CustomerAuthService } from "./customer_auth.js";
+import type { BillingCheckoutService } from "./billing_checkout.js";
+
+const apps: Array<ReturnType<typeof createGatewayApp>> = [];
+
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
+describe("gateway service bootstrap", () => {
+  it("does not expose retired lesson, question or staff Room routes", async () => {
+    const app = createGatewayApp();
+    apps.push(app);
+    for (const [method, url] of [
+      ["GET", "/v1/rooms/room_12345678/lessons"],
+      ["GET", "/v1/rooms/room_12345678/questions"],
+      ["GET", "/v1/admin/rooms"],
+      ["GET", "/v1/rooms/room_12345678/discussion"],
+      ["GET", "/v1/rooms"],
+      ["GET", "/v1/rooms/discover"],
+      ["GET", "/v1/rooms/room_12345678/community"],
+      ["POST", "/v1/rooms/room_12345678/community/timeline"],
+    ] as const) {
+      const response = await app.inject({ method, url });
+      expect(response.statusCode, `${method} ${url}`).toBe(404);
+    }
+  });
+  it("reports health without implying dependency readiness", async () => {
+    const app = createGatewayApp({
+      now: () => toInstant("2026-10-01T16:00:00Z"),
+      readinessChecks: [
+        {
+          name: "database",
+          check: async () => ({ ready: false, reason: "unavailable" }),
+        },
+      ],
+    });
+    apps.push(app);
+
+    const health = await app.inject({ method: "GET", url: "/healthz" });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toEqual({
+      service: "gateway",
+      status: "ok",
+      time: "2026-10-01T16:00:00.000Z",
+    });
+
+    const readiness = await app.inject({ method: "GET", url: "/readyz" });
+    expect(readiness.statusCode).toBe(503);
+    expect(readiness.json().status).toBe("not-ready");
+  });
+
+  it("preserves validated retry/correlation keys without treating them as authority", async () => {
+    const app = createGatewayApp();
+    apps.push(app);
+
+    const suppliedRequestId = createCanonicalId("request");
+    const suppliedCorrelationId = createCanonicalId("correlation");
+    const parentTrace =
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/healthz",
+      headers: {
+        traceparent: parentTrace,
+        "x-request-id": suppliedRequestId,
+        "x-correlation-id": suppliedCorrelationId,
+      },
+    });
+
+    const requestId = response.headers["x-request-id"];
+    const correlationId = response.headers["x-correlation-id"];
+    const traceparent = response.headers.traceparent;
+    expect(typeof requestId).toBe("string");
+    expect(typeof correlationId).toBe("string");
+    expect(typeof traceparent).toBe("string");
+    if (typeof traceparent !== "string") {
+      throw new TypeError("expected traceparent response header");
+    }
+    expect(isCanonicalId("request", requestId)).toBe(true);
+    expect(isCanonicalId("correlation", correlationId)).toBe(true);
+    expect(requestId).toBe(suppliedRequestId);
+    expect(correlationId).toBe(suppliedCorrelationId);
+
+    const parsed = parseTraceparent(traceparent);
+    expect(parsed?.traceId).toBe("4bf92f3577b34da6a3ce929d0e0e4736");
+    expect(parsed?.spanId).not.toBe("00f067aa0ba902b7");
+  });
+
+  it("projects canonical OTP capabilities without delivery configuration", async () => {
+    let savedContact:{contactPhone:string;countryIso:string;subdivisionIso?:string}|null=null;
+    const customerAuth: CustomerAuthService = {
+      capabilities: () => ({ otpChannels: ["email"] }),
+      async currentSession({authorizationHeader}) {
+        if(authorizationHeader!=="Bearer owner")throw new CustomerAuthError("UNAUTHORIZED",401);
+        return {id:"user_example",name:"Amina Okafor",email:"amina@example.com",phone:null,
+          locale:"en",status:"ACTIVE",role:"CITIZEN",isNewUser:false,communityId:null,stateId:null,createdAt:"2026-11-09T00:00:00Z"};
+      },
+      async sendOtp() { throw new Error("unused"); },
+      async verifyOtp() { throw new Error("unused"); },
+      async accountStatus() { throw new Error("unused"); },
+      async deviceRestore() { throw new Error("unused"); },
+      async passwordVerify() { throw new Error("unused"); },
+      async passwordSetup() { throw new Error("unused"); },
+      async refresh() { throw new Error("unused"); },
+      async logout() {},
+      async sessions() { return []; },
+      async revokeSession() {},
+      async logoutAll() {},
+      async loginHistory() { return []; },
+      async startEmailLink() { throw new Error("unused"); },
+      async confirmEmailLink() { throw new Error("unused"); },
+      async requestPasswordRecovery() { throw new Error("unused"); },
+      async completePasswordRecovery() { throw new Error("unused"); },
+      async beginWithdrawalStepUp() { throw new Error("unused"); },
+      async confirmWithdrawalStepUp() { throw new Error("unused"); },
+      async consumeWithdrawalStepUp() { throw new Error("unused"); },
+      async beginContactChange() { throw new Error("unused"); },
+      async completeContactChange() { throw new Error("unused"); },
+      async beginBankStepUp() { throw new Error("unused"); },
+      async confirmBankStepUp() { throw new Error("unused"); },
+      async consumeBankStepUp() { throw new Error("unused"); },
+      async authorizeSensitiveMutation() {},
+      async contactGeography(input) {
+        if(input.authorizationHeader!=="Bearer owner")
+          throw new CustomerAuthError("AUTH_UNAVAILABLE",401);
+        return {contactPhone:savedContact?.contactPhone??null,
+          countryIso:savedContact?.countryIso??null,
+          subdivisionIso:savedContact?.subdivisionIso??null,
+          provenance:savedContact?'user_selected' as const:'not_provided' as const};
+      },
+      async updateContactGeography(input) {
+        if(input.authorizationHeader!=="Bearer owner")
+          throw new CustomerAuthError("AUTH_UNAVAILABLE",401);
+        savedContact={contactPhone:input.contactPhone,countryIso:input.countryIso,
+          ...(input.subdivisionIso?{subdivisionIso:input.subdivisionIso}:{})};
+        return {contactPhone:input.contactPhone,countryIso:input.countryIso,
+          subdivisionIso:input.subdivisionIso??null,
+          provenance:'user_selected' as const};
+      },
+    };
+    const app = createGatewayApp({ customerAuth });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/capabilities",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ otpChannels: ["email"] });
+
+    const deniedSession=await app.inject({url:"/auth/session"});
+    expect(deniedSession.statusCode).toBe(401);
+    expect(deniedSession.headers["cache-control"]).toBe("private, no-store");
+    const webSession=await app.inject({url:"/auth/session",headers:{authorization:"Bearer owner"}});
+    expect(webSession.statusCode).toBe(200);
+    expect(webSession.json()).toMatchObject({user:{id:"user_example",name:"Amina Okafor"}});
+    expect(webSession.body).not.toContain("accessToken");
+
+    const privateUrl='/v1/auth/profile/contact-geography';
+    const denied=await app.inject({method:'GET',url:privateUrl});
+    expect(denied.statusCode).toBe(401);
+    expect(denied.headers['cache-control']).toBe('private, no-store');
+    const saved=await app.inject({method:'PATCH',url:privateUrl,
+      headers:{authorization:'Bearer owner'},payload:{contactPhone:'+2348031234567',
+      countryIso:'NG',subdivisionIso:'NG-FC'}});
+    expect(saved.statusCode).toBe(200);
+    expect(saved.headers['cache-control']).toBe('private, no-store');
+    expect(saved.json()).toMatchObject({contactPhone:'+2348031234567',
+      countryIso:'NG',subdivisionIso:'NG-FC',provenance:'user_selected'});
+    const read=await app.inject({method:'GET',url:privateUrl,
+      headers:{authorization:'Bearer owner'}});
+    expect(read.statusCode).toBe(200);
+    expect(read.headers['cache-control']).toBe('private, no-store');
+    expect(read.json()).toEqual(saved.json());
+    expect((await app.inject({method:'PATCH',url:privateUrl,
+      payload:{contactPhone:'+2348031234567',countryIso:'NG'}})).statusCode).toBe(401);
+  });
+
+  it("retired bill quote routes remain absent with an injected legacy service", async () => {
+    const billingCheckout: BillingCheckoutService = {
+      async createQuote() { throw new Error("unused"); },
+      async startCheckout() { throw new Error("unused"); },
+      async verifyAndPurchase() { throw new Error("unused"); },
+      async read() { throw new Error("unused"); },
+      async list(request) {
+        if (request.authorizationHeader !== "Bearer customer") {
+          throw new Error("financial.auth.unauthorized");
+        }
+        return [];
+      },
+      async reconcileFulfillment() { return null; },
+      async verifyWalletConfirmAction() { throw new Error("unused"); },
+      async executeShellAction() { throw new Error("unused"); },
+    };
+    const app = createGatewayApp({ billingCheckout });
+    apps.push(app);
+
+    const allowed = await app.inject({
+      method: "GET",
+      url: "/v1/commerce/bills/quotes?limit=10",
+      headers: { authorization: "Bearer customer" },
+    });
+    expect(allowed.statusCode).toBe(404);
+
+    const denied = await app.inject({
+      method: "GET",
+      url: "/v1/commerce/bills/quotes",
+    });
+    expect(denied.statusCode).toBe(404);
+  });
+
+  it("fails readiness closed when a probe throws", async () => {
+    const app = createGatewayApp({
+      readinessChecks: [
+        {
+          name: "dependency",
+          check: async () => {
+            throw new Error("secret internal failure");
+          },
+        },
+      ],
+    });
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/readyz" });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks).toEqual([
+      {
+        name: "dependency",
+        ready: false,
+        reason: "readiness check failed",
+      },
+    ]);
+    expect(response.body).not.toContain("secret internal failure");
+  });
+});

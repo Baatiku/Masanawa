@@ -1,0 +1,95 @@
+94
+m
+dl
+c
+EGL
+GLESv2
+android
+log
+z
+jnigraphics
+OpenSLES
+GLESv3
+androidx.graphics.path 2 1 0
+c++_shared 2 1
+curve25519 2
+dav1d 2
+fb_sqlite_3530200 2 1
+fbandroid_java_com_facebook_privacy_acs_jni_jni-bridge-helpers 2
+fortify 2
+ggml_core_ops_enhanced 2 0
+ggml_core_ops_universal 2 0
+sodium 2
+s 2
+sqlitevec 2 0
+vlc 2
+wzav1 2 1 0
+arcore_sdk_c 6 5 2 1 0
+wa_log 6 2
+force_dlopen 6 2 1
+superpack 6 5 2 1
+fbjni 12 6
+glog 12
+executorch 12 6 0
+fbsocketthreadlocalscope 12
+fbunwindstack 12 6 0
+flexlayout 12 6 0
+graphstorecerealutil 12
+graphutil 12
+minscompiler-jni 12 0
+native-filters 12 8 6 0
+profilo_logger 12 0
+qnn_runtime_paths_jni 12 6
+simplejni 12 6
+sqlitejni 15 12 6
+transparency 20 12 6
+voprf-ed25519 20 16
+voprf-ristretto 20 16
+native_utils 26
+rtvip 27 12
+fbsofterror 29
+bloks_gpu_query 29
+fbjni_kt 29
+hiddenapis2 29 27
+ar-bundle3 30 6 0
+unwindstack_binary 33
+profilo_multi_buffer_logger 39 6
+profilo_mmapbuf_buffer 39
+fb 48 30 0
+qpl 52 29
+opus_mlow 52
+pyspeech 52 31 17 5
+wa_sandboxed_gifimage 52 8
+webpencoder-native 52 29
+yoga 52
+profilo_mmapbuf_buffer_jni 55 29
+essential 56 27 26
+fb_libyuv_jni 56 52
+gifimage 56 8
+lacrimajni 56 27
+profilo 56 54 52
+static-webp 56 52 8
+whatsappmerged 57 56 41 36 35 8 5
+ctsmarttrim-frame-based-native 57 31 8
+xplat_psi 57 31
+ar-bundle2 58 57 10 5 4 3
+profilo_mmapbuf 63 56
+profilo_stacktrace 68 33
+profilo_counters 68
+profilo_threadmetadata 68
+mobileconfig-jni 70 20
+ohai 70 26 20
+pando-client-runtimedefaults-jni 70
+smartglasses-bundle 70
+tigon-ue-reporter 70
+wasafedeps 70
+psi 72
+ar-bundle5 73 56
+ffsingletonmerged 73 70 32 15 7
+whatsapp 73 70 59 26 23 9 7
+profilo_atrace 75
+profilo_systemcounters 76
+wasafe 83
+ar-bundle4 85 70 31 7
+unityjni 87
+graphicsengine-arengineservices-whatsappservicehost-native 91

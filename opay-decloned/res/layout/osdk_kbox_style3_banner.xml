@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.pay.widget.LoopViewPager android:id="@id/kboxBanner" android:layout_width="0.0dp" android:layout_height="0.0dp" app:layout_constraintDimensionRatio="h,3.74:1" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:loop_indicator_color_normal="@color/white_40" app:loop_indicator_color_select="@color/osdk_color_white" app:loop_indicator_position="pager_middle" />
+</androidx.constraintlayout.widget.ConstraintLayout>

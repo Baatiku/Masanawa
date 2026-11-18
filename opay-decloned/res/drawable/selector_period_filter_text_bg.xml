@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:drawable="@drawable/selector_transaction_period_select" />
+    <item android:drawable="@drawable/shape_solid_f8f8fb_c_8" />
+</selector>

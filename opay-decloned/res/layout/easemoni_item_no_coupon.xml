@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView android:textSize="@dimen/easemoni_tv_size_14" android:textColor="@color/easemoni_color_8497a4" android:gravity="center" android:background="@drawable/easemoni_bg_no_coupon" android:paddingTop="@dimen/easemoni_dimen_16" android:paddingBottom="@dimen/easemoni_dimen_16" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/easemoni_no_coupon"
+  xmlns:android="http://schemas.android.com/apk/res/android" />

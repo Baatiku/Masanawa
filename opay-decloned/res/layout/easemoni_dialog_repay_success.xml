@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:background="@drawable/easemoni_bg_corner_12_white" android:padding="@dimen/easemoni_dimen_24" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:layout_width="wrap_content" android:layout_height="wrap_content" app:srcCompat="@drawable/easemoni_icon_paysuccess" />
+    <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_theme" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_10" android:text="@string/easemoni_pay_success" android:fontFamily="sans-serif-medium" />
+    <TextView android:textSize="@dimen/easemoni_tv_size_14" android:textColor="@color/easemoni_color_222f3e" android:gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_12" android:text="@string/easemoni_pay_success_remind" />
+    <Button android:enabled="true" android:id="@id/btn_success_understand" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_btn_height" android:layout_marginTop="@dimen/easemoni_dimen_24" android:layout_marginBottom="@dimen/easemoni_dimen_24" android:text="@string/easemoni_ok_understand" android:textAllCaps="false" style="@style/EaseMoniLargeBtnStyle" />
+</LinearLayout>

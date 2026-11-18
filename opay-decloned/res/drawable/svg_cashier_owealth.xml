@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="40.0dp" android:width="40.0dp" android:viewportWidth="40.0" android:viewportHeight="40.0"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <path android:fillColor="#1dcf9f" android:pathData="M16,0L24,0A16,16 0,0 1,40 16L40,24A16,16 0,0 1,24 40L16,40A16,16 0,0 1,0 24L0,16A16,16 0,0 1,16 0z" android:strokeAlpha="0.1" android:fillAlpha="0.1" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$svg_cashier_owealth__0" android:pathData="M12.554,16.182c-1.25,-1.276 -3.276,-1.276 -4.526,0L6.566,17.675l4.525,4.62 3.725,-3.803 -2.262,-2.31z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$svg_cashier_owealth__1" android:pathData="M17.88,19.985c-1.25,-1.276 -3.276,-1.276 -4.526,0l-2.262,2.31 2.262,2.31c1.25,1.275 3.276,1.275 4.526,0l2.262,-2.31 -2.262,-2.31z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$svg_cashier_owealth__2" android:pathData="M32.256,16.182c-1.25,-1.276 -3.277,-1.276 -4.525,0l-2.263,2.31 1.463,1.492c1.248,1.277 3.275,1.277 4.525,0l2.263,-2.31 -1.463,-1.492z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$svg_cashier_owealth__3" android:pathData="M26.93,19.985l-4.525,-4.62c-1.25,-1.276 -3.276,-1.276 -4.525,0l-4.526,4.62c1.25,-1.276 3.276,-1.276 4.526,0l4.525,4.62c1.25,1.275 3.276,1.275 4.525,0l4.526,-4.62c-1.25,1.275 -3.276,1.275 -4.526,0z" android:fillType="evenOdd" />
+</vector>

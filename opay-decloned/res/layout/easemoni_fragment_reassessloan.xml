@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.easemoni.widget.OKashActionBar android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent" app:okash_ab_bg_color="@color/easemoni_color_transparent" app:okash_ab_end_tint_color="@color/easemoni_color_transparent" app:okash_ab_start_tint_color="@color/easemoni_color_transparent" app:okash_ab_title_color="@color/easemoni_color_transparent" app:okash_ab_title_gravity="start" />
+    <View android:background="@color/easemoni_color_f8f8fb" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_1" />
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+            <TextView android:textSize="@dimen/easemoni_tv_size_18" android:textStyle="bold" android:textColor="@color/easemoni_color_515f68" android:gravity="center" android:layout_gravity="center_horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_24" android:text="@string/easemoni_estimation_congratulation" />
+            <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_8497a4" android:gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_4" android:text="@string/easemoni_estimation_reassess_description" android:layout_marginStart="@dimen/easemoni_dimen_16" android:layout_marginEnd="@dimen/easemoni_dimen_16" />
+            <androidx.appcompat.widget.AppCompatImageView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_32" android:layout_marginBottom="@dimen/easemoni_dimen_36" android:adjustViewBounds="true" android:layout_marginStart="@dimen/easemoni_dimen_24" android:layout_marginEnd="@dimen/easemoni_dimen_24" app:srcCompat="@drawable/easemoni_ic_estimation_overdate" />
+            <Button android:enabled="true" android:id="@id/estimation_fragment_assess" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_btn_height" android:layout_marginBottom="@dimen/easemoni_dimen_24" android:text="@string/easemoni_assess" app:layout_constraintBottom_toBottomOf="parent" style="@style/EaseMoniLargeBtnStyle" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

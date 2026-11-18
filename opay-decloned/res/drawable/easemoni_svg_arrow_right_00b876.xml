@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="@dimen/easemoni_dimen_4" android:width="@dimen/easemoni_dimen_4" android:viewportWidth="4.0" android:viewportHeight="4.0"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="@color/easemoni_color_00b876" android:pathData="M2,0 L4,2 L2,4 L2,0 Z" />
+</vector>

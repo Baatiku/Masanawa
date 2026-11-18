@@ -1,0 +1,23 @@
+[Unit]
+Description=Masanawa read-only operational health check and transition alert
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=masanawa-ops
+Group=masanawa-ops
+WorkingDirectory=/opt/masanawa
+EnvironmentFile=/etc/masanawa/health-watch.env
+Environment=MASANAWA_WATCH_STATE_FILE=/var/lib/masanawa-reliability/last-health-state
+StateDirectory=masanawa-reliability
+StateDirectoryMode=0700
+ExecStart=/usr/bin/node /opt/masanawa/scripts/reliability/readiness-watch.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/masanawa-reliability
+TimeoutStartSec=30
+StandardOutput=journal
+StandardError=journal

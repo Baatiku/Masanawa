@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.core.widget.fillet.CorpConstraintLayout android:id="@id/rootBanner" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" app:corp_corners="8.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.business.provider.active.NestedScrollableViewPager2 android:id="@id/nestedScrollView" android:layout_width="match_parent" android:layout_height="0.0dp" app:layout_constraintDimensionRatio="4:1" app:layout_constraintTop_toTopOf="parent">
+        <team.opay.pay.widget.LoopViewPager android:id="@id/banner_layout" android:layout_width="match_parent" android:layout_height="match_parent" app:loop_indicator_visible="false" app:loop_xml_w_h="true" />
+    </team.opay.business.provider.active.NestedScrollableViewPager2>
+    <team.opay.business.widget.looper.ViewPagerIndicator android:id="@id/tabIndicator" android:visibility="gone" android:layout_width="match_parent" android:layout_height="15.0dp" app:layout_constraintBottom_toBottomOf="@id/nestedScrollView" app:vpi_animation="false" app:vpi_default_color="#d2dbe1" app:vpi_distance="9.0dp" app:vpi_distanceType="BY_DISTANCE" app:vpi_indicatorType="CIRCLE_LINE" app:vpi_radius="2.0dp" app:vpi_radius_selected="2.0dp" app:vpi_selected_color="@color/mint" />
+</team.opay.core.widget.fillet.CorpConstraintLayout>

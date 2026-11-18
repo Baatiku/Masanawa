@@ -1,0 +1,1495 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:compileSdkVersion="35" android:compileSdkVersionCodename="15" package="team.opay.pay" platformBuildVersionCode="35" platformBuildVersionName="15">
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera" android:required="true"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <uses-feature android:name="android.hardware.telephony" android:required="false"/>
+    <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+    <uses-feature android:name="android.hardware.location" android:required="false"/>
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <permission-group android:name="team.opay.pay.andpermission"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_LOCATION"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.FLASHLIGHT"/>
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"/>
+    <uses-feature android:name="android.hardware.camera.autofocus"/>
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+        </intent>
+        <package android:name="com.facebook.katana"/>
+        <package android:name="com.google.android.apps.maps"/>
+        <intent>
+            <action android:name="com.appsflyer.referrer.INSTALL_PROVIDER"/>
+        </intent>
+        <package android:name="com.instagram.android"/>
+        <package android:name="com.facebook.lite"/>
+        <package android:name="com.samsung.android.mapsagent"/>
+        <package android:name="com.huawei.hff"/>
+        <package android:name="com.huawei.hms"/>
+        <package android:name="com.huawei.hwid"/>
+        <package android:name="com.huawei.hwid.tv"/>
+        <package android:name="com.huawei.works"/>
+    </queries>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.AUTHENTICATE_ACCOUNTS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="com.huawei.android.launcher.permission.CHANGE_BADGE "/>
+    <uses-feature android:glEsVersion="0x20000" android:required="true"/>
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION"/>
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID"/>
+    <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE"/>
+    <uses-permission android:name="com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"/>
+    <uses-permission android:name="com.samsung.android.mapsagent.permission.READ_APP_INFO"/>
+    <uses-permission android:name="com.huawei.appmarket.service.commondata.permission.GET_COMMON_DATA"/>
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE"/>
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS"/>
+    <permission android:name="team.opay.pay.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" android:protectionLevel="signature"/>
+    <uses-permission android:name="team.opay.pay.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"/>
+    <application android:allowBackup="false" android:appComponentFactory="androidx.core.app.CoreComponentFactory" android:dataExtractionRules="@xml/appsflyer_data_extraction_rules" android:debuggable="false" android:enableOnBackInvokedCallback="false" android:extractNativeLibs="true" android:fullBackupContent="@xml/appsflyer_backup_rules" android:hardwareAccelerated="false" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:name="team.opay.pay.android.NewOpayApplication" android:networkSecurityConfig="@xml/disable_network_security_config" android:persistent="false" android:supportsRtl="true" android:testOnly="false" android:theme="@style/AppTheme" android:usesCleartextTraffic="true">
+        <activity android:exported="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:name="team.opay.pay.home.DexloadActivity" android:screenOrientation="portrait" android:theme="@style/SplashTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="opayHost" android:value="https://api.opayweb.com/"/>
+        <meta-data android:name="publicBuild" android:value="true"/>
+        <meta-data android:name="homeConfigHost" android:value="https://config-home.opayweb.com"/>
+        <meta-data android:name="osdkType" android:value="main"/>
+        <meta-data android:name="mqttHost" android:value="tcp://message-platform.opayweb.com"/>
+        <meta-data android:name="mqttOfflineHost" android:value="https://api-im.opayweb.com"/>
+        <meta-data android:name="appId" android:value="1"/>
+        <meta-data android:name="messagecenter" android:value="https://messagecenter-platform.opayweb.com/"/>
+        <meta-data android:name="ologgerHost" android:value="https://logger-platform.opayweb.com"/>
+        <meta-data android:name="abtestHost" android:value="https://ab-platform.opayweb.com"/>
+        <meta-data android:name="jambHost" android:value="https://scene.opayweb.com/scene"/>
+        <meta-data android:name="analyticsHost" android:value="https://tracking.gateway.opayweb.com"/>
+        <meta-data android:name="etype" android:value="release"/>
+        <meta-data android:name="riskControlHost" android:value="https://push.opayweb.com"/>
+        <meta-data android:name="scheme_prefix" android:value="otravel://schemedispatcher?action="/>
+        <meta-data android:name="marketActivityHost" android:value="https://marketing.opayweb.com"/>
+        <meta-data android:name="enableDebug" android:value="false"/>
+        <meta-data android:name="SM_ENABLED" android:value="open"/>
+        <meta-data android:name="APPLOG_SCHEME" android:value="rangersapplog.8d32aa77a2f43915"/>
+        <meta-data android:name="APPLOG_ID" android:value="10000009"/>
+        <meta-data android:name="APPLOG_URL" android:value="https://ab-test.opayweb.com"/>
+        <meta-data android:name="sipSecret" android:value="56786c7c562a47a5ab68a5803a44969a"/>
+        <meta-data android:name="sipAppId" android:value="4a4b23e2f8104d87acb7e423c926c479"/>
+        <meta-data android:name="sipCompanyId" android:value="e698cb8256814e09a4864662839009e4"/>
+        <meta-data android:name="apiHost" android:value="https://cscenter-nigeria.opayweb.com"/>
+        <meta-data android:name="sipAddress" android:value="sip-cscenter-nigeria.opayweb.com:8880"/>
+        <meta-data android:name="remoteConfigHost" android:value="https://api.opayweb.com/"/>
+        <meta-data android:name="opayCardInfoHost" android:value="https://opay.ng"/>
+        <meta-data android:name="DEFAULT_PRE" android:value="google play"/>
+        <meta-data android:name="disableSecurity" android:value="false"/>
+        <meta-data android:name="auth2WhiteList" android:value="opayweb.com;opay.ng;inokv.com;br-easeml.com;opaycheckout.com;easeml.com;easecredit.com;brmfbank.com"/>
+        <meta-data android:name="socketHost" android:value="wss:///wallet-ws.opayweb.com/ws"/>
+        <meta-data android:name="cashierHost" android:value="https://api.opayweb.com"/>
+        <meta-data android:name="marketTaskActivityHost" android:value="https://opay-marketing-task-web-api.opayweb.com"/>
+        <meta-data android:name="owealthWebHost" android:value="https://savings-owealth.opayweb.com"/>
+        <meta-data android:name="shortUrlHost" android:value="https://opay.ng"/>
+        <meta-data android:name="rewardsH5Host" android:value="https://mkt.opayweb.com"/>
+        <meta-data android:name="downloadHost" android:value="https://userh5.opayweb.com"/>
+        <meta-data android:name="unfreezeH5Host" android:value="https://opay.ng"/>
+        <meta-data android:name="userH5Host" android:value="https://userh5.opayweb.com"/>
+        <meta-data android:name="cardWeb" android:value="https://card.opayweb.com"/>
+        <meta-data android:name="webAuthHost" android:value="https://api.opayweb.com"/>
+        <meta-data android:name="gonggongGateway" android:value="https://gonggong-marketing.opayweb.com"/>
+        <meta-data android:name="acTransferHost" android:value="https://wallet-actransfer.opayweb.com"/>
+        <meta-data android:name="aaTransferHost" android:value="https://wallet-aatransfer.opayweb.com"/>
+        <meta-data android:name="billHost" android:value="https://wallet-transaction.opayweb.com"/>
+        <meta-data android:name="livingHost" android:value="https://wallet-living.opayweb.com"/>
+        <meta-data android:name="qrHost" android:value="https://gonggong-offline-transaction.opayweb.com"/>
+        <meta-data android:name="businessHost" android:value="https://offline-api-user.opayweb.com"/>
+        <meta-data android:name="facePlatformHost" android:value="https://face-security.opayweb.com"/>
+        <meta-data android:name="omsHost" android:value="https://merchant-saas.opayweb.com"/>
+        <meta-data android:name="payBillHost" android:value="https://pos.opayweb.com"/>
+        <activity android:exported="false" android:name="team.opay.sme.va.TransferActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/sme/va" android:scheme="opay"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="sme" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.sme.va.TransferTranslucentActivity" android:screenOrientation="behind" android:theme="@style/CommonAppTheme.Translucent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/push/large" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.sme.va.receive.staticAccount.posterTeplate.AccountPosterPreviewActivity" android:screenOrientation="behind" android:theme="@style/CommonAppTheme.Translucent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/sme/poster/preview" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.sme.va.v2.MyBusinessActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="opay"/>
+                <data android:host="business"/>
+                <data android:pathPrefix="/sme/tn/home"/>
+                <data android:pathPrefix="/sme/tn/merchantServices"/>
+                <data android:pathPrefix="/sme/tn/payMePage"/>
+                <data android:pathPrefix="/sme/tn/paymentAccount"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.business.transfer.flow.TransferFlowActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer" android:pathPrefix="/transferFlow" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.transfer.flow.TransactionActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="oms" android:pathPrefix="/transaction" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.business.transfer.flow.cashback.CashBackActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/cashback" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.pos.print.PosBluetoothPrintActivity" android:theme="@style/CommonAppTheme.Translucent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="posPrint" android:pathPrefix="/bluetooth" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="true" android:launchMode="singleTask" android:name="team.opay.spos.printer.function.PrintVerifyPinActivity" android:theme="@style/CommonAppTheme.Translucent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="open" android:pathPrefix="/verify/printSupervisorPin" android:scheme="opaypos"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="true" android:launchMode="singleTask" android:name="team.opay.spos.printer.function.PrintProviderActivity" android:theme="@style/CommonAppTheme.Translucent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="open" android:pathPrefix="/printer" android:scheme="opaypos"/>
+                <data android:host="open" android:pathPrefix="/qrCode/printer" android:scheme="opaypos"/>
+                <data android:host="open" android:pathPrefix="/bitmap/printer" android:scheme="opaypos"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="opayActivityHost" android:value="https://inokv.com"/>
+        <activity android:exported="false" android:label="" android:name="pub.devrel.easypermissions.AppSettingsDialogHolderActivity" android:theme="@style/EasyPermissions.Transparent"/>
+        <meta-data android:name="android.max_aspect" android:value="2.4"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.opb.qrcode.CommonQRResultActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="opay"/>
+                <data android:host="common"/>
+                <data android:pathPrefix="/qrcode/bindPreQr"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:hardwareAccelerated="true" android:launchMode="singleTop" android:name="team.opay.opb.qrcode.CommonQRScanActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="opay"/>
+                <data android:host="common"/>
+                <data android:pathPrefix="/qrcode/scan"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="qrscan" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="qrscan_v2" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="scan.qrcode" android:pathPrefix="/2sqr" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="scan.qrcode" android:pathPrefix="/2sqr" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.opb.qrcode.CommonQRDecodeActivity" android:theme="@style/CommonAppTheme.Translucent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="common" android:pathPrefix="/qrcode/decodeQR" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.opb.qrcode.payment.QrSdkPaymentActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="opay"/>
+                <data android:host="common"/>
+                <data android:pathPrefix="/qrSdk/onqrPayment"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.onboarding.register.SetPasswordActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.onboarding.register.OnboardingAccountDetailsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:label="@string/app_name" android:name="team.opay.pay.home.SplashActivity" android:screenOrientation="portrait" android:theme="@style/SplashTheme"/>
+        <activity android:name="team.opay.pay.home.AppGuideActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="com.opay.team.newhome.me.NewTotalAssetsV2Activity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="assetsinfo" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="NewRewards" android:launchMode="singleTask" android:name="com.opay.team.newhome.reward.RewardsNewActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="rewards_new_page" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="com.opay.team.newhome.account.AccountDetailActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="account_detail" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="com.opay.team.newhome.home.balance.HomeSavingDetailsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="savings_detail" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.kyc.UpgradeByBankInfoActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="adjustPan"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.kyc.ModifyUserInfoActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="modify_info" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.email.ModifyEmailTipsActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="modify_email_tips" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.OpayTransferSendMoneyActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer_aa" android:path="/actoaa" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.core.android.AuthUserActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="auth2" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.home.tabs.ac.BankStatusActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="bank_monitor" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.home.tabs.ac.BankTransferDispatchActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="bank_transfer" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.home.tabs.ac.OpayBankTransferActivityV3" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="stateVisible|adjustResize"/>
+        <activity android:exported="false" android:name="team.opay.pay.invest.withdraw.WithdrawItemActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="withdraw_group" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cashout" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.settings.sms.SmsSubscribeActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent">
+            <meta-data android:name="android.app.lib_name" android:value=""/>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="sms_subscribe" android:path="/entry" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.PaymentChooseCategoryActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="choose_category" android:path="/entry" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.cashier.result.SaveBeneficiaryActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="beneficiary" android:path="/save" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.payment.RecentRechargeBeneficiaryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:label="Contacts" android:name="team.opay.pay.TransferContactActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer/aahome" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:excludeFromRecents="true" android:exported="true" android:label="@string/activity_dispatchscheme_page_label" android:launchMode="singleTask" android:name="team.opay.pay.home.scheme.SchemeDispatchActivity" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="schemedispatcher" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="payment_new" android:scheme="btravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="otravelopayapp"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="au3zr.app.link" android:scheme="https"/>
+                <data android:host="au3zr.test-app.link" android:scheme="https"/>
+                <data android:host="au3zr-alternate.app.link" android:scheme="https"/>
+                <data android:host="au3zr-alternate.test-app.link" android:scheme="https"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="opaytest.onelink.me" android:pathPrefix="/lsgX" android:scheme="https"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="opayapp.onelink.me" android:pathPrefix="/2h9f" android:scheme="https"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_home_page_label" android:launchMode="singleTask" android:name="team.opay.pay.home.MainActivity" android:screenOrientation="portrait" android:theme="@style/MainActivityTheme" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="android/payment/easycash" android:scheme="opay"/>
+                <data android:host="home" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="opay" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="reward" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="account" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="card" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="finance" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="finance" android:path="/entrance/loan" android:scheme="otravel"/>
+                <data android:host="finance" android:path="/entrance/savings" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_cashout_page_label" android:name="team.opay.pay.cashio.CashOutActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="stateVisible|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cashout" android:pathPrefix="/qrcode" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_cashin_page_label" android:name="team.opay.pay.cashio.CashInActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysVisible|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cashin" android:pathPrefix="/qrcode" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cashin" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.payment.airtime.AirtimeTopUpActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="android/payment/airtime_data" android:scheme="opay"/>
+                <data android:host="android/payment/airtime" android:scheme="opay"/>
+                <data android:host="airtime_data" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="airtime" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.payment.airtimeMobileData.DataTopUpActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="android/payment/mobile_data" android:scheme="opay"/>
+                <data android:host="mobile_data" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_billpayment_page_label" android:launchMode="singleTop" android:name="team.opay.pay.payment.bill.NativeBillPaymentActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="billpayment_list" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_billpayment_page_label" android:launchMode="singleTop" android:name="team.opay.pay.payment.bill.NativeBillMoreActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="billpayment" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_billpayment_page_label" android:launchMode="singleTop" android:name="team.opay.pay.payment.bill.NativeBillSearchActivity" android:screenOrientation="portrait" android:theme="@style/AppThemeStatueBar" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:label="@string/activity_betting_page_label" android:launchMode="singleTask" android:name="team.opay.pay.payment.betting.BettingTopupActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="android/payment/betting" android:scheme="opay"/>
+                <data android:host="betting" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/activity_betting_page_label" android:launchMode="singleTop" android:name="team.opay.pay.payment.betting.BettingHistoryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:label="@string/activity_electricity_page_label" android:launchMode="singleTop" android:name="team.opay.pay.payment.electricity.ElectricityPaymentActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="android/payment/electricity" android:scheme="opay"/>
+                <data android:host="nigeriaelectricity" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="electricity" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.home.security.paypin.PayPinInputActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="input_payment_pin" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.wallet.AddMoneyActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="add_money" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.wallet.ReceiveMoneyActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="receive_money" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:launchMode="singleTop" android:name="team.opay.pay.onboarding.OnboardingActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="signup" android:path="/entrance" android:scheme="otravel"/>
+                <data android:host="login" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/title_activity_payment_instrument" android:name="team.opay.pay.settings.PaymentInstrumentActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="add_card" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/instrument_card" android:name="team.opay.pay.settings.NewCardActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="bind_card" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.settings.ChangeEmailActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="keyboard|keyboardHidden|orientation" android:exported="false" android:name="team.opay.pay.wallet.TransactionActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="balance" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.wallet.cashback.CashBackActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cash_back" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/settings_about" android:name="team.opay.pay.settings.AboutActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.payment.verification.PinVerificationActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.payment.verification.OtpVerificationActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="com.opay.team.home.ntp.NTPTimeNoticeActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.payment.verification.PhoneVerificationActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:label="@string/osdk_my_profile" android:name="team.opay.pay.kyc.AccountDetailsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="account" android:path="/entrance/detail" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/recent_contacts" android:name="team.opay.pay.cashio.RecentCashContactsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.kyc.levels.KycLevelsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="kyclevel" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.kyc.upgrade3.Kyc3SuccessActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.kyc.upgrade3.KycUpgrade3Activity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="kyc_document" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.kyc.edit.KycFormActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="kycform" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.kyc.bvn.IAgreeBvnActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:label="@string/settings_account" android:name="team.opay.pay.kyc.agent.AgentUpgradeDocumentActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="agent_upgrade_document" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:launchMode="singleTask" android:name="team.opay.pay.home.PinAppLockActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysHidden|adjustPan"/>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.history.details.TransactionDetailsForIdActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transaction_detail" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.history.details.pdf.PdfDetailActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="share_pdf" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:launchMode="singleTop" android:name="team.opay.pay.payment.tv.TVTopupActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="android/payment/tv" android:scheme="opay"/>
+                <data android:host="tv" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:launchMode="singleTask" android:name="team.opay.pay.home.security.paypin.ResetPayPinActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="payment_pin" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.settings.profile.ProfileHomeActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysHidden"/>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.SecurityEntranceActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="security" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.closeaccount.CloseAccountApplyActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.GestureSettingActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:name="team.opay.pay.transfer.MobileTransferActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="mobiletransfer" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.settings.MessageNotificationsSettingActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="message_notifications" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.pay.transfer.contact.view.TransferToOpayAccountActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysHidden|adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="send_money" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.transfer.contact.requestmoney.TransferContactListActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="request_money" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:launchMode="singleTop" android:name="team.opay.pay.transfer.contact.requestmoney.ContactTransferRequestMoneyActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:name="team.opay.pay.transfer.contact.view.TransferToNotOPayUserGuideActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.transfer.contact.sendmoney.ContactTransferSendMoneyActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="stateVisible|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer" android:pathPrefix="/qrcode" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.transfer.contact.view.TransferSavedContactActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer_beneficiary_contact" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.transfer.contact.view.TransferSearchContactActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer_search_contact" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.transfer.MoneyTransferActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.home.security.SecretSecurityPasswordActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="login_password" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:launchMode="singleTop" android:name="team.opay.pay.home.security.ChangePasswordActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysHidden"/>
+        <activity android:launchMode="singleTop" android:name="team.opay.pay.home.security.ForgotPasswordActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateAlwaysHidden"/>
+        <activity android:launchMode="singleTop" android:name="team.opay.pay.wallet.transferhistory.TransferHistoryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.wallet.addmoney.AddMoneyItemActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="add_money_group" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.pay.transfer.MobileTransferItemActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer_group" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:name="team.opay.pay.cashier.CvvVerificationActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:name="team.opay.pay.cashier.ProtocolConfirmActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.cashier.PaymentActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="stateHidden|adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cashier" android:path="/im" android:scheme="opay"/>
+                <data android:host="cashier" android:path="/payment" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.history.balance.BalanceHistoryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="balance_history" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:launchMode="singleTop" android:name="team.opay.pay.history.balance.BalanceHistoryDetailActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.lockpattern.demo.activity.CreateGestureActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="create_lock_pattern" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.account.verify.VerifyActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="verify_pool" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.account.ChangeMobileActivity" android:screenOrientation="behind" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="change_mobile" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:label="@string/app_name" android:name="team.opay.pay.home.tabs.RecentBeneficiaryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustPan"/>
+        <activity android:exported="true" android:label="@string/app_name" android:launchMode="singleTop" android:name="team.opay.pay.home.tabs.ChooseBankActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="choose_bank" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:label="@string/app_name" android:name="team.opay.pay.settings.ChooseBankAccountActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustPan"/>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.remember.RememberPasswordSetActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="router_password_remember" android:path="" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.ChangePasswordEntranceActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="router_modifyPassWord" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.ForgetPasswordEntranceActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="router_forgetPassWord" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.paypin.ChangePinEntranceActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="router_modifyPaymentPin" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:name="team.opay.pay.home.security.remember.RememberPasswordTipActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:name="team.opay.pay.ad.MajorRecommendActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.kyc.upgrade2.KycUpgrade2Activity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="kyc" android:path="/enter" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:label="@string/app_name" android:name="team.opay.pay.kyc.upgrade1.KycUpgrade1Activity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="new_kyc" android:path="/task" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.email.EmailModifyActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateVisible|adjustResize">
+            <intent-filter>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.biometric.BiometricSaveActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateVisible|adjustResize"/>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.OpaySystemNotificationsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="system_notifications" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.PasswordResultActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:name="team.opay.pay.cashier.result.ShareContactActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:name="team.opay.pay.kyc.upgrade3.fail.KycUpgrade3FailedActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="stateHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="update_kyc3_fail" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.payment.data.DataShareActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparentWithBackground" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.face.CameraActivity" android:screenOrientation="behind" android:theme="@style/OPayTransparent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="oface" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.sensesecurity.SecurityCenterActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="securitycenter" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.sensesecurity.SecurityMessageCenterActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="securitycenter_message" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.sensesecurity.SecurityTestingActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="securitytesting" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.sensesecurity.SecurityTestingAnimationActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="securitytestinganimation" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.HomePageSettingsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.onboarding.help.HelpActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.pin.PasswordRecoveryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.wallet.TransactionHistoryByNumberActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="user_records" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.themes.ThemesSettingsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="theme_settings" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.home.security.AccessToClipboardSettingActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.history.download.BillDownloadTimeActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="bill_download_time" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.history.balance.BalanceUnAvailableHistoryActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.pin.NoNetWorkActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.cashier.result.PaymentSafetyQuestionnaireActivity" android:screenOrientation="portrait" android:theme="@style/OPayTransparent"/>
+        <activity android:exported="false" android:name="team.opay.pay.kyc.upgrade2.Kyc2StatusActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="kyc_upgrade_status" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.sensesecurity.SecurityCenterDialogActivity" android:theme="@style/OPayTransparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="securitycenter_dialog" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.payment.voucherpackage.VoucherPackageActivity" android:theme="@style/OPayTransparent"/>
+        <activity android:exported="false" android:name="team.opay.pay.customerservice.OCustomerServiceHomeActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="customer_service" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.customerservice.OCustomerServiceMoreActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="service_more" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.payment.giftcard.GiftCardListActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="gift_card" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.pay.payment.giftcard.GIftCardDetailsActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.onboarding.secondary.SecondaryBoardingActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme"/>
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false"/>
+        <meta-data android:name="firebase_crashlytics_collection_enabled" android:value="false"/>
+        <meta-data android:name="httpdnsHost" android:value="http://35.181.50.213/dns_list.json"/>
+        <meta-data android:name="io.branch.sdk.BranchKey" android:value="key_live_ik0nsbzWmECWE6d8LN2dYejhxEl7OWkX"/>
+        <meta-data android:name="io.branch.sdk.BranchKey.test" android:value="key_test_ieZjwaC0fqE8E4k4JR2e8comtuk7N0Ce"/>
+        <meta-data android:name="io.branch.sdk.TestMode" android:value="false"/>
+        <meta-data android:name="opayCSHost" android:value="https://cs.opayweb.com:9000"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_opay_logo_support"/>
+        <meta-data android:name="com.google.android.geo.API_KEY" android:value="@string/google_maps_key"/>
+        <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="@string/facebook_app_id"/>
+        <meta-data android:name="com.facebook.sdk.ClientToken" android:value="@string/osdk_facebook_client_token"/>
+        <meta-data android:name="com.facebook.sdk.AutoInitEnabled" android:value="false"/>
+        <meta-data android:name="opayCardHost" android:value="https://card.opayweb.com"/>
+        <meta-data android:name="tongDunHost" android:value="https://opay-rcc-tddevice-api.opayweb.com/risk/device/info"/>
+        <meta-data android:name="owealthInvest" android:value="https://owealthh5.opayweb.com/apiOwealth"/>
+        <meta-data android:name="draftHost" android:value="https://creditme-api-pro.opayweb.com"/>
+        <provider android:authorities="team.opay.pay.provider" android:exported="false" android:grantUriPermissions="true" android:name="androidx.core.content.FileProvider">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/provider_paths"/>
+        </provider>
+        <receiver android:exported="true" android:name="com.appsflyer.SingleInstallBroadcastReceiver">
+            <intent-filter>
+                <action android:name="com.android.vending.INSTALL_REFERRER"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:enabled="true" android:exported="true" android:name="team.opay.pay.onboarding.tabs.WhatsappOtpReceiver">
+            <intent-filter>
+                <action android:name="com.whatsapp.otp.OTP_RETRIEVED"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:exported="true" android:name="team.opay.pay.onboarding.tabs.OtpBroadcastReceiver" android:permission="com.google.android.gms.auth.api.phone.permission.SEND">
+            <intent-filter>
+                <action android:name="com.google.android.gms.auth.api.phone.SMS_RETRIEVED"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:exported="true" android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver" android:permission="com.google.android.c2dm.permission.SEND" android:process=":push">
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE"/>
+            </intent-filter>
+            <meta-data android:name="com.google.android.gms.cloudmessaging.FINISHED_AFTER_HANDLED" android:value="true"/>
+        </receiver>
+        <service android:directBootAware="true" android:exported="true" android:name="com.google.firebase.messaging.FirebaseMessagingService" android:process=":push">
+            <intent-filter android:priority="-500">
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
+        <service android:exported="true" android:name="team.opay.pay.fcm.OPayFCMService" android:process=":push">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
+        <service android:enabled="true" android:exported="false" android:name="com.google.firebase.sessions.SessionLifecycleService" android:process=":push"/>
+        <provider android:authorities="team.opay.pay.firebase_disabler" android:exported="false" android:initOrder="100" android:name="team.opay.pay.fcm.CustomFirebaseInitProvider" android:process=":push"/>
+        <provider android:authorities="team.opay.pay.tracking_initializer" android:directBootAware="true" android:exported="false" android:initOrder="100" android:name="team.opay.pay.fcm.TrackingInitializerProvider"/>
+        <receiver android:exported="false" android:name="team.opay.pay.fcm.dispatcher.track.UniversalTrackingDispatchReceiver" android:process=":push"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.pay.fcm.dispatcher.track.UniversalTrackingDispatchActivity" android:process=":push" android:theme="@style/CommonAppTheme.Translucent"/>
+        <meta-data android:name="pushHost" android:value="https://offline-message.opayweb.com"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.push.core.NotificationMessageActivity" android:screenOrientation="behind" android:theme="@style/CommonAppTheme.Translucent"/>
+        <receiver android:exported="false" android:name="team.opay.business.push.core.NotificationBroadcastReceiver"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.picture.BigImageActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="common" android:pathPrefix="/pick/displayBigImage" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.sme.store.SmeStoreActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/sme/store" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.sme.store.branch.link.BranchInviteActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/smeStore" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.share.ui.ShareActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="common" android:pathPrefix="/share" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.share.ui.ShareTranslucentActivity" android:screenOrientation="behind" android:theme="@style/CommonAppTheme.Translucent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="common" android:pathPrefix="/translucent" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="faqHost" android:value="https://gw-ng.opayweb.com"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.csc.CustomerServiceActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/customerService" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.business.payroll.PayrollActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/payroll" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="true" android:launchMode="singleTop" android:name="team.opay.business.pin.biz.PinActivity" android:theme="@style/CommonAppTheme.Translucent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/pin" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="team.opay.opb.transfer.bank.BankActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:pathPrefix="/bankTransfer" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.opb.transfer.bank.ui.TransferTranslucentActivity" android:screenOrientation="behind" android:theme="@style/CommonAppTheme.Translucent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="transfer" android:pathPrefix="/translucent" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.core.BusinessActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="common" android:pathPrefix="/business" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="team.opay.business.core.web.H5DataResultWebActivity" android:screenOrientation="portrait" android:theme="@style/CommonAppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="business" android:path="/web/dataResult" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="com.huawei.agconnect.AccessNetwork" android:value="false"/>
+        <meta-data android:name="saasHost" android:value="https://offline-api-saas.opayweb.com"/>
+        <activity android:exported="true" android:label="@string/qrcode_scan_activity" android:name="team.opay.qrcode.scanqrcode.QRCodeScanActivity" android:screenOrientation="portrait" android:theme="@style/QRCodeAppOverlayTheme" android:uiOptions="splitActionBarWhenNarrow"/>
+        <activity android:exported="true" android:label="@string/qrcode_my_qrcode" android:name="team.opay.qrcode.myqrcode.MyQRCodeActivity" android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="myqr" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="true" android:name="team.opay.qrcode.qrcodeparser.QRCodeParserActivity" android:theme="@style/QRCodeAppTranslucentTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="qrcode" android:pathPrefix="/parse" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="true" android:name="team.opay.qrcode.qrcodeparser.QRCodeEMVQRProtocolParserActivity" android:theme="@style/QRCodeAppTranslucentTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="qrcode" android:pathPrefix="/emvqr_parse" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="proxyWebHost" android:value="https://mkt.opayweb.com"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:exported="false" android:launchMode="singleTask" android:name="team.opay.easemoni.module.EMMainActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="easemoni" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="easemoni" android:path="/entranceweb" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.web.EMWebActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.photo.EMPhotographActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.bank.EMBankActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.bank.EMBankListActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.account.EMAccountContainerActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.account.activity.EMAdditionalInfoActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.account.activity.VersionCheckActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.card.EMAddCardActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.card.EMCard3DSActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.card.EMCardVerifyContainerActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:launchMode="singleTask" android:name="team.opay.easemoni.module.repay.EMRepayActivity2" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:launchMode="singleTask" android:name="team.opay.easemoni.module.repay.EMRepayResultActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.card.EMCardListActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.profile.EMProfileListActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.profile.income.EMProfileIncomeActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.profile.email.EMProfileEmailActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.profile.contact.EMProfileContactActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.repay.EMRepay3DActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateVisible|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.repay.EMRepayVerifyContainerActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateVisible|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.account.activity.EMCouponsActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateAlwaysHidden|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.otpauth.OKashOTPAuthActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.otpauth.OKashOTPPhoneInputActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.web.EMLiveChatActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateVisible|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.repay.card.EMRepayAddCardActivity2" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateVisible|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.loop.loan.EMHomeActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateAlwaysHidden|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.loop.loan.EMUseLoanActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateAlwaysHidden|adjustResize"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.loop.loan.EMSimpleUseLoanActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.loop.status.EMLoopStatusActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.home.EMDownloadActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.transactionrisk.otp.EMTransOTPAuthActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.profile.contact.EMAddContactActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.verify.EMTRPhotoGuideActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.home.EMAccountSecurityActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.bvn.EMBvnRetrievalActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.bvn.otp.EMBvnRetrievalOTPAuthActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.bvn.security.EMBvnRetrievalSecurityFaceActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.home.EMAuthErrorActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.account.activity.EMAutoDebitManagerActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.defer.EMDeferAuthActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.defer.EMRestructurePlanListActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.defer.ExtensionPlanListActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.defer.EMLoanExtensionPlanDetailActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.defer.EMLoanRestructurePlanDetailActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.defer.EMDeferResultActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:name="team.opay.easemoni.module.loop.loan.EMNinUseLoanActivity" android:screenOrientation="portrait" android:theme="@style/EaseMoniAppTheme" android:windowSoftInputMode="stateHidden"/>
+        <activity android:exported="false" android:name="com.loan.cash.credit.business.ui.merchant.MerchantLoanActivity" android:screenOrientation="portrait" android:theme="@style/Theme.MerchantLoanAndroid" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <action android:name="android.intent.action.VIEW"/>
+                <data android:host="easemerchant" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize" android:exported="false" android:name="com.loan.cash.credit.bnpl.main.BNPLMainActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="easepay" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:name="com.loan.cash.credit.bnpl.bvn.BNPLBvnRetrievalActivity" android:screenOrientation="portrait" android:theme="@style/BNPLActivityTheme"/>
+        <activity android:exported="false" android:name="com.loan.cash.credit.bnpl.bvn.otp.BNPLBvnOtpActivity" android:screenOrientation="portrait" android:theme="@style/BNPLActivityTheme"/>
+        <activity android:exported="false" android:name="com.loan.cash.credit.bnpl.bvn.security.BNPLBvnSecurityFaceActivity" android:screenOrientation="portrait" android:theme="@style/BNPLActivityTheme"/>
+        <activity android:exported="false" android:name="com.loan.cash.credit.bnpl.bvn.face.BNPLBvnFaceGuideActivity" android:screenOrientation="portrait" android:theme="@style/BNPLActivityTheme"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="cashier.normalpay.CashierActivity" android:screenOrientation="behind" android:theme="@style/Pay.Transparent" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="cashier.quickpay.QuickPayActivity" android:screenOrientation="behind" android:theme="@style/Pay.Transparent" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="quick_pay" android:path="/entrance" android:scheme="opay"/>
+            </intent-filter>
+        </activity>
+        <activity android:exported="false" android:launchMode="singleTop" android:name="cashier.quickpay.QuickChannelActivity" android:screenOrientation="behind" android:theme="@style/Pay.Transparent" android:windowSoftInputMode="stateHidden|adjustResize"/>
+        <activity android:exported="false" android:name="cashier.ui.PayVerificationActivity" android:screenOrientation="behind" android:theme="@style/Pay.AppTheme" android:windowSoftInputMode="stateAlwaysVisible|adjustResize"/>
+        <meta-data android:name="owealthHost" android:value="https://owealthh5.opayweb.com"/>
+        <activity android:exported="false" android:name="team.opay.pay.message.module.MessageNoticeDetailActivity" android:theme="@style/MessageAppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="omessage_detail" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <activity android:name="team.opay.pay.message.module.NoticeMoreActivity" android:theme="@style/MessageAppTheme"/>
+        <activity android:exported="false" android:name="team.opay.pay.message.module.MessageCenterActivity" android:screenOrientation="portrait" android:theme="@style/MessageAppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="omessage" android:path="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <receiver android:exported="true" android:name="team.opay.pay.message.utils.NotificationBroadcastReceiver"/>
+        <activity android:exported="false" android:name="team.opay.pay.sensitivepermissions.SensitivePermissionsActivity" android:theme="@style/sensitive_Transparent"/>
+        <service android:name="org.eclipse.paho.android.service.MqttService"/>
+        <service android:name="team.opay.oim.manager.im.MQTTService"/>
+        <service android:enabled="true" android:exported="false" android:name="team.opay.olocation.LocationUpdatesService"/>
+        <service android:name="team.opay.pay.hybrid.HybridWifiOnlyJobService" android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name="team.opay.pay.hybrid.HybridJobService" android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <activity android:exported="false" android:name="com.opay.webview.WebFoundationActivity" android:screenOrientation="portrait" android:theme="@style/AppTheme.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="http"/>
+                <data android:scheme="https"/>
+            </intent-filter>
+        </activity>
+        <provider android:authorities="team.opay.pay.share.file_provider" android:exported="false" android:grantUriPermissions="true" android:name="team.opay.pay.oshare.provider.ShareFileProvider">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/share_file_paths"/>
+        </provider>
+        <activity android:exported="false" android:launchMode="singleTask" android:name="team.opay.camera.CameraActivity" android:screenOrientation="portrait" android:theme="@style/ocamera_AppThemeCameraActivity" android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="ocamera" android:pathPrefix="/entrance" android:scheme="otravel"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="riskHost" android:value="https://opay-rcc-tddevice-api.opayweb.com"/>
+        <meta-data android:name="fingerHost" android:value="https://opay-sdk-tddevice-api.opayweb.com/android3_8/profile.json"/>
+        <meta-data android:name="PARTNER_CODE" android:value="opay"/>
+        <meta-data android:name="TD_APPNAME" android:value="opay_and"/>
+        <meta-data android:name="SM_HOST" android:value="https://opay-sdk-shumei-api.opayweb.com"/>
+        <meta-data android:name="SM_ORIGANIZATION" android:value="uWuPftCCfXdfRQiwc3bQ"/>
+        <meta-data android:name="SM_APPID" android:value="default"/>
+        <meta-data android:name="SM_PUBLICKEY" android:value="MIIDLzCCAhegAwIBAgIBMDANBgkqhkiG9w0BAQUFADAyMQswCQYDVQQGEwJDTjELMAkGA1UECwwCU00xFjAUBgNVBAMMDWUuaXNodW1laS5jb20wHhcNMjExMjA5MDMzMDA2WhcNNDExMjA0MDMzMDA2WjAyMQswCQYDVQQGEwJDTjELMAkGA1UECwwCU00xFjAUBgNVBAMMDWUuaXNodW1laS5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCOJoJrOGxlgrrN9Wui2fWotFeB4KCjrIEsG3OFRXvCWWNA4af6OE3mQT9qZak4zhrtHHfbCR4FqNLY+0KNVhHLWw58R4QJUMX86XJkDxdYrG9Xr0kWVltIXHqy86TVs3GUVVVlvhr9wYxmJ1f0HAnXc5Y/ym8FgG/ADeJDzMdkfi/SL3tEeopi7WtDPRGqC46E4NPajG/iZABgjGjg8a8scjegrgmsDXePJOYP9Z5SuwwaolvDyily/yDvitmfyd6QHXmMgKe3mBrViHHyBO8XsiGb9mJM51iFhHkzrblyDtqy+0ww3QNVNMM5SSBGrn689UObdHMm36verTj447bHAgMBAAGjUDBOMB0GA1UdDgQWBBQJuSQxm2QYZrw6Yo31ePGs2v5HETAfBgNVHSMEGDAWgBQJuSQxm2QYZrw6Yo31ePGs2v5HETAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBBQUAA4IBAQBeUwfX6n+d8C3kmC06xPV0xz9kW4Wt78QXqamVTKNd2j21pJMdMBOoLyDbtpGX/EWcS8jjfLC0mVn+I5c5mgz+Xqm2Vg3L25GblksYGvmrC3+jBSEcAYomDzwl58nX9AUDV8dKDoafDwPnE+eGaVHsmDIPTU5+fR9Li7IG2AkEJ08CuQmu/Mu+gnUjri+55J6iAI2wZSkp69HRK09MGv3AMw/VsK9805qD+5ZbZgI6bC2dxDjab2qMqpUIw91ifDvOyrRpsGmTYk6Fi786I4+BO1SGzCfArGT5p92w0iK8aSY1jxaSFMtTDK7nST/EyYFeb6y6/9uk1NCfv7UdZqy9"/>
+        <activity android:exported="true" android:name="com.opay.face.common.activity.OFaceLiveNew1Activity" android:screenOrientation="portrait" android:theme="@style/OFace.AppTheme.NoActionBar" android:windowSoftInputMode="stateAlwaysHidden"/>
+        <activity android:exported="true" android:name="com.opay.face.common.activity.OFaceLiveUploadActivity" android:screenOrientation="portrait" android:theme="@style/OFace.AppTheme.NoActionBar" android:windowSoftInputMode="stateAlwaysHidden"/>
+        <activity android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" android:launchMode="singleTask" android:name="com.zhihu.matisse.ui.MatisseActivity" android:screenOrientation="behind" android:theme="@style/MatisseTransparent"/>
+        <activity android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" android:name="com.zhihu.matisse.internal.ui.AlbumPreviewActivity"/>
+        <activity android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" android:name="com.zhihu.matisse.internal.ui.SelectedPreviewActivity"/>
+        <activity android:configChanges="keyboardHidden|orientation|screenSize" android:name="com.zhihu.matisse.camera.MatisseCameraActivity" android:screenOrientation="portrait"/>
+        <service android:enabled="false" android:exported="false" android:name="com.google.android.gms.metadata.ModuleDependencies">
+            <intent-filter>
+                <action android:name="com.google.android.gms.metadata.MODULE_DEPENDENCIES"/>
+            </intent-filter>
+            <meta-data android:name="photopicker_activity:0:required" android:value=""/>
+        </service>
+        <service android:enabled="false" android:exported="false" android:name="androidx.camera.core.impl.MetadataHolderService">
+            <meta-data android:name="androidx.camera.core.impl.MetadataHolderService.DEFAULT_CONFIG_PROVIDER" android:value="androidx.camera.camera2.Camera2Config$DefaultProvider"/>
+        </service>
+        <activity android:launchMode="singleTop" android:name="team.opera.library.feedback.OperaFeedbackActivity" android:screenOrientation="portrait"/>
+        <service android:directBootAware="true" android:exported="false" android:name="com.google.firebase.components.ComponentDiscoveryService">
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.perf.ktx.FirebasePerfLegacyRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.perf.FirebasePerfKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.perf.FirebasePerfRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.analytics.ktx.FirebaseAnalyticsLegacyRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.crashlytics.ndk.CrashlyticsNdkRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.crashlytics.ktx.FirebaseCrashlyticsKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.crashlytics.FirebaseCrashlyticsKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.crashlytics.CrashlyticsRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.sessions.FirebaseSessionsRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.remoteconfig.FirebaseRemoteConfigKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.remoteconfig.RemoteConfigRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.messaging.ktx.FirebaseMessagingLegacyRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.analytics.connector.internal.AnalyticsConnectorRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.messaging.FirebaseMessagingKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.messaging.FirebaseMessagingRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.ktx.FirebaseCommonLegacyRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.FirebaseCommonKtxRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.abt.component.AbtRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data android:name="com.google.firebase.components:com.google.firebase.datatransport.TransportRegistrar" android:value="com.google.firebase.components.ComponentRegistrar"/>
+        </service>
+        <activity android:excludeFromRecents="true" android:name="androidx.slice.compat.SlicePermissionActivity"/>
+        <activity android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize" android:name="com.facebook.FacebookActivity" android:theme="@style/com_facebook_activity_theme"/>
+        <activity android:name="com.facebook.CustomTabMainActivity"/>
+        <activity android:exported="true" android:name="com.facebook.CustomTabActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="cct.team.opay.pay" android:scheme="fbconnect"/>
+            </intent-filter>
+        </activity>
+        <meta-data android:name="com.bumptech.glide.integration.okhttp3.OkHttpGlideModule" android:value="GlideModule"/>
+        <activity android:excludeFromRecents="true" android:exported="false" android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+        <service android:exported="true" android:name="com.google.android.gms.auth.api.signin.RevocationBoundService" android:permission="com.google.android.gms.auth.api.signin.permission.REVOCATION_NOTIFICATION" android:visibleToInstantApps="true"/>
+        <uses-library android:name="org.apache.http.legacy" android:required="false"/>
+        <receiver android:enabled="true" android:exported="false" android:name="com.google.android.gms.measurement.AppMeasurementReceiver"/>
+        <service android:enabled="true" android:exported="false" android:name="com.google.android.gms.measurement.AppMeasurementService"/>
+        <service android:enabled="true" android:exported="false" android:name="com.google.android.gms.measurement.AppMeasurementJobService" android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <receiver android:exported="false" android:name="com.facebook.CurrentAccessTokenExpirationBroadcastReceiver">
+            <intent-filter>
+                <action android:name="com.facebook.sdk.ACTION_CURRENT_ACCESS_TOKEN_CHANGED"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:exported="false" android:name="com.facebook.AuthenticationTokenManager$CurrentAuthenticationTokenChangedBroadcastReceiver">
+            <intent-filter>
+                <action android:name="com.facebook.sdk.ACTION_CURRENT_AUTHENTICATION_TOKEN_CHANGED"/>
+            </intent-filter>
+        </receiver>
+        <uses-library android:name="android.ext.adservices" android:required="false"/>
+        <activity android:exported="false" android:name="com.google.android.gms.common.api.GoogleApiActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+        <service android:directBootAware="true" android:exported="false" android:name="androidx.room.MultiInstanceInvalidationService"/>
+        <meta-data android:name="com.google.android.gms.version" android:value="@integer/google_play_services_version"/>
+        <service android:exported="false" android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery">
+            <meta-data android:name="backend:com.google.android.datatransport.cct.CctBackendFactory" android:value="cct"/>
+        </service>
+        <activity android:exported="false" android:name="com.bytedance.applog.migrate.MigrateDetectorActivity"/>
+        <receiver android:enabled="true" android:exported="false" android:name="com.bytedance.applog.collector.Collector"/>
+        <receiver android:directBootAware="false" android:enabled="true" android:exported="true" android:name="androidx.profileinstaller.ProfileInstallReceiver" android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SKIP_FILE"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION"/>
+            </intent-filter>
+        </receiver>
+        <service android:exported="false" android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService" android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <receiver android:exported="false" android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"/>
+        <activity android:exported="false" android:name="com.google.android.play.core.common.PlayCoreDialogWrapperActivity" android:stateNotNeeded="true" android:theme="@style/Theme.PlayCore.Transparent"/>
+        <meta-data android:name="huawei_module_scankit_local" android:value="21200301"/>
+        <meta-data android:name="huawei_module_scankit_sdk_version" android:value="scanplus:2.13.0.303"/>
+        <meta-data android:name="com.huawei.hms.client.service.name:scanplus" android:value="scanplus:2.13.0.303"/>
+        <meta-data android:name="com.huawei.hms.min_api_level:scanplus:huawei_module_scankit" android:value="1"/>
+        <meta-data android:name="com.huawei.hms.min_api_level:scanplus:hmscore" android:value="1"/>
+        <activity android:configChanges="navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize" android:launchMode="singleTask" android:name="com.huawei.hms.hmsscankit.ScanKitActivity"/>
+        <meta-data android:name="networkservice_netdiag" android:value="com.huawei.hms.network.netdiag.NetDiagnosisService"/>
+        <meta-data android:name="networkservice_ai" android:value="com.huawei.hms.network.ai.AIPolicyService"/>
+        <meta-data android:name="networkservice_config" android:value="com.huawei.hms.network.conf.api.ConfigService"/>
+        <meta-data android:name="networkservice_dns" android:value="com.huawei.hms.network.dns.DNSService"/>
+        <meta-data android:name="com.huawei.hms.client.service.name:network-api" android:value="network-api:6.0.7.300"/>
+        <meta-data android:name="com.huawei.hms.client.service.name:dynamic-api" android:value="dynamic-api:1.0.24.300"/>
+        <meta-data android:name="com.huawei.hms.min_api_level:dynamic-api:huawei_module_dynamicloader" android:value="10"/>
+        <service android:exported="false" android:name="com.huawei.agconnect.core.ServiceDiscovery"/>
+        <meta-data android:name="com.android.dynamic.apk.fused.modules" android:value="base"/>
+        <meta-data android:name="com.android.stamp.source" android:value="https://play.google.com/store"/>
+        <meta-data android:name="com.android.stamp.type" android:value="STAMP_TYPE_STANDALONE_APK"/>
+        <meta-data android:name="com.android.vending.splits" android:resource="@xml/splits0"/>
+        <meta-data android:name="com.android.vending.derived.apk.id" android:value="2"/>
+    </application>
+</manifest>

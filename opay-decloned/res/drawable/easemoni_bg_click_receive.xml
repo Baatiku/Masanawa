@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <gradient android:startColor="@color/easemoni_color_fddebd" android:endColor="@color/easemoni_color_e69169" android:angle="270.0" />
+            <corners android:radius="@dimen/easemoni_dimen_22" />
+        </shape>
+    </item>
+    <item android:left="@dimen/easemoni_dimen_20" android:top="@dimen/easemoni_dimen_6" android:right="@dimen/easemoni_dimen_20" android:bottom="@dimen/easemoni_dimen_6">
+        <shape>
+            <solid android:color="@color/easemoni_color_edae87" />
+            <corners android:radius="@dimen/easemoni_dimen_22" />
+            <padding android:left="@dimen/easemoni_dimen_32" android:top="@dimen/easemoni_dimen_8" android:right="@dimen/easemoni_dimen_32" android:bottom="@dimen/easemoni_dimen_8" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@id/cl_root" android:layout_width="match_parent" android:layout_height="?actionBarSize"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <FrameLayout android:id="@id/okash_fl_back" android:layout_width="wrap_content" android:layout_height="match_parent" android:paddingStart="@dimen/easemoni_dimen_16" android:paddingEnd="@dimen/easemoni_dimen_16" app:layout_constraintStart_toStartOf="parent">
+        <ImageView android:layout_gravity="center" android:id="@id/okash_back_navigation_button" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/easemoni_ic_back" android:tint="@color/easemoni_color_white" />
+    </FrameLayout>
+    <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_text_333" android:ellipsize="end" android:gravity="center" android:layout_gravity="center" android:id="@id/okash_title" android:layout_width="wrap_content" android:layout_height="match_parent" android:singleLine="true" android:textAllCaps="false" android:fontFamily="sans-serif-medium" app:layout_constraintStart_toEndOf="@id/okash_fl_back" />
+    <FrameLayout android:gravity="center_vertical" android:id="@id/okash_ab_fl_right_container" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="match_parent" android:paddingStart="@dimen/easemoni_dimen_16" android:paddingEnd="@dimen/easemoni_dimen_16" app:layout_constraintEnd_toEndOf="parent">
+        <ImageView android:layout_gravity="center" android:id="@id/actionbar_right_remote" android:visibility="gone" android:layout_width="@dimen/easemoni_dimen_24" android:layout_height="@dimen/easemoni_dimen_24" />
+        <ImageView android:layout_gravity="center" android:id="@id/actionbar_right_bt" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/easemoni_ic_back" android:tint="@color/easemoni_color_white" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

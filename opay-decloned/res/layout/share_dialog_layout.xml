@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:orientation="horizontal" android:background="#f5f1f1" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <RadioGroup android:orientation="horizontal" android:id="@id/sharePlatView" android:paddingTop="30.0dp" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent">
+        <RadioButton android:id="@id/copy" android:text="copy" style="@style/shareItemStyle" />
+        <RadioButton android:id="@id/whatsapp" android:text="whatsapp" style="@style/shareItemStyle" />
+        <RadioButton android:id="@id/facebook" android:text="facebook" style="@style/shareItemStyle" />
+        <RadioButton android:id="@id/twitter" android:text="twitter" style="@style/shareItemStyle" />
+    </RadioGroup>
+    <TextView android:textColor="@android:color/black" android:gravity="center" android:id="@id/share_cancel" android:layout_width="match_parent" android:layout_height="50.0dp" android:text="Cancel" app:layout_constraintTop_toBottomOf="@id/sharePlatView" />
+    <ProgressBar android:id="@id/progress_bar" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

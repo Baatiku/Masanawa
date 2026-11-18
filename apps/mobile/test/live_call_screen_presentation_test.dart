@@ -1,0 +1,190 @@
+import 'dart:async';
+import 'visual_test_fonts.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:masanawa/src/agents/agent_directory.dart';
+import 'package:masanawa/src/agents/masana_portrait_avatar.dart';
+import 'package:masanawa/src/core/live_voice_session.dart';
+import 'package:masanawa/src/screens/chat/ai_chat_screen.dart';
+import 'package:masanawa/src/theme/masanawa_theme.dart';
+
+class _Session extends Mock implements LiveVoiceSession {}
+
+Future<_Session> _openCall(WidgetTester tester, {bool largeText = false,bool official=false,Future<void>? readiness, bool failStart = false}) async {
+  final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  const toneChannel = MethodChannel('masanawa/call_tone');
+  messenger.setMockMethodCallHandler(toneChannel, (_) async => true);
+  addTearDown(() => messenger.setMockMethodCallHandler(toneChannel, null));
+  // The visual/legacy-control test represents a device without a selectable
+  // communication-route list. Bluetooth picker behavior has separate tests.
+  const pcmChannel = MethodChannel('masanawa/live_pcm');
+  messenger.setMockMethodCallHandler(pcmChannel, (call) async {
+    if (call.method == 'routes') return <Map<String, Object>>[];
+    return false;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(pcmChannel, null));
+  final session = _Session();
+  when(() => session.audioInterrupted).thenReturn(false);
+  when(() => session.errors).thenAnswer((_) => const Stream<String>.empty());
+  when(() => session.states).thenAnswer((_) => Stream.value(LiveVoiceState.listening));
+  when(() => session.ready).thenAnswer((_) => readiness ?? Future<void>.value());
+  when(() => session.start()).thenAnswer((_) async {
+    if (failStart) throw StateError('Simulated connection error');
+  });
+  when(() => session.close()).thenAnswer((_) async {});
+  when(() => session.mute(any())).thenAnswer((_) async {});
+  when(() => session.setSpeaker(any())).thenAnswer((_) async {});
+  final agent = AgentDirectoryEntry(
+    characterId: 'agent', characterVersionId: 'v1',
+    displayName: 'Amina', roleLabel: 'Medicine', about: '',
+    presence: AgentPresence.available,publicOfficialSimulation:official,portraitKey:official?null:'amina',
+  );
+  await tester.pumpWidget(MaterialApp(
+    theme: buildMasanawaTheme(brightness: Brightness.light),
+    builder: largeText ? (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: const TextScaler.linear(2)),
+      child: child!,
+    ) : null,
+    home: Builder(builder: (context) => Scaffold(body: TextButton(
+      child: const Text('Open call'),
+      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => MasanaLiveCallScreen(agent: agent, session: session))),
+    ))),
+  ));
+  await tester.tap(find.text('Open call'));
+  // The timer runs continuously after connection; never pumpAndSettle.
+  // First frame starts Masanawa's fade-up page transition; the following
+  // timed frame advances it before any viewport-position assertion.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pump();
+  return session;
+}
+
+void main() {
+  setUpAll(loadVisualTestFonts);
+  testWidgets('outgoing call stage and persistent controls have a reviewed phone portrait baseline',(tester)async{
+    tester.view.physicalSize=const Size(390,844);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    final readiness=Completer<void>();
+    final session=await _openCall(tester,readiness:readiness.future);
+    final context=tester.element(find.byKey(const ValueKey('live-call-masana-portrait')));
+    await tester.runAsync(()=>precacheImage(const AssetImage('assets/masana/portraits/amina.webp'),context));
+    await tester.pump();
+    expect(tester.getCenter(find.byKey(const ValueKey('live-call-masana-portrait'))).dx,closeTo(195,1));
+    expect(tester.getCenter(find.byTooltip('Speaker')).dy,greaterThan(650));
+    expect(tester.getCenter(find.byTooltip('Mute')).dy,greaterThan(650));
+    expect(tester.getCenter(find.byTooltip('End call')).dy,greaterThan(650));
+    await expectLater(find.byKey(const ValueKey('masanawa-live-call-screen')),
+      matchesGoldenFile('goldens/masana-call-phone.png'));
+    readiness.complete();await tester.pump();
+    await tester.tap(find.text('End call'));await tester.pump();await tester.pump(const Duration(milliseconds:400));
+    verify(()=>session.close()).called(greaterThanOrEqualTo(1));
+  });
+  testWidgets('public-official call discloses simulation at 320dp and 200% text', (tester) async {
+    tester.view.physicalSize=const Size(320,568);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    await _openCall(tester,largeText:true,official:true);
+    expect(find.text('AI simulation · Not the official or their office'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+    await tester.tap(find.text('End call'));await tester.pump();await tester.pump(const Duration(milliseconds:400));
+  });
+
+  testWidgets('failed call stays visible with a clear reason and a working Close action', (tester) async {
+    final session = await _openCall(tester, failStart: true);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('masanawa-live-call-screen')), findsOneWidget);
+    expect(find.text('Unable to connect. Return to chat and try again.'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+    expect(find.text('Mute'), findsNothing);
+    await tester.tap(find.text('Close'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Open call'), findsOneWidget);
+    verify(() => session.close()).called(greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('call fills the viewport and End closes the session and route', (tester) async {
+    final session = await _openCall(tester);
+    final screen=find.byKey(const ValueKey('masanawa-live-call-screen'));
+    expect(tester.getSize(screen),const Size(800,600));
+    expect(find.byType(BottomSheet),findsNothing);
+    expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
+      const ValueKey('live-call-masana-portrait'))).size, 200);
+    expect(find.text('Mute'),findsOneWidget);
+    expect(find.text('Speaker'),findsOneWidget);
+    expect(find.text('End call'), findsOneWidget);
+    expect(tester.getSize(find.byKey(
+      const ValueKey('live-call-end-action'))).height,
+      greaterThanOrEqualTo(54));
+    // End remains in the safe-area footer even when the call stage scrolls.
+    expect(tester.getCenter(find.byKey(const ValueKey('live-call-end-action'))).dy,
+      lessThan(600));
+    await tester.tap(find.text('End call'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds:400));
+    expect(screen,findsNothing);expect(find.text('Open call'),findsOneWidget);
+    verify(()=>session.start()).called(1);
+    verify(()=>session.close()).called(greaterThanOrEqualTo(1));
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('call has accessible controls and an End action at 320dp with 200% text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final session = await _openCall(tester, largeText: true);
+    expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
+      const ValueKey('live-call-masana-portrait'))).size, 176);
+    await tester.drag(find.byType(SingleChildScrollView),
+      const Offset(0, -450));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.byTooltip('Mute'));
+    await tester.pump();
+    expect(find.text('Unmute'), findsOneWidget);
+    verify(() => session.mute(true)).called(1);
+    await tester.tap(find.byTooltip('Speaker'));
+    // The route picker first checks the native channel. If this older-device
+    // bridge reports no routes, its legacy speaker toggle completes in a
+    // second asynchronous microtask. Pump frames rather than asserting before
+    // the native lookup has settled; avoid pumpAndSettle during call timers.
+    for (var attempt = 0; attempt < 8 &&
+        find.text('Earpiece').evaluate().isEmpty; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Earpiece'), findsOneWidget);
+    verify(() => session.setSpeaker(false)).called(1);
+    await tester.tap(find.text('End call'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Open call'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('short landscape call can scroll to End without losing media controls',
+      (tester) async {
+    tester.view.physicalSize = const Size(568, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _openCall(tester, largeText: true);
+    expect(tester.widget<MasanaPortraitAvatar>(find.byKey(
+      const ValueKey('live-call-masana-portrait'))).size, 128);
+    expect(find.byTooltip('Mute'), findsOneWidget);
+    expect(find.byTooltip('Speaker'), findsOneWidget);
+    await tester.drag(find.byType(SingleChildScrollView),
+      const Offset(0, -600));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('End call'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Open call'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+

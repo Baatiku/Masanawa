@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="@dimen/easemoni_dimen_12" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="@dimen/easemoni_tv_size_14" android:textColor="@color/easemoni_color_00b876" android:id="@id/tv_item_content" android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" />
+    <View android:layout_width="@dimen/easemoni_dimen_0" android:layout_height="@dimen/easemoni_dimen_0" android:layout_weight="1.0" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/aciv_item_right_arrow" android:layout_width="wrap_content" android:layout_height="wrap_content" app:srcCompat="@drawable/easemoni_icon_right_arrow_green" />
+</LinearLayout>

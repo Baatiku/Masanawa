@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:startColor="@color/easemoni_login_next_activated_true" android:endColor="@color/easemoni_login_next_activated_true" android:angle="0.0" android:centerColor="@color/easemoni_login_next_activated_true" />
+    <corners android:radius="@dimen/easemoni_btn_radius" />
+</shape>

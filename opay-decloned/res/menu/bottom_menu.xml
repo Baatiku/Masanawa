@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:icon="@drawable/ic_home_tab_home_bg" android:id="@id/tab_home" android:title="@string/bottom_bar_pay" />
+    <item android:icon="@drawable/ic_home_tab_reward_bg" android:id="@id/tab_reward" android:title="@string/bottom_bar_reward" />
+    <item android:icon="@drawable/ic_home_tab_finance_bg" android:id="@id/tab_fin" android:title="@string/bottom_bar_fin" />
+    <item android:icon="@drawable/ic_home_tab_card_bg" android:id="@id/tab_card" android:title="@string/bottom_bar_card" />
+    <item android:icon="@drawable/ic_home_tab_me_bg" android:id="@id/tab_me" android:title="@string/bottom_bar_me" />
+</menu>

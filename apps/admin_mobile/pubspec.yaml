@@ -1,0 +1,39 @@
+name: masanawa_admin
+description: "Masanawa Admin — mobile operations console."
+publish_to: 'none'
+version: 0.1.0+1
+environment:
+  sdk: ^3.12.2
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  dio: ^5.11.0
+  flutter_secure_storage: ^11.0.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/brand/masanawa_agent_logo.png"
+  adaptive_icon_background: "#25D366"
+  adaptive_icon_foreground: "assets/brand/masanawa_launcher_foreground.png"
+  min_sdk_android: 21
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: "assets/brand/masanawa_splash_mark.png"
+  color_dark: "#FFFFFF"
+  image_dark: "assets/brand/masanawa_splash_mark.png"
+  android_12:
+    color: "#FFFFFF"
+    image: "assets/brand/masanawa_splash_mark.png"
+    color_dark: "#FFFFFF"
+    image_dark: "assets/brand/masanawa_splash_mark.png"

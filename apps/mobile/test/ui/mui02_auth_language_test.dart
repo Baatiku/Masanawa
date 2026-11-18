@@ -1,0 +1,368 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:masanawa/src/core/api/models.dart';
+import 'package:masanawa/src/core/network/api_client.dart';
+import 'package:masanawa/src/core/providers.dart';
+import 'package:masanawa/src/localization/locale_preference.dart';
+import 'package:masanawa/src/localization/locale_preference_scope.dart';
+import 'package:masanawa/src/localization/masanawa_localization.dart';
+import 'package:masanawa/src/screens/onboarding/name_screen.dart';
+import 'package:masanawa/src/screens/onboarding/otp_screen.dart';
+import 'package:masanawa/src/screens/onboarding/password_screen.dart';
+import 'package:masanawa/src/screens/onboarding/phone_login_screen.dart';
+import 'package:masanawa/src/state/session_state.dart';
+import 'package:masanawa/src/theme/masanawa_theme.dart';
+
+class _MemoryLocaleStore implements LocalePreferenceStore {
+  _MemoryLocaleStore(this.value);
+  String? value;
+
+  @override
+  Future<String?> read() async => value;
+
+  @override
+  Future<void> write(String? languageCode) async {
+    value = languageCode;
+  }
+}
+
+class _FixedSession extends SessionController {
+  _FixedSession(this.current);
+  final SessionState current;
+
+  @override
+  SessionState build() => current;
+}
+
+/// Mount the real auth widgets with deterministic capability discovery.
+class _TestAuthClient extends ApiClient {
+  _TestAuthClient() : super(dio: Dio());
+
+  @override
+  Future<List<OtpChannel>> authOtpChannels() async => [OtpChannel.email];
+}
+
+SessionState _sessionFor(String route) => switch (route) {
+  '/password' => const SessionPasswordRequired('+2348012345678', setup: false),
+  '/otp' => const SessionAwaitingOtp(OtpChannel.email, 'fan@example.test', 0),
+  '/name' => const SessionNameRequired(
+    OtpChannel.email,
+    'fan@example.test',
+    '123456',
+  ),
+  _ => const SessionSignedOut(),
+};
+
+GoRouter _router(String initialLocation) => GoRouter(
+  initialLocation: initialLocation,
+  routes: [
+    GoRoute(path: '/phone-login', builder: (_, _) => const PhoneLoginScreen()),
+    GoRoute(
+      path: '/password',
+      builder: (_, _) =>
+          const PasswordScreen(phone: '+2348012345678', setup: false),
+    ),
+    GoRoute(path: '/otp', builder: (_, _) => const OtpScreen()),
+    GoRoute(path: '/name', builder: (_, _) => const NameScreen()),
+  ],
+);
+
+Widget _app(
+  GoRouter router,
+  LocalePreferenceController preference,
+  SessionState session, {
+  required double textScale,
+  ApiClient? api,
+}) => ProviderScope(
+  overrides: [
+    sessionProvider.overrideWith(() => _FixedSession(session)),
+    apiClientProvider.overrideWithValue(api ?? _TestAuthClient()),
+  ],
+  child: ListenableBuilder(
+    listenable: preference,
+    builder: (context, _) => LocalePreferenceScope(
+      controller: preference,
+      child: MaterialApp.router(
+        routerConfig: router,
+        theme: buildMasanawaTheme(brightness: Brightness.light),
+        locale: preference.localeOverride,
+        supportedLocales: MasanawaLocalization.supportedLocales,
+        localizationsDelegates: MasanawaLocalization.delegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+      ),
+    ),
+  ),
+);
+
+class _PhoneAndEmailClient extends _TestAuthClient {
+  @override
+  Future<List<OtpChannel>> authOtpChannels() async => [
+    OtpChannel.email,
+    OtpChannel.sms,
+  ];
+}
+
+class _ControlledCapabilityClient extends _TestAuthClient {
+  final calls = <Completer<List<OtpChannel>>>[];
+  @override
+  Future<List<OtpChannel>> authOtpChannels() {
+    final next = Completer<List<OtpChannel>>();
+    calls.add(next);
+    return next.future;
+  }
+}
+
+class _ExpiredOtpClient extends _TestAuthClient {
+  @override
+  Future<AuthTokens> otpVerify(
+    String code, {
+    String? phone,
+    String? email,
+    String? name,
+    String? firstName,
+    String? lastName,
+    String? contactPhone,
+    String? countryIso,
+    String? subdivisionIso,
+    String? username,
+    String? deviceId,
+  }) async {
+    throw const ApiException('Invalid or expired code', code: 'OTP_INVALID');
+  }
+}
+
+void main() {
+  testWidgets(
+    'Gateway never answers: login form stays visible, times out and can retry',
+    (tester) async {
+      final client = _ControlledCapabilityClient();
+      final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
+      await preference.load();
+      final router = _router('/phone-login');
+      addTearDown(router.dispose);
+      addTearDown(preference.dispose);
+      await tester.pumpWidget(
+        _app(
+          router,
+          preference,
+          const SessionSignedOut(),
+          textScale: 1,
+          api: client,
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Checking available sign-in methods…'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pump();
+      expect(find.text('Checking available sign-in methods…'), findsNothing);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.tap(find.text('Try again'));
+      await tester.pump();
+      expect(client.calls.length, 2);
+      // A late first response may not override newer method discovery.
+      client.calls.first.complete([OtpChannel.sms]);
+      await tester.pump();
+      expect(find.text('Email'), findsWidgets);
+      client.calls.last.complete([OtpChannel.email]);
+      await tester.pump();
+      expect(find.text('Email'), findsWidgets);
+      expect(find.text('Phone'), findsNothing);
+    },
+  );
+
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  const routes = ['/phone-login', '/password', '/otp', '/name'];
+
+  for (final route in routes) {
+    for (final width in [320.0, 390.0]) {
+      for (final language in ['en', 'ar']) {
+        for (final scale in [1.0, 2.0]) {
+          testWidgets('$route: picker centered, tappable at $width px, '
+              '$language, text scale $scale', (tester) async {
+            tester.view.physicalSize = Size(width, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+
+            final store = _MemoryLocaleStore(language);
+            final preference = LocalePreferenceController(store);
+            await preference.load();
+            final router = _router(route);
+            addTearDown(router.dispose);
+            addTearDown(preference.dispose);
+            await tester.pumpWidget(
+              _app(router, preference, _sessionFor(route), textScale: scale),
+            );
+            await tester.pumpAndSettle();
+
+            final picker = find.byKey(const Key('language-picker'));
+            expect(picker, findsOneWidget);
+            expect(tester.getCenter(picker).dx, closeTo(width / 2, 1.0));
+            expect(find.byIcon(Icons.language), findsOneWidget);
+            expect(tester.widget<TextButton>(picker).onPressed, isNotNull);
+            final semantics = tester.ensureSemantics();
+            expect(
+              tester
+                  .getSemantics(picker)
+                  .getSemanticsData()
+                  .hasAction(SemanticsAction.tap),
+              isTrue,
+            );
+            semantics.dispose();
+            expect(tester.takeException(), isNull);
+            expect(store.value, language);
+          });
+        }
+      }
+    }
+  }
+
+  testWidgets('email login does not offer phone signup', (tester) async {
+    final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
+    await preference.load();
+    final router = _router('/phone-login');
+    addTearDown(router.dispose);
+    addTearDown(preference.dispose);
+    await tester.pumpWidget(
+      _app(
+        router,
+        preference,
+        const SessionSignedOut(),
+        textScale: 1,
+        api: _PhoneAndEmailClient(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Phone'), findsNothing);
+    expect(find.byKey(const Key('phone-country-picker')), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expired code during name completion returns to OTP recovery', (
+    tester,
+  ) async {
+    // The signup country now follows the device locale suggestion. Pin this
+    // Nigeria-specific region scenario rather than relying on CI host locale.
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en', 'NG');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
+    final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
+    await preference.load();
+    final router = _router('/name');
+    addTearDown(router.dispose);
+    addTearDown(preference.dispose);
+    await tester.pumpWidget(
+      _app(
+        router,
+        preference,
+        _sessionFor('/name'),
+        textScale: 1,
+        api: _ExpiredOtpClient(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Ada');
+    await tester.enterText(find.byType(TextField).at(1), 'Obi');
+    await tester.enterText(find.byType(TextField).at(2), '08012345678');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    final region=find.byKey(const ValueKey('signup-subdivision-NG'));
+    expect(region,findsOneWidget);
+    await tester.ensureVisible(region);
+    await tester.tap(region);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Abuja Federal Capital Territory').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.byType(OtpScreen), findsOneWidget);
+    expect(find.byType(NameScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('signup country switch replaces region options and clears selection',
+      (tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en', 'NG');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
+    final preference = LocalePreferenceController(_MemoryLocaleStore('en'));
+    await preference.load();
+    final router = _router('/name');
+    addTearDown(router.dispose);
+    addTearDown(preference.dispose);
+    await tester.pumpWidget(_app(router, preference, _sessionFor('/name'),
+      textScale: 1, api: _PhoneAndEmailClient()));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('signup-subdivision-NG')), findsOneWidget);
+    final phone = find.byKey(const Key('phone-national-number'));
+    expect(tester.widget<TextField>(phone).controller!.text, isEmpty);
+
+    await tester.tap(find.byKey(const Key('phone-country-picker')));
+    await tester.pumpAndSettle();
+    final ghana = find.byKey(const Key('phone-country-GH'));
+    await tester.ensureVisible(ghana);
+    await tester.tap(ghana);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('signup-subdivision-NG')), findsNothing);
+    final ghRegion = find.byKey(const ValueKey('signup-subdivision-GH'));
+    expect(ghRegion, findsOneWidget);
+    expect(tester.widget<DropdownButtonFormField<String>>(ghRegion).initialValue,
+      isNull, reason: 'The old state must never carry to another country');
+    expect(find.text('Selected country: Ghana. Change it if the phone prefix suggests the wrong country.'),
+      findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selected language persists across mounted auth routes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = _MemoryLocaleStore('en');
+    final preference = LocalePreferenceController(store);
+    await preference.load();
+    final router = _router('/phone-login');
+    addTearDown(router.dispose);
+    addTearDown(preference.dispose);
+    await tester.pumpWidget(
+      _app(router, preference, const SessionSignedOut(), textScale: 1),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('language-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('language-fr')));
+    await tester.pumpAndSettle();
+    expect(store.value, 'fr');
+    expect(preference.localeOverride, const Locale('fr'));
+    expect(find.text('Langue de l’application'), findsOneWidget);
+
+    router.go('/otp');
+    await tester.pumpAndSettle();
+    expect(find.byType(OtpScreen), findsOneWidget);
+    expect(find.text('Langue de l’application'), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(const Key('language-picker'))).dx,
+      closeTo(160, 1.0),
+    );
+    expect(tester.takeException(), isNull);
+  });
+}

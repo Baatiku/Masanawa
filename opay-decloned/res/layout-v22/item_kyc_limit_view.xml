@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="16.0dp" android:layout_marginRight="16.0dp" android:layout_marginHorizontal="16.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="12.0sp" android:textColor="@color/black_65" android:id="@id/left_view" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginBottom="19.0dp" android:text="@string/daily_out_limit" android:fontFamily="@font/roboto_400" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toStartOf="@id/right_view" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:textSize="14.0sp" android:textColor="@color/black_85" android:gravity="end" android:id="@id/right_view" android:layout_width="0.0dp" android:layout_height="wrap_content" android:fontFamily="@font/roboto_500" android:layout_marginStart="@dimen/content_padding_small" app:layout_constraintBottom_toBottomOf="@id/left_view" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="@id/left_view" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,745 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:audio_session/audio_session.dart';
+import 'package:record/record.dart';
+import 'package:flutter/widgets.dart';
+
+import '../agents/agent_shell.dart';
+import '../calls/call_outcome.dart';
+import 'app_permissions.dart';
+import 'audio_failure.dart';
+import 'microphone_capture.dart';
+import 'live_pcm_audio.dart';
+import 'live_call_foreground.dart';
+import 'call_recording.dart';
+
+enum LiveVoiceState {
+  idle,
+  connecting,
+  listening,
+  speaking,
+  interrupted,
+  ended,
+  failed,
+}
+
+/// A grant expires for *establishing* Gemini media, not for continuing a
+/// healthy, already established conversation. Only explicit call admission
+/// deadlines and the consented duration may terminate a connected call.
+Duration? permittedConnectedCallDuration({
+  required DateTime now,
+  DateTime? endAt,
+  Duration? maxDuration,
+}) {
+  Duration? allowed = maxDuration;
+  if (endAt != null) {
+    final untilDeadline = endAt.difference(now);
+    if (allowed == null || untilDeadline < allowed) allowed = untilDeadline;
+  }
+  return allowed;
+}
+
+class LiveVoiceSession with WidgetsBindingObserver {
+  LiveVoiceSession({
+    required this.grant,
+    required this.characterName,
+    this.captureInputTranscription = false,
+    AudioRecorder? recorder,
+    this.sharedMicrophone,
+    this.onAudioPcm,
+    this.onInterrupted,
+    this.onConnected,
+    this.onClosed,
+    this.sendGreeting = true,
+    this.maxDuration,
+    this.endAt,
+    this.renewConnectionGrant,
+  }) : _activeGrant = grant,
+       _recorder =
+           recorder ?? (sharedMicrophone == null ? AudioRecorder() : null) {
+    // Closing before a caller awaits readiness must not emit an unhandled
+    // async error. Consumers awaiting ready still receive the failure.
+    _ready.future.ignore();
+  }
+
+  final AgentLiveVoiceGrant grant;
+  AgentLiveVoiceGrant _activeGrant;
+  /// Refresh only the short-lived Gemini connection permission, not the
+  /// customer-paid call admission. The owner must fence identity and reuse the
+  /// same original admission ID when providing the replacement grant.
+  /// May be bound by a group-call controller after it constructs a member
+  /// session. It must preserve the original account and paid admission.
+  Future<AgentLiveVoiceGrant> Function()? renewConnectionGrant;
+  final String characterName;
+  final bool captureInputTranscription;
+  final AudioRecorder? _recorder;
+  final Stream<Uint8List>? sharedMicrophone;
+  final FutureOr<void> Function(Uint8List)? onAudioPcm;
+  final FutureOr<void> Function()? onInterrupted;
+  final FutureOr<void> Function()? onConnected;
+  final FutureOr<void> Function()? onClosed;
+  CallAudioObserver? audioObserver;
+  final bool sendGreeting;
+  final Duration? maxDuration;
+  final DateTime? endAt;
+  bool _connectedReported = false;
+  bool get _ownsAudio => sharedMicrophone == null;
+  final _state = StreamController<LiveVoiceState>.broadcast(sync: true);
+  final _errors = StreamController<String>.broadcast(sync: true);
+  final _transcripts = StreamController<String>.broadcast(sync: true);
+  final _inputTranscripts = StreamController<String>.broadcast(sync: true);
+  final _turnCompletions = StreamController<void>.broadcast(sync: true);
+  final Completer<void> _ready = Completer<void>();
+  WebSocket? _socket;
+  StreamSubscription<Uint8List>? _micSub;
+  StreamSubscription<dynamic>? _socketSub;
+  StreamSubscription<AudioInterruptionEvent>? _interruptions;
+  StreamSubscription<void>? _noisy;
+  Timer? _setupTimer;
+  Timer? _durationTimer;
+  Future<void>? _starting;
+  Future<void>? _closing;
+  Future<void>? _startingMic;
+  Future<void> _incoming = Future<void>.value();
+  String? _resumptionHandle;
+  Future<void>? _reconnectTask;
+  int _resumeAttempts = 0;
+  bool _closed = false;
+  bool _setupComplete = false;
+  bool _speaker = true;
+  bool _muted = false;
+  bool _observing = false;
+  bool _foregroundCallActive = false;
+  bool _audioInterrupted = false;
+  Future<void>? _suspendingAudio;
+  bool get audioInterrupted => _audioInterrupted;
+  bool get reconnecting => _reconnectTask!=null;
+  CallEndReason? endReason;
+
+  Stream<LiveVoiceState> get states => _state.stream;
+  Stream<String> get errors => _errors.stream;
+  Stream<String> get transcripts => _transcripts.stream;
+  Stream<String> get inputTranscripts => _inputTranscripts.stream;
+  Stream<void> get turnCompletions => _turnCompletions.stream;
+  Future<void> get ready => _ready.future;
+  bool get speakerEnabled => _speaker;
+  bool get muted => _muted;
+
+  Future<void> start() async {
+    final active = _starting;
+    if (active != null) return active;
+    final future = _start();
+    _starting = future;
+    try {
+      await future;
+    } finally {
+      _starting = null;
+    }
+  }
+
+  Future<void> _start() async {
+    if (_closed || _socket != null) return;
+    _state.add(LiveVoiceState.connecting);
+    try {
+      if (!DateTime.now().isBefore(grant.expiresAt)) {
+        throw StateError('Live voice connection permission has expired.');
+      }
+      if (_ownsAudio) {
+        if (!await _recorder!.hasPermission()) {
+          throw const AudioFailure('permission', 'Microphone permission is required. Allow microphone access in Android settings, then try again.');
+        }
+        if (_closed) return;
+        try {
+          await LivePcmAudio.release();
+        } catch (_) {}
+        final audioSession = await AudioSession.instance;
+        await audioSession.configure(
+          AudioSessionConfiguration(
+            avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+            avAudioSessionCategoryOptions:
+                AVAudioSessionCategoryOptions.allowBluetooth |
+                AVAudioSessionCategoryOptions.defaultToSpeaker,
+            avAudioSessionMode: AVAudioSessionMode.voiceChat,
+            androidAudioAttributes: const AndroidAudioAttributes(
+              contentType: AndroidAudioContentType.speech,
+              usage: AndroidAudioUsage.voiceCommunication,
+            ),
+            androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+            androidWillPauseWhenDucked: true,
+          ),
+        );
+        if (_closed) return;
+        try {
+          await audioSession.setActive(true);
+        } catch (_) {
+          // Proceed even if exclusive audio session focus is restricted by OS
+        }
+        if (_closed) {
+          await audioSession.setActive(false);
+          return;
+        }
+        _interruptions = audioSession.interruptionEventStream.listen((event) {
+          unawaited(handleAudioInterruption(event));
+        });
+        _noisy = audioSession.becomingNoisyEventStream.listen((_) {
+          // Stop capture/playback when a headset disconnects. Keep the same
+          // session/admission and let the user explicitly choose the new route.
+          unawaited(handleAudioInterruption(
+            AudioInterruptionEvent(true, AudioInterruptionType.pause)));
+        });
+      }
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
+
+      await LiveCallForeground.startOrThrow();
+      _foregroundCallActive = true;
+      if (_closed) {
+        _foregroundCallActive = false;
+        await LiveCallForeground.stop();
+        return;
+      }
+      await _connectSocket();
+    } catch (error) {
+      if(error is AudioFailure && error.code=='permission')endReason??=CallEndReason.permissionDenied;
+      _fail(
+        audioFailureMessage(error, fallback: error is StateError ? error.message : 'Could not start live voice.'),
+      );
+      await close();
+      rethrow;
+    }
+  }
+
+  /// Gemini can rotate connections every ten minutes. The session handle
+  /// resumes the same model context with the original grant, call admission
+  /// and duration timer; we never create another paid call or receipt.
+  Future<void> _connectSocket({String? resumeHandle}) async {
+    final socket = await WebSocket.connect(
+      _activeGrant.websocketUrl,
+      headers: _activeGrant.transport == AgentLiveVoiceTransport.gatewayRelay
+          ? {'Authorization': 'Bearer ${_activeGrant.token}'} : null,
+    )
+        .timeout(const Duration(seconds: 20));
+    if (_closed) {
+      await socket.close();
+      return;
+    }
+    _socket = socket;
+    _socketSub = socket.listen(
+      (raw) {
+        // Maintain ordering across PCM/native method-channel operations.
+        _incoming = _incoming.then((_) => _handleServerMessage(raw));
+      },
+      onError: (Object _) => unawaited(_unexpectedDisconnect(socket)),
+      onDone: () => unawaited(_unexpectedDisconnect(socket)),
+      cancelOnError: false,
+    );
+    _setupTimer?.cancel();
+    _setupTimer = Timer(const Duration(seconds: 20), () {
+      if (!_closed && !_setupComplete && identical(_socket, socket)) {
+        _fail('Live voice setup timed out. Try starting a new call.');
+        unawaited(close());
+      }
+    });
+    socket.add(jsonEncode({
+      'setup': {
+        'model': 'models/${_activeGrant.model}',
+        'generationConfig': {
+          'responseModalities': ['AUDIO'],
+          'speechConfig': {
+            'voiceConfig': {
+              'prebuiltVoiceConfig': {'voiceName': _activeGrant.voiceName},
+            },
+          },
+        },
+        // Empty on first connect requests resumable-session handles.
+        // Reconnecting uses the latest provider-issued handle in memory.
+        'sessionResumption': resumeHandle == null
+            ? <String, String>{}
+            : {'handle': resumeHandle},
+        'outputAudioTranscription': {},
+        if (captureInputTranscription) 'inputAudioTranscription': {},
+        'systemInstruction': {
+          'parts': [{
+            'text': _activeGrant.systemInstruction ?? 'You are $characterName. Have a natural live voice conversation. '
+                'Answer in the user\'s language. Do not read hidden system information aloud.',
+          }],
+        },
+      },
+    }));
+  }
+
+  Future<void> _unexpectedDisconnect(WebSocket socket) async {
+    if (_closed || !identical(_socket, socket)) return;
+    try {
+      await _incoming;
+    } catch (_) {}
+    if (_closed || !identical(_socket, socket)) return;
+    // A WebSocket may call onError followed by onDone for one failure.
+    // Never turn its second callback into a fatal error while resuming.
+    if (_reconnectTask != null) return;
+    if (!_ready.isCompleted ||
+        _resumptionHandle == null ||
+        (_activeGrant.expiresAt.isBefore(DateTime.now()) &&
+            renewConnectionGrant == null) ||
+        _resumeAttempts >= 2) {
+      _fail('Live voice disconnected. Start a new call to reconnect.');
+      unawaited(close());
+      return;
+    }
+    final task = _resumeSocket();
+    _reconnectTask = task;
+    unawaited(task.catchError((Object _) {
+      _fail('Live voice could not resume. Start a new call.');
+      unawaited(close());
+    }).whenComplete(() {
+      if (identical(_reconnectTask, task)) _reconnectTask = null;
+    }));
+  }
+
+  Future<void> _resumeSocket() async {
+    final handle = _resumptionHandle;
+    if (handle == null || _closed) return;
+    _resumeAttempts++;
+    _state.add(LiveVoiceState.connecting);
+    _setupTimer?.cancel();
+    try { await _socketSub?.cancel(); } catch (_) {}
+    try {
+      await _socket?.close(WebSocketStatus.normalClosure, 'resume');
+    } catch (_) {}
+    _socketSub = null;
+    _socket = null;
+    _setupComplete = false;
+    if (_ownsAudio) {
+      try { await LivePcmAudio.stop(); } catch (_) {}
+    }
+    await Future<void>.delayed(Duration(milliseconds: _resumeAttempts * 400));
+    if (_closed) return;
+    if (!DateTime.now().isBefore(_activeGrant.expiresAt)) {
+      final renew = renewConnectionGrant;
+      if (renew == null) {
+        throw StateError('Call connection permission has expired.');
+      }
+      final fresh = await renew().timeout(const Duration(seconds: 15));
+      if (_closed) return;
+      // Never let a refresh silently switch the professional, model or voice.
+      // The original admission, history and duration timer remain owned by
+      // the calling screen and do not get replaced or re-billed.
+      if (!DateTime.now().isBefore(fresh.expiresAt) ||
+          fresh.model != grant.model ||
+          fresh.voiceName != grant.voiceName) {
+        throw StateError('Refreshed permission does not match the ongoing call.');
+      }
+      _activeGrant = fresh;
+    }
+    if (_closed) return;
+    await _connectSocket(resumeHandle: handle);
+  }
+
+  Future<void> _beginMicrophone() async {
+    if (_closed ||
+        _audioInterrupted || _muted ||
+        !_setupComplete ||
+        _micSub != null)
+      return;
+    final active = _startingMic;
+    if (active != null) return active;
+    final future = _startMicrophone();
+    _startingMic = future;
+    try {
+      await future;
+    } finally {
+      _startingMic = null;
+    }
+  }
+
+  Future<void> _startMicrophone() async {
+    final stream = sharedMicrophone ?? await startCallMicrophone(
+      _recorder!, bluetoothGranted: await AppPermissions.bluetoothConnectGranted());
+    if (_closed || _audioInterrupted || _muted || !_setupComplete) {
+      try {
+        if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
+      } catch (_) {}
+      return;
+    }
+    _micSub = stream.listen(
+      (chunk) {
+        if (_closed ||
+            _muted || _audioInterrupted || !_setupComplete ||
+            chunk.isEmpty ||
+            _socket?.readyState != WebSocket.open) {
+          return;
+        }
+        try { audioObserver?.input(chunk); } catch (_) {}
+        _socket!.add(
+          jsonEncode({
+            'realtimeInput': {
+              'audio': {
+                'data': base64Encode(chunk),
+                'mimeType': 'audio/pcm;rate=16000',
+              },
+            },
+          }),
+        );
+      },
+      onError: (_) {
+        _fail('Microphone streaming stopped.');
+        unawaited(close());
+      },
+      onDone: () {
+        if (!_closed) unawaited(close());
+      },
+    );
+    _state.add(LiveVoiceState.listening);
+  }
+
+  Future<void> _handleServerMessage(dynamic raw) async {
+    if (_closed) return;
+    try {
+      String text;
+      if (raw is String) {
+        text = raw;
+      } else if (raw is List<int>) {
+        text = utf8.decode(raw);
+      } else {
+        return;
+      }
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) return;
+      final message = decoded.cast<String, dynamic>();
+      if (message.containsKey('setupComplete')) {
+        if (_setupComplete) return;
+        _setupTimer?.cancel();
+        _setupComplete = true;
+        if (_ownsAudio && !await LivePcmAudio.setSpeaker(_speaker)) {
+          throw StateError('Audio routing is unavailable.');
+        }
+        if (_closed) return;
+        // Only model output transcription is enabled. User microphone audio is
+        // intentionally never requested or rendered as text.
+        final pendingSocket = _socket;
+        if (pendingSocket == null || _closed) return;
+        await _beginMicrophone();
+        if (_closed) return;
+        if (sendGreeting && !_ready.isCompleted) {
+          pendingSocket.add(
+            jsonEncode({
+              'clientContent': {
+                'turns': [
+                  {
+                    'role': 'user',
+                    'parts': [
+                      {
+                        'text':
+                            'You have answered this call. Speak first with a brief, natural hello in your own character, using the saved conversation context. '
+                            'Do not repeat your introduction or ask for facts already supplied.',
+                      },
+                    ],
+                  },
+                ],
+                'turnComplete': true,
+              },
+            }),
+          );
+        }
+        if (!_ready.isCompleted && !_closed) {
+          final allowed = permittedConnectedCallDuration(
+            now: DateTime.now(),
+            endAt: endAt,
+            maxDuration: maxDuration,
+          );
+          if (allowed != null) {
+            if (allowed <= Duration.zero) {
+              throw StateError('This call permission has expired.');
+            }
+            _durationTimer = Timer(allowed, () {endReason??=CallEndReason.durationLimit;unawaited(close());});
+          }
+          _ready.complete();
+          if (!_connectedReported) {
+            _connectedReported = true;
+            _notify(onConnected);
+          }
+        } else if (!_closed) {
+          // A resumed transport is part of the same paid/free call. The
+          // original admission duration timer and onConnected remain intact.
+          _resumeAttempts = 0;
+          _state.add(LiveVoiceState.listening);
+        }
+        return;
+      }
+      final resume = message['sessionResumptionUpdate'];
+      if (resume is Map) {
+        final handle = resume['newHandle'];
+        if (resume['resumable'] == true &&
+            handle is String && handle.isNotEmpty && handle.length <= 4096) {
+          _resumptionHandle = handle;
+        }
+        return;
+      }
+      if (message.containsKey('goAway')) {
+        // The provider may send one final newer handle after GoAway. Finish
+        // ordered incoming messages before the socket closes and reconnect.
+        return;
+      }
+      if (message.containsKey('error')) {
+        _fail('Live voice connection ended. Start a new call to reconnect.');
+        unawaited(close());
+        return;
+      }
+
+      final server = message['serverContent'];
+      if (server is! Map) return;
+      if (server['interrupted'] == true) {
+        try { audioObserver?.interrupted(); } catch (_) {}
+        if (_ownsAudio) await LivePcmAudio.stop();
+        if (onInterrupted != null) await onInterrupted!();
+        if (_closed) return;
+        _state.add(LiveVoiceState.interrupted);
+        return;
+      }
+
+      if (captureInputTranscription) {
+        final inputTranscription = server['inputTranscription'];
+        if (inputTranscription is Map) {
+          final transcript = inputTranscription['text'];
+          if (transcript is String && transcript.trim().isNotEmpty) {
+            _inputTranscripts.add(transcript);
+          }
+        }
+      }
+
+      final outputTranscription = server['outputTranscription'];
+      if (outputTranscription is Map) {
+        final transcript = outputTranscription['text'];
+        if (transcript is String && transcript.isNotEmpty) {
+          _transcripts.add(transcript);
+        }
+      }
+
+      final modelTurn = server['modelTurn'];
+      if (modelTurn is Map) {
+        final parts = modelTurn['parts'];
+        if (parts is List) {
+          for (final part in parts) {
+            if (_closed) return;
+            if (part is! Map) continue;
+            final inline = part['inlineData'];
+            if (inline is! Map) continue;
+            final mime = inline['mimeType'];
+            final data = inline['data'];
+            if (mime is String &&
+                mime.startsWith('audio/pcm') &&
+                data is String &&
+                data.isNotEmpty) {
+              if (_audioInterrupted) continue;
+              final pcm = base64Decode(data);
+              _state.add(LiveVoiceState.speaking);
+              if (onAudioPcm != null) {
+                await onAudioPcm!(pcm);
+                try { audioObserver?.output(pcm); } catch (_) {}
+                continue;
+              }
+              if (!await LivePcmAudio.start(sampleRate: 24000)) {
+                throw StateError('Native live audio playback is unavailable.');
+              }
+              if (_closed) return;
+              if (!await LivePcmAudio.write(pcm)) {
+                throw StateError('Native live audio playback stopped.');
+              }
+              try { audioObserver?.output(pcm); } catch (_) {}
+            }
+          }
+        }
+      }
+      if (!_closed && server['turnComplete'] == true) {
+        _turnCompletions.add(null);
+        _state.add(LiveVoiceState.listening);
+      }
+    } catch (error) {
+      _fail(audioFailureMessage(error, fallback:'Live voice received an invalid audio event.'));
+      unawaited(close());
+    }
+  }
+
+  /// Transient focus events (notifications/navigation/media) are not proof
+  /// that another call owns the microphone. Never tear down paid admission.
+  Future<void> handleAudioInterruption(AudioInterruptionEvent event) async {
+    if (_closed || !_ownsAudio) return;
+    if (event.type == AudioInterruptionType.duck) return;
+    if (!event.begin) { await resumeAudio(); return; }
+    if (_audioInterrupted) return;
+    _audioInterrupted = true;
+    _state.add(LiveVoiceState.interrupted);
+    try { audioObserver?.interrupted(); } catch (_) {}
+    final stopping = _suspendAudio();
+    _suspendingAudio = stopping;
+    await stopping;
+  }
+
+  Future<void> _suspendAudio() async {
+    await _startingMic;
+    try { await _micSub?.cancel(); } catch (_) {}
+    _micSub = null;
+    try { await _recorder!.stop().timeout(const Duration(seconds:2)); } catch (_) {}
+    try { await LivePcmAudio.stop(); } catch (_) {}
+  }
+
+  Future<void> resumeAudio() async {
+    if (_closed || !_audioInterrupted) return;
+    await _suspendingAudio;
+    if (_closed || !_audioInterrupted) return;
+    try {
+      final session = await AudioSession.instance;
+      if (!await session.setActive(true) || _closed) return;
+      _audioInterrupted = false;
+      await LivePcmAudio.setSpeaker(_speaker);
+      if (!_muted) await _beginMicrophone();
+      if (!_closed) _state.add(LiveVoiceState.listening);
+    } catch (_) {
+      // Keep explicit Resume available; connection and admission stay intact.
+      _audioInterrupted = true;
+      if (!_closed) _state.add(LiveVoiceState.interrupted);
+    }
+  }
+
+  Future<void> setSpeaker(bool enabled) async {
+    if (_closed) return;
+    _speaker = enabled;
+    if (_ownsAudio) await LivePcmAudio.setSpeaker(enabled);
+  }
+
+  /// Select only a route reported by Android for this active call. A device
+  /// that disconnected before selection fails without changing the UI state.
+  Future<bool> selectAudioRoute(CallAudioRoute route) async {
+    if (_closed || !_ownsAudio) return false;
+    final selected = await LivePcmAudio.selectCallRoute(route.id);
+    if (selected && !_closed) _speaker = route.kind == 'speaker';
+    return selected && !_closed;
+  }
+
+  Future<void> mute(bool muted) async {
+    if (_closed) return;
+    _muted = muted;
+    if (muted) {
+      await _startingMic;
+      if (_closed) return;
+      try {
+        await _micSub?.cancel();
+      } catch (_) {}
+      _micSub = null;
+      try {
+        if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
+      } catch (_) {}
+    } else {
+      await _beginMicrophone();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached ||
+        (state == AppLifecycleState.paused &&
+            (!Platform.isAndroid || !_foregroundCallActive))) {
+      // Native Android foreground service keeps a customer-authorized live
+      // call visible when they lock the phone or switch apps. Standalone
+      // notes and unsupported platforms retain the conservative close path.
+      endReason??=CallEndReason.appClosed;
+      unawaited(close());
+    }
+  }
+
+  void _fail(String message) {
+    if (_closed) return;
+    endReason??=CallEndReason.connectionFailed;
+    if (!_ready.isCompleted) {
+      _ready.completeError(StateError(message));
+    }
+    _errors.add(message);
+    _state.add(LiveVoiceState.failed);
+  }
+
+  Future<void> close() async {
+    final active = _closing;
+    if (active != null) return active;
+    final future = _close();
+    _closing = future;
+    return future;
+  }
+
+  Future<void> _close() async {
+    if (_closed) return;
+    _closed = true;
+    try { audioObserver?.ended(); } catch (_) {}
+    audioObserver = null;
+    if (!_ready.isCompleted) {
+      _ready.completeError(
+        StateError('Live voice ended before media setup completed.'),
+      );
+    }
+    _setupTimer?.cancel();
+    _durationTimer?.cancel();
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observing = false;
+    }
+    try {
+      await _interruptions?.cancel();
+    } catch (_) {}
+    try {
+      await _noisy?.cancel();
+    } catch (_) {}
+    try {
+      await _socketSub?.cancel();
+    } catch (_) {}
+    try {
+      await _startingMic;
+      await _suspendingAudio;
+    } catch (_) {}
+    try {
+      await _micSub?.cancel();
+    } catch (_) {}
+    _micSub = null;
+    try {
+      if (_ownsAudio) await _recorder!.stop().timeout(const Duration(seconds:2));
+    } catch (_) {}
+    try {
+      if (_ownsAudio) await _recorder!.dispose().timeout(const Duration(seconds:2));
+    } catch (_) {}
+    try {
+      if (_ownsAudio) await LivePcmAudio.release();
+    } catch (_) {}
+    try {
+      await _socket?.close(WebSocketStatus.normalClosure, 'ended');
+    } catch (_) {}
+    _socket = null;
+    if (_foregroundCallActive) {
+      _foregroundCallActive = false;
+      await LiveCallForeground.stop();
+    }
+    try {
+      if (_ownsAudio) {
+        final audioSession = await AudioSession.instance;
+        await audioSession.setActive(false);
+      }
+    } catch (_) {}
+    _notify(onClosed);
+    _state.add(LiveVoiceState.ended);
+    await _state.close();
+    await _errors.close();
+    await _transcripts.close();
+    await _inputTranscripts.close();
+    await _turnCompletions.close();
+  }
+
+  void _notify(FutureOr<void> Function()? callback) {
+    if (callback == null) return;
+    // History delivery must never hold microphone or socket cleanup hostage.
+    unawaited(Future<void>.sync(callback).catchError((Object _) {}));
+  }
+}
+
+
+
+

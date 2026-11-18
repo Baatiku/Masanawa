@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ImageView android:id="@id/ivPic" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_marginLeft="4.0dp" android:layout_marginRight="4.0dp" android:layout_marginHorizontal="4.0dp" app:layout_constraintDimensionRatio="h,160:58" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <View android:id="@id/holder" android:background="@drawable/shape_corner_black45_8" android:layout_width="0.0dp" android:layout_height="0.0dp" app:layout_constraintBottom_toBottomOf="@id/ivPic" app:layout_constraintEnd_toEndOf="@id/ivPic" app:layout_constraintStart_toStartOf="@id/ivPic" app:layout_constraintTop_toTopOf="@id/ivPic" />
+    <ImageView android:id="@id/ivLock" android:layout_width="24.0dp" android:layout_height="24.0dp" android:src="@mipmap/osdk_ic_white_lock" android:layout_marginStart="3.0dp" app:layout_constraintBottom_toBottomOf="@id/holder" app:layout_constraintEnd_toEndOf="@id/holder" app:layout_constraintStart_toStartOf="@id/holder" app:layout_constraintTop_toTopOf="@id/holder" />
+    <Space android:layout_width="0.0dp" android:layout_height="16.0dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/ivPic" />
+</androidx.constraintlayout.widget.ConstraintLayout>

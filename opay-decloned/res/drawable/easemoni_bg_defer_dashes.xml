@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape android:shape="line"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_color_33000000" android:dashWidth="@dimen/easemoni_dimen_2" android:dashGap="@dimen/easemoni_dimen_4" />
+    <size android:height="@dimen/easemoni_dimen_1" />
+</shape>

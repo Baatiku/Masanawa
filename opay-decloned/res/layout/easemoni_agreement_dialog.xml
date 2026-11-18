@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@drawable/easemoni_bg_corner_8_white" android:padding="@dimen/easemoni_dimen_12" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <FrameLayout android:id="@id/agreement_web" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginBottom="@dimen/easemoni_dimen_60" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:id="@id/okash_permission_request_agree" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/easemoni_agree" android:textAllCaps="false" android:layout_marginStart="@dimen/easemoni_dimen_0" android:layout_marginEnd="@dimen/easemoni_dimen_0" app:layout_constraintBottom_toBottomOf="parent" style="@style/EaseMoniLargeBtnStyle" />
+</androidx.constraintlayout.widget.ConstraintLayout>

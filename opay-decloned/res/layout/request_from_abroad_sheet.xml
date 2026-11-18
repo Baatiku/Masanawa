@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="end" android:orientation="horizontal" android:id="@id/close_area" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <ImageView android:layout_gravity="end" android:background="@null" android:padding="@dimen/content_padding" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="@string/content_description_close" app:srcCompat="@drawable/ic_close" app:tint="@color/osdk_color_white" />
+    </LinearLayout>
+    <LinearLayout android:orientation="vertical" android:id="@id/bottom_sheet" android:background="@color/osdk_color_white" android:padding="@dimen/content_padding" android:layout_width="match_parent" android:layout_height="match_parent">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" android:text="@string/request_sheet_request_money_desc" style="@style/Body" />
+        <LinearLayout android:layout_gravity="center" android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="18.0dp" android:layout_marginBottom="18.0dp">
+            <TextView android:textSize="17.0sp" android:textStyle="bold" android:textColor="@color/mint" android:id="@id/amount" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <TextView android:padding="10.0dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/to" />
+            <TextView android:textSize="17.0sp" android:textStyle="bold" android:textColor="@color/mint" android:id="@id/receiver" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/_20dp">
+            <TextView android:textSize="13.0sp" android:textStyle="normal" android:textColor="@color/omain_8497a4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Phone:" android:lineSpacingExtra="7.0sp" />
+            <TextView android:textSize="13.0sp" android:textStyle="bold" android:textColor="@color/osdk_495057" android:id="@id/sender_phone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:lineSpacingExtra="7.0sp" android:layout_marginStart="@dimen/_8dp" />
+        </LinearLayout>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/_8dp">
+            <TextView android:textSize="13.0sp" android:textStyle="normal" android:textColor="@color/omain_8497a4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Email:" android:lineSpacingExtra="7.0sp" />
+            <TextView android:textSize="13.0sp" android:textStyle="bold" android:textColor="@color/osdk_495057" android:id="@id/sender_email" android:layout_width="wrap_content" android:layout_height="wrap_content" android:lineSpacingExtra="7.0sp" android:layout_marginStart="@dimen/_8dp" />
+        </LinearLayout>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/_12dp" android:text="@string/request_sheet_notification_desc" style="@style/Body" />
+        <Button android:id="@id/submit_button" android:background="@color/mint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18.0dp" android:text="@string/request_sheet_confirm_button" style="@style/Button" />
+    </LinearLayout>
+</LinearLayout>

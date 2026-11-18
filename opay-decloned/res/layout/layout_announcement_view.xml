@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:id="@id/announcement" android:layout_width="match_parent" android:layout_height="32.0dp" android:layout_marginLeft="16.0dp" android:layout_marginTop="12.0dp" android:layout_marginRight="16.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="center_vertical" android:id="@id/announcement_image" android:background="@mipmap/osdk_ic_announcement_normal" android:layout_width="16.0dp" android:layout_height="16.0dp" android:layout_marginStart="12.0dp" />
+    <team.opay.pay.wallet.view.MarqueeView android:layout_gravity="center_vertical" android:id="@id/marquee_view" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="36.0dp" android:layout_marginEnd="36.0dp" app:OsdkmvDirection="bottom_to_top" app:OsdkmvInterval="5000" app:OsdkmvSingleLine="true" app:OsdkmvTextColor="@color/black_65" app:OsdkmvTextSize="12.0sp" />
+    <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="end|center" android:id="@id/announcement_arrow" android:background="@mipmap/osdk_ic_announcement_arrow_normal" android:layout_width="16.0dp" android:layout_height="16.0dp" android:layout_marginEnd="12.0dp" />
+</FrameLayout>

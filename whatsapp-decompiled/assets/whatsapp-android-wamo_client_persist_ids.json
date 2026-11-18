@@ -1,0 +1,178 @@
+{
+  "WamoAdvertisersYouSawQuery": {
+    "operation_name": "WamoAdvertisersYouSawQuery",
+    "operation_name_hash": "2147902749",
+    "operation_text_hash": "6182467651326310869",
+    "client_doc_id": "21479027496182467651326310869",
+    "doc_id": 27369407879349730,
+    "schema": "wamo"
+  },
+  "WamoAutoClearLpaConsentMutation": {
+    "operation_name": "WamoAutoClearLpaConsentMutation",
+    "operation_name_hash": "2052519841",
+    "operation_text_hash": "4482441013185961464",
+    "client_doc_id": "20525198414482441013185961464",
+    "doc_id": 27157017957286380,
+    "schema": "wamo"
+  },
+  "WamoBloksGetLayoutQuery": {
+    "operation_name": "WamoBloksGetLayoutQuery",
+    "operation_name_hash": "1651107939",
+    "operation_text_hash": "5311803504039928229",
+    "client_doc_id": "16511079395311803504039928229",
+    "doc_id": 35761428053502962,
+    "schema": "wamo"
+  },
+  "WamoCreateUserMutation": {
+    "operation_name": "WamoCreateUserMutation",
+    "operation_name_hash": "3992463379",
+    "operation_text_hash": "654957343135145153",
+    "client_doc_id": "3992463379654957343135145153",
+    "doc_id": 26643102025382056,
+    "schema": "wamo"
+  },
+  "WamoDYIJobCreateMutation": {
+    "operation_name": "WamoDYIJobCreateMutation",
+    "operation_name_hash": "213410182",
+    "operation_text_hash": "3951428602058065691",
+    "client_doc_id": "2134101823951428602058065691",
+    "doc_id": 35432158949761169,
+    "schema": "wamo"
+  },
+  "WamoDYIJobDeleteMutation": {
+    "operation_name": "WamoDYIJobDeleteMutation",
+    "operation_name_hash": "930874139",
+    "operation_text_hash": "15334775061021222311",
+    "client_doc_id": "93087413915334775061021222311",
+    "doc_id": 35418212507825478,
+    "schema": "wamo"
+  },
+  "WamoDYIJobStatusQuery": {
+    "operation_name": "WamoDYIJobStatusQuery",
+    "operation_name_hash": "791062331",
+    "operation_text_hash": "11361859595717024294",
+    "client_doc_id": "79106233111361859595717024294",
+    "doc_id": 26233222629644328,
+    "schema": "wamo"
+  },
+  "WamoDeleteUserMutation": {
+    "operation_name": "WamoDeleteUserMutation",
+    "operation_name_hash": "497609364",
+    "operation_text_hash": "10097492468132561662",
+    "client_doc_id": "49760936410097492468132561662",
+    "doc_id": 26847597944871230,
+    "schema": "wamo"
+  },
+  "WamoFrxReportPromoMutation": {
+    "operation_name": "WamoFrxReportPromoMutation",
+    "operation_name_hash": "26566936",
+    "operation_text_hash": "4388679466163320019",
+    "client_doc_id": "265669364388679466163320019",
+    "doc_id": 28395941500007169,
+    "schema": "wamo"
+  },
+  "WamoHeartbeatMutation": {
+    "operation_name": "WamoHeartbeatMutation",
+    "operation_name_hash": "1561831982",
+    "operation_text_hash": "94073990555553266",
+    "client_doc_id": "156183198294073990555553266",
+    "doc_id": 26147852544878404,
+    "schema": "wamo"
+  },
+  "WamoHidePageMutation": {
+    "operation_name": "WamoHidePageMutation",
+    "operation_name_hash": "4277394583",
+    "operation_text_hash": "14545718600828592548",
+    "client_doc_id": "427739458314545718600828592548",
+    "doc_id": 26762670266664464,
+    "schema": "wamo"
+  },
+  "WamoHidePromoMutation": {
+    "operation_name": "WamoHidePromoMutation",
+    "operation_name_hash": "671583766",
+    "operation_text_hash": "7730793145720575892",
+    "client_doc_id": "6715837667730793145720575892",
+    "doc_id": 26672924455626300,
+    "schema": "wamo"
+  },
+  "WamoLeadGenFormQuery": {
+    "operation_name": "WamoLeadGenFormQuery",
+    "operation_name_hash": "4156889031",
+    "operation_text_hash": "1703003341517365903",
+    "client_doc_id": "41568890311703003341517365903",
+    "doc_id": 29079028461715443,
+    "schema": "wamo"
+  },
+  "WamoLeadGenSubmitMutation": {
+    "operation_name": "WamoLeadGenSubmitMutation",
+    "operation_name_hash": "743015997",
+    "operation_text_hash": "10960098779140315597",
+    "client_doc_id": "74301599710960098779140315597",
+    "doc_id": 27590772603957866,
+    "schema": "wamo"
+  },
+  "WamoLinkUserMutation": {
+    "operation_name": "WamoLinkUserMutation",
+    "operation_name_hash": "3447111810",
+    "operation_text_hash": "7119565372846725700",
+    "client_doc_id": "34471118107119565372846725700",
+    "doc_id": 26986545907702584,
+    "schema": "wamo"
+  },
+  "WamoRecentPromoActivityQuery": {
+    "operation_name": "WamoRecentPromoActivityQuery",
+    "operation_name_hash": "1715915636",
+    "operation_text_hash": "12314148878492380736",
+    "client_doc_id": "171591563612314148878492380736",
+    "doc_id": 26763213160017946,
+    "schema": "wamo"
+  },
+  "WamoReportPromoAppealV2Mutation": {
+    "operation_name": "WamoReportPromoAppealV2Mutation",
+    "operation_name_hash": "1347337532",
+    "operation_text_hash": "7211360160995598349",
+    "client_doc_id": "13473375327211360160995598349",
+    "doc_id": 26867425009592691,
+    "schema": "wamo"
+  },
+  "WamoReportPromoFetchQuery": {
+    "operation_name": "WamoReportPromoFetchQuery",
+    "operation_name_hash": "709927804",
+    "operation_text_hash": "13611701671541958207",
+    "client_doc_id": "70992780413611701671541958207",
+    "doc_id": 36309881008625497,
+    "schema": "wamo"
+  },
+  "WamoReportPromoMutation": {
+    "operation_name": "WamoReportPromoMutation",
+    "operation_name_hash": "2224812236",
+    "operation_text_hash": "13767087543683141893",
+    "client_doc_id": "222481223613767087543683141893",
+    "doc_id": 26170110515981669,
+    "schema": "wamo"
+  },
+  "WamoStartViewerSessionV2Mutation": {
+    "operation_name": "WamoStartViewerSessionV2Mutation",
+    "operation_name_hash": "3477921639",
+    "operation_text_hash": "11635691811106893047",
+    "client_doc_id": "347792163911635691811106893047",
+    "doc_id": 27513021238282069,
+    "schema": "wamo"
+  },
+  "WamoUnhidePageV2Mutation": {
+    "operation_name": "WamoUnhidePageV2Mutation",
+    "operation_name_hash": "2485495666",
+    "operation_text_hash": "12153757634117323048",
+    "client_doc_id": "248549566612153757634117323048",
+    "doc_id": 26343585518664598,
+    "schema": "wamo"
+  },
+  "WamoUserBasicQuery": {
+    "operation_name": "WamoUserBasicQuery",
+    "operation_name_hash": "1654010751",
+    "operation_text_hash": "5932181193979718948",
+    "client_doc_id": "16540107515932181193979718948",
+    "doc_id": 26217108451265493,
+    "schema": "wamo"
+  }
+}

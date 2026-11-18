@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:orientation="vertical" android:background="@color/color_f8f8fb" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.core.android.views.OpayActionBar android:id="@id/action_bar" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:oab_title="@string/osdk_wallet_balance_details" style="@style/ActionBar" />
+    <team.opay.pay.android.views.OPaySwipeRefreshLayout android:id="@id/wallet_refresh" android:visibility="gone" android:layout_width="0.0dp" android:layout_height="0.0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/action_bar">
+        <androidx.recyclerview.widget.RecyclerView android:id="@id/transaction_history" android:layout_width="match_parent" android:layout_height="match_parent" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+    </team.opay.pay.android.views.OPaySwipeRefreshLayout>
+    <team.opay.core.android.views.PulseLoaderView android:id="@id/loadingLayout" android:layout_width="match_parent" android:layout_height="match_parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

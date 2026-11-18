@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/easemoni_dimen_18" android:textColor="@color/easemoni_text_333" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_version_update" />
+    <TextView android:textSize="@dimen/easemoni_dimen_16" android:textColor="@color/easemoni_color_5c5f61" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_16" android:text="@string/easemoni_version_update_tip" />
+    <Button android:id="@id/btn_update_now" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_btn_height" android:layout_marginTop="@dimen/easemoni_dimen_16" android:text="@string/easemoni_update_now" android:textAllCaps="false" style="@style/EaseMoniLargeBtnStyle" />
+</LinearLayout>

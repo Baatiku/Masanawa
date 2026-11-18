@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:gravity="end" android:orientation="vertical" android:id="@id/close_area" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <ImageView android:layout_gravity="end" android:background="@null" android:padding="@dimen/content_padding" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="@string/content_description_close" app:srcCompat="@drawable/ic_close" app:tint="@color/osdk_color_white" />
+            <LinearLayout android:orientation="horizontal" android:id="@id/header_layout" android:background="@drawable/payment_sheet_header_background" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:id="@id/top_header_label" android:padding="@dimen/content_padding" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" style="@style/Body" />
+                <LinearLayout android:orientation="vertical" android:id="@id/custom_header_layout" android:padding="@dimen/content_padding" android:paddingBottom="0.0dp" android:visibility="gone" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0">
+                    <TextView android:gravity="center_horizontal" android:id="@id/header_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/payment_sheet_header_tv_title" style="@style/PaymentSheetHeader.Title" />
+                </LinearLayout>
+                <ProgressBar android:layout_gravity="center" android:id="@id/fees_update_progress" android:visibility="gone" android:layout_width="@dimen/default_icon_size" android:layout_height="@dimen/default_icon_size" android:layout_margin="@dimen/content_padding" android:indeterminateTint="@color/mint" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout android:orientation="vertical" android:background="@color/osdk_color_white" android:paddingTop="@dimen/content_padding_small" android:paddingBottom="@dimen/content_padding" android:layout_width="match_parent" android:layout_height="360.0dp">
+            <TextView android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/blue_grey_41" android:id="@id/header" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/payment_sheet_header" android:paddingStart="@dimen/content_padding" android:paddingEnd="@dimen/content_padding" />
+            <androidx.recyclerview.widget.RecyclerView android:orientation="vertical" android:id="@id/payments" android:paddingTop="@dimen/content_padding_middling" android:paddingBottom="@dimen/content_padding_small" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_weight="1.0" android:paddingStart="@dimen/content_padding_small" android:paddingEnd="@dimen/content_padding_small" />
+            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@id/payment_coupons" android:paddingTop="@dimen/content_padding_smaller" android:paddingBottom="@dimen/content_padding" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/content_padding" android:paddingEnd="@dimen/content_padding">
+                <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" app:srcCompat="@drawable/ic_payment_coupon_icon" app:tint="@color/light_pink" />
+                <TextView android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/blue_grey_41" android:gravity="center_vertical" android:layout_width="0.0dp" android:layout_height="wrap_content" android:text="@string/payment_sheet_coupon" android:layout_weight="1.0" android:layout_marginStart="@dimen/content_padding_smaller" />
+                <TextView android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/red_pink" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/otp_input_hint" android:layout_marginEnd="@dimen/content_padding_smaller" />
+                <TextView android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/blue_grey_41" android:id="@id/payment_coupons_amount" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </LinearLayout>
+            <TextView android:textStyle="italic" android:gravity="center_vertical" android:id="@id/transaction_warning" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/content_padding_small" android:text="@string/payment_sheet_add_money_warning" android:drawablePadding="@dimen/content_padding_small" android:drawableStart="@drawable/ic_warning" android:paddingStart="@dimen/content_padding" android:paddingEnd="@dimen/content_padding" style="@style/Body" />
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/content_padding" android:paddingEnd="@dimen/content_padding">
+                <team.opay.core.android.validation.ValidationButton android:enabled="false" android:id="@id/submit_button" android:layout_width="match_parent" style="@style/Button.Validation" />
+                <ProgressBar android:id="@id/submit_progress" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" android:indeterminateTint="@color/osdk_color_white" />
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

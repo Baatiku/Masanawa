@@ -1,0 +1,509 @@
+bool isAdminPersonaPortraitUrl(String raw) {
+  final u = Uri.tryParse(raw);
+  return u != null &&
+      u.scheme == 'https' &&
+      u.host == 'api.masanawa.com' &&
+      u.userInfo.isEmpty &&
+      !u.hasPort &&
+      !u.hasFragment &&
+      RegExp(r'^/v1/personas/character_[a-f0-9-]{36}/portrait$')
+          .hasMatch(u.path) &&
+      u.queryParameters.length == 1 &&
+      u.queryParametersAll['revision']?.length == 1 &&
+      RegExp(r'^[0-9]{1,16}$').hasMatch(u.queryParameters['revision'] ?? '');
+}
+
+bool isOfficialPublicMediaUrl(String raw) {
+  final u = Uri.tryParse(raw);
+  return u != null &&
+      u.scheme == 'https' &&
+      u.host == 'api.masanawa.com' &&
+      u.userInfo.isEmpty &&
+      !u.hasPort &&
+      !u.hasQuery &&
+      !u.hasFragment &&
+      RegExp(r'^/public/persona-media/[a-f0-9]{32}$').hasMatch(u.path);
+}
+
+class OfficialPortrait {
+  const OfficialPortrait(
+    this.url,
+    this.sourceUrl,
+    this.credit,
+    this.licenseLabel,
+    this.licenseUrl,
+  );
+  final String url, sourceUrl, credit, licenseLabel;
+  final String? licenseUrl;
+  static OfficialPortrait? read(Object? raw) {
+    if (raw is! Map) return null;
+    final url = raw['url'],
+        source = raw['sourceUrl'],
+        credit = raw['credit'],
+        label = raw['licenseLabel'];
+    if (url is! String ||
+        !(isOfficialPublicMediaUrl(url) || isAdminPersonaPortraitUrl(url)) ||
+        source is! String ||
+        Uri.tryParse(source)?.scheme != 'https' ||
+        credit is! String ||
+        credit.isEmpty ||
+        credit.length > 200 ||
+        label is! String ||
+        label.length > 100)
+      return null;
+    final license = raw['licenseUrl'];
+    return OfficialPortrait(
+      url,
+      source,
+      credit,
+      label,
+      license is String && license.startsWith('https://creativecommons.org/')
+          ? license
+          : null,
+    );
+  }
+}
+
+class OfficialParty {
+  const OfficialParty(
+    this.code,
+    this.name,
+    this.emblemUrl,
+    this.sourceUrl,
+    this.checkedAt,
+  );
+  final String code, name, emblemUrl, sourceUrl, checkedAt;
+  static OfficialParty? read(Object? raw) {
+    if (raw is! Map ||
+        !const ['APC', 'ADC', 'NDC', 'PDP'].contains(raw['code']))
+      return null;
+    final name = raw['name'],
+        url = raw['emblemUrl'],
+        source = raw['sourceUrl'],
+        date = raw['checkedAt'];
+    if (name is! String ||
+        name.length > 100 ||
+        url is! String ||
+        !isOfficialPublicMediaUrl(url) ||
+        source is! String ||
+        Uri.tryParse(source)?.scheme != 'https' ||
+        date is! String ||
+        DateTime.tryParse(date) == null)
+      return null;
+    return OfficialParty(raw['code'] as String, name, url, source, date);
+  }
+}
+
+class PublicOfficialIdentity {
+  const PublicOfficialIdentity(
+    this.officialName,
+    this.office,
+    this.sourceUrl,
+    this.reviewedAt,
+    this.expiresAt, {
+    this.dateOfBirth,
+    this.stateOfOrigin,
+    this.cityOfOrigin,
+    this.biography,
+    this.birthPlace,
+    this.portrait,
+    this.party,
+  });
+  final OfficialPortrait? portrait;
+  final OfficialParty? party;
+  final String officialName, office, sourceUrl;
+  final DateTime reviewedAt, expiresAt;
+  final String? dateOfBirth, stateOfOrigin, cityOfOrigin, biography, birthPlace;
+  bool get current =>
+      !reviewedAt.isAfter(DateTime.now().toUtc()) &&
+      expiresAt.isAfter(DateTime.now().toUtc());
+  static PublicOfficialIdentity? read(Object? raw) {
+    if (raw is! Map ||
+        raw['verification'] != 'source_reviewed' ||
+        raw['representation'] != 'ai_simulation')
+      return null;
+    final name = raw['officialName'],
+        office = raw['office'],
+        url = raw['identitySourceUrl'];
+    final reviewed = DateTime.tryParse('${raw['reviewedAt']}'),
+        expires = DateTime.tryParse('${raw['reviewExpiresAt']}');
+    final uri = url is String ? Uri.tryParse(url) : null;
+    if (name is! String ||
+        name.trim().isEmpty ||
+        name.length > 160 ||
+        office is! String ||
+        office.isEmpty ||
+        office.length > 240 ||
+        uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment ||
+        reviewed == null ||
+        expires == null ||
+        !expires.isAfter(reviewed))
+      return null;
+    final facts = raw['biographicalFacts'];
+    String? fact(String key) {
+      final v = facts is Map ? facts[key] : null;
+      return v is String && v.trim().isNotEmpty && v.length <= 100
+          ? v.trim()
+          : null;
+    }
+
+    final birth = fact('dateOfBirth');
+    final date = birth == null ? null : DateTime.tryParse(birth);
+    final validBirth =
+        birth != null &&
+        RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(birth) &&
+        date != null &&
+        date.toIso8601String().startsWith(birth) &&
+        !date.isAfter(DateTime.now().toUtc());
+    final result = PublicOfficialIdentity(
+      name,
+      office,
+      url as String,
+      reviewed,
+      expires,
+      dateOfBirth: validBirth ? birth : null,
+      stateOfOrigin: fact('stateOfOrigin'),
+      cityOfOrigin: fact('cityOfOrigin'),
+      birthPlace: fact('birthPlace'),
+      portrait: OfficialPortrait.read(raw['portrait']),
+      party: OfficialParty.read(raw['party']),
+      biography:
+          raw['biography'] is String &&
+              (raw['biography'] as String).trim().isNotEmpty &&
+              (raw['biography'] as String).length <= 8000
+          ? raw['biography'] as String
+          : null,
+    );
+    return result.current ? result : null;
+  }
+}
+
+/// A public official channel admitted through an approved server revision.
+class AgentSocialChannel {
+  const AgentSocialChannel({required this.platform, required this.url});
+  final String platform;
+  final String url;
+  static const allowed = <String, List<String>>{
+    'whatsapp': ['wa.me'],
+    'telegram': ['t.me'],
+    'youtube': ['www.youtube.com', 'youtube.com'],
+    'tiktok': ['www.tiktok.com', 'tiktok.com'],
+    'facebook': ['www.facebook.com', 'facebook.com'],
+    'instagram': ['www.instagram.com', 'instagram.com'],
+    'x': ['x.com', 'www.x.com'],
+  };
+  static AgentSocialChannel? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final platform = raw['platform'];
+    final link = raw['url'];
+    if (platform is! String || link is! String || link.length > 256)
+      return null;
+    final uri = Uri.tryParse(link);
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasPort ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        !(allowed[platform]?.contains(uri.host) ?? false) ||
+        !link.startsWith('https://'))
+      return null;
+    final path = uri.path;
+    final valid = platform == 'whatsapp'
+        ? RegExp(r'^/[1-9][0-9]{6,15}/?$').hasMatch(path)
+        : platform == 'telegram'
+        ? RegExp(r'^/[a-zA-Z0-9_]{5,32}/?$').hasMatch(path)
+        : platform == 'youtube'
+        ? RegExp(r'^/@[a-zA-Z0-9._-]{3,80}/?$').hasMatch(path)
+        : RegExp(r'^/@?[a-zA-Z0-9._-]{3,80}/?$').hasMatch(path);
+    if (!valid) return null;
+    return AgentSocialChannel(platform: platform, url: uri.toString());
+  }
+
+  Map<String, String> toJson() => {'platform': platform, 'url': url};
+}
+
+/// Server-driven projection used by the mobile shell.
+///
+/// This is intentionally presentation-only. Character identity is owned by the
+/// platform identity domain; Skills remain independently assigned server-side.
+/// The app never infers capabilities from [roleLabel].
+enum AgentPresence {
+  available,
+  listening,
+  working,
+  onCall,
+  offline,
+  unknown;
+
+  static AgentPresence parse(String? value) => switch (value) {
+    'listening' => AgentPresence.listening,
+    'working' => AgentPresence.working,
+    'on_call' => AgentPresence.onCall,
+    'available' => AgentPresence.available,
+    'offline' => AgentPresence.offline,
+    'unknown' => AgentPresence.unknown,
+    // Missing or unrecognized server presence is not proof that a visible
+    // persona is offline or ready to chat. Do not invent availability.
+    _ => AgentPresence.unknown,
+  };
+
+  String get label => switch (this) {
+    AgentPresence.available => 'Available',
+    AgentPresence.listening => 'Listening…',
+    AgentPresence.working => 'Working',
+    AgentPresence.onCall => 'On a call',
+    AgentPresence.offline => 'Offline',
+    AgentPresence.unknown => 'Status unverified',
+  };
+}
+
+class AgentDirectoryEntry {
+  const AgentDirectoryEntry({
+    required this.characterId,
+    required this.characterVersionId,
+    required this.displayName,
+    required this.roleLabel,
+    required this.about,
+    this.biography,
+    required this.presence,
+    this.avatarUrl,
+    this.greeting,
+    this.activeWorkCount = 0,
+    this.supportAgent = false,
+    this.defaultPlatformAgent = false,
+    this.voiceProvider,
+    this.voiceName,
+    this.portraitKey,
+    this.following = false,
+    this.conversationStarters = const [],
+    this.socialChannels = const [],
+    this.countryCode,
+    this.countryName,
+    this.publicOfficial,
+    this.publicOfficialSimulation = false,
+    this.civicAgencyId,
+  });
+
+  final PublicOfficialIdentity? publicOfficial;
+  final bool publicOfficialSimulation;
+
+  /// Server-reviewed independent AI guide identity, never an official account.
+  final String? civicAgencyId;
+  final String characterId;
+  final String characterVersionId;
+  final String displayName;
+
+  /// Admin-configured presentation label. It is not a Skill or authority grant.
+  final String roleLabel;
+  final String about;
+  final String? biography;
+  final AgentPresence presence;
+  final String? avatarUrl;
+  final String? greeting;
+  final int activeWorkCount;
+  final bool supportAgent;
+  final bool defaultPlatformAgent;
+  final String? voiceProvider;
+  final String? voiceName;
+  final String? portraitKey;
+  final bool following;
+  final List<String> conversationStarters;
+  final List<AgentSocialChannel> socialChannels;
+  final String? countryCode, countryName;
+
+  String get countrySearchText => [
+    countryName ?? '',
+    countryCode ?? '',
+    switch (countryCode) {
+      'NG' => 'Nigeria Najeriya Nijeriya',
+      'IN' => 'India Indiya Bharat',
+      'CN' => 'China Sin Zhongguo',
+      _ => '',
+    },
+  ].join(' ').toLowerCase();
+  String? get countryFlag {
+    final code = countryCode;
+    if (code == null ||
+        !RegExp(r'^[A-Z]{2}$').hasMatch(code) ||
+        countryName == null)
+      return null;
+    return String.fromCharCodes(
+      code.codeUnits.map((unit) => 0x1F1E6 + unit - 65),
+    );
+  }
+
+  /// Saved roster metadata is useful before refresh, but saved presence is
+  /// historical. Never present it as a current runtime/voice availability check.
+  AgentDirectoryEntry withUnverifiedPresence() => AgentDirectoryEntry(
+    characterId: characterId,
+    characterVersionId: characterVersionId,
+    displayName: displayName,
+    roleLabel: roleLabel,
+    about: about,
+    biography: biography,
+    presence: AgentPresence.unknown,
+    // Offline directory snapshots cannot assert a media grant is still
+    // authorized. The approved portraitKey remains as stable metadata.
+    avatarUrl: null,
+    greeting: greeting,
+    activeWorkCount: 0,
+    supportAgent: supportAgent,
+    defaultPlatformAgent: defaultPlatformAgent,
+    voiceProvider: voiceProvider,
+    voiceName: voiceName,
+    portraitKey: portraitKey,
+    following: following,
+    conversationStarters: conversationStarters,
+    socialChannels: socialChannels,
+    countryCode: countryCode,
+    countryName: countryName,
+    publicOfficialSimulation: publicOfficialSimulation,
+    // Cached records do not prove a civic guide is still admitted.
+    civicAgencyId: null,
+  );
+
+  String get initial =>
+      displayName.trim().isEmpty ? 'M' : displayName.trim()[0].toUpperCase();
+
+  String get presenceLabel {
+    if (presence == AgentPresence.working && activeWorkCount > 0) {
+      return 'Working · $activeWorkCount ${activeWorkCount == 1 ? 'task' : 'tasks'}';
+    }
+    return presence.label;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'characterId': characterId,
+    'characterVersionId': characterVersionId,
+    'displayName': displayName,
+    if (publicOfficialSimulation) 'publicOfficialSimulation': true,
+    if (civicAgencyId != null) 'civicAgencyId': civicAgencyId,
+    'roleLabel': roleLabel,
+    'about': about,
+    if (biography != null) 'biography': biography,
+    'presence': switch (presence) {
+      AgentPresence.available => 'available',
+      AgentPresence.listening => 'listening',
+      AgentPresence.working => 'working',
+      AgentPresence.onCall => 'on_call',
+      AgentPresence.offline => 'offline',
+      AgentPresence.unknown => 'unknown',
+    },
+    // Never serialize URL-bearing portrait data to plaintext roster cache.
+    if (greeting != null) 'greeting': greeting,
+    'activeWorkCount': activeWorkCount,
+    'supportAgent': supportAgent,
+    'defaultPlatformAgent': defaultPlatformAgent,
+    if (voiceProvider != null) 'voiceProvider': voiceProvider,
+    if (voiceName != null) 'voiceName': voiceName,
+    if (portraitKey != null) 'portraitKey': portraitKey,
+    'following': following,
+    'conversationStarters': conversationStarters,
+    'socialChannels': [for (final channel in socialChannels) channel.toJson()],
+    if (countryCode != null) 'countryCode': countryCode,
+    if (countryName != null) 'countryName': countryName,
+  };
+
+  factory AgentDirectoryEntry.fromJson(Map<String, dynamic> json) {
+    String requiredString(String key) {
+      final value = json[key];
+      if (value is! String || value.trim().isEmpty) {
+        throw FormatException('Agent directory entry is missing $key');
+      }
+      return value.trim();
+    }
+
+    final work = json['activeWorkCount'];
+    return AgentDirectoryEntry(
+      publicOfficial: PublicOfficialIdentity.read(json['publicOfficial']),
+      publicOfficialSimulation:
+          json['publicOfficialSimulation'] == true ||
+          json['publicOfficial'] is Map,
+      civicAgencyId:
+          json['civicAgencyId'] is String &&
+              RegExp(r'^[a-z][a-z0-9-]{1,39}$')
+                  .hasMatch(json['civicAgencyId'] as String)
+          ? json['civicAgencyId'] as String
+          : null,
+      characterId: requiredString('characterId'),
+      characterVersionId: requiredString('characterVersionId'),
+      displayName: requiredString('displayName'),
+      roleLabel: requiredString('roleLabel'),
+      about: (json['about'] as String? ?? '').trim(),
+      biography:
+          json['biography'] is String &&
+              (json['biography'] as String).length <= 8000
+          ? json['biography'] as String
+          : null,
+      presence: AgentPresence.parse(
+        json['presence'] is String ? json['presence'] as String : null,
+      ),
+      avatarUrl: (json['avatarUrl'] as String?)?.trim(),
+      greeting: (json['greeting'] as String?)?.trim(),
+      activeWorkCount: work is int && work >= 0 ? work : 0,
+      supportAgent: json['supportAgent'] == true,
+      defaultPlatformAgent: json['defaultPlatformAgent'] == true,
+      voiceProvider: (json['voiceProvider'] as String?)?.trim(),
+      voiceName: (json['voiceName'] as String?)?.trim(),
+      countryCode:
+          json['countryCode'] is String &&
+              RegExp(r'^[A-Z]{2}$').hasMatch(json['countryCode'] as String)
+          ? json['countryCode'] as String
+          : null,
+      countryName:
+          json['countryName'] is String &&
+              (json['countryName'] as String).trim().isNotEmpty
+          ? (json['countryName'] as String).trim()
+          : null,
+      portraitKey:
+          json['portraitKey'] is String &&
+              RegExp(r'^[a-z][a-z0-9_-]{1,39}$')
+                  .hasMatch(json['portraitKey'] as String)
+          ? json['portraitKey'] as String
+          : null,
+      following: json['following'] == true,
+      conversationStarters: json['conversationStarters'] is List
+          ? (json['conversationStarters'] as List)
+                .whereType<String>()
+                .where((v) => v.trim().isNotEmpty && v.length <= 160)
+                .take(4)
+                .toList(growable: false)
+          : const [],
+      socialChannels: json['socialChannels'] is List
+          ? (json['socialChannels'] as List)
+                .map(AgentSocialChannel.fromJson)
+                .whereType<AgentSocialChannel>()
+                .take(7)
+                .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+abstract class AgentDirectoryTransport {
+  Future<List<AgentDirectoryEntry>> loadDirectory();
+  Future<void> setDefaultPlatformAgent(String characterId);
+}
+
+/// Used when no live Masanawa runtime is configured. Deliberately empty:
+/// agent identities are never invented or hard-coded in the client.
+class EmptyAgentDirectoryTransport implements AgentDirectoryTransport {
+  const EmptyAgentDirectoryTransport();
+
+  @override
+  Future<List<AgentDirectoryEntry>> loadDirectory() async => const [];
+
+  @override
+  Future<void> setDefaultPlatformAgent(String characterId) async {
+    throw StateError('Agent runtime is not configured');
+  }
+}
+
+class UnavailableAgentDirectoryTransport extends EmptyAgentDirectoryTransport {
+  const UnavailableAgentDirectoryTransport();
+}

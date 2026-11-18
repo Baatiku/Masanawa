@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/load_more_loading_view" android:layout_width="match_parent" android:layout_height="@dimen/def_height">
+        <ProgressBar android:id="@id/loading_progress" android:layout_width="15.0dp" android:layout_height="15.0dp" android:layout_marginEnd="@dimen/dp_4" android:indeterminateTint="@color/black_100" />
+        <TextView android:textSize="12.0sp" android:textColor="@color/black_100" android:id="@id/loading_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/osdk_loading" android:layout_marginStart="@dimen/dp_4" />
+    </LinearLayout>
+    <FrameLayout android:id="@id/load_more_load_fail_view" android:visibility="gone" android:layout_width="match_parent" android:layout_height="@dimen/def_height">
+        <TextView android:textColor="@color/osdk_0DDDB8" android:layout_gravity="center" android:id="@id/tv_prompt" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/osdk_loading_fail_try_again" />
+    </FrameLayout>
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@id/load_more_load_end_view" android:padding="@dimen/_16dp" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="12.0sp" android:textColor="@color/black_45" android:gravity="center" android:layout_gravity="center" android:id="@id/tv_load_finished_tips" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/osdk_transaction_load_finished" app:layout_constraintLeft_toLeftOf="parent" app:layout_constraintRight_toRightOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

@@ -1,0 +1,631 @@
+import {createNgnSpending} from '../gb_wallet/ngn_spending.js';
+import { createHash } from "node:crypto";
+import { createGbUsageReservations } from "../gb_wallet/reservations.js";
+import type { Pool } from "pg";
+import { parseCanonicalId, toInstant } from "@masanawa/contracts";
+import { canonicalJson } from "@masanawa/security";
+import type {
+  MobileShellActionRecord,
+  MobileShellEvent,
+  MobileShellRepository,
+  MobileTurnCommand,
+  MobilePushRepository,
+  MobileNotificationPreferences,
+  MobileAgentActivityRepository,
+} from "@masanawa/agents";
+import { withTransaction } from "../transaction.js";
+
+function command(row: any): MobileTurnCommand {
+  return Object.freeze({
+    scope: Object.freeze({
+      tenantId: parseCanonicalId("tenant", row.tenant_id),
+      userId: parseCanonicalId("user", row.user_id),
+      characterId: parseCanonicalId("character", row.character_id),
+      relationshipId: parseCanonicalId("relationship", row.relationship_id),
+    }),
+    characterSessionId: parseCanonicalId("character-session", row.character_session_id),
+    requestId: parseCanonicalId("request", row.request_id),
+    kind: row.kind,
+    userText: row.user_text,
+    payloadHash: row.payload_hash,
+    state: row.state,
+    agentRunId: row.agent_run_id ? parseCanonicalId("agent-run", row.agent_run_id) : null,
+    reply: row.reply,
+    parts: Object.freeze(Array.isArray(row.parts) ? [...row.parts] : []),
+    failureCode: row.failure_code,
+    createdAt: toInstant(row.created_at),
+    updatedAt: toInstant(row.updated_at),
+  });
+}
+
+function event(row: any): MobileShellEvent {
+  return Object.freeze({
+    cursor: String(row.event_cursor),
+    type: row.event_type,
+    payload: Object.freeze({ ...(row.payload ?? {}) }),
+    createdAt: toInstant(row.created_at),
+  });
+}
+
+function action(row: any): MobileShellActionRecord {
+  return Object.freeze({
+    scope: Object.freeze({
+      tenantId: parseCanonicalId("tenant", row.tenant_id),
+      userId: parseCanonicalId("user", row.user_id),
+      characterId: parseCanonicalId("character", row.character_id),
+      relationshipId: parseCanonicalId("relationship", row.relationship_id),
+    }),
+    characterSessionId: parseCanonicalId("character-session", row.character_session_id),
+    documentId: row.document_id,
+    revision: row.revision,
+    tokenHash: row.token_hash,
+    actionId: row.action_id,
+    nodeId: row.node_id,
+    valuesHash: row.values_hash,
+    state: row.state,
+    result: row.result ? Object.freeze({ ...row.result }) : null,
+    createdAt: toInstant(row.created_at),
+    updatedAt: toInstant(row.updated_at),
+  });
+}
+
+export function createPostgresMobileShellRepository(pool: Pool, options: {billReplies?: boolean} = {}): MobileShellRepository {
+  const chargeActor = (input: {scope: {tenantId:string;userId:string};requestId:string}) => ({
+    tenantId: input.scope.tenantId, userId: input.scope.userId,
+    operationId: "reply_" + createHash("sha256").update(JSON.stringify([
+      input.scope.tenantId,input.scope.userId,input.requestId])).digest("hex"),
+  });
+  async function historyPage(input:Parameters<NonNullable<MobileShellRepository['listHistoryPage']>>[0]){
+      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 200) {
+        throw new RangeError("history limit out of range");
+      }
+      let cursorTime:string|null=null,cursorId:string|null=null;
+      if(input.cursor){
+        if(!/^h_[A-Za-z0-9_-]{1,256}$/.test(input.cursor))throw new TypeError('invalid history cursor');
+        let value:unknown;try{value=JSON.parse(Buffer.from(input.cursor.slice(2),'base64url').toString('utf8'));}catch{throw new TypeError('invalid history cursor');}
+        if(!Array.isArray(value)||value.length!==2||typeof value[0]!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(value[0])||!Number.isFinite(Date.parse(value[0]))||typeof value[1]!=='string')throw new TypeError('invalid history cursor');
+        parseCanonicalId('request',value[1]);cursorTime=value[0];cursorId=value[1];
+      }
+      const before = !cursorTime&&input.before ? new Date(input.before) : null;
+      if (before && Number.isNaN(before.getTime())) throw new TypeError("invalid history cursor");
+      const result = await pool.query(
+        `SELECT *,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS page_created_at FROM agents.mobile_turn_commands
+          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
+            AND state='completed'
+            AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz OR ($6::text IS NOT NULL AND created_at=$5::timestamptz AND request_id<$6))
+          ORDER BY created_at DESC, request_id DESC LIMIT $7`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+         cursorTime??before?.toISOString()??null,cursorId,input.limit],
+      );
+      const oldest=result.rows.at(-1);
+      const nextCursor=result.rows.length===input.limit&&oldest?'h_'+Buffer.from(JSON.stringify([oldest.page_created_at,oldest.request_id])).toString('base64url'):null;
+      const controls=await pool.query(`SELECT request_id,direction,hidden,reaction,revision::text FROM agents.customer_message_controls WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND request_id=ANY($4::text[])`,[input.scope.tenantId,input.scope.userId,input.scope.characterId,result.rows.map(row=>row.request_id)]);
+      const annotations=new Map(controls.rows.map(row=>[row.request_id+':'+row.direction,row]));
+      const messages: any[] = [];
+      for (const row of result.rows.reverse()) {
+        const c = command(row);
+        const userControl=annotations.get(c.requestId+':user'),assistantControl=annotations.get(c.requestId+':assistant');
+        if(!userControl?.hidden)messages.push(Object.freeze({
+          controlRevision:Number(userControl?.revision??0),reaction:userControl?.reaction??null,
+          key: `user:${c.requestId}`, direction: "user" as const, requestId: c.requestId,
+          text: c.userText, parts: Object.freeze([]), agentRunId: null, createdAt: c.createdAt,
+        }));
+        if(!assistantControl?.hidden)messages.push(Object.freeze({
+          controlRevision:Number(assistantControl?.revision??0),reaction:assistantControl?.reaction??null,
+          key: `assistant:${c.requestId}`, direction: "assistant" as const, requestId: c.requestId,
+          text: c.reply ?? "", parts: c.parts, agentRunId: c.agentRunId, createdAt: c.updatedAt,
+        }));
+      }
+      return {messages:Object.freeze(messages),before:oldest?new Date(oldest.created_at).toISOString():null,nextCursor,hasMore:result.rows.length===input.limit,removedKeys:controls.rows.filter(row=>row.hidden).map(row=>row.direction+':'+row.request_id)};
+      }
+  return Object.freeze({
+    async claimTurn(input: Parameters<MobileShellRepository["claimTurn"]>[0]) {
+      return withTransaction(pool, async client => {
+        const result = await client.query(
+          `INSERT INTO agents.mobile_turn_commands(
+             tenant_id,user_id,character_id,relationship_id,character_session_id,
+             request_id,kind,user_text,payload_hash,state
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
+           ON CONFLICT DO NOTHING RETURNING *`,
+          [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+           input.characterSessionId,input.requestId,input.kind,input.userText,input.payloadHash],
+        );
+        if (result.rows[0]) {
+          if (options.billReplies) {
+            const actor = chargeActor(input);
+            await createNgnSpending(pool, client).reserve({...actor,
+              idempotencyKey: actor.operationId, purpose: "reply", amountKobo: 200});
+            await client.query(`UPDATE agents.mobile_turn_commands SET ngn_reply_operation_id=$3
+              WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,input.requestId,actor.operationId]);
+          }
+          return Object.freeze({ state: "created" as const, command: command(result.rows[0]) });
+        }
+        const replay = await client.query(
+          `SELECT * FROM agents.mobile_turn_commands
+            WHERE tenant_id=$1 AND request_id=$2 FOR SHARE`,
+          [input.scope.tenantId,input.requestId],
+        );
+        const row = replay.rows[0];
+        if (!row ||
+            row.user_id !== input.scope.userId ||
+            row.character_id !== input.scope.characterId ||
+            row.relationship_id !== input.scope.relationshipId ||
+            row.character_session_id !== input.characterSessionId ||
+            row.kind !== input.kind ||
+            row.user_text !== input.userText ||
+            row.payload_hash !== input.payloadHash) {
+          throw Object.assign(new Error("mobile turn request conflict"), {
+            statusCode: 409,
+            code: "agents.turn_request_conflict",
+          });
+        }
+        return Object.freeze({ state: "existing" as const, command: command(row) });
+      });
+    },
+
+    async completeTurn(input: Parameters<MobileShellRepository["completeTurn"]>[0]) {
+      return withTransaction(pool, async client => {
+      const result = await client.query(
+        `UPDATE agents.mobile_turn_commands
+            SET state='completed', agent_run_id=$5, reply=$6, parts=$7::jsonb,
+                failure_code=NULL, updated_at=clock_timestamp()
+          WHERE tenant_id=$1 AND user_id=$2 AND relationship_id=$3 AND request_id=$4
+            AND state='pending' AND character_id=$8
+          RETURNING *`,
+        [input.scope.tenantId,input.scope.userId,input.scope.relationshipId,input.requestId,
+         input.agentRunId,input.reply,canonicalJson(input.parts),input.scope.characterId],
+      );
+      if (!result.rows[0]) {
+        const replay = await client.query(
+          `SELECT * FROM agents.mobile_turn_commands
+            WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3
+              AND relationship_id=$4 AND request_id=$5`,
+          [input.scope.tenantId,input.scope.userId,input.scope.characterId,
+           input.scope.relationshipId,input.requestId],
+        );
+        const current = replay.rows[0] ? command(replay.rows[0]) : null;
+        if (current?.state === "completed" && current.agentRunId === input.agentRunId) return current;
+        throw new Error("mobile turn completion conflict");
+      }
+      if (result.rows[0].ngn_reply_operation_id) {
+        const actor={...chargeActor(input),operationId:result.rows[0].ngn_reply_operation_id as string};
+        await createNgnSpending(pool, client).capture(actor, 200);
+      }
+      if (result.rows[0].mb_reply_operation_id) {
+      const wallet = createGbUsageReservations(pool, client);
+      const actor = {...chargeActor(input),operationId:result.rows[0].mb_reply_operation_id as string};
+      // Only new billed turns have a hold; historical commands remain intact.
+      const hold = await wallet.read(actor.tenantId, actor.operationId, actor.userId);
+      if (!hold) throw new Error("gb.wallet.reservation_missing");
+      await wallet.capture(actor, 1);
+      }
+      return command(result.rows[0]);
+      });
+    },
+
+    async failTurn(input: Parameters<MobileShellRepository["failTurn"]>[0]) {
+      return withTransaction(pool, async client => {
+      const result = await client.query(
+        `UPDATE agents.mobile_turn_commands
+            SET state='failed', agent_run_id=COALESCE(agent_run_id,$5),
+                failure_code=$6, updated_at=clock_timestamp()
+          WHERE tenant_id=$1 AND user_id=$2 AND relationship_id=$3 AND request_id=$4
+            AND state='pending' AND character_id=$7
+          RETURNING *`,
+        [input.scope.tenantId,input.scope.userId,input.scope.relationshipId,input.requestId,
+         input.agentRunId,input.failureCode,input.scope.characterId],
+      );
+      if (!result.rows[0]) {
+        const replay = await client.query(
+          `SELECT * FROM agents.mobile_turn_commands
+            WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3
+              AND relationship_id=$4 AND request_id=$5`,
+          [input.scope.tenantId,input.scope.userId,input.scope.characterId,
+           input.scope.relationshipId,input.requestId],
+        );
+        const current = replay.rows[0] ? command(replay.rows[0]) : null;
+        if (current?.state === "failed") return current;
+        throw new Error("mobile turn failure conflict");
+      }
+      if (result.rows[0].ngn_reply_operation_id) {
+        const actor={...chargeActor(input),operationId:result.rows[0].ngn_reply_operation_id as string};
+        await createNgnSpending(pool, client).release(actor);
+      }
+      if (result.rows[0].mb_reply_operation_id) {
+      const wallet = createGbUsageReservations(pool, client);
+      const actor = {...chargeActor(input),operationId:result.rows[0].mb_reply_operation_id as string};
+      // Only new billed turns have a hold; historical commands remain intact.
+      const hold = await wallet.read(actor.tenantId, actor.operationId, actor.userId);
+      if (!hold) throw new Error("gb.wallet.reservation_missing");
+      await wallet.release(actor);
+      }
+      return command(result.rows[0]);
+      });
+    },
+
+    async readTurn(input: Parameters<MobileShellRepository["readTurn"]>[0]) {
+      const result = await pool.query(
+        `SELECT * FROM agents.mobile_turn_commands
+          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3
+            AND relationship_id=$4 AND request_id=$5`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,input.requestId],
+      );
+      return result.rows[0] ? command(result.rows[0]) : null;
+    },
+
+    listHistoryPage:historyPage,
+    async listHistory(input:Parameters<MobileShellRepository['listHistory']>[0]){return (await historyPage(input)).messages;},
+
+    async appendEvent(input: Parameters<MobileShellRepository["appendEvent"]>[0]) {
+      const result = await pool.query(
+        `INSERT INTO agents.mobile_shell_events(
+           tenant_id,user_id,character_id,relationship_id,character_session_id,event_type,payload
+         ) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) RETURNING *`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+         input.characterSessionId,input.type,canonicalJson(input.payload)],
+      );
+      return event(result.rows[0]);
+    },
+
+    async listEvents(input: Parameters<MobileShellRepository["listEvents"]>[0]) {
+      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 200) {
+        throw new RangeError("event limit out of range");
+      }
+      const after = input.after === undefined ? 0 : Number(input.after);
+      if (!Number.isSafeInteger(after) || after < 0) throw new TypeError("invalid event cursor");
+      const result = await pool.query(
+        `SELECT * FROM agents.mobile_shell_events
+          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
+            AND event_cursor > $5
+          ORDER BY event_cursor ASC LIMIT $6`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,after,input.limit],
+      );
+      return Object.freeze(result.rows.map(event));
+    },
+
+    async claimAction(input: Parameters<MobileShellRepository["claimAction"]>[0]) {
+      return withTransaction(pool, async client => {
+        const result = await client.query(
+          `INSERT INTO agents.mobile_shell_actions(
+             tenant_id,user_id,character_id,relationship_id,character_session_id,
+             document_id,revision,token_hash,action_id,node_id,values_hash,state
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending')
+           ON CONFLICT DO NOTHING RETURNING *`,
+          [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+           input.characterSessionId,input.documentId,input.revision,input.tokenHash,input.actionId,input.nodeId,input.valuesHash],
+        );
+        if (result.rows[0]) return Object.freeze({ created: true, record: action(result.rows[0]) });
+        const replay = await client.query(
+          `SELECT * FROM agents.mobile_shell_actions
+            WHERE tenant_id=$1 AND user_id=$2 AND relationship_id=$3
+              AND document_id=$4 AND revision=$5 FOR SHARE`,
+          [input.scope.tenantId,input.scope.userId,input.scope.relationshipId,input.documentId,input.revision],
+        );
+        const row = replay.rows[0];
+        if (!row || row.character_id !== input.scope.characterId ||
+            row.character_session_id !== input.characterSessionId ||
+            row.token_hash !== input.tokenHash || row.action_id !== input.actionId ||
+            row.node_id !== input.nodeId || row.values_hash !== input.valuesHash) {
+          throw new Error("mobile shell action conflict");
+        }
+        return Object.freeze({ created: false, record: action(row) });
+      });
+    },
+
+    async settleAction(input: Parameters<MobileShellRepository["settleAction"]>[0]) {
+      const result = await pool.query(
+        `UPDATE agents.mobile_shell_actions
+            SET state=$6, result=$7::jsonb, updated_at=clock_timestamp()
+          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
+            AND document_id=$5 AND revision=$8
+            AND state='pending' RETURNING *`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+         input.documentId,input.state,canonicalJson(input.result ?? {}),input.revision],
+      );
+      if (!result.rows[0]) {
+        const replay = await pool.query(
+          `SELECT * FROM agents.mobile_shell_actions
+            WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3
+              AND relationship_id=$4 AND document_id=$5 AND revision=$6`,
+          [input.scope.tenantId,input.scope.userId,input.scope.characterId,
+           input.scope.relationshipId,input.documentId,input.revision],
+        );
+        const current = replay.rows[0] ? action(replay.rows[0]) : null;
+        if (current && current.state === input.state) return current;
+        throw new Error("mobile shell action settlement conflict");
+      }
+      return action(result.rows[0]);
+    },
+
+    async readAction(input: Parameters<MobileShellRepository["readAction"]>[0]) {
+      const result = await pool.query(
+        `SELECT * FROM agents.mobile_shell_actions
+          WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4
+            AND document_id=$5 AND revision=$6`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,input.scope.relationshipId,
+         input.documentId,input.revision],
+      );
+      return result.rows[0] ? action(result.rows[0]) : null;
+    },
+  });
+}
+
+
+const defaultNotificationPreferences: MobileNotificationPreferences = Object.freeze({
+  messages: true, calls: true, rooms: true, status: true, wallet: true,
+  p2p: true, quietStart: null, quietEnd: null, utcOffsetMinutes: 0,
+});
+
+function notificationPreferences(row: any): MobileNotificationPreferences {
+  if (!row) return defaultNotificationPreferences;
+  return Object.freeze({
+    messages: row.messages === true,
+    calls: row.calls === true,
+    rooms: row.rooms === true,
+    status: row.status === true,
+    wallet: row.wallet === true,
+    p2p: row.p2p === true,
+    quietStart: row.quiet_start ?? null,
+    quietEnd: row.quiet_end ?? null,
+    utcOffsetMinutes: row.utc_offset_minutes,
+  });
+}
+
+export function createPostgresMobilePushRepository(pool: Pool): MobilePushRepository {
+  return Object.freeze({
+    async readPreferences(scope: Parameters<MobilePushRepository["readPreferences"]>[0]) {
+      const result = await pool.query(
+        `SELECT messages,calls,rooms,status,wallet,p2p,quiet_start,quiet_end,utc_offset_minutes
+           FROM agents.mobile_notification_preferences
+          WHERE tenant_id=$1 AND user_id=$2`,
+        [scope.tenantId,scope.userId],
+      );
+      return notificationPreferences(result.rows[0]);
+    },
+    async writePreferences(input: Parameters<MobilePushRepository["writePreferences"]>[0]) {
+      const p = input.preferences;
+      if (![p.messages,p.calls,p.rooms,p.status,p.wallet,p.p2p].every(
+        (value) => typeof value === "boolean") ||
+        (p.quietStart === null) !== (p.quietEnd === null) ||
+        !Number.isInteger(p.utcOffsetMinutes) || p.utcOffsetMinutes < -840 ||
+        p.utcOffsetMinutes > 840 ||
+        [p.quietStart,p.quietEnd].some((v) =>
+          v !== null && (!Number.isInteger(v) || v < 0 || v > 1439))) {
+        throw new TypeError("notification.preferences_invalid");
+      }
+      const result = await pool.query(
+        `INSERT INTO agents.mobile_notification_preferences
+          (tenant_id,user_id,messages,calls,rooms,status,wallet,p2p,
+           quiet_start,quiet_end,utc_offset_minutes)
+         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+         WHERE EXISTS(SELECT 1 FROM identity.users
+          WHERE tenant_id=$1 AND user_id=$2 AND state='active')
+         ON CONFLICT (tenant_id,user_id) DO UPDATE SET
+           messages=EXCLUDED.messages,calls=EXCLUDED.calls,
+           rooms=EXCLUDED.rooms,status=EXCLUDED.status,
+           wallet=EXCLUDED.wallet,p2p=EXCLUDED.p2p,
+           quiet_start=EXCLUDED.quiet_start,quiet_end=EXCLUDED.quiet_end,
+           utc_offset_minutes=EXCLUDED.utc_offset_minutes,
+           updated_at=clock_timestamp() RETURNING *`,
+        [input.tenantId,input.userId,p.messages,p.calls,p.rooms,p.status,
+         p.wallet,p.p2p,p.quietStart,p.quietEnd,p.utcOffsetMinutes],
+      );
+      if (!result.rows[0]) throw Error("notification.account_inactive");
+      return notificationPreferences(result.rows[0]);
+    },
+    async appendNotice(input: Parameters<MobilePushRepository["appendNotice"]>[0]) {
+      await pool.query(
+        `INSERT INTO agents.mobile_notification_history
+          (tenant_id,user_id,event_id,category,title,deep_link)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (tenant_id,user_id,event_id) DO NOTHING`,
+        [input.tenantId,input.userId,input.eventId,input.category,
+         input.title,input.deepLink],
+      );
+    },
+    async listNotices(scope: Parameters<MobilePushRepository["listNotices"]>[0]) {
+      const result = await pool.query(
+        `SELECT event_id,category,title,deep_link,created_at,read_at
+           FROM agents.mobile_notification_history
+          WHERE tenant_id=$1 AND user_id=$2
+          ORDER BY created_at DESC,event_id DESC LIMIT 100`,
+        [scope.tenantId,scope.userId],
+      );
+      return Object.freeze(result.rows.map((row: any) => Object.freeze({
+        id: row.event_id,
+        category: row.category,
+        title: row.title,
+        deepLink: row.deep_link,
+        createdAt: new Date(row.created_at).toISOString(),
+        readAt: row.read_at == null ? null : new Date(row.read_at).toISOString(),
+      })));
+    },
+    async markNoticeRead(input: Parameters<MobilePushRepository["markNoticeRead"]>[0]) {
+      const result = await pool.query<{ read_at: Date }>(
+        `UPDATE agents.mobile_notification_history
+            SET read_at=COALESCE(read_at,clock_timestamp())
+          WHERE tenant_id=$1 AND user_id=$2 AND event_id=$3
+          RETURNING read_at`,
+        [input.tenantId,input.userId,input.eventId],
+      );
+      return result.rows[0] == null ? null :
+        new Date(result.rows[0].read_at).toISOString();
+    },
+    async register(input: Parameters<MobilePushRepository["register"]>[0]) {
+      if (
+        input.installationId.trim().length < 16 ||
+        input.installationId.length > 128 ||
+        input.token.trim().length < 16 ||
+        input.token.length > 4096
+      ) {
+        throw new TypeError("Invalid push registration");
+      }
+      const result = await withTransaction(pool, async (client) => {
+        // A revocation may race mobile token refresh. The same User row lock
+        // forces registration either before deletion (then removed) or denied.
+        const user = await client.query<{ state: string }>(
+          `SELECT state FROM identity.users
+            WHERE tenant_id=$1 AND user_id=$2 FOR SHARE`,
+          [input.tenantId,input.userId],
+        );
+        if (user.rows[0]?.state !== "active") {
+          throw new Error("push.account_inactive");
+        }
+        // Serialize ownership transfers of this physical FCM token even
+        // across tenants and concurrent sign-ins on the same handset.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
+          ["masanawa:push-install:" + input.installationId],
+        );
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))",
+          ["masanawa:push-token:" + input.token],
+        );
+        await client.query(
+          `DELETE FROM agents.mobile_push_registrations
+           WHERE (tenant_id<>$1 OR user_id<>$4)
+             AND (token=$2 OR installation_id=$3)`,
+          [input.tenantId,input.token,input.installationId,input.userId],
+        );
+        return client.query(
+          `INSERT INTO agents.mobile_push_registrations(
+             tenant_id,user_id,installation_id,platform,token
+           ) VALUES($1,$2,$3,$4,$5)
+           ON CONFLICT (tenant_id,user_id,installation_id)
+           DO UPDATE SET platform=EXCLUDED.platform,token=EXCLUDED.token,
+                         updated_at=clock_timestamp()
+           RETURNING *`,
+          [input.tenantId,input.userId,input.installationId,input.platform,input.token],
+        );
+      });
+      const row = result.rows[0]!;
+      return Object.freeze({
+        tenantId: parseCanonicalId("tenant", row.tenant_id),
+        userId: parseCanonicalId("user", row.user_id),
+        installationId: row.installation_id,
+        platform: row.platform,
+        token: row.token,
+        createdAt: toInstant(row.created_at),
+        updatedAt: toInstant(row.updated_at),
+      });
+    },
+    async unregister(input: Parameters<MobilePushRepository["unregister"]>[0]) {
+      await pool.query(
+        `DELETE FROM agents.mobile_push_registrations
+          WHERE tenant_id=$1 AND user_id=$2 AND installation_id=$3`,
+        [input.tenantId,input.userId,input.installationId],
+      );
+    },
+    async list(input: Parameters<MobilePushRepository["list"]>[0]) {
+      const result = await pool.query(
+        `SELECT * FROM agents.mobile_push_registrations
+          WHERE tenant_id=$1 AND user_id=$2
+          ORDER BY updated_at DESC LIMIT 32`,
+        [input.tenantId,input.userId],
+      );
+      return Object.freeze(result.rows.map((row: any) => Object.freeze({
+        tenantId: parseCanonicalId("tenant", row.tenant_id),
+        userId: parseCanonicalId("user", row.user_id),
+        installationId: row.installation_id,
+        platform: row.platform,
+        token: row.token,
+        createdAt: toInstant(row.created_at),
+        updatedAt: toInstant(row.updated_at),
+      })));
+    },
+  });
+}
+
+
+export function createPostgresMobileAgentActivityRepository(
+  pool: Pool,
+): MobileAgentActivityRepository {
+  return Object.freeze({
+    async setPresence(input: Parameters<MobileAgentActivityRepository["setPresence"]>[0]) {
+      if (
+        !Number.isSafeInteger(input.durationMs) ||
+        input.durationMs < 5_000 ||
+        input.durationMs > 24 * 60 * 60 * 1000
+      ) {
+        throw new RangeError("Invalid presence duration");
+      }
+      await pool.query(
+        `INSERT INTO agents.mobile_presence(
+          tenant_id,user_id,character_id,relationship_id,state,expires_at
+        ) VALUES($1,$2,$3,$4,$5,clock_timestamp()+($6::bigint * interval '1 millisecond'))
+        ON CONFLICT (tenant_id,user_id,character_id)
+        DO UPDATE SET relationship_id=EXCLUDED.relationship_id,
+                      state=EXCLUDED.state,
+                      expires_at=EXCLUDED.expires_at,
+                      updated_at=clock_timestamp()`,
+        [input.scope.tenantId,input.scope.userId,input.scope.characterId,
+         input.scope.relationshipId,input.state,input.durationMs],
+      );
+    },
+
+    async list(input: Parameters<MobileAgentActivityRepository["list"]>[0]) {
+      if (input.characterIds.length === 0) return Object.freeze([]);
+      const result = await pool.query(
+        `WITH wanted AS (
+           SELECT unnest($3::text[]) AS character_id
+         ),
+         active AS (
+           SELECT character_id, count(*)::int AS active_work_count
+           FROM agents.mobile_turn_commands
+           WHERE tenant_id=$1 AND user_id=$2 AND state='pending'
+             AND character_id = ANY($3::text[])
+           GROUP BY character_id
+         )
+         SELECT w.character_id,
+                CASE
+                  WHEN p.expires_at > clock_timestamp() THEN p.state
+                  WHEN COALESCE(a.active_work_count,0) > 0 THEN 'working'
+                  ELSE 'available'
+                END AS presence,
+                COALESCE(a.active_work_count,0)::int AS active_work_count
+         FROM wanted w
+         LEFT JOIN agents.mobile_presence p
+           ON p.tenant_id=$1 AND p.user_id=$2 AND p.character_id=w.character_id
+         LEFT JOIN active a ON a.character_id=w.character_id`,
+        [input.tenantId,input.userId,[...input.characterIds]],
+      );
+      return Object.freeze(result.rows.map((row: any) => Object.freeze({
+        characterId: parseCanonicalId("character", row.character_id),
+        presence: row.presence,
+        activeWorkCount: Number(row.active_work_count) || 0,
+      })));
+    },
+  });
+}
+
+
+/** Cancel only commands whose durable delivery never completed. A concurrent
+ * completion wins or loses the command-row lock atomically with its charge.
+ * Late provider output cannot complete a failed command or debit a released hold.
+ */
+export async function recoverExpiredMbReplies(pool: Pool, limit = 100): Promise<number> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new RangeError("Invalid recovery limit");
+  const rows = await pool.query(`SELECT c.* FROM agents.mobile_turn_commands c
+    WHERE c.state='pending' AND (c.mb_reply_operation_id IS NOT NULL OR c.ngn_reply_operation_id IS NOT NULL) AND c.created_at < clock_timestamp()-interval '15 minutes'
+    ORDER BY c.created_at LIMIT $1`, [limit]);
+  const repository = createPostgresMobileShellRepository(pool, {billReplies: true});
+  let recovered=0;
+  for (const row of rows.rows) {
+    const turn=command(row);
+    // Recovery is intentionally bounded to turns admitted by the new MB policy.
+    const operationId=(row.ngn_reply_operation_id??row.mb_reply_operation_id) as string;
+    const hold=await (row.ngn_reply_operation_id?createNgnSpending(pool):createGbUsageReservations(pool)).read(turn.scope.tenantId,operationId,turn.scope.userId);
+    if (!hold || hold.state!=="reserved") continue;
+    try {
+      await repository.failTurn({scope:turn.scope,requestId:turn.requestId,
+        agentRunId:turn.agentRunId,failureCode:"agents.turn_expired"});
+      recovered++;
+    } catch (error) {
+      // A successful concurrent completion is authoritative. Other failures
+      // remain visible to the lifecycle runner and are retried next sweep.
+      const current=await repository.readTurn({scope:turn.scope,requestId:turn.requestId});
+      if(current?.state!=="completed")throw error;
+    }
+  }
+  return recovered;
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shell_connection_title">Masanawa is unavailable</string>
+    <string name="shell_connection_description">Check your internet connection and try again. Your account and wallet information remain on Masanawa’s servers.</string>
+    <string name="shell_security_description">We could not establish a secure connection to Masanawa. Please try again later.</string>
+    <string name="shell_retry">Try again</string>
+</resources>

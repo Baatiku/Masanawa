@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="67.0dp" android:width="64.0dp" android:autoMirrored="true" android:viewportWidth="64.0" android:viewportHeight="67.0"
+  xmlns:aapt="http://schemas.android.com/aapt" xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="@drawable/$easemoni_ic_urge_to_stay_note__0" android:pathData="M32,6A24,24 0,1 0,32 54A24,24 0,1 0,32 6Z" />
+    <path android:fillColor="#fff" android:pathData="M29.534,19.197C29.509,17.991 30.48,17 31.687,17H32H32.313C33.52,17 34.491,17.991 34.465,19.197L34.196,32.113C34.172,33.284 33.216,34.22 32.044,34.22H31.956C30.784,34.22 29.828,33.284 29.803,32.113L29.534,19.197Z" />
+    <path android:fillColor="#fff" android:pathData="M32,37.092L32,37.092A2.153,2.153 0,0 1,34.153 39.244L34.153,39.244A2.153,2.153 0,0 1,32 41.397L32,41.397A2.153,2.153 0,0 1,29.847 39.244L29.847,39.244A2.153,2.153 0,0 1,32 37.092z" />
+</vector>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <View android:id="@id/ic_holder_1" android:background="@drawable/osdk_bg_white_radius_100" android:layout_width="40.0dp" android:layout_height="40.0dp" android:layout_margin="16.0dp" android:backgroundTint="@color/color_f8f8fb" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <View android:background="@drawable/shape_corner_f8f8fb_4" android:layout_width="76.0dp" android:layout_height="12.0dp" android:layout_marginStart="8.0dp" app:layout_constraintStart_toEndOf="@id/ic_holder_1" app:layout_constraintTop_toTopOf="@id/ic_holder_1" />
+    <View android:background="@drawable/shape_corner_f8f8fb_4" android:layout_width="0.0dp" android:layout_height="12.0dp" android:layout_marginStart="8.0dp" android:layout_marginEnd="16.0dp" app:layout_constraintBottom_toBottomOf="@id/ic_holder_1" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toEndOf="@id/ic_holder_1" />
+</androidx.constraintlayout.widget.ConstraintLayout>

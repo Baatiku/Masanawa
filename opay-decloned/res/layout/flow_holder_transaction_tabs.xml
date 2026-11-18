@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.business.widget.shimmer.CorpShimmerConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.business.widget.shimmer.CorpShimmerView android:id="@id/holderTab1" android:layout_width="0.0dp" android:layout_height="36.0dp" android:layout_marginStart="16.0dp" app:corp_corners="4.0dp" app:layout_constraintEnd_toStartOf="@id/holderTab2" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" style="@style/commonShimmer" />
+    <team.opay.business.widget.shimmer.CorpShimmerView android:id="@id/holderTab2" android:layout_width="0.0dp" android:layout_height="36.0dp" android:layout_marginStart="8.0dp" android:layout_marginEnd="16.0dp" app:corp_corners="4.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toEndOf="@id/holderTab1" app:layout_constraintTop_toTopOf="@id/holderTab1" style="@style/commonShimmer" />
+</team.opay.business.widget.shimmer.CorpShimmerConstraintLayout>

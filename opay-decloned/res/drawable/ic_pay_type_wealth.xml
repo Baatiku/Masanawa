@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:height="24.0dp" android:width="24.0dp" android:viewportWidth="24.0" android:viewportHeight="24.0"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt">
+    <path android:fillColor="#1dcf9f" android:pathData="M12,12m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$ic_pay_type_wealth__0" android:pathData="M7.532,10.31c-0.75,-0.766 -1.965,-0.766 -2.715,0l-0.877,0.895 2.715,2.772L8.89,11.695 7.532,10.309z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$ic_pay_type_wealth__1" android:pathData="M10.728,12.59c-0.75,-0.765 -1.966,-0.765 -2.716,0L6.655,13.978l1.357,1.386c0.75,0.765 1.966,0.765 2.716,0l1.357,-1.386 -1.357,-1.386z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$ic_pay_type_wealth__2" android:pathData="M19.354,10.31c-0.75,-0.766 -1.966,-0.766 -2.716,0l-1.357,1.385 0.877,0.896c0.75,0.766 1.966,0.766 2.716,0l1.357,-1.386 -0.877,-0.896z" android:fillType="evenOdd" />
+    <path android:fillColor="@drawable/$ic_pay_type_wealth__3" android:pathData="M16.158,12.59L13.443,9.82c-0.75,-0.766 -1.966,-0.766 -2.715,0L8.012,12.59c0.75,-0.765 1.966,-0.765 2.716,0l2.715,2.773c0.75,0.765 1.965,0.765 2.715,0l2.716,-2.772c-0.75,0.765 -1.966,0.765 -2.716,0z" android:fillType="evenOdd" />
+</vector>

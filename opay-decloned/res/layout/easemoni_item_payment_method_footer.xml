@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/easemoni_dimen_18" android:paddingRight="@dimen/easemoni_dimen_18" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_60">
+        <ImageView android:layout_width="@dimen/easemoni_dimen_50" android:layout_height="wrap_content" app:srcCompat="@drawable/easemoni_ic_add_card" />
+        <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_515f68" android:gravity="left|center" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/easemoni_dimen_16" android:layout_marginRight="@dimen/easemoni_dimen_10" android:text="@string/easemoni_add_card" android:layout_weight="1.0" />
+        <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginRight="@dimen/easemoni_dimen_5" android:src="@drawable/easemoni_right_arrow" android:layout_alignParentRight="true" android:layout_centerVertical="true" app:tint="@color/easemoni_color_515f68" />
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_1" android:layout_marginBottom="@dimen/easemoni_dimen_100" />
+</LinearLayout>

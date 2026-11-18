@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:gravity="center_vertical" android:orientation="horizontal" android:background="@color/easemoni_color_white" android:paddingTop="@dimen/easemoni_dimen_12" android:paddingBottom="@dimen/easemoni_dimen_12" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/easemoni_dimen_16"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_222f3e" android:id="@id/tv_item" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constrainedWidth="true" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <ImageView android:id="@id/acivCheck" android:padding="@dimen/easemoni_dimen_8" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/easemoni_spinner_checkbox" />
+</androidx.constraintlayout.widget.ConstraintLayout>

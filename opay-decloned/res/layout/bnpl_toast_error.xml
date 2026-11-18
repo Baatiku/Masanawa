@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="@color/bnpl_color_error" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/bnpl_color_white" android:gravity="center" android:id="@id/bnpl_tv_toast_error" android:padding="@dimen/okash_dimen_12" android:layout_width="match_parent" android:layout_height="wrap_content" />
+</FrameLayout>

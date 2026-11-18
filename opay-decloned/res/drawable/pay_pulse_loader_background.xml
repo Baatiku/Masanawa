@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/progress" android:top="8.0dp" android:bottom="8.0dp">
+        <layer-list>
+            <item>
+                <rotate android:fromDegrees="0.0" android:toDegrees="315.0" android:pivotX="50.0%" android:pivotY="50.0%">
+                    <shape android:shape="oval">
+                        <size android:height="@dimen/pay_load_shape_size" android:width="@dimen/pay_load_shape_size" />
+                        <gradient android:startColor="@color/pay_color_00B876" android:endColor="@android:color/transparent" android:useLevel="true" android:angle="45.0" android:centerColor="@color/pay_color_00B876" />
+                    </shape>
+                </rotate>
+            </item>
+        </layer-list>
+    </item>
+</layer-list>

@@ -1,0 +1,50 @@
+version: 3.0.3
+apkFileName: OPay.apk
+usesFramework:
+  ids:
+  - 1
+sdkInfo:
+  minSdkVersion: 21
+  targetSdkVersion: 35
+versionInfo:
+  versionCode: 8413184
+  versionName: 8.6.0.453
+resourcesInfo:
+  packageId: 127
+doNotCompress:
+- arsc
+- gif
+- jpeg
+- jpg
+- mp3
+- ogg
+- png
+- webp
+- HMSCore-hatool.properties
+- META-INF/services/com.loan.cash.credit.auth.IAuthStateProvider
+- META-INF/services/com.loan.cash.credit.risk.IRiskConfig
+- META-INF/services/com.opay.face.common.IFaceSoCheck
+- META-INF/services/com.opay.face.common.OFaceLiveDelegate
+- META-INF/services/com.opay.webview.category.IWebViewInit
+- META-INF/services/p87
+- META-INF/services/q89
+- META-INF/services/team.opay.core.spi.IBuilderDelegate
+- META-INF/services/team.opay.face.net.RequestUrlDelegate
+- META-INF/services/team.opay.spos.base.spi.PosModuleFragment
+- META-INF/services/team.opay.swarmfoundation.action.IActionManager
+- META-INF/services/team.opay.swarmfoundation.data.ICombinationDataGenerator
+- agconnect-core.properties
+- androidsupportmultidexversion.txt
+- assets/com/appsflyer/internal/1a7e8023f147cacac-
+- assets/com/appsflyer/internal/3e6e8a8a85e1aaa2b-
+- assets/com/appsflyer/internal/cc32cb866f63cd58a-
+- assets/com/appsflyer/internal/cf2b565222edadded-
+- assets/dexopt/baseline.prof
+- assets/dexopt/baseline.profm
+- com/huawei/hms/network/okhttp/publicsuffixes.gz
+- network-api.properties
+- network-base.properties
+- network-common.properties
+- network-embedded.properties
+- network-grs.properties
+- okhttp3/internal/publicsuffix/publicsuffixes.gz

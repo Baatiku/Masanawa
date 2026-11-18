@@ -1,0 +1,11 @@
+name: Configure Android Gradle repositories
+description: Add official Maven repositories to Flutter included builds and buildscript dependencies.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+        mkdir -p "$gradle_home/init.d"
+        cp "$GITHUB_WORKSPACE/apps/mobile/android/gradle/masanawa-repositories.init.gradle" "$gradle_home/init.d/masanawa-repositories.gradle"

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/content" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <team.opay.core.widget.CorpActionBar android:id="@id/actionBar" android:layout_width="match_parent" app:common_title="@string/share_pdf_title" app:layout_constraintTop_toTopOf="parent" style="@style/CorpActionBar" />
+    <androidx.core.widget.NestedScrollView android:id="@id/scrollView" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" app:layout_constrainedHeight="true" app:layout_constraintBottom_toTopOf="@id/actionConfirm" app:layout_constraintTop_toBottomOf="@id/actionBar">
+        <androidx.constraintlayout.widget.ConstraintLayout android:id="@id/layoutPdf" android:layout_width="match_parent" android:layout_height="match_parent">
+            <androidx.recyclerview.widget.RecyclerView android:id="@id/recyclerView" android:layout_width="match_parent" android:layout_height="match_parent" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.button.MaterialButton android:textSize="16.0sp" android:textColor="@color/white" android:id="@id/actionConfirm" android:layout_width="match_parent" android:layout_height="48.0dp" android:layout_marginLeft="@dimen/biz_button_margin_40" android:layout_marginTop="8.0dp" android:layout_marginRight="@dimen/biz_button_margin_40" android:layout_marginBottom="24.0dp" android:text="@string/share_receipt_low" android:textAllCaps="false" android:fontFamily="@font/roboto_medium" android:layout_marginHorizontal="@dimen/biz_button_margin_40" app:backgroundTint="@color/mint" app:cornerRadius="@dimen/biz_button_corner_24" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/scrollView" app:layout_constraintVertical_bias="1.0" style="@style/Material.Button.UnelevatedButton" />
+</androidx.constraintlayout.widget.ConstraintLayout>

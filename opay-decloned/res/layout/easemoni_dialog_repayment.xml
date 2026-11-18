@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:gravity="center_horizontal" android:orientation="vertical" android:background="@drawable/easemoni_dialog_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@id/fl_title_bar" android:layout_width="match_parent" android:layout_height="?android:actionBarSize">
+            <ImageView android:id="@id/iv_back" android:paddingLeft="@dimen/easemoni_dimen_15" android:paddingRight="@dimen/easemoni_dimen_15" android:layout_width="wrap_content" android:layout_height="match_parent" android:src="@drawable/easemoni_ic_close" app:tint="@color/easemoni_color_8497a4" />
+            <TextView android:textSize="@dimen/easemoni_tv_size_18" android:textColor="@color/easemoni_color_222f3e" android:gravity="center_vertical" android:focusable="true" android:focusableInTouchMode="true" android:layout_width="match_parent" android:layout_height="match_parent" android:text="@string/easemoni_title_payment" android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
+        <View android:background="@color/easemoni_divider" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_dimen_1" />
+        <androidx.constraintlayout.widget.ConstraintLayout android:padding="@dimen/easemoni_dimen_16" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <TextView android:textSize="@dimen/easemoni_tv_size_36" android:textStyle="bold" android:textColor="@color/easemoni_color_222f3e" android:id="@id/tv_money" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+        <androidx.recyclerview.widget.RecyclerView android:id="@id/rv_payment_method" android:layout_width="match_parent" android:layout_height="match_parent" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+    </LinearLayout>
+    <Button android:layout_gravity="bottom" android:id="@id/btn_confirm" android:layout_width="match_parent" android:layout_height="@dimen/easemoni_btn_height" android:layout_marginBottom="@dimen/easemoni_dimen_25" android:text="@string/easemoni_confirm" android:textAllCaps="false" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintLeft_toLeftOf="parent" app:layout_constraintRight_toRightOf="parent" style="@style/EaseMoniLargeBtnStyle" />
+</FrameLayout>

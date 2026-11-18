@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/sme_store_item_user_tab_text" android:gravity="center" android:id="@id/tabItem" android:background="@drawable/sme_store_icon_tab_left" android:paddingBottom="8.0dp" android:layout_width="match_parent" android:layout_height="50.0dp" app:fontFamily="@font/roboto_400" app:layout_constraintTop_toTopOf="parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" />

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/easemoni_dimen_36" android:paddingEnd="@dimen/easemoni_dimen_36"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/easemoni_tv_size_12" android:textColor="@color/easemoni_color_white" android:gravity="center" android:id="@id/tv_toast_error" android:background="@drawable/easemoni_bg_toast_error" android:paddingTop="@dimen/easemoni_dimen_10" android:paddingBottom="@dimen/easemoni_dimen_10" android:layout_width="match_parent" android:layout_height="wrap_content" />
+</LinearLayout>

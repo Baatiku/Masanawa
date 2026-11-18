@@ -1,0 +1,37 @@
+[
+  {
+    "remoteUrl":"/assets/css/vendor-br-vant.css",
+    "path":"easemoney/css/vendor-br-vant.css",
+    "mineType":"text/css"
+  },
+  {
+    "remoteUrl":"/assets/js/vendor-br-vue.js",
+    "path":"easemoney/js/vendor-br-vue.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/assets/js/vendor-br-vant.js",
+    "path":"easemoney/js/vendor-br-vant.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/assets/js/vendor-br-pinia.js",
+    "path":"easemoney/js/vendor-br-pinia.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/assets/js/vendor-br-jsencrypt.js",
+    "path":"easemoney/js/vendor-br-jsencrypt.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/assets/js/vendor-br-crypto-js.js",
+    "path":"easemoney/js/vendor-br-crypto-js.js",
+    "mineType":"application/javascript"
+  },
+  {
+    "remoteUrl":"/assets/js/vendor-br-axios.js",
+    "path":"easemoney/js/vendor-br-axios.js",
+    "mineType":"application/javascript"
+  }
+]

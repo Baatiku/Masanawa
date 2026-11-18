@@ -1,0 +1,9 @@
+# Billstack deposit identity and recovery — 17 November 2026
+
+Connected surfaces: reserved-account webhook raw signature parser and acknowledgement; stable interbank transaction identifier; canonical integer-kobo NGN repository deduplication and legacy-record protection; strict independent getTransaction lookup; immutable-image console rollout and actual owner payment reconciliation. Preserve every existing ledger record and allocation. No manual balance seed, unverified event replay or fabricated provider receipt.
+
+The owner reports a missing ₦100 transfer to their existing 9PSB account. A pre-payment encrypted snapshot confirms the receiving account is assigned to the owner and had no preceding deposit entries. Current provider API reads from this runtime receive HTTP 403; SSH receives TCP refusal. Live evidence therefore requires the existing Droplet console, using its private key and IP. Receipt references and full receiving details stay private.
+
+Official documentation checked: https://docs.billstack.co/webhooks.md, https://docs.billstack.co/webhook-security.md and https://docs.billstack.co/get-transaction.md. data.reference is the virtual-account reference; transaction_ref/wiaxy_ref identify a transfer. Both modern HMAC headers are documented. Keep HMAC validation; never downgrade to a static MD5 password. Acknowledge committed deposits with the documented status/message plus compatible accepted/duplicate fields.
+
+The console verifier binds the approved receipt session, amount, receiving account, customer and approximate receipt time to an independently SUCCESS/settled provider transfer before invoking the existing canonical ledger. Re-running it uses the same interbank ID and cannot credit twice. Once recovery starts, preserve the new webhook identity implementation; do not roll back to the old account-reference algorithm. No payment credential or full receipt identifier is public.

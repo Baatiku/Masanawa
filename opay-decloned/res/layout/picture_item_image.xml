@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:layout_width="110.0dp" android:layout_height="110.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:id="@id/picture_imageview" android:padding="5.0dp" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <ImageView android:id="@id/picture_delete" android:layout_width="20.0dp" android:layout_height="20.0dp" android:src="@drawable/picture_image_delete" android:layout_alignParentTop="true" android:layout_alignParentRight="true" />
+</RelativeLayout>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list android:shape="rectangle"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="12.0dp" />
+            <solid android:color="@color/color_e2f5eb" />
+        </shape>
+    </item>
+    <item android:gravity="center" android:drawable="@mipmap/ic_opay_place_holder" android:left="60.0dp" android:top="34.0dp" android:right="60.0dp" android:bottom="34.0dp" />
+</layer-list>

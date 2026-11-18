@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:visibility="visible" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="@dimen/okash_tv_size_14" android:textStyle="bold" android:textColor="@color/easemoni_color_353535" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/easemoni_repayment_discount" />
+    <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/okash_dimen_16">
+        <TextView android:textSize="@dimen/okash_tv_size_14" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/okash_dimen_8" android:text="@string/easemoni_coupon" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+        <ImageView android:id="@id/eaasemoni_ic_coupon_select" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/easemoni_ic_coupon_select" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toStartOf="@id/tv_coupon_content" />
+        <androidx.appcompat.widget.AppCompatImageView android:id="@id/easemoni_right_arrow" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:srcCompat="@drawable/easemoni_ic_repay_right_arrow" />
+        <TextView android:textSize="@dimen/okash_tv_size_14" android:textColor="@color/easemoni_color_fd7437" android:id="@id/tv_coupon_content" android:paddingLeft="@dimen/okash_dimen_4" android:paddingTop="@dimen/okash_dimen_3" android:paddingRight="@dimen/okash_dimen_4" android:paddingBottom="@dimen/okash_dimen_3" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toStartOf="@id/easemoni_right_arrow" app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

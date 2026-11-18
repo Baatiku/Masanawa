@@ -1,0 +1,18 @@
+ALTER TABLE feed.official_social_sources ADD COLUMN backfill_complete boolean NOT NULL DEFAULT false;
+ALTER TABLE feed.official_social_posts ADD COLUMN provider_id text;
+UPDATE feed.official_social_posts SET provider_id=external_id;
+ALTER TABLE feed.official_social_posts ALTER COLUMN provider_id SET NOT NULL;
+ALTER TABLE feed.official_social_posts ADD COLUMN edit_version integer NOT NULL DEFAULT 0 CHECK(edit_version>=0);
+ALTER TABLE feed.official_social_posts ADD COLUMN provider_checked_at timestamptz;
+ALTER TABLE feed.official_social_posts ADD COLUMN next_check_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE feed.official_social_posts ADD COLUMN withdrawal_reason text CHECK(withdrawal_reason IN ('deleted','withheld','unavailable'));
+ALTER TABLE feed.official_social_sources ADD COLUMN inspection_lease uuid;
+ALTER TABLE feed.official_social_sources ADD COLUMN inspection_lease_until timestamptz;
+CREATE INDEX official_posts_due ON feed.official_social_posts(source_id,next_check_at) WHERE withdrawn_at IS NULL;
+CREATE TABLE feed.official_social_provider_limits(platform text PRIMARY KEY CHECK(platform IN ('x','facebook')),not_before timestamptz NOT NULL);
+REVOKE ALL ON feed.official_social_provider_limits FROM PUBLIC;
+ALTER TABLE feed.official_social_posts ADD COLUMN provider_updated_at timestamptz;
+UPDATE feed.official_social_posts SET provider_updated_at=original_published_at;
+ALTER TABLE feed.official_social_sources ADD COLUMN last_error_code text;
+ALTER TABLE feed.official_social_sources ADD COLUMN next_inspection_at timestamptz NOT NULL DEFAULT now();
+CREATE INDEX official_posts_knowledge_text ON feed.posts USING gin(to_tsvector('english',body)) WHERE source_provenance IS NOT NULL AND state='published';

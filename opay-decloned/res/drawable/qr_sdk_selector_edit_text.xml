@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_activated="true">
+        <layer-list>
+            <item android:left="-1.5dp" android:top="-1.5dp" android:right="-1.5dp">
+                <shape>
+                    <solid android:color="@color/opb_white" />
+                    <stroke android:width="1.0dp" android:color="@color/qr_sdk_color_DC0C48" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_enabled="false">
+        <layer-list>
+            <item>
+                <shape>
+                    <solid android:color="@color/opb_white" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_focused="true">
+        <layer-list>
+            <item android:left="-1.5dp" android:top="-1.5dp" android:right="-1.5dp">
+                <shape>
+                    <solid android:color="@color/opb_white" />
+                    <stroke android:width="1.0dp" android:color="@color/mint" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:left="-1.5dp" android:top="-1.5dp" android:right="-1.5dp">
+                <shape>
+                    <solid android:color="@color/opb_white" />
+                    <stroke android:width="1.0dp" android:color="@color/mint" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item android:left="-1.5dp" android:top="-1.5dp" android:right="-1.5dp">
+                <shape>
+                    <solid android:color="@color/opb_white" />
+                    <stroke android:width="1.0dp" android:color="@color/black_15" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

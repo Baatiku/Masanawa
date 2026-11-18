@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="@drawable/easemoni_bg_corner_4_fafafa" android:paddingTop="@dimen/easemoni_dimen_24" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_515f68" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/easemoni_confirm_modify" android:layout_marginStart="@dimen/easemoni_dimen_24" android:layout_marginEnd="@dimen/easemoni_dimen_24" />
+    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/easemoni_dimen_26">
+        <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textColor="@color/easemoni_color_8497a4" android:gravity="center" android:id="@id/tv_confirm" android:paddingTop="@dimen/easemoni_dimen_12" android:paddingBottom="@dimen/easemoni_dimen_12" android:layout_width="@dimen/easemoni_dimen_0" android:layout_height="wrap_content" android:text="@string/easemoni_confirm" android:layout_weight="1.0" android:textAllCaps="true" />
+        <TextView android:textSize="@dimen/easemoni_tv_size_16" android:textStyle="bold" android:textColor="@color/easemoni_color_theme" android:gravity="center" android:id="@id/tv_cancel" android:paddingTop="@dimen/easemoni_dimen_12" android:paddingBottom="@dimen/easemoni_dimen_12" android:layout_width="@dimen/easemoni_dimen_0" android:layout_height="wrap_content" android:text="@string/easemoni_btn_cancel" android:layout_weight="1.0" android:textAllCaps="true" />
+    </LinearLayout>
+</LinearLayout>

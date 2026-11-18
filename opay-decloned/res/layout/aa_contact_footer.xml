@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <include android:id="@id/view_all_footer" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" layout="@layout/aa_view_all_footer" />
+    <include android:id="@id/banner_footer" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toBottomOf="@id/view_all_footer" layout="@layout/footer_transfer_to_opay_account_banner" />
+</androidx.constraintlayout.widget.ConstraintLayout>

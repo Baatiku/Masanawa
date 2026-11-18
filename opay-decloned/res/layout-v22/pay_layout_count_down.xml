@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="10.0sp" android:textColor="@color/pay_red_pink" android:gravity="center" android:id="@id/tvMin" android:background="@drawable/pay_bg_count_down_time" android:layout_width="28.0dp" android:layout_height="19.0dp" android:fontFamily="@font/pay_roboto_500" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/pay_black_85" android:layout_gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="2.0dp" android:layout_marginRight="2.0dp" android:text=":" android:fontFamily="@font/pay_roboto_500" android:layout_marginHorizontal="2.0dp" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="10.0sp" android:textColor="@color/pay_red_pink" android:gravity="center" android:id="@id/tvSecond" android:background="@drawable/pay_bg_count_down_time" android:layout_width="28.0dp" android:layout_height="19.0dp" android:fontFamily="@font/pay_roboto_500" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/pay_black_45" android:layout_gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/pay_count_down_label" android:fontFamily="@font/pay_roboto_400" android:layout_marginStart="4.0dp" />
+</LinearLayout>

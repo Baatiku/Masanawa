@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/printer_white" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/iv_google" android:layout_width="70.0dp" android:layout_height="22.0dp" android:layout_marginTop="4.0dp" android:src="@drawable/printer_svg_google_play" app:layout_constraintEnd_toStartOf="@id/iv_apple" app:layout_constraintHorizontal_chainStyle="packed" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.appcompat.widget.AppCompatImageView android:id="@id/iv_apple" android:visibility="gone" android:layout_width="70.0dp" android:layout_height="22.0dp" android:src="@drawable/printer_svg_appstore" android:scaleType="centerCrop" android:layout_marginStart="10.0dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toEndOf="@id/iv_google" app:layout_constraintTop_toTopOf="@id/iv_google" />
+</androidx.constraintlayout.widget.ConstraintLayout>

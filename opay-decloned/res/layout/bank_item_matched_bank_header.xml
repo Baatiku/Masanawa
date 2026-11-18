@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="@color/white" android:paddingTop="8.0dp" android:paddingBottom="6.0dp" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="12.0sp" android:textColor="@color/black_45" android:id="@id/headerTitle" android:background="@color/opb_f8f8fb" android:paddingLeft="16.0dp" android:paddingTop="5.0dp" android:paddingRight="16.0dp" android:paddingBottom="5.0dp" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:includeFontPadding="false" app:fontFamily="@font/roboto_400" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@id/list_header" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="10.0dp" android:layout_marginTop="6.0dp" android:layout_marginRight="10.0dp" app:layoutManager="androidx.recyclerview.widget.GridLayoutManager" app:layout_constraintTop_toBottomOf="@id/headerTitle" app:layout_goneMarginTop="0.0dp" app:spanCount="3" />
+</androidx.constraintlayout.widget.ConstraintLayout>

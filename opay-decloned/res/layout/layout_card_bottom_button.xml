@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/bottom_layout" android:background="@color/color_f8f8fb" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ViewStub android:id="@id/btnLayoutTop" android:layout="@layout/item_card_bottom_button_top" android:inflatedId="@id/btnLayoutTop" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent" />
+    <ViewStub android:id="@id/btnLayoutBottom" android:layout="@layout/item_card_bottom_button_bottom" android:inflatedId="@id/btnLayoutBottom" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_constraintTop_toBottomOf="@id/btnLayoutTop" />
+</androidx.constraintlayout.widget.ConstraintLayout>

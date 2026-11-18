@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/easemoni_dimen_8" />
+            <stroke android:width="@dimen/easemoni_dimen_1" android:color="@color/easemoni_color_theme" />
+            <solid android:color="@color/easemoni_color_eef3ff" />
+        </shape>
+    </item>
+    <item android:gravity="end|bottom">
+        <bitmap android:src="@drawable/easemoni_ic_term_selected_bottom_end" />
+    </item>
+</layer-list>

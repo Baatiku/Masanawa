@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="common_12sp">27.333282sp</dimen>
+    <dimen name="common_14sp">31.888885sp</dimen>
+    <dimen name="common_16sp">36.444397sp</dimen>
+    <dimen name="common_20sp">45.555573sp</dimen>
+    <dimen name="common_24sp">54.666687sp</dimen>
+    <dimen name="common_26sp">59.2222sp</dimen>
+    <dimen name="common_30sp">68.33328sp</dimen>
+    <dimen name="common_38sp">86.5556sp</dimen>
+</resources>

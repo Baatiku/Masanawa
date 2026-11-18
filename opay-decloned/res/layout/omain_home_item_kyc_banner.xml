@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.pay.ad.OpayAdBannerView android:id="@id/banner" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="16.0dp" android:layout_marginRight="16.0dp" android:animateLayoutChanges="true" app:banner_indicator_style="style_line" app:banner_style="bigNotice" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" />

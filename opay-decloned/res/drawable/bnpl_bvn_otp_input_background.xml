@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item android:drawable="@drawable/bnpl_bvn_otp_input_background_invalid" app:state_invalid="true" />
+    <item android:drawable="@drawable/bnpl_bvn_otp_input_background_valid" />
+</selector>

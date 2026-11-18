@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:background="@drawable/shape_corner_white_12_tlr" android:focusable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="142.0dp" android:elevation="2.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8.0dp" app:srcCompat="@drawable/ic_nba_location_no" />
+    <androidx.appcompat.widget.AppCompatTextView android:textSize="14.0sp" android:textStyle="normal" android:textColor="@color/omain_8497a4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16.0dp" android:text="@string/nba_agent_empty" android:maxLines="1" android:includeFontPadding="false" android:lineSpacingExtra="0.0dp" android:layout_marginStart="16.0dp" android:layout_marginEnd="16.0dp" />
+</LinearLayout>

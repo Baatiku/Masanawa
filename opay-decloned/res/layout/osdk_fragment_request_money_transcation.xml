@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<team.opay.pay.android.views.OPaySwipeRefreshLayout android:id="@id/wallet_refresh" android:background="@color/content_background" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.coordinatorlayout.widget.CoordinatorLayout android:id="@id/custom_coordinator" android:layout_width="match_parent" android:layout_height="match_parent">
+        <com.google.android.material.appbar.AppBarLayout android:id="@id/app_bar_layout" android:background="@color/osdk_color_white" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <androidx.appcompat.widget.AppCompatTextView android:textSize="13.0sp" android:textColor="@color/color_515f68_80" android:gravity="center" android:id="@id/wallet_filter_status" android:layout_width="wrap_content" android:layout_height="52.0dp" android:text="@string/wallet_filter_any_status" android:drawableEnd="@mipmap/ic_arrow_drop_down" android:paddingStart="@dimen/content_padding" />
+        </com.google.android.material.appbar.AppBarLayout>
+        <androidx.constraintlayout.widget.ConstraintLayout android:background="@drawable/ripple_white_3" android:descendantFocusability="blocksDescendants" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+            <androidx.recyclerview.widget.RecyclerView android:id="@id/rv_transaction" android:visibility="visible" android:descendantFocusability="blocksDescendants" android:layout_width="match_parent" android:layout_height="match_parent" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+            <ViewStub android:id="@id/stub_empty" android:layout="@layout/osdk_request_money_empty_layout" android:inflatedId="@id/stub_empty" android:layout_width="match_parent" android:layout_height="match_parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+</team.opay.pay.android.views.OPaySwipeRefreshLayout>

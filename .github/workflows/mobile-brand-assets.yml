@@ -1,0 +1,40 @@
+name: Generate Masanawa launcher assets
+on:
+  push:
+    branches:
+      - fix/mobile-communications-wallet-brand-performance-20261014
+    paths:
+      - scripts/branding/generate_masanawa_launcher.py
+      - apps/mobile/pubspec.yaml
+      - .github/workflows/mobile-brand-assets.yml
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install Pillow==11.3.0
+      - run: python scripts/branding/generate_masanawa_launcher.py
+      - name: Ensure launcher art and transparency
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          a=Image.open('apps/mobile/assets/brand/masanawa_agent_logo.png')
+          assert a.mode=='RGBA' and a.getpixel((0,0))[3]==0
+          assert a.getbbox() is not None
+          PY
+      - name: Commit updated icons to branch
+        run: |
+          git config user.name 'Masanawa Brand Bot'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add apps/mobile/assets/brand/masanawa_agent_logo.png apps/mobile/assets/brand/masanawa_launcher_foreground.png apps/mobile/android/app/src/main/res/
+          if ! git diff --cached --quiet; then
+            git commit -m 'assets(android): generate transparent M logo and mipmap icon variants'
+            git push origin HEAD:fix/mobile-communications-wallet-brand-performance-20261014
+          fi

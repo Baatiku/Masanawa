@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:gravity="center" android:layout_gravity="center" android:id="@id/pop_container" android:background="@color/transparent" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:gravity="center" android:layout_gravity="center" android:orientation="vertical" android:id="@id/ad_popup_container" android:background="@color/transparent" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ImageView android:id="@id/img_popup" android:layout_width="300.0dp" android:layout_height="400.0dp" android:scaleType="centerCrop" />
+        <ImageView android:layout_gravity="center|bottom" android:id="@id/close" android:background="@drawable/osdk_icon_close" android:layout_width="40.0dp" android:layout_height="40.0dp" android:layout_marginTop="16.0dp" android:backgroundTint="@color/osdk_color_white" />
+    </LinearLayout>
+</FrameLayout>

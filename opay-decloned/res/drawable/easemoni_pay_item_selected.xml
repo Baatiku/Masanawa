@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/okash_dimen_8" />
+            <solid android:color="@color/easemoni_color_1a0055ff" />
+        </shape>
+    </item>
+    <item android:gravity="end|bottom">
+        <bitmap android:src="@drawable/easemoni_ic_term_selected_bottom_end" />
+    </item>
+</layer-list>
