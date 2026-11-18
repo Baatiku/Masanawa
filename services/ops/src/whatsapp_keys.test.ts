@@ -17,17 +17,19 @@ describe('WhatsApp encrypted Gemini key administration',()=>{
   }
   it('stores only AES-GCM ciphertext and never returns the full credential',async()=>{
     const mock=setup(),key='AIzaAValidLookingApiKeyForTesting1234abcd';
-    expect(await mock.admin.addGeminiKey('Bearer test','Primary','production-ai',key)).toEqual({added:true});
+    expect(await mock.admin.addGeminiKey('Bearer test',`  ${key}  `)).toEqual({added:true});
     const inserted=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_gemini_keys'))!;
-    expect(inserted.params[3]).toBeInstanceOf(Buffer);
-    expect(decryptWhatsAppToken(inserted.params[3] as Buffer,secret)).toBe(key);
+    expect(inserted.params).toHaveLength(4);
+    expect(inserted.params[1]).toBe('Gemini key');
+    expect(inserted.params[2]).toBeInstanceOf(Buffer);
+    expect(decryptWhatsAppToken(inserted.params[2] as Buffer,secret)).toBe(key);
     expect(inserted.params.join(' ')).not.toContain(key);
     expect(JSON.stringify(await mock.admin.geminiKeys('Bearer test'))).not.toContain(key);
     expect(mock.authorize).toHaveBeenCalledWith(expect.objectContaining({capability:'whatsapp.write'}));
   });
-  it('rejects a malformed project or short credential before writing',async()=>{
+  it('rejects a short credential without requiring label or project ID',async()=>{
     const mock=setup();
-    await expect(mock.admin.addGeminiKey('Bearer test','Test','fake project','short'))
+    await expect(mock.admin.addGeminiKey('Bearer test','short'))
       .rejects.toMatchObject({statusCode:422});
     expect(mock.calls).toHaveLength(0);
   });
