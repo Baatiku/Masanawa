@@ -119,6 +119,7 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
         val route = ShellDeepLinks.route(message.data["deepLink"])
             ?: message.data["characterId"]?.let { ShellDeepLinks.route("masanawa://chat/$it") }
             ?: WebOriginPolicy.HOME
-        ShellPush.showNotification(this, route, incomingCall = type == "incoming_call")
+        ShellPush.showNotification(this, route,
+            incomingCall = ShellNotificationIdentity.isIncomingCall(type, message.data["callId"]))
     }
 }
