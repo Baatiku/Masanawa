@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "ng.unigeria.unigeria"
     compileSdk = 36
+    buildFeatures { resValues = true }
 
     defaultConfig {
         // The existing Flutter package ID is retained for a future in-place migration.
@@ -15,6 +16,16 @@ android {
         versionCode = 7
         versionName = "1.1.0-shell-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Firebase Android app identifiers come from the same managed values used
+        // by the existing Flutter app. Never commit provider credentials.
+        mapOf(
+            "masanawa_firebase_api_key" to "FIREBASE_API_KEY",
+            "masanawa_firebase_app_id" to "FIREBASE_APP_ID",
+            "masanawa_firebase_sender_id" to "FIREBASE_MESSAGING_SENDER_ID",
+            "masanawa_firebase_project_id" to "FIREBASE_PROJECT_ID",
+        ).forEach { (resource, environment) ->
+            resValue("string", resource, System.getenv(environment)?.trim().orEmpty())
+        }
     }
 
     buildTypes {
@@ -57,6 +68,10 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation("androidx.fragment:fragment:1.9.1")
+    implementation("androidx.webkit:webkit:1.18.0")
+    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("com.google.firebase:firebase-messaging:26.0.2")
     testImplementation("junit:junit:4.13.2")
 }

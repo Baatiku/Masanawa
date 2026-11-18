@@ -4,16 +4,20 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.ClipData
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.provider.MediaStore
 import android.os.Build
 import android.os.Bundle
+import android.content.Context
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
@@ -34,6 +38,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import androidx.webkit.JavaScriptReplyProxy
+import org.json.JSONObject
+import java.io.File
 
 /**
  * Small, replaceable Android host for the existing Cloudflare-hosted UI.
@@ -48,12 +62,46 @@ class ShellActivity : ComponentActivity() {
     private var fileCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
     private var lastTrustedUrl = WebOriginPolicy.HOME
+    private lateinit var downloads: ShellDownloads
+    private var pendingSharedText: String? = null
+    private var pendingSharedAttachment: Uri? = null
+    private var pendingCameraUri: Uri? = null
+    private var pendingCameraFile: File? = null
+    private var pendingCameraPicker: Intent? = null
+    private var protectScreen = false
+    private var callActive = false
+    private var pendingPushReply: JavaScriptReplyProxy? = null
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val reply = pendingPushReply
+        pendingPushReply = null
+        if (reply != null) {
+            if (granted) sendPushToken(reply)
+            else reply.postMessage("{\"type\":\"push-error\",\"message\":\"Notification permission denied.\"}")
+        }
+    }
+
+    private val saveDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        downloads.onDestinationSelected(if (result.resultCode == RESULT_OK) result.data?.data else null)
+    }
+
+    private val capturePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        val picker = pendingCameraPicker
+        pendingCameraPicker = null
+        if (picker != null) launchFileChooser(picker, allowed)
+    }
 
     private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        fileCallback?.onReceiveValue(
-            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-        )
+        val selected = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        val photo = pendingCameraFile
+        val uri = pendingCameraUri
+        val captured = selected.isNullOrEmpty() && result.resultCode == RESULT_OK && (photo?.length() ?: 0L) > 0 && uri != null
+        val resultUris = if (captured) arrayOf(uri!!) else selected
+        fileCallback?.onReceiveValue(resultUris)
         fileCallback = null
+        if (resultUris?.contains(uri) != true) photo?.delete()
+        pendingCameraFile = null
+        pendingCameraUri = null
     }
 
     private val mediaPermissions = registerForActivityResult(
@@ -82,11 +130,29 @@ class ShellActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.WHITE
-        window.navigationBarColor = Color.BLACK
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        // Android 15/16 enforce edge-to-edge. Reserve system-bar/keyboard space
+        // for the web viewport instead of letting the chat composer sit beneath it.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
 
         container = FrameLayout(this)
+        ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            insets
+        }
+        downloads = ShellDownloads(this, { name, mime ->
+            saveDocument.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mime
+                putExtra(Intent.EXTRA_TITLE, name)
+            })
+        }, { message -> Toast.makeText(this, message, Toast.LENGTH_LONG).show() })
+        ShellPush.ensureChannels(this)
+        File(cacheDir, "capture").listFiles()?.filter {
+            it.name.startsWith("masanawa-capture-") && System.currentTimeMillis() - it.lastModified() > 3_600_000
+        }?.forEach { it.delete() }
         webView = newWebView()
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setupFailureView()
@@ -101,15 +167,18 @@ class ShellActivity : ComponentActivity() {
             }
         })
 
-        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(WebOriginPolicy.safeLaunchUrl(intent?.dataString))
-        }
+        collectSharedInput(intent)
+        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null)
+            webView.loadUrl(launchUrl(intent))
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        webView.loadUrl(WebOriginPolicy.safeLaunchUrl(intent.dataString))
+        collectSharedInput(intent)
+        if (intent.action == Intent.ACTION_VIEW || intent.hasExtra("deepLink") || intent.hasExtra("characterId"))
+            webView.loadUrl(launchUrl(intent))
+        else dispatchSharedText()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -118,12 +187,17 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        webView.onPause()
+        // Keep sensitive content out of the Android recent-apps thumbnail.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // A customer-authorized foreground microphone session must not be
+        // paused with the UI while the foreground call service is active.
+        if (!callActive) webView.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        if (!protectScreen) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         webView.onResume()
     }
 
@@ -133,12 +207,14 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        stopCallService()
         pendingMediaRequest?.deny()
         pendingMediaRequest = null
         fileCallback?.onReceiveValue(null)
         fileCallback = null
         container.removeView(webView)
         webView.destroy()
+        downloads.close()
         super.onDestroy()
     }
 
@@ -156,12 +232,31 @@ class ShellActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.safeBrowsingEnabled = true
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+        setDownloadListener { url, _, contentDisposition, mimeType, _ ->
+            if (url != null && WebOriginPolicy.isTrusted(url))
+                downloads.beginHttp(url, android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType), mimeType)
+            else Toast.makeText(this@ShellActivity, "Use Masanawa's private file download control.", Toast.LENGTH_LONG).show()
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(this, "MasanawaNative", setOf("https://app.masanawa.com")) {
+                _, message, origin, isMainFrame, reply ->
+                if (isMainFrame && WebOriginPolicy.isTrusted(origin.toString())) {
+                    val payload = try { JSONObject(message.data ?: "") } catch (_: Exception) { null }
+                    if (payload != null) handleNativeMessage(payload, reply)
+                }
+            }
+        }
 
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
                 val url = request.url.toString()
                 if (WebOriginPolicy.isTrusted(url)) return false
+                val route = ShellDeepLinks.route(url)
+                if (route != null) {
+                    view.loadUrl(route)
+                    return true
+                }
                 openOutside(url)
                 return true
             }
@@ -171,6 +266,10 @@ class ShellActivity : ComponentActivity() {
                     lastTrustedUrl = url
                     failureView.visibility = View.GONE
                 }
+            }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                if (WebOriginPolicy.isTrusted(url)) dispatchSharedText()
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -217,14 +316,127 @@ class ShellActivity : ComponentActivity() {
                 }
                 fileCallback?.onReceiveValue(null)
                 fileCallback = filePathCallback
+                val incoming = pendingSharedAttachment
+                if (incoming?.scheme == "content") {
+                    pendingSharedAttachment = null
+                    fileCallback?.onReceiveValue(arrayOf(incoming))
+                    fileCallback = null
+                    return true
+                }
                 try {
-                    filePicker.launch(fileChooserParams.createIntent())
-                } catch (_: ActivityNotFoundException) {
+                    val chooser = fileChooserParams.createIntent()
+                    val capture = fileChooserParams.isCaptureEnabled &&
+                        fileChooserParams.acceptTypes.any { it.startsWith("image/") }
+                    if (capture && ContextCompat.checkSelfPermission(this@ShellActivity,
+                            Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                        pendingCameraPicker = chooser
+                        capturePermission.launch(Manifest.permission.CAMERA)
+                    } else launchFileChooser(chooser, capture)
+                } catch (_: RuntimeException) {
                     fileCallback?.onReceiveValue(null)
                     fileCallback = null
                 }
                 return true
             }
+        }
+    }
+
+    private fun launchFileChooser(picker: Intent, offerCamera: Boolean) {
+        try {
+            if (!offerCamera) { filePicker.launch(picker); return }
+            val dir = File(cacheDir, "capture").apply { mkdirs() }
+            val photo = File.createTempFile("masanawa-capture-", ".jpg", dir)
+            val uri = FileProvider.getUriForFile(this, "$packageName.shellfiles", photo)
+            pendingCameraFile = photo
+            pendingCameraUri = uri
+            val camera = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                clipData = ClipData.newRawUri("Masanawa photo", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+            filePicker.launch(Intent.createChooser(picker, "Choose or take a photo").apply {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(camera))
+            })
+        } catch (_: Exception) {
+            pendingCameraFile?.delete()
+            pendingCameraFile = null
+            pendingCameraUri = null
+            try { filePicker.launch(picker) } catch (_: Exception) { fileCallback?.onReceiveValue(null); fileCallback = null }
+        }
+    }
+
+    private fun launchUrl(intent: Intent?): String =
+        ShellDeepLinks.route(intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString)
+            ?: ShellDeepLinks.route(intent?.getStringExtra("deepLink"))
+            ?: ShellDeepLinks.route(intent?.getStringExtra("characterId")?.let { "masanawa://chat/$it" })
+            ?: WebOriginPolicy.HOME
+
+    private fun collectSharedInput(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()?.take(4_000)
+        if (!text.isNullOrEmpty()) pendingSharedText = text
+        val attachment = if (Build.VERSION.SDK_INT >= 33)
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else @Suppress("DEPRECATION") (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+        if (attachment?.scheme == "content") {
+            pendingSharedAttachment = attachment
+            Toast.makeText(this, "Open a chat and tap Attach to use the shared file.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun dispatchSharedText() {
+        val shared = pendingSharedText ?: return
+        if (!WebOriginPolicy.isTrusted(webView.url)) return
+        pendingSharedText = null
+        val quoted = JSONObject.quote(shared)
+        webView.evaluateJavascript("window.__masanawaSharedText=$quoted;window.dispatchEvent(new Event('masanawa-native-share'));", null)
+    }
+
+    private fun handleNativeMessage(payload: JSONObject, reply: JavaScriptReplyProxy) {
+        when (payload.optString("type")) {
+            "privacy" -> {
+                protectScreen = payload.optBoolean("enabled", false)
+                if (protectScreen) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+            "download-begin", "download-chunk", "download-end", "download-cancel" -> downloads.receive(payload)
+            "push-token-request" -> {
+                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this,
+                        Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    pendingPushReply = reply
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else sendPushToken(reply)
+            }
+            "push-token-delete" -> ShellPush.deleteToken(this)
+            "call-state" -> {
+                val active = payload.optBoolean("active", false)
+                if (active && !callActive &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        ContextCompat.startForegroundService(this, Intent(this, ShellCallService::class.java).apply { action = ShellCallService.START })
+                        callActive = true
+                    } catch (_: RuntimeException) { callActive = false }
+                } else if (!active) stopCallService()
+            }
+            "share-text" -> {
+                val value = payload.optString("text").take(4_000)
+                if (value.isNotBlank()) startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, value)
+                }, "Share from Masanawa"))
+            }
+        }
+    }
+
+    private fun stopCallService() {
+        if (!callActive) return
+        callActive = false
+        stopService(Intent(this, ShellCallService::class.java))
+    }
+
+    private fun sendPushToken(reply: JavaScriptReplyProxy) {
+        ShellPush.getToken(this) { message ->
+            runOnUiThread { reply.postMessage(message.toString()) }
         }
     }
 
