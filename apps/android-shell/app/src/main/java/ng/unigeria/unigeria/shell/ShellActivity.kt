@@ -39,7 +39,6 @@ import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import androidx.webkit.JavaScriptReplyProxy
-import androidx.webkit.WebMessageCompat
 import org.json.JSONObject
 
 /**
@@ -67,7 +66,7 @@ class ShellActivity : ComponentActivity() {
         pendingPushReply = null
         if (reply != null) {
             if (granted) sendPushToken(reply)
-            else reply.postMessage(WebMessageCompat("{\"type\":\"push-error\",\"message\":\"Notification permission denied.\"}"))
+            else reply.postMessage("{\"type\":\"push-error\",\"message\":\"Notification permission denied.\"}")
         }
     }
 
@@ -368,7 +367,7 @@ class ShellActivity : ComponentActivity() {
 
     private fun sendPushToken(reply: JavaScriptReplyProxy) {
         ShellPush.getToken(this) { message ->
-            runOnUiThread { reply.postMessage(WebMessageCompat(message.toString())) }
+            runOnUiThread { reply.postMessage(message.toString()) }
         }
     }
 
