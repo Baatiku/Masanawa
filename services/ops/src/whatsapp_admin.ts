@@ -78,7 +78,7 @@ export function createWhatsAppAdmin(input:Input){
       const result=await input.pool.query(`SELECT key_id AS "keyId",label,project_id AS "projectId",
         key_suffix AS "keySuffix",enabled,cooldown_until AS "cooldownUntil",
         last_error_code AS "lastErrorCode",last_used_at AS "lastUsedAt",created_at AS "createdAt"
-        FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200`,[actor.tenantId]);
+        FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 ORDER BY created_at DESC`,[actor.tenantId]);
       return {keys:result.rows,quotaPolicy:'Gemini rate limits apply per Google Cloud project, not per API key.'};
     },
     async addGeminiKey(auth:string|undefined,label:string,projectId:string,secret:string){
