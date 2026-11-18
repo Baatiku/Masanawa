@@ -14,6 +14,8 @@ import android.provider.MediaStore
 import android.os.Build
 import android.os.Bundle
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -71,6 +73,23 @@ class ShellActivity : ComponentActivity() {
     private var protectScreen = false
     private var callActive = false
     private var pendingPushReply: JavaScriptReplyProxy? = null
+    private val callControls = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (!::webView.isInitialized || !WebOriginPolicy.isTrusted(webView.url)) return
+            when (intent.getStringExtra(ShellCallService.REMOTE_EVENT)) {
+                ShellCallService.EVENT_END -> {
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new Event('masanawa-native-call-hangup'))", null)
+                    stopCallService()
+                }
+                ShellCallService.EVENT_MUTE -> {
+                    val muted = intent.getBooleanExtra(ShellCallService.REMOTE_MUTED, false)
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('masanawa-native-call-mute',{detail:{muted:${muted}}}))", null)
+                }
+            }
+        }
+    }
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val reply = pendingPushReply
@@ -150,6 +169,8 @@ class ShellActivity : ComponentActivity() {
             })
         }, { message -> Toast.makeText(this, message, Toast.LENGTH_LONG).show() })
         ShellPush.ensureChannels(this)
+        ContextCompat.registerReceiver(this, callControls,
+            IntentFilter(ShellCallService.REMOTE_CONTROL), ContextCompat.RECEIVER_NOT_EXPORTED)
         File(cacheDir, "capture").listFiles()?.filter {
             it.name.startsWith("masanawa-capture-") && System.currentTimeMillis() - it.lastModified() > 3_600_000
         }?.forEach { it.delete() }
@@ -207,6 +228,7 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        unregisterReceiver(callControls)
         stopCallService()
         pendingMediaRequest?.deny()
         pendingMediaRequest = null
@@ -287,6 +309,7 @@ class ShellActivity : ComponentActivity() {
 
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 // A failed Chromium renderer must not crash the host activity.
+                stopCallService()
                 container.removeView(view)
                 view.destroy()
                 webView = newWebView()
@@ -431,7 +454,11 @@ class ShellActivity : ComponentActivity() {
     private fun stopCallService() {
         if (!callActive) return
         callActive = false
-        stopService(Intent(this, ShellCallService::class.java))
+        try {
+            startService(Intent(this, ShellCallService::class.java).apply { action = ShellCallService.STOP })
+        } catch (_: RuntimeException) {
+            stopService(Intent(this, ShellCallService::class.java))
+        }
     }
 
     private fun sendPushToken(reply: JavaScriptReplyProxy) {
