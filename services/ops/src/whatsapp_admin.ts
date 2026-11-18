@@ -228,7 +228,16 @@ export function createWhatsAppAdmin(input:Input){
         ON t.tenant_id=p.tenant_id AND t.thread_id=p.thread_id
         JOIN gb_wallet.ngn_data_orders o ON o.tenant_id=p.tenant_id AND o.user_id=p.user_id AND o.operation_id=p.operation_id
         WHERE p.tenant_id=$1 AND t.channel_id=$2 AND o.state='delivered'`,[actor.tenantId,id]);
-      return {...result.rows[0],costsVerified:false,salesVerified:true,
+      const jobs=await input.pool.query(`SELECT
+        count(*) FILTER(WHERE state='pending')::int AS "pendingJobs",
+        count(*) FILTER(WHERE state='pending' AND available_at<=clock_timestamp())::int AS "overdueJobs",
+        count(*) FILTER(WHERE state='failed')::int AS "failedJobs",
+        count(*) FILTER(WHERE state='uncertain')::int AS "uncertainJobs",
+        (SELECT last_error_code FROM security.whatsapp_jobs latest
+          WHERE latest.tenant_id=$1 AND latest.channel_id=$2 AND latest.last_error_code IS NOT NULL
+          ORDER BY latest.created_at DESC LIMIT 1) AS "lastJobError"
+        FROM security.whatsapp_jobs WHERE tenant_id=$1 AND channel_id=$2`,[actor.tenantId,id]);
+      return {...result.rows[0],...jobs.rows[0],costsVerified:false,salesVerified:true,
         providerBilling:'Linked-device transport has no Meta Cloud API billing feed',
         dataSales:data.rows,deliveredOrders:sales.rows[0]?.deliveredOrders??0,
         deliveredSalesKobo:Number(sales.rows[0]?.deliveredSalesKobo??0)};

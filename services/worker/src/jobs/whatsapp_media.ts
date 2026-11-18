@@ -28,21 +28,42 @@ export async function transcribeWhatsAppAudio(input:{audio:Buffer;mimeType:strin
 export async function synthesizeWhatsAppVoice(input:{text:string;voice:string;apiKey:string;model:string;fetch?:typeof fetch}):Promise<{data:Buffer;mimeType:string}>{
   if(!input.apiKey||!input.model||!input.voice||!input.text.trim()||input.text.length>2500)throw Error('voice_synthesis_unavailable');
   const call=input.fetch??fetch;
-  const response=await call('https://generativelanguage.googleapis.com/v1beta/interactions',{
-    method:'POST',redirect:'error',signal:AbortSignal.timeout(35000),
+  // Match the canonical Masanawa recorded-voice renderer: Gemini 3 first uses
+  // Interactions; a definite 400/404 may be retried via GenerateContent.
+  // Such a rejection cannot have delivered a voice note to WhatsApp.
+  const signal=AbortSignal.timeout(35000);
+  const request=(interactions:boolean)=>call(interactions?
+    'https://generativelanguage.googleapis.com/v1beta/interactions':
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent`,{
+    method:'POST',redirect:'error',signal,
     headers:{'x-goog-api-key':input.apiKey,'content-type':'application/json'},
-    body:JSON.stringify({model:input.model,store:false,input:[{type:'user_input',content:[{type:'text',text:input.text}]}],
+    body:JSON.stringify(interactions?{
+      model:input.model,store:false,input:[{type:'user_input',content:[{type:'text',text:input.text}]}],
       response_format:{type:'audio',mime_type:'audio/l16',sample_rate:24000},
-      generation_config:{speech_config:[{voice:input.voice}]}}),
+      generation_config:{speech_config:[{voice:input.voice}]},
+    }:{contents:[{role:'user',parts:[{text:input.text}]}],generationConfig:{
+      responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:input.voice}}},
+    }}),
   });
+  const firstInteractions=/^gemini-3\./.test(input.model);
+  let response=await request(firstInteractions);
+  if(firstInteractions&&(response.status===400||response.status===404)&&!signal.aborted){
+    await response.body?.cancel();
+    response=await request(false);
+  }
   if(!response.ok)throw Error('voice_synthesis_provider_failed');
-  const result=await response.json() as {steps?:{type?:string;content?:{type?:string;data?:string;mime_type?:string}[]}[]};
-  const audio=result.steps?.filter(s=>s.type==='model_output').flatMap(s=>s.content??[]).filter(c=>c.type==='audio').at(-1);
-  if(!audio?.data||audio.data.length>MAX_AUDIO_BYTES*2)throw Error('voice_synthesis_invalid');
-  const mimeType=(audio.mime_type??'').toLowerCase();
+  const result=await response.json() as {steps?:{type?:string;content?:{type?:string;data?:string;mime_type?:string}[]}[];
+    candidates?:{content?:{parts?:{inlineData?:{data?:string;mimeType?:string};inline_data?:{data?:string;mime_type?:string}}[]}}[]};
+  const interactionAudio=result.steps?.filter(s=>s.type==='model_output').flatMap(s=>s.content??[]).filter(c=>c.type==='audio').at(-1);
+  const generated=result.candidates?.flatMap(c=>c.content?.parts??[]).map(p=>p.inlineData??
+    (p.inline_data?{data:p.inline_data.data,mimeType:p.inline_data.mime_type}:undefined)).find(p=>p?.data);
+  const data64=interactionAudio?.data??generated?.data;
+  if(!data64||data64.length>MAX_AUDIO_BYTES*2)throw Error('voice_synthesis_invalid');
+  const mimeType=(interactionAudio?.mime_type??generated?.mimeType??'').toLowerCase();
   if(!['audio/l16','audio/l16;rate=24000','audio/pcm;rate=24000','audio/wav'].includes(mimeType))throw Error('voice_synthesis_mime_invalid');
-  const data=Buffer.from(audio.data,'base64');
-  if(!data.length||data.length>MAX_AUDIO_BYTES)throw Error('voice_synthesis_payload_invalid');
+  const data=Buffer.from(data64,'base64');
+  if(!data.length||data.length>MAX_AUDIO_BYTES||data.toString('base64')!==data64||
+    (/^audio\/(?:l16|pcm)/.test(mimeType)&&data.length%2!==0))throw Error('voice_synthesis_payload_invalid');
   return {data,mimeType};
 }
 

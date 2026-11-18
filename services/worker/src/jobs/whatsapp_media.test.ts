@@ -37,4 +37,25 @@ describe('WhatsApp Gemini audio boundary',()=>{
     expect(opus.subarray(0,4).toString('ascii')).toBe('OggS');
     expect(opus.length).toBeGreaterThan(50);
   });
+  it('uses the canonical Gemini GenerateContent TTS fallback after a definite Interactions rejection',async()=>{
+    const pcm=Buffer.alloc(4800);
+    const call=vi.fn(async(url:string,init:RequestInit)=>{
+      if(url.endsWith('/interactions'))return {status:404,ok:false,body:null};
+      const body=JSON.parse(String(init.body)) as {generationConfig:{responseModalities:string[];speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:string}}}}};
+      expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
+      expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Kore');
+      return {status:200,ok:true,json:async()=>({candidates:[{content:{parts:[{
+        inlineData:{mimeType:'audio/l16;rate=24000',data:pcm.toString('base64')},
+      }]}}]})};
+    });
+    await expect(synthesizeWhatsAppVoice({text:'Good morning',voice:'Kore',apiKey:'stub',model:'gemini-3.8-flash-tts',fetch:call as never}))
+      .resolves.toEqual({data:pcm,mimeType:'audio/l16;rate=24000'});
+    expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('never retries an ambiguous provider failure as a second TTS request',async()=>{
+    const call=vi.fn(async()=>({status:503,ok:false}));
+    await expect(synthesizeWhatsAppVoice({text:'Hello',voice:'Kore',apiKey:'stub',model:'gemini-3.8-flash-tts',fetch:call as never}))
+      .rejects.toThrow('voice_synthesis_provider_failed');
+    expect(call).toHaveBeenCalledTimes(1);
+  });
 });

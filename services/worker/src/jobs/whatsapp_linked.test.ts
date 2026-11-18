@@ -1,9 +1,18 @@
 import {randomBytes} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState} from './whatsapp_linked.js';
+import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState,eligibleWhatsAppUpsert} from './whatsapp_linked.js';
 
 describe('encrypted WhatsApp linked-device session',()=>{
   const key=randomBytes(32).toString('base64');
+  it('ingests recent offline catch-up messages but not old WhatsApp history',()=>{
+    const now=Date.parse('2026-11-18T10:00:00Z');
+    const seconds=Math.floor(now/1000);
+    expect(eligibleWhatsAppUpsert('notify',seconds,now)).toBe(true);
+    expect(eligibleWhatsAppUpsert('append',seconds-60,now)).toBe(true);
+    expect(eligibleWhatsAppUpsert('append',seconds-500,now)).toBe(false);
+    expect(eligibleWhatsAppUpsert('append',seconds+500,now)).toBe(false);
+    expect(eligibleWhatsAppUpsert('append',0,now)).toBe(false);
+  });
   it('encrypts every QR and Signal secret with authenticated randomized ciphertext',()=>{
     const a=encryptLinkedSecret('session credential',key);
     const b=encryptLinkedSecret('session credential',key);
@@ -29,5 +38,19 @@ describe('encrypted WhatsApp linked-device session',()=>{
     expect(cipher.toString('utf8')).not.toContain('noiseKey');
     const decrypted=decryptLinkedSecret(cipher,key);
     expect(decrypted).toContain('noiseKey');
+  });
+  it('restores the same encrypted session after a Worker restart without issuing another QR',async()=>{
+    const stored=new Map<string,Buffer>();
+    const pool={query:async(sql:string,params:unknown[]=[]):Promise<{rows:unknown[]}>=>{
+      if(sql.includes('SELECT key_id,ciphertext'))return {rows:stored.has('creds:main')?
+        [{key_id:'main',ciphertext:stored.get('creds:main')}]:[]};
+      if(sql.includes("'creds','main',$3"))stored.set('creds:main',params[2] as Buffer);
+      return {rows:[]};
+    }};
+    const first=await createLinkedAuthState(pool as never,'tenant-a','channel-a',key,'worker-a');
+    await first.saveCreds();await first.flush();
+    const second=await createLinkedAuthState(pool as never,'tenant-a','channel-a',key,'worker-b');
+    expect(Buffer.from(second.state.creds.noiseKey.public).equals(Buffer.from(first.state.creds.noiseKey.public))).toBe(true);
+    expect(stored.get('creds:main')?.toString('utf8')).not.toContain('noiseKey');
   });
 });
