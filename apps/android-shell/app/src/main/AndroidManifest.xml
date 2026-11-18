@@ -18,7 +18,7 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/masanawa_private_backup_rules"
         android:usesCleartextTraffic="false"
-        android:label="Masanawa"
+        android:label="@string/masanawa_app_label"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/ShellSplashTheme">
