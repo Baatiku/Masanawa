@@ -55,7 +55,14 @@ describe('WhatsApp Gemini audio boundary',()=>{
   it('never retries an ambiguous provider failure as a second TTS request',async()=>{
     const call=vi.fn(async()=>({status:503,ok:false}));
     await expect(synthesizeWhatsAppVoice({text:'Hello',voice:'Kore',apiKey:'stub',model:'gemini-3.8-flash-tts',fetch:call as never}))
-      .rejects.toThrow('voice_synthesis_provider_failed');
+      .rejects.toThrow('voice_synthesis_provider_unavailable');
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+  it('classifies exhausted Gemini TTS quota for delayed retry before any WhatsApp send',async()=>{
+    const call=vi.fn(async()=>({status:429,ok:false}));
+    await expect(synthesizeWhatsAppVoice({text:'Wa alaikum assalam',voice:'Kore',apiKey:'stub',
+      model:'gemini-3.8-flash-lite-tts',fetch:call as never}))
+      .rejects.toThrow('voice_synthesis_quota_exceeded');
     expect(call).toHaveBeenCalledTimes(1);
   });
 });
