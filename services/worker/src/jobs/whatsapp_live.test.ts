@@ -36,25 +36,26 @@ describe('WhatsApp Gemini Live audio-first replies',()=>{
     socket.dispatch({serverContent:{outputTranscription:{text:'Hi'},turnComplete:true}});
     await expect(promise).rejects.toThrow('live_invalid');
   });
-  it('switches to a different project on quota failure and cools down the exhausted project',async()=>{
+  it('tries every eligible API key in order and cools down only the failed key',async()=>{
     const key=Buffer.alloc(32,2).toString('base64');
     const queries:{sql:string;params:unknown[]}[]=[];
     const pool={query:vi.fn(async(sql:string,params:unknown[]=[])=>{
       queries.push({sql,params});
       if(sql.includes('FROM security.whatsapp_gemini_keys'))return {rows:[
-        {key_id:'a',project_id:'project-one',key_ciphertext:encryptLinkedSecret('key-one',key)},
-        {key_id:'a2',project_id:'project-one',key_ciphertext:encryptLinkedSecret('key-two',key)},
-        {key_id:'b',project_id:'project-two',key_ciphertext:encryptLinkedSecret('key-three',key)},
+        {key_id:'a',key_ciphertext:encryptLinkedSecret('key-one',key)},
+        {key_id:'a2',key_ciphertext:encryptLinkedSecret('key-two',key)},
+        {key_id:'b',key_ciphertext:encryptLinkedSecret('key-three',key)},
       ]};
       return {rows:[]};
     })};
     const invoke=vi.fn(async(apiKey:string)=>{
-      if(apiKey==='key-one')throw new LiveProviderError('live_quota');
+      if(apiKey!=='key-three')throw new LiveProviderError('live_quota');
       return 'voice-ready';
     });
     expect(await withGeminiKeyPool({pool:pool as never,tenantId:'tenant',sessionKey:key,env:{},invoke}))
       .toBe('voice-ready');
-    expect(invoke.mock.calls.map(c=>c[0])).toEqual(['key-one','key-three']);
-    expect(queries.some(q=>q.sql.includes('cooldown_until=')&&q.params[1]==='project-one'&&q.params[2]===300)).toBe(true);
+    expect(invoke.mock.calls.map(c=>c[0])).toEqual(['key-one','key-two','key-three']);
+    expect(queries.filter(q=>q.sql.includes('SET cooldown_until=clock_timestamp()'))
+      .map(q=>[q.params[1],q.params[2]])).toEqual([['a',300],['a2',300]]);
   });
 });
