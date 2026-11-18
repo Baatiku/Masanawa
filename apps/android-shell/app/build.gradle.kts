@@ -29,15 +29,15 @@ android {
     }
 
     val keyFile = System.getenv("SHELL_RELEASE_KEYSTORE_PATH")?.let(::file)?.takeIf { it.isFile }
-    val keyAlias = System.getenv("SHELL_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
-    val storePassword = System.getenv("SHELL_RELEASE_STORE_PASSWORD")?.takeIf { it.isNotBlank() }
-    val keyPassword = System.getenv("SHELL_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
-    if (keyFile != null && keyAlias != null && storePassword != null && keyPassword != null) {
+    val ownerKeyAlias = System.getenv("SHELL_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+    val ownerStorePassword = System.getenv("SHELL_RELEASE_STORE_PASSWORD")?.takeIf { it.isNotBlank() }
+    val ownerKeyPassword = System.getenv("SHELL_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+    if (keyFile != null && ownerKeyAlias != null && ownerStorePassword != null && ownerKeyPassword != null) {
         signingConfigs.create("ownerRelease") {
             storeFile = keyFile
-            storePassword = storePassword
-            keyAlias = keyAlias
-            keyPassword = keyPassword
+            storePassword = ownerStorePassword
+            keyAlias = ownerKeyAlias
+            keyPassword = ownerKeyPassword
         }
     }
 
