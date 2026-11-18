@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {withTransaction} from '../transaction.js';
 import type {Pool} from 'pg';
 import {newsCatalog,safeNewsArticleUrl} from './news_catalog.js';
+import {classifyNigeriaNews,classifyPublicInterest,nearDuplicateNews,recentNewsTimestamp} from './news_intelligence.js';
 
 export type ParsedNews={url:string;title:string;summary:string;publishedAt:string};
 
@@ -23,8 +24,8 @@ function xmlElement(xml:string,tag:string):string{
  const pattern=new RegExp('<'+tag+'(?:\\s[^>]*)?>([\\s\\S]*?)<\\/'+tag+'>','i');
  return pattern.exec(xml)?.[1]??'';
 }
-/** RSS 2/Atom summary only. Never fetch article HTML or invoke an AI rewrite
- * that could invent a quotation or imply authorization to mirror full text.
+/** RSS 2/Atom discovery metadata only. Reject stale and non-Nigerian events
+ * before any database enrichment or AI editorial work.
  */
 export function parseNewsFeed(xml:string,publisherId:string):ParsedNews[]{
  if(xml.length>600000||/<!DOCTYPE|<!ENTITY/i.test(xml))throw Error('invalid_news_xml');
@@ -47,7 +48,7 @@ export function parseNewsFeed(xml:string,publisherId:string):ParsedNews[]{
   const date=plain(xmlElement(block,'pubDate')||xmlElement(block,'published')||xmlElement(block,'updated'));
   const time=Date.parse(date);
   if(!url||seen.has(url)||title.length<3||description.length<15||!Number.isFinite(time))continue;
-  if(time>Date.now()+300000||time<Date.now()-30*86400000)continue;
+  if(!recentNewsTimestamp(date)||!classifyNigeriaNews(title,description).confident||!classifyPublicInterest(title,description).relevant)continue;
   out.push({url,title,summary:description,publishedAt:new Date(time).toISOString()});seen.add(url);
   if(out.length>=30)break;
  }
@@ -85,7 +86,7 @@ export async function ensurePlatformNewsPublishers(pool:Pool,tenantId:string):Pr
    RETURNING publisher_id`,[tenantId,...newsCatalog.flatMap(source=>[source.id,source.name,source.feed])]);
  return result.rowCount??result.rows.length;
 }
-export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,platformTenantId?:string,gatewayOrigin?:string,maxSources=7){
+export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,platformTenantId?:string,gatewayOrigin?:string,maxSources:number=newsCatalog.length){
  const upstream=gatewayOrigin?newsGatewayOrigin(gatewayOrigin):undefined;
  async function pollOne(){
   const leased=await pool.query(`UPDATE feed.news_publishers p SET lease_until=clock_timestamp()+interval '2 minutes',
@@ -101,12 +102,21 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
   let imported=0;
   try{
    if(!canonical)throw Error('unapproved_news_feed_url');
-   const stories=upstream?await fetchGatewayNews(upstream,canonical.id,fetchImpl)
+   const stories=upstream
+    ?await fetchGatewayNews(upstream,canonical.id,fetchImpl).catch(()=>parseNewsFeed(await boundedFeedFetch(canonical.feed,fetchImpl),canonical.id))
     :parseNewsFeed(await boundedFeedFetch(canonical.feed,fetchImpl),canonical.id);
    for(const story of stories){
+    // Gate again for upstream providers: an old cached gateway response must
+    // never bypass the same freshness and geography constraints as RSS.
+    if(!recentNewsTimestamp(story.publishedAt))continue;
+    const locality=classifyNigeriaNews(story.title,story.summary);
+    const interest=classifyPublicInterest(story.title,story.summary);
+    if(!locality.confident||!interest.relevant)continue;
     const hash=createHash('sha256').update(story.title+'\n'+story.summary).digest('hex');
     await withTransaction(pool,async client=>{
-     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[row.tenant_id+'|'+story.url]);
+     // Serialize the small tenant news admission window: two sources with
+     // different URLs for the same event cannot both win a concurrent insert.
+     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[row.tenant_id+'|news-events']);
      const eligible=await client.query(`SELECT 1 FROM feed.news_publishers WHERE tenant_id=$1
        AND publisher_id=$2 AND feed_url=$3 AND state='approved'
        AND rights_until>clock_timestamp() FOR SHARE`,[row.tenant_id,row.publisher_id,canonical.feed]);
@@ -115,11 +125,31 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
        WHERE tenant_id=$1 AND source_url=$2`,[row.tenant_id,story.url]);
      if(existing.rows.length){
       if(existing.rows[0].content_hash===hash)return;
-      await client.query(`UPDATE feed.news_articles SET headline=$3,summary=$4,content_hash=$5
-        WHERE tenant_id=$1 AND source_url=$2`,[row.tenant_id,story.url,story.title,story.summary,hash]);
+      await client.query(`UPDATE feed.news_articles SET headline=$3,summary=$4,content_hash=$5,
+       states=$6,nationwide=$7,locality_names=$8,category=$9,priority_score=$10
+        WHERE tenant_id=$1 AND source_url=$2`,[row.tenant_id,story.url,story.title,story.summary,hash,
+          locality.states,locality.nationwide,locality.locations,interest.category,interest.priority]);
       await client.query(`UPDATE feed.posts SET body=$3 WHERE tenant_id=$1 AND id=$2`,
        [row.tenant_id,existing.rows[0].post_id,story.title+'\n\n'+story.summary]);
       imported++;return;
+     }
+     const linked=await client.query(`SELECT 1 FROM feed.news_article_sources
+       WHERE tenant_id=$1 AND source_url=$2`,[row.tenant_id,story.url]);
+     if(linked.rows.length)return;
+     const potential=await client.query(`SELECT post_id,headline,original_published_at,states,nationwide
+       FROM feed.news_articles WHERE tenant_id=$1 AND original_published_at >= $2::timestamptz - interval '72 hours'
+       AND original_published_at <= $2::timestamptz + interval '72 hours'
+       AND (states && $3::text[] OR nationwide=$4::boolean)
+       ORDER BY original_published_at DESC LIMIT 120`,[row.tenant_id,story.publishedAt,locality.states,locality.nationwide]);
+     const matching=potential.rows.find(other=>other.nationwide===locality.nationwide&&
+       nearDuplicateNews({title:story.title,publishedAt:story.publishedAt,states:locality.states},
+         {title:String(other.headline),publishedAt:new Date(other.original_published_at).toISOString(),states:other.states}));
+     if(matching){
+      await client.query(`INSERT INTO feed.news_article_sources
+        (tenant_id,source_url,publisher_id,post_id,headline) VALUES($1,$2,$3,$4,$5)
+        ON CONFLICT(tenant_id,source_url) DO NOTHING`,
+       [row.tenant_id,story.url,row.publisher_id,matching.post_id,story.title]);
+      return;
      }
      const idem=createHash('sha256').update(story.url).digest('hex');
      const post=await client.query(`INSERT INTO feed.posts
@@ -127,14 +157,20 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
        VALUES($1,'publisher',NULL,'text',$2,'{}',$3,$4,$5) RETURNING id`,
        [row.tenant_id,story.title+'\n\n'+story.summary,'news:'+row.publisher_id,idem,story.publishedAt]);
      await client.query(`INSERT INTO feed.news_articles
-       (tenant_id,publisher_id,post_id,source_url,headline,summary,original_published_at,content_hash)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-       [row.tenant_id,row.publisher_id,post.rows[0].id,story.url,story.title,story.summary,story.publishedAt,hash]);
+       (tenant_id,publisher_id,post_id,source_url,headline,summary,original_published_at,content_hash,states,nationwide,locality_names,category,priority_score)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+       [row.tenant_id,row.publisher_id,post.rows[0].id,story.url,story.title,story.summary,story.publishedAt,hash,
+        locality.states,locality.nationwide,locality.locations,interest.category,interest.priority]);
+     await client.query(`INSERT INTO feed.news_article_sources
+       (tenant_id,source_url,publisher_id,post_id,headline) VALUES($1,$2,$3,$4,$5)`,
+      [row.tenant_id,story.url,row.publisher_id,post.rows[0].id,story.title]);
      imported++;
     });
    }
+   // Idle sources back off automatically, reducing provider and server work.
    await pool.query(`UPDATE feed.news_publishers SET lease_until=NULL,last_poll_at=clock_timestamp(),
-     last_error=NULL WHERE tenant_id=$1 AND publisher_id=$2`,[row.tenant_id,row.publisher_id]);
+     next_poll_at=clock_timestamp()+CASE WHEN $3::integer>0 THEN interval '15 minutes' ELSE interval '45 minutes' END,
+     last_error=NULL WHERE tenant_id=$1 AND publisher_id=$2`,[row.tenant_id,row.publisher_id,imported]);
    return {checked:1,imported};
   }catch(_){
    await pool.query(`UPDATE feed.news_publishers SET lease_until=NULL,
@@ -156,3 +192,4 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
   return {checked,imported,failed,enrolled};
  }};
 }
+

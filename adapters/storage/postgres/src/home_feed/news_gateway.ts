@@ -1,5 +1,6 @@
 import {newsCatalog,safeNewsArticleUrl} from './news_catalog.js';
 import type {ParsedNews} from './news_import.js';
+import {classifyNigeriaNews,classifyPublicInterest,recentNewsTimestamp} from './news_intelligence.js';
 
 /** The configured origin is public: never forward a Masanawa session or token.
  * Keep Flutter on canonical feed.posts IDs so likes/comments remain authoritative.
@@ -34,10 +35,12 @@ export async function fetchGatewayNews(origin:string,publisherId:string,fetchImp
    if(item?.author?.id!==publisherId||item?.author?.type!=='publisher'||news?.id!==publisherId||
     news.name!==source.name||typeof news.title!=='string'||typeof news.summary!=='string'||
     typeof news.url!=='string'||typeof item.publishedAt!=='string')throw Error('invalid_news_gateway_story');
-   const articleUrl=safeNewsArticleUrl(source,news.url),time=Date.parse(item.publishedAt);
-   if(!articleUrl||news.title.length<3||news.title.length>280||news.summary.length<15||news.summary.length>520||
-    !Number.isFinite(time)||time>Date.now()+300000||time<Date.now()-30*86400000)throw Error('invalid_news_gateway_story');
-   if(!seen.has(articleUrl)){seen.add(articleUrl);stories.push({url:articleUrl,title:news.title,summary:news.summary,publishedAt:new Date(time).toISOString()});}
+   const articleUrl=safeNewsArticleUrl(source,news.url);
+   if(!articleUrl||news.title.length<3||news.title.length>280||news.summary.length<15||news.summary.length>520)
+    throw Error('invalid_news_gateway_story');
+   // A stale or non-Nigerian record is ordinary provider noise, not a whole-feed failure.
+   if(!recentNewsTimestamp(item.publishedAt)||!classifyNigeriaNews(news.title,news.summary).confident||!classifyPublicInterest(news.title,news.summary).relevant)continue;
+   if(!seen.has(articleUrl)){seen.add(articleUrl);stories.push({url:articleUrl,title:news.title,summary:news.summary,publishedAt:new Date(item.publishedAt).toISOString()});}
   }
   const next='nextCursor'in data?data.nextCursor:null;
   if(next===null)break;
@@ -46,3 +49,4 @@ export async function fetchGatewayNews(origin:string,publisherId:string,fetchImp
  }
  return stories;
 }
+

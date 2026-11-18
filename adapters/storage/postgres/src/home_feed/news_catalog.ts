@@ -3,6 +3,9 @@
  * A row must match the exact URL/host; never fetch arbitrary operator URLs.
  */
 export const newsCatalog = [
+ {id:'punch',name:'PUNCH',feed:'https://rss.punchng.com/v1/category/latest_news',hosts:['punchng.com']},
+ {id:'premium-times',name:'Premium Times',feed:'https://www.premiumtimesng.com/feed',hosts:['premiumtimesng.com']},
+ {id:'channels',name:'Channels Television',feed:'https://www.channelstv.com/feed/',hosts:['channelstv.com']},
  {id:'bbc',name:'BBC News',feed:'https://feeds.bbci.co.uk/news/rss.xml',hosts:['bbc.com','bbc.co.uk']},
  {id:'aljazeera',name:'Al Jazeera',feed:'https://www.aljazeera.com/xml/rss/all.xml',hosts:['aljazeera.com']},
  {id:'dw',name:'DW News',feed:'https://rss.dw.com/xml/rss-en-all',hosts:['dw.com']},
@@ -25,3 +28,4 @@ export function safeNewsArticleUrl(entry:NewsCatalogEntry,raw:string):string|nul
   u.searchParams.sort();return u.toString();
  }catch{return null;}
 }
+

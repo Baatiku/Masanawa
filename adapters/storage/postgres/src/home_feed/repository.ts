@@ -19,7 +19,7 @@ function item(r:Row){
   ...(!publisher&&r.source_provenance?{source:r.source_provenance as {platform:'x'|'facebook';url:string;originalPublishedAt:string;revision:number}}:{}),
   ...(publisher&&r.news_info?{news:r.news_info as {
     id:string;name:string;title:string;summary:string;url:string;
-    verified:boolean;logoUrl?:string|null;
+    verified:boolean;logoUrl?:string|null;states?:string[];nationwide?:boolean;localities?:string[];category?:string|null;priority?:number;
    }}:{}),
   kind:String(r.kind) as "text"|"image"|"audio",body:String(r.body),media:r.media_ids as string[],transcript:r.transcript===null?null:String(r.transcript),
   publishedAt:r.published_at_exact==null?new Date(String(r.published_at)).toISOString():String(r.published_at_exact),likeCount:Number(r.like_count??0),commentCount:Number(r.comment_count??0),
@@ -82,7 +82,9 @@ const projection=`p.*,
  END AS author_name,
  (SELECT jsonb_build_object('id',pub.publisher_id,'name',pub.display_name,
    'title',n.headline,'summary',n.summary,'url',n.source_url,'verified',true,
-   'logoUrl',CASE WHEN pub.logo_licensed THEN pub.logo_url ELSE NULL END)
+   'logoUrl',CASE WHEN pub.logo_licensed THEN pub.logo_url ELSE NULL END,
+   'states',n.states,'nationwide',n.nationwide,'localities',n.locality_names,
+   'category',n.category,'priority',n.priority_score)
     FROM feed.news_articles n JOIN feed.news_publishers pub
     ON pub.tenant_id=n.tenant_id AND pub.publisher_id=n.publisher_id
     WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id AND pub.state='approved'
@@ -151,9 +153,14 @@ export class PgHomeFeedRepository {
      ...(filtered?[filters?.source??null,filters?.from??null,filters?.to??null]:[])]);
   return rows.rows.map(item);
  }
- async listNews(tenant:string,viewer:string|null,before:Cursor,limit:number,publisher?:string,search?:string){
+ async listNews(tenant:string,viewer:string|null,before:Cursor,limit:number,publisher?:string,search?:string,state?:string){
   const rows=await this.pool.query(`SELECT ${projection} FROM feed.posts p
     WHERE p.tenant_id=$1 AND p.state='published' AND p.author_type='publisher' AND ${this.access}
+    AND p.published_at >= statement_timestamp()-interval '7 days'
+    AND EXISTS(SELECT 1 FROM feed.news_articles active WHERE active.tenant_id=p.tenant_id
+      AND active.post_id=p.id AND active.original_published_at >= statement_timestamp()-interval '7 days'
+      AND (cardinality(active.states)>0 OR active.nationwide)
+      AND ($8::text IS NULL OR $8=ANY(active.states) OR active.nationwide))
     AND ($3::timestamptz IS NULL OR (p.published_at,p.id)<($3::timestamptz,$4::uuid))
     AND ($6::text IS NULL OR EXISTS(SELECT 1 FROM feed.news_articles n
       WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id AND n.publisher_id=$6))
@@ -161,7 +168,7 @@ export class PgHomeFeedRepository {
       WHERE n.tenant_id=p.tenant_id AND n.post_id=p.id
       AND (n.headline ILIKE '%'||$7||'%' OR n.summary ILIKE '%'||$7||'%')))
     ORDER BY p.published_at DESC,p.id DESC LIMIT $5`,
-    [tenant,viewer,before?.at??null,before?.id??null,limit,publisher??null,search??null]);
+    [tenant,viewer,before?.at??null,before?.id??null,limit,publisher??null,search??null,state??null]);
   return rows.rows.map(item);
  }
  async newsPublishers(tenant:string){
@@ -478,4 +485,5 @@ export class PgHomeFeedRepository {
    });
   }
 }
+
 
