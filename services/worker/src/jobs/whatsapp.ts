@@ -3,7 +3,7 @@ import type { Pool } from '@masanawa/postgres';
 import {safeWhatsAppHistory,summarizeWhatsAppMemory} from './whatsapp_memory.js';
 import {whatsappIdentityInstructions} from './whatsapp_identity.js';
 import {encryptLinkedSecret} from './whatsapp_linked.js';
-import {generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
+import {formatWhatsAppTranscript,generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
@@ -147,7 +147,7 @@ export function createWhatsAppWorker(input:Input){
           sessionKey:input.env.MASANAWA_WHATSAPP_SESSION_KEY??'',env:input.env,
           invoke:apiKey=>generateLiveReply({apiKey,model:input.env.MASANAWA_WHATSAPP_LIVE_MODEL??'gemini-3.8-live',
             voice:selectedVoice,system,message:prompt})});
-        actual=generated.transcript;
+        actual=formatWhatsAppTranscript(generated.transcript);
         audio=encryptLinkedSecret(generated.pcm.toString('base64'),input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
       }catch(error){await deferLiveReply(source,error);return false;}
     }
