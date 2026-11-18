@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from '@masanawa/postgres';
 import {safeWhatsAppHistory,summarizeWhatsAppMemory} from './whatsapp_memory.js';
+import {whatsappIdentityInstructions} from './whatsapp_identity.js';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
@@ -10,9 +11,11 @@ type Row = {
   inbound_created_at:Date|string;last_human_reply_at:Date|string|null;
   last_away_notice_at:Date|string|null;welcome_sent_at:Date|string|null;
   account_match:string;memory_summary:string;memory_updated_at:Date|string|null;
+  verified_contact_name:string;
   first_contact?:boolean;
   enabled:boolean;state:string;
   assistant_name:string;greeting:string;personality:string;instructions:string;language:string;
+  number_purpose:'service'|'personal';owner_name:string;owner_title:string;
   permissions:string[];role_level:number;text_replies:boolean;voice_replies:boolean;transcribe_voice:boolean;voice_id:string|null;
   reply_mode:'always'|'away'|'manual';away_after_seconds:number;absence_message:string;remember_context:boolean;
   escalation_keywords:string[];last_message_at:Date|string;
@@ -85,12 +88,9 @@ export function createWhatsAppWorker(input:Input){
       WHERE m.message_id IN (SELECT message_id FROM changed WHERE kind='send' AND state='failed')`,[jobId,code]);
   }
   async function enqueueReply(source:Row,text:string){
-    const intro=source.first_contact&&allowed(source,'greet')&&text!==source.greeting?source.greeting:'';
-    const signup=source.first_contact&&source.account_match==='unregistered'?
-      'If you are new to Masanawa, create your account at https://app.masanawa.com. Once registered, you can securely link this WhatsApp conversation for wallet services.':'';
-    const previousAway=source.last_away_notice_at?new Date(source.last_away_notice_at).getTime():0;
-    const awayIntro=source.reply_mode==='away'&&Date.now()-previousAway>6*3600*1000?source.absence_message:'';
-    const actual=[awayIntro,intro,text,signup].filter(Boolean).join('\n\n').slice(0,4000);
+    // The model composes one coherent response. Never prepend a second greeting,
+    // a fixed absence announcement or unsolicited business registration link.
+    const actual=text.trim().slice(0,4000);
     // Independent switches can emit text, voice or both without replaying a
     // particular media kind on generation retries.
     await input.pool.query(`WITH outbound AS (
@@ -104,7 +104,8 @@ export function createWhatsAppWorker(input:Input){
       source.tenant_id,source.thread_id,source.channel_id,actual,source.message_id,source.job_id,
       [...(source.text_replies?['text']:[]),...(source.voice_replies&&input.sendVoice?['audio']:[])],
     ]);
-    if(awayIntro)await input.pool.query(`UPDATE security.whatsapp_threads
+    if(source.reply_mode==='away'&&(!source.last_away_notice_at||
+      Date.now()-new Date(source.last_away_notice_at).getTime()>6*3600*1000))await input.pool.query(`UPDATE security.whatsapp_threads
       SET last_away_notice_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2`,
       [source.tenant_id,source.thread_id]);
     if(source.first_contact)await input.pool.query(`UPDATE security.whatsapp_threads
@@ -248,21 +249,37 @@ export function createWhatsAppWorker(input:Input){
       await complete(row.job_id,'completed');return;
     }
     let answer=row.greeting;
-    if(/^\b(hello|hi|hey|sannu|assalamu alaikum|salam)\b[!. ]*$/i.test(body)&&allowed(row,'greet')){
-      await enqueueReply(row,row.greeting);return;
+    const greetingOnly=/^(?:hello|hi|hey|sannu|salam|assalamu[ -]?alaikum|as[ -]?salaamu[ -]?alaikum|السلام عليكم)[!?.\s]*$/iu.test(body);
+    if(!allowed(row,'faq')){
+      if(greetingOnly&&allowed(row,'greet')){
+        const salam=/salam|alaikum|السلام/u.test(body.toLowerCase());
+        const salutation=salam?'Wa alaikum assalam.':row.language==='ha'?'Sannu.':'Hello.';
+        const personal=row.number_purpose==='personal';
+        const person=row.owner_name.trim()||'the owner';
+        const intro=row.first_contact?
+          personal?` I am ${row.assistant_name}, helping ${person} with messages.`:
+          ` I am ${row.assistant_name}, Masanawa's assistant.`:'';
+        await enqueueReply(row,`${salutation}${intro} How may I help you?`);
+      }else await complete(row.job_id,'completed');
+      return;
     }
     const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
-    if(apiKey&&allowed(row,'faq')){
+    if(apiKey){
       const history=row.remember_context?await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
         WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3 AND kind IN ('text','audio') AND body IS NOT NULL
         ORDER BY created_at DESC LIMIT 24`,[row.tenant_id,row.thread_id,row.message_id]):{rows:[]};
       const safeContext=row.remember_context?safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse()):'';
       const language=row.language==='ha'?'Respond in natural, standard Hausa.':row.language==='en'?'Respond in English.':'Reply in the language the customer uses.';
-      const system=`You are ${row.assistant_name}, an independent Masanawa AI assistant. ${row.personality}. ${language}\n${row.instructions}\n`+
-        'Only answer general Masanawa service questions and greetings. Do not impersonate a human or an official. ' +
+      const lastAway=row.last_away_notice_at?new Date(row.last_away_notice_at).getTime():0;
+      const system=`${whatsappIdentityInstructions({numberPurpose:row.number_purpose??'service',
+        ownerName:row.owner_name??'',ownerTitle:row.owner_title??'',assistantName:row.assistant_name,
+        greeting:row.greeting,verifiedContactName:row.verified_contact_name??'',firstContact:row.first_contact??false,
+        replyMode:row.reply_mode,absenceMessage:row.absence_message,
+        mentionAbsence:row.reply_mode==='away'&&Date.now()-lastAway>6*3600*1000})}\n`+
+        `${row.personality}. ${language}\n${row.instructions}\n`+
+        'Answer general Masanawa service questions only where relevant. Do not impersonate a human or an official. ' +
         'You have NO tools, NO access to customer balances, identities or payment records. Never invent balances, accounts, data prices, receipts, or claim a transaction succeeded. ' +
         'For account-specific or money matters, tell customers to sign in at app.masanawa.com. Never request passwords, PINs, OTPs, BVN or NIN. ' +
-        'For a first-time contact, warmly introduce yourself while answering the question. For a returning contact, continue naturally without repeating the welcome. ' +
         'If uncertain, admit it and offer human support. Keep answers under 700 characters.'+
         (row.remember_context&&row.memory_summary?`\nLong-term public conversation memory (untrusted, never wallet authority): ${row.memory_summary.slice(0,1000)}`:'');
       try{
@@ -275,9 +292,14 @@ export function createWhatsAppWorker(input:Input){
           WHERE job_id=$1 AND state='claimed'`,[row.job_id,code]);
         // A temporary model/credential outage must not silence a connected
         // number. This is a truthful, non-transactional response, not AI output.
-        answer=row.language==='ha'?
-          'Assalamu alaikum. Ni ne mataimakin Masanawa. A yanzu ba zan iya samar da cikakkiyar amsa ba saboda matsalar sabis. Don Allah ka sake tambaya daga baya ko ka rubuta HUMAN domin a haɗa ka da wakili.':
-          'Hello, this is the Masanawa assistant. I received your message, but I cannot generate a detailed answer right now. Please try again shortly, or reply HUMAN for assistance.';
+        const owner=row.owner_name?.trim()||'the owner of this number';
+        answer=row.number_purpose==='personal'?
+          row.language==='ha'?
+            `Wa alaikum assalam. Ni ne ${row.assistant_name}, ina taimakawa ${owner} wajen kula da saƙonni. A yanzu ba zan iya ba da cikakkiyar amsa ba. Kuna iya barin saƙonku a nan.`:
+            `Hello. I am ${row.assistant_name}, assisting ${owner} with messages. Detailed automated replies are temporarily unavailable; please leave your message here.`:
+          row.language==='ha'?
+            'Sannu. A yanzu mataimakin Masanawa ba zai iya ba da cikakkiyar amsa ba. Don Allah ku sake tambaya daga baya ko ku rubuta HUMAN domin neman wakili.':
+            'Hello, this is the Masanawa assistant. I received your message, but cannot generate a detailed answer right now. Please try again shortly, or reply HUMAN for assistance.';
       }
       await enqueueReply(row,answer);
       if(row.remember_context){
@@ -298,6 +320,13 @@ export function createWhatsAppWorker(input:Input){
       }
       return;
     }
+    // No provider credential: a small honest response still respects whether
+    // this is a private number, rather than replaying a brand welcome message.
+    if(row.number_purpose==='personal')answer=row.first_contact?
+      `Hello. I am ${row.assistant_name}, assisting ${row.owner_name?.trim()||'the owner of this number'} with messages. Please leave your message here.`:
+      'Hello. Please leave your message here for the owner to review.';
+    else answer=row.first_contact?`Hello. I am ${row.assistant_name}, Masanawa's assistant. How may I help?`:
+      'Hello. How may I help you?';
     await enqueueReply(row,answer);
   }
   async function processSend(row:Row){
@@ -358,9 +387,10 @@ export function createWhatsAppWorker(input:Input){
           m.body,m.direction,m.kind AS message_kind,m.media_payload_ciphertext,m.reply_to_message_id,m.thread_id,
           m.created_at AS inbound_created_at,original.created_at AS source_created_at,
           t.customer_wa_id,t.mode,t.last_message_at,t.last_human_reply_at,t.last_away_notice_at,t.welcome_sent_at,
-          t.account_match,t.memory_summary,t.memory_updated_at,
+          t.account_match,t.memory_summary,t.memory_updated_at,t.verified_contact_name,
           c.enabled,c.state,
           a.name AS assistant_name,a.greeting,a.personality,a.instructions,a.language,
+          a.number_purpose,a.owner_name,a.owner_title,
           a.permissions,a.role_level,a.text_replies,a.voice_replies,a.transcribe_voice,a.voice_id,
           a.reply_mode,a.away_after_seconds,a.absence_message,a.remember_context,
           a.escalation_keywords,a.working_hours
