@@ -16,7 +16,11 @@ import android.os.Bundle
 import android.content.Context
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.SystemClock
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -34,15 +38,17 @@ import android.net.http.SslError
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
@@ -61,6 +67,13 @@ class ShellActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var failureView: View
     private lateinit var failureText: TextView
+    private lateinit var loadingBar: ProgressBar
+    private var firstPageVisible = false
+    private var keyboardVisible = false
+    private var safeTopDp = 0
+    private var safeBottomDp = 0
+    private var safeLeftDp = 0
+    private var safeRightDp = 0
     private var fileCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var pendingMediaRequest: PermissionRequest? = null
     private var lastTrustedUrl = WebOriginPolicy.HOME
@@ -148,17 +161,41 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val launchStarted = SystemClock.elapsedRealtime()
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
-        // Android 15/16 enforce edge-to-edge. Reserve system-bar/keyboard space
-        // for the web viewport instead of letting the chat composer sit beneath it.
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // The WebView must cover the entire window. It forwards the system-bar
+        // safe areas to CSS; padding its parent creates the floating white
+        // strips and can double-count the keyboard on newer WebView releases.
+        enableEdgeToEdge()
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = true
+        splash.setKeepOnScreenCondition {
+            !firstPageVisible && SystemClock.elapsedRealtime() - launchStarted < 1_800
+        }
 
-        container = FrameLayout(this)
-        ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+        container = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
+        ViewCompat.setOnApplyWindowInsetsListener(container) { _, insets ->
+            // Observe the IME only; never resize or pad the WebView here.
+            // Modern WebView owns visual-viewport resizing for the keyboard.
+            // Pass a CSS fallback for older WebView versions that expose zero
+            // env(safe-area-inset-*) values despite edge-to-edge hosting.
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            val density = resources.displayMetrics.density
+            val top = (bars.top / density + .5f).toInt()
+            val bottom = (bars.bottom / density + .5f).toInt()
+            val left = (bars.left / density + .5f).toInt()
+            val right = (bars.right / density + .5f).toInt()
+            val next = insets.isVisible(WindowInsetsCompat.Type.ime())
+            if (next != keyboardVisible || top != safeTopDp || bottom != safeBottomDp ||
+                left != safeLeftDp || right != safeRightDp) {
+                keyboardVisible = next
+                safeTopDp = top
+                safeBottomDp = bottom
+                safeLeftDp = left
+                safeRightDp = right
+                syncKeyboardClass()
+            }
             insets
         }
         downloads = ShellDownloads(this, { name, mime ->
@@ -176,15 +213,36 @@ class ShellActivity : ComponentActivity() {
         }?.forEach { it.delete() }
         webView = newWebView()
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
+        setupLoadingBar()
         setupFailureView()
         setContentView(container)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView.canGoBack()) webView.goBack() else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+                if (!WebOriginPolicy.isTrusted(webView.url)) {
+                    fallbackBack()
+                    return
                 }
+                // Close web dialogs, sheets and the current chat before
+                // navigating WebView history or exiting the Activity.
+                webView.evaluateJavascript(
+                    "(function(){try{return window.__masanawaHandleAndroidBack?.()||'history'}catch(_){return 'history'}})()"
+                ) { result ->
+                    when (ShellBackResult.fromJavaScript(result)) {
+                        ShellBackResult.HANDLED -> Unit
+                        ShellBackResult.EXIT -> exitShell()
+                        ShellBackResult.HISTORY -> fallbackBack()
+                    }
+                }
+            }
+
+            private fun fallbackBack() {
+                if (webView.canGoBack()) webView.goBack() else exitShell()
+            }
+
+            private fun exitShell() {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
             }
         })
 
@@ -242,6 +300,7 @@ class ShellActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun newWebView(): WebView = WebView(this).apply {
+        setBackgroundColor(Color.WHITE)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.allowFileAccess = false
@@ -291,7 +350,15 @@ class ShellActivity : ComponentActivity() {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                if (WebOriginPolicy.isTrusted(url)) dispatchSharedText()
+                firstPageVisible = true
+                if (WebOriginPolicy.isTrusted(url)) {
+                    syncKeyboardClass()
+                    dispatchSharedText()
+                }
+            }
+
+            override fun onPageCommitVisible(view: WebView, url: String) {
+                if (WebOriginPolicy.isTrusted(url)) firstPageVisible = true
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -320,6 +387,14 @@ class ShellActivity : ComponentActivity() {
         }
 
         webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView, newProgress: Int) {
+                if (::loadingBar.isInitialized) {
+                    loadingBar.progress = newProgress
+                    loadingBar.visibility =
+                        if (newProgress in 1..94 && failureView.visibility != View.VISIBLE)
+                            View.VISIBLE else View.GONE
+                }
+            }
             override fun onPermissionRequest(request: PermissionRequest) {
                 runOnUiThread { authorizeMedia(request) }
             }
@@ -448,6 +523,17 @@ class ShellActivity : ComponentActivity() {
                     putExtra(Intent.EXTRA_TEXT, value)
                 }, "Share from Masanawa"))
             }
+            "haptic" -> {
+                val effect = when (payload.optString("kind")) {
+                    "selection" -> HapticFeedbackConstants.CLOCK_TICK
+                    "confirm" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                        HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
+                    "reject" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                        HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
+                    else -> null
+                }
+                if (effect != null) webView.performHapticFeedback(effect)
+            }
         }
     }
 
@@ -502,9 +588,17 @@ class ShellActivity : ComponentActivity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(48, 48, 48, 48)
+            setPadding(dp(24), dp(24), dp(24), dp(24))
             setBackgroundColor(Color.WHITE)
             visibility = View.GONE
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(maxOf(dp(24), bars.left), maxOf(dp(24), bars.top),
+                maxOf(dp(24), bars.right), maxOf(dp(24), bars.bottom))
+            // The WebView is a sibling and must still receive the original
+            // insets. Never consume them on this parent or overlay.
+            insets
         }
         val title = TextView(this).apply {
             text = getString(ng.unigeria.unigeria.R.string.shell_connection_title)
@@ -536,8 +630,55 @@ class ShellActivity : ComponentActivity() {
     }
 
     private fun showFailure(security: Boolean) {
+        firstPageVisible = true
+        if (::loadingBar.isInitialized) loadingBar.visibility = View.GONE
         failureText.setText(if (security) ng.unigeria.unigeria.R.string.shell_security_description
+            else if (!hasInternetNetwork()) ng.unigeria.unigeria.R.string.shell_offline_description
             else ng.unigeria.unigeria.R.string.shell_connection_description)
         failureView.visibility = View.VISIBLE
+        ViewCompat.requestApplyInsets(failureView)
     }
+
+    private fun setupLoadingBar() {
+        loadingBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            isIndeterminate = false
+            progressTintList = ColorStateList.valueOf(Color.rgb(37, 211, 102))
+            progressBackgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            visibility = View.GONE
+        }
+        container.addView(loadingBar, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(3), Gravity.TOP))
+        ViewCompat.setOnApplyWindowInsetsListener(loadingBar) { view, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()).top
+            (view.layoutParams as FrameLayout.LayoutParams).let { params ->
+                if (params.topMargin != top) {
+                    params.topMargin = top
+                    view.layoutParams = params
+                }
+            }
+            insets
+        }
+    }
+
+    private fun hasInternetNetwork(): Boolean {
+        val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = manager.activeNetwork ?: return false
+        return manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }
+
+    private fun syncKeyboardClass() {
+        if (::webView.isInitialized && WebOriginPolicy.isTrusted(webView.url)) {
+            webView.evaluateJavascript(
+                "(function(){const root=document.documentElement;" +
+                    "root.classList.toggle('masanawa-native-keyboard-open',$keyboardVisible);" +
+                    "root.style.setProperty('--masanawa-native-safe-top','${safeTopDp}px');" +
+                    "root.style.setProperty('--masanawa-native-safe-bottom','${safeBottomDp}px');" +
+                    "root.style.setProperty('--masanawa-native-safe-left','${safeLeftDp}px');" +
+                    "root.style.setProperty('--masanawa-native-safe-right','${safeRightDp}px');" +
+                    "})()", null)
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
 }
