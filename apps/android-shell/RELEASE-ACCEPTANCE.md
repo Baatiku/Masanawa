@@ -2,7 +2,29 @@
 
 This is a signed *candidate* workflow, not permission to replace the Flutter
 application or a claim of production provider/payment readiness. Android
-target SDK is 36 (Google Play's current update minimum).
+target SDK is 36.
+
+## Firebase Android identity (owner-supplied configuration)
+
+The supplied `google-services.json` is checked into
+`apps/android-shell/app/google-services.json`; it registers **`com.masanawa.app`**
+in Firebase project **`masanawa-mobile`**. The Kotlin shell's application ID
+now exactly matches that registration in both debug and release, and Google's
+Services Gradle plugin generates the Firebase resources directly from this file.
+The previous `FIREBASE_*` build-secret fallback is removed.
+
+**Important:** `com.masanawa.app` is a separate Android application identity
+from the prior `ng.unigeria.unigeria` Flutter app. They can coexist on a device,
+but the Kotlin package is **not** an in-place Play Store update to Flutter.
+The debug and signed Kotlin variants now have the **same package ID**:
+to install a differently signed variant, remove the earlier Kotlin build
+first, not the separate Flutter app. Before public distribution, the owner
+must confirm that `com.masanawa.app` is the intended Google Play listing.
+
+The JSON contains Firebase **client configuration**, not the private server
+credential required to send FCM messages. Backend sending credentials and
+test notifications must be verified separately; a compiled APK alone does not
+prove that cloud push delivery has been configured.
 
 ## Managed GitHub Actions secrets (never add to source or a chat)
 
@@ -12,15 +34,14 @@ target SDK is 36 (Google Play's current update minimum).
   `SHELL_RELEASE_KEY_ALIAS`: existing authorized upload-key parameters.
 - `SHELL_EXPECTED_UPLOAD_SHA256`: verified SHA-256 certificate fingerprint of
   that upload key. The workflow fails if the keystore differs.
-- `FIREBASE_API_KEY`, `FIREBASE_APP_ID`,
-  `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_PROJECT_ID`: Android Firebase app
-  config to be provided on the owner's local machine/CI. The backend FCM
-  service account is a **separate** managed secret.
+- The Android client configuration is the tracked `google-services.json`;
+  no old `FIREBASE_*` overrides are accepted. The backend FCM service account
+  is a **separate** managed secret.
 
 From GitHub Actions run **Kotlin Android shell signed release candidate** with a
 new `version_code` above the current Play version. Its AAB is an artifact for
-private review only. If the Play package uses the original Flutter signing
-lineage, confirm that the new bundle is updatable on an internal-test device.
+private review only. The new package identity is not an upgrade of the
+original Flutter package.
 
 ## Digital Asset Links
 
@@ -33,7 +54,7 @@ Release > Setup > App signing. After owner verification, host precisely:
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "ng.unigeria.unigeria",
+      "package_name": "com.masanawa.app",
       "sha256_cert_fingerprints": ["OWNER_PLAY_APP_SIGNING_SHA256"]
     }
   }
@@ -42,10 +63,10 @@ Release > Setup > App signing. After owner verification, host precisely:
 
 at `https://app.masanawa.com/.well-known/assetlinks.json` with JSON content
 type, no redirect or login. Replace the template token with the actual
-fingerprint; **never deploy the token as a real association**. The side-by-side
-debug package uses `ng.unigeria.unigeria.shelltest`, so it does not match this
-release association. Check verification with `adb shell pm get-app-links
-ng.unigeria.unigeria` on a device running the actual signed release.
+fingerprint; **never deploy the token as a real association**. Debug builds
+are signed with a different key from release and therefore cannot verify
+the release certificate association. Check verification with
+`adb shell pm get-app-links com.masanawa.app` on the signed release.
 
 ## Production acceptance on a real handset
 
@@ -58,7 +79,8 @@ native `container.setPadding(...)` or consume the FrameLayout window insets:
 that recreates the detached/floating bottom tabs and double keyboard offsets.
 
 The test APK from the **Kotlin Android Shell** workflow installs alongside
-Flutter (`.shelltest`) and is the build to use for these checks. These are
+Flutter under the new `com.masanawa.app` identity and is the build to use for
+these checks. These are
 **physical-device verification tasks**, not claims of completed lab testing:
 
 | Device/state | Acceptance condition |
@@ -89,7 +111,7 @@ The native APK and the Cloudflare-hosted web code must both contain the
 complementary safe-area and Back-handler changes. Publishing only one side
 leaves older WebViews with the browser-history fallback. Keep the previous
 signed Flutter application untouched until an authorized in-place upgrade is
-proven on a device; never publish a debug `.shelltest` APK to the Play Store.
+proven on a device; never publish a debug APK to the Play Store.
 
 1. Keep Flutter installed, test debug shell side by side. Test clean install,
    returning account, explicit logout, offline recovery, uploads/downloads,
