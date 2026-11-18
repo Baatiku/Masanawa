@@ -64,6 +64,9 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
   await pool.query(commentsMigration); // forward-only and repeat-safe on historic rows
   const newsMigration=readFileSync(new URL("../../../../../packages/feed/migrations/0027_publisher_news.sql",import.meta.url),"utf8");
   await pool.query(newsMigration);
+  // Keep the isolated integration schema aligned with the rolling Nigeria
+  // locality/admission schema used by the real news repository.
+  await pool.query(readFileSync(new URL("../../../../../packages/feed/migrations/0029_nigeria_news_intelligence.sql",import.meta.url),"utf8"));
   repo=new PgHomeFeedRepository(pool);
  });
  afterAll(async()=>{await isolated?.close();});
@@ -81,9 +84,9 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
     RETURNING id`,[t]);
   const postId=String(created.rows[0]?.id);
   await pool.query(`INSERT INTO feed.news_articles
-   (tenant_id,publisher_id,post_id,source_url,headline,summary,original_published_at,content_hash)
+    (tenant_id,publisher_id,post_id,source_url,headline,summary,original_published_at,content_hash,states)
    VALUES($1,'bbc',$2,'https://www.bbc.com/news/articles/test-news-001',
-    'Headline','A short source summary',clock_timestamp(),'abc123')`,[t,postId]);
+     'Headline','A short source summary',clock_timestamp(),'abc123',ARRAY['osun']::text[])`,[t,postId]);
   const service=new FeedService(repo,async()=>true);
   const result=await service.newsList(t,null);
   expect(result.items).toHaveLength(1);
@@ -545,3 +548,4 @@ integration("J06 real PostgreSQL18 Feed tenant/idempotency/visibility",()=>{
  });
 
 });
+

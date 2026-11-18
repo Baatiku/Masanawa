@@ -3,7 +3,7 @@ type Actor={kind:"fan"|"staff"|"masana";tenantId:string;id:string;permissions?:r
 type Filters={source?:'x'|'facebook';from?:string;to?:string};
 type FeedPort={
  list(t:string,v:string|null,m:"for_you"|"following"|"mine",c?:string,authorMasanaId?:string,search?:string,filters?:Filters):Promise<unknown>;
- newsList?(t:string,v:string|null,c?:string,publisher?:string,search?:string):Promise<unknown>;
+ newsList?(t:string,v:string|null,c?:string,publisher?:string,search?:string,state?:string):Promise<unknown>;
  newsPublishers?(t:string):Promise<unknown>;
  detail(t:string,v:string|null,id:string):Promise<unknown>;
  publish(a:Actor,p:{authorMasanaId:string;kind:"text"|"image"|"audio";body:string;media?:string[];transcript?:string|null;idempotencyKey:string}):Promise<unknown>;
@@ -41,16 +41,17 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
  const member=(actor:Actor|null)=>{if(!actor)throw Object.assign(new Error("authentication_required"),{status:401,code:"authentication_required"});return actor};
  app.get('/v1/news',async(req,rep)=>run(req,rep,async({tenant,viewer})=>{
   const q=object(req.query),params=new URL(req.raw.url??'/v1/news','http://local').searchParams;
-  if(Object.keys(q).some(k=>!['cursor','publisher','search'].includes(k))||
-    ['cursor','publisher','search'].some(k=>params.getAll(k).length>1))
+  if(Object.keys(q).some(k=>!['cursor','publisher','search','state'].includes(k))||
+    ['cursor','publisher','search','state'].some(k=>params.getAll(k).length>1))
     return rep.code(422).send({code:'invalid_news_query'});
-  const cursor=q.cursor,publisher=q.publisher,search=q.search;
+  const cursor=q.cursor,publisher=q.publisher,search=q.search,state=q.state;
   if(cursor!==undefined&&(typeof cursor!=='string'||cursor.length>700||!cursor)||
     publisher!==undefined&&(typeof publisher!=='string'||!/^[a-z][a-z0-9-]{1,39}$/.test(publisher))||
-    search!==undefined&&(typeof search!=='string'||search!==search.trim()||search.length<2||Buffer.byteLength(search)>80))
+    search!==undefined&&(typeof search!=='string'||search!==search.trim()||search.length<2||Buffer.byteLength(search)>80)||
+    state!==undefined&&(typeof state!=='string'||!(/^[a-z-]{3,20}$/.test(state))))
     return rep.code(422).send({code:'invalid_news_query'});
   if(!o.service.newsList)return rep.code(503).send({code:'news_unavailable'});
-  return o.service.newsList(tenant,viewer,cursor as string|undefined,publisher as string|undefined,search as string|undefined);
+  return o.service.newsList(tenant,viewer,cursor as string|undefined,publisher as string|undefined,search as string|undefined,state as string|undefined);
  }));
  app.get('/v1/news/publishers',async(req,rep)=>run(req,rep,async({tenant})=>{
   if(Object.keys(object(req.query)).length)return rep.code(422).send({code:'invalid_news_query'});
@@ -171,3 +172,4 @@ export async function registerHomeFeedRoutes(app:FastifyInstance,o:FeedRoutesOpt
     b.state as 'hidden'|'visible',str(b.reason),b.revision as number);
  }));
 }
+

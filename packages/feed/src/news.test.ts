@@ -16,17 +16,21 @@ describe('publisher news scope',()=>{
   const page=await service.newsList('platform','alice',undefined,'bbc','Africa');
   expect(page.items).toHaveLength(20);
   expect(page.nextCursor).toBeTruthy();
-  expect(listNews).toHaveBeenCalledWith('platform','alice',null,21,'bbc','Africa');
+  expect(listNews).toHaveBeenCalledWith('platform','alice',null,21,'bbc','Africa',undefined);
   await expect(service.newsList('platform','bob',page.nextCursor!,'bbc','Africa'))
    .rejects.toMatchObject({code:'invalid_cursor'});
   await expect(service.newsList('platform','alice',page.nextCursor!,'guardian','Africa'))
    .rejects.toMatchObject({code:'invalid_cursor'});
   await expect(service.newsList('platform','alice',page.nextCursor!,'bbc','Other'))
    .rejects.toMatchObject({code:'invalid_cursor'});
+  await expect(service.newsList('platform','alice',page.nextCursor!,'bbc','Africa','osun'))
+   .rejects.toMatchObject({code:'invalid_cursor'});
  });
  it('rejects arbitrary publisher keys and oversized search terms',async()=>{
   const service=new FeedService({} as Repository,async()=>true);
   await expect(service.newsList('platform',null,undefined,'../../admin')).rejects.toMatchObject({code:'invalid_publisher'});
   await expect(service.newsList('platform',null,undefined,undefined,'a')).rejects.toMatchObject({code:'invalid_search'});
+  await expect(service.newsList('platform',null,undefined,undefined,undefined,'not-a-state')).rejects.toMatchObject({code:'invalid_news_state'});
  });
 });
+
