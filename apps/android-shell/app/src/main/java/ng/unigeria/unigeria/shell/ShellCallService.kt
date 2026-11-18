@@ -101,6 +101,7 @@ class ShellCallService : Service() {
     }
 
     private suspend fun registerConnectedCall() {
+        var registered = false
         try {
             val manager = CallsManager(this)
             manager.registerAppWithTelecom(CallsManager.CAPABILITY_BASELINE)
@@ -116,23 +117,27 @@ class ShellCallService : Service() {
                 onAnswer = { throw UnsupportedOperationException("No incoming media session") },
                 onDisconnect = { endCall(notifyWeb = true) },
                 onSetActive = { /* Already connected according to the web transport. */ },
-                onSetInactive = { throw UnsupportedOperationException("Hold is not implemented") },
+                onSetInactive = {
+                    // A cellular interruption must not leave a chargeable web
+                    // microphone session running when the OS takes audio focus.
+                    endCall(notifyWeb = true)
+                    throw UnsupportedOperationException("Hold is not implemented")
+                },
             ) {
                 callControl = this
+                registered = true
                 showForeground(true) // Must be posted promptly once Telecom accepts the call.
-                setActive()
                 launch {
+                    setActive()
                     isMuted.collect { muted -> sendControl(EVENT_MUTE, muted) }
-                }
-                try {
-                    kotlinx.coroutines.awaitCancellation()
-                } finally {
-                    callControl = null
                 }
             }
         } catch (_: Exception) {
             // A rejected Telecom registration does not invent an active
             // platform call. The microphone notice remains until web ends.
+        } finally {
+            callControl = null
+            if (registered && !stopping) endCall(notifyWeb = true)
         }
     }
 
