@@ -27,6 +27,8 @@
 6. AI and human outbound replies pass through one durable outbox. Unknown send outcomes are marked `uncertain` and require reconciliation; they are not blindly retransmitted.
 7. If the account logs out, the system erases invalid Signal keys, records `needs_pairing`, and requires admin Reconnect + fresh QR. Disconnect erases encrypted keys but preserves audit/history.
 
+**Reconnect and restart recovery:** Disabling an assistant or the phone's automated replies does not delete its encrypted linked-device Signal session. The Worker drains queued credential writes on a normal shutdown. If a reply becomes due while a socket is temporarily `degraded`, its job stays pending and retries for a bounded 15-minute recovery window. If an outgoing send was rejected *before* WhatsApp dispatch, it can retry; if the external send was attempted but its outcome is unknown, it is held as `uncertain` and never blindly replayed. The Usage & delivery screen exposes pending, overdue, failed and uncertain job counts, plus the latest safe diagnostic code. A true linked-device logout or explicit administrator Disconnect requires new QR pairing.
+
 Worker must be a single bounded managed service with leased sockets, not one browser process per phone. On the owner’s two-GiB pilot, memory/capacity qualification remains necessary before unbounded concurrent numbers or background jobs are started. `maxSockets` defaults to four in the bounded manager; larger requirements need measured hosting capacity.
 
 ## 3. Roles and security
@@ -52,6 +54,7 @@ The per-number roles are templates; *permissions are separate backend-enforced s
 - Existing Masanawa persona voice enrollment allows authorized speaker sample uploads, audition, consent and provider-reviewed activation. Saving a number's custom `voiceId` requires its matching ready persona enrollment.
 - The text Worker includes a no-tools Gemini FAQ path with a bounded, public-service conversation history, greeting automation, server-defined account/Buy Data routing, and deterministic protection responses. Customer messages are not given to the model as wallet authorities.
 - Eligible incoming audio is stored temporarily as an encrypted Baileys media envelope, downloaded on the active socket and transcribed through Gemini. Text and/or synthesized voice replies use separate idempotent outbox entries. Existing consented custom voice IDs or the configured Masanawa voice feed provider audio, which FFmpeg turns into WhatsApp Ogg/Opus voice notes. Voice uploads and audition use the existing Masanawa persona voice enrollment service. Provider credentials and a compatible account remain required for actual audio delivery.
+- WhatsApp voice synthesis now follows the canonical Masanawa recorded-voice sequence: request Gemini 3 speech through Interactions, fall back to GenerateContent only for a definite 400/404 rejection, validate PCM/WAV output, and encode a push-to-talk Ogg/Opus note. A generation/encoding failure is recorded before any WhatsApp send and may be retried safely. Text output is queued independently, so an unavailable voice provider does not suppress an enabled text reply.
 - Saved reply templates are per number and editable by an authorized admin; a user can invoke an enabled matching template via `/template-name`. No unsolicited bulk scheduler is enabled.
 
 ### Account identity boundary
