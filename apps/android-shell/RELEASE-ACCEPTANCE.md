@@ -30,7 +30,7 @@ prove that cloud push delivery has been configured.
 
 | Item | State |
 | --- | --- |
-| Firebase Android client identity and generated resources | Implemented from owner JSON; debug and release compile checks |
+| Firebase Android client identity and generated resources | Implemented from owner JSON; debug CI passes, signed release awaits owner key |
 | Android 13+ runtime permission | Implemented with explicit user opt-in; automatic rebind never re-prompts |
 | Account-scoped token opt-in, revocation, and renewal | Implemented in web Gateway binding; refresh on app resume; verify on phone |
 | Incoming push and separate work/call channels | Implemented; call channel requires valid call ID, as on the server |
