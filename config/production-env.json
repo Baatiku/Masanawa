@@ -1098,67 +1098,32 @@
       "description": "Owner contact URI for standards-based web push."
     },
     {
-      "name": "MASANAWA_WHATSAPP_ADMIN_TOKEN",
-      "owner": "gateway/channels",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Bearer token protecting linked-device WhatsApp QR, status, and reset administration routes."
-    },
-    {
-      "name": "MASANAWA_META_APP_ID",
-      "owner": "ops/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Meta app identifier used only for the opt-in WhatsApp Business Platform Embedded Signup flow."
-    },
-    {
-      "name": "MASANAWA_META_APP_SECRET",
-      "owner": "ops/whatsapp",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Meta app secret for server-side Embedded Signup code exchange and webhook signature validation."
-    },
-    {
-      "name": "MASANAWA_META_EMBEDDED_CONFIG_ID",
-      "owner": "ops/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Meta business login configuration ID for authorized WhatsApp Business onboarding."
-    },
-    {
-      "name": "MASANAWA_META_WEBHOOK_VERIFY_TOKEN",
-      "owner": "ops/whatsapp",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Independent webhook GET challenge verification token for the official Meta Cloud API callback."
-    },
-    {
       "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
       "owner": "worker/whatsapp",
       "classification": "public",
       "requiredIn": [],
-      "description": "Optional WhatsApp-specific text inference model, disabled until worker activation."
+      "description": "Optional Gemini inference model for linked-device WhatsApp text and voice-note understanding."
     },
     {
-      "name": "MASANAWA_WHATSAPP_TOKEN_KEY",
-      "owner": "ops/whatsapp",
-      "classification": "secret",
+      "name": "MASANAWA_WHATSAPP_TTS_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
       "requiredIn": [],
-      "description": "32-byte encryption key for per-phone-number official Meta access tokens at rest."
+      "description": "Optional Gemini TTS model used for WhatsApp Ogg/Opus voice replies. Defaults to Masanawa voice service model."
     },
     {
-      "name": "MASANAWA_WHATSAPP_AUTH_DIR",
-      "owner": "gateway/channels",
+      "name": "MASANAWA_WHATSAPP_SESSION_KEY",
+      "owner": "ops/whatsapp-and-worker",
       "classification": "secret",
       "requiredIn": [],
-      "description": "Persistent filesystem directory for the encrypted linked-device WhatsApp authentication state."
+      "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
     },
     {
       "name": "MASANAWA_WHATSAPP_ENABLED",
       "owner": "gateway/channels",
       "classification": "public",
       "requiredIn": [],
-      "description": "Enables the WhatsApp customer channel webhook and delivery adapter."
+      "description": "Opt-in enables the bounded linked-device WhatsApp Worker connector (requires a stable encrypted session key and Worker process)."
     },
     {
       "name": "MASANAWA_WHATSAPP_MODE",

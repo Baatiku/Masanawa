@@ -11,7 +11,10 @@ describe('Railway Docker install inputs',()=>{
     expect(installed).toBeGreaterThan(0);
     expect(docker.indexOf('COPY package.json pnpm-lock.yaml')).toBeLessThan(installed);
     expect(docker).not.toContain('COPY patches');
-    expect(workspace).not.toMatch(/baileys|whatsapp-rust|patchedDependencies/);
+    // The new linked-device connector uses a reviewed direct library install;
+    // it never resurrects the retired local Baileys/Rust source patches.
+    expect(workspace).not.toMatch(/whatsapp-rust|patchedDependencies/);
+    expect(workspace).toContain("'@whiskeysockets/baileys': true");
     expect(gateway).not.toMatch(/baileys|whatsapp-rust|qrcode/);
   });
 });

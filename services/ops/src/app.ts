@@ -1,6 +1,5 @@
 import {registerOwnerMailboxRoutes} from './owner_mailbox_routes.js';
 import { WhatsAppAdminError, type createWhatsAppAdmin } from './whatsapp_admin.js';
-import { WhatsAppWebhookError, type createWhatsAppWebhook } from './whatsapp_webhook.js';
 import type {createOwnerMailbox} from './owner_mailbox.js';
 import type {createDataReconciliation} from './data_reconciliation.js';
 import Fastify from "fastify";
@@ -31,7 +30,6 @@ export interface ReadinessCheck {
 
 export interface OpsAppOptions {
   readonly whatsappAdmin?:ReturnType<typeof createWhatsAppAdmin>;
-  readonly whatsappWebhook?:ReturnType<typeof createWhatsAppWebhook>;
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
@@ -208,6 +206,7 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     const channelQuery=Type.Object({channelId:Type.String({maxLength:50})},{additionalProperties:false});
     const threadQuery=Type.Object({threadId:Type.String({maxLength:50})},{additionalProperties:false});
     app.get('/v1/admin/whatsapp',async(q,r)=>handle(r,()=>wa.list(q.headers.authorization)));
+    app.get('/v1/admin/whatsapp/qr',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.qr(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/config',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.config(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/threads',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.threads(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/messages',{schema:{querystring:threadQuery}},async(q,r)=>handle(r,()=>wa.messages(q.headers.authorization,q.query.threadId)));
@@ -215,32 +214,12 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     app.get('/v1/admin/whatsapp/templates',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.templates(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/audit',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.auditEvents(q.headers.authorization,q.query.channelId)));
     app.post('/v1/admin/whatsapp/onboarding/start',async(q,r)=>handle(r,()=>wa.start(q.headers.authorization)));
-    app.post('/v1/admin/whatsapp/onboarding/finish',{schema:{body:Type.Object({
-      state:Type.String({maxLength:150}),code:Type.String({maxLength:2048}),wabaId:Type.String({maxLength:32}),phoneNumberId:Type.String({maxLength:32}),
-    },{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.finish(q.headers.authorization,q.body)));
     app.put('/v1/admin/whatsapp/config',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),expectedRevision:Type.Integer({minimum:1}),config:Type.Unknown()},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.save(q.headers.authorization,q.body.channelId,q.body.expectedRevision,q.body.config)));
-    app.post('/v1/admin/whatsapp/channel',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),expectedRevision:Type.Integer({minimum:1}),action:Type.Union([Type.Literal('enable'),Type.Literal('disable'),Type.Literal('disconnect')])},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.change(q.headers.authorization,q.body.channelId,q.body.action,q.body.expectedRevision)));
+    app.post('/v1/admin/whatsapp/channel',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),expectedRevision:Type.Integer({minimum:1}),action:Type.Union([Type.Literal('enable'),Type.Literal('disable'),Type.Literal('disconnect'),Type.Literal('reconnect')])},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.change(q.headers.authorization,q.body.channelId,q.body.action,q.body.expectedRevision)));
+    app.post('/v1/admin/whatsapp/template',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),name:Type.String({minLength:1,maxLength:100}),body:Type.String({minLength:1,maxLength:4000}),language:Type.Union([Type.Literal('auto'),Type.Literal('en'),Type.Literal('ha')]),enabled:Type.Boolean()},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.saveTemplate(q.headers.authorization,q.body.channelId,q.body.name,q.body.body,q.body.language,q.body.enabled)));
     app.post('/v1/admin/whatsapp/handoff',{schema:{body:Type.Object({threadId:Type.String({maxLength:50}),mode:Type.Union([Type.Literal('ai'),Type.Literal('human'),Type.Literal('closed')])},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.handoff(q.headers.authorization,q.body.threadId,q.body.mode)));
     app.post('/v1/admin/whatsapp/send',{schema:{body:Type.Object({threadId:Type.String({maxLength:50}),message:Type.String({minLength:1,maxLength:4000}),requestId:Type.String({maxLength:50})},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.send(q.headers.authorization,q.body.threadId,q.body.message,q.body.requestId)));
     app.post('/v1/admin/whatsapp/test',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),action:Type.String({maxLength:80})},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.test(q.headers.authorization,q.body.channelId,q.body.action as import('./whatsapp_policy.js').WhatsAppPermission)));
-  }
-  if(options.whatsappWebhook){
-    // A scoped raw-body parser preserves exact bytes for X-Hub-Signature-256.
-    // All other admin JSON routes retain Fastify's normal validated parser.
-    void app.register(async scoped=>{
-      scoped.removeContentTypeParser('application/json');
-      scoped.addContentTypeParser('application/json',{parseAs:'buffer'},(_req,body,done)=>done(null,body));
-      scoped.get('/webhooks/whatsapp',async(q,r)=>{
-        const params=q.query as Record<string,string|undefined>;
-        const challenge=options.whatsappWebhook!.verify({mode:params['hub.mode'],token:params['hub.verify_token'],challenge:params['hub.challenge']});
-        if(challenge===null)return r.code(403).send({error:'webhook_verification_failed'});
-        r.type('text/plain; charset=utf-8');return challenge;
-      });
-      scoped.post('/webhooks/whatsapp',async(q,r)=>{
-        try{return await options.whatsappWebhook!.ingest(q.headers['x-hub-signature-256'] as string|undefined,q.body as Buffer);}
-        catch(e){r.code(e instanceof WhatsAppWebhookError?e.statusCode:503);return {error:e instanceof WhatsAppWebhookError?e.code:'webhook_unavailable'};}
-      });
-    });
   }
 
   if(options.ownerMailbox)registerOwnerMailboxRoutes(app,options.ownerMailbox);

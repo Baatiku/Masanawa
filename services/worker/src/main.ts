@@ -1,5 +1,6 @@
 import {createNewsFeedPoller} from './jobs/home_feed/news_import.js';
 import {createWhatsAppWorker} from './jobs/whatsapp.js';
+import {createLinkedDeviceManager} from './jobs/whatsapp_linked.js';
 import {workerProductJobs} from './product_jobs.js';
 import {createConfiguredStatusObjectStore} from "@masanawa/providers";
 import {createCreatorMediaCleanup} from "./jobs/creator/media_deletions.js";
@@ -132,12 +133,18 @@ export async function startWorkerService(
   let privacyDeletion: ReturnType<typeof createJobScheduler> | undefined;
   let conversationRecovery: ReturnType<typeof createJobScheduler> | undefined;
   let whatsappDispatch: ReturnType<typeof createJobScheduler> | undefined;
+  let whatsappSockets: ReturnType<typeof createJobScheduler> | undefined;
+  let linkedManager: ReturnType<typeof createLinkedDeviceManager> | undefined;
 
   let app: ManagedNodeServer;
   try {
     if (!database.pool) throw new Error("worker_postgres_pool_required");
-    if(env.MASANAWA_WHATSAPP_TOKEN_KEY?.trim()){
-      const whatsapp=createWhatsAppWorker({pool:database.pool,env});
+    if(env.MASANAWA_WHATSAPP_ENABLED==='true'&&env.MASANAWA_WHATSAPP_MODE==='linked-device'&&env.MASANAWA_WHATSAPP_SESSION_KEY?.trim()){
+      linkedManager=createLinkedDeviceManager({pool:database.pool,sessionKey:env.MASANAWA_WHATSAPP_SESSION_KEY,env});
+      const manager=linkedManager;
+      const whatsapp=createWhatsAppWorker({pool:database.pool,env,send:manager.send,sendVoice:manager.sendVoice,transcribe:manager.transcribe});
+      whatsappSockets=createJobScheduler({runOnce:manager.runOnce,enabled:()=>!drain.isDraining(),intervalMs:5000,
+        onError:()=>process.stderr.write(JSON.stringify({event:'whatsapp.linked.reconnect',reason:'socket_or_database_unavailable'})+'\n')});
       whatsappDispatch=createJobScheduler({runOnce:whatsapp.runOnce,enabled:()=>!drain.isDraining(),intervalMs:5000,
         onError:()=>process.stderr.write(JSON.stringify({event:'whatsapp.dispatch.retry',reason:'database_or_provider_unavailable'})+'\n')});
     }
@@ -342,6 +349,7 @@ export async function startWorkerService(
         schedulerHealth("privacy_deletion", privacyDeletion),
         schedulerHealth("masana_chat_recovery", conversationRecovery),
         schedulerHealth("whatsapp_dispatch", whatsappDispatch),
+        schedulerHealth("whatsapp_linked_sockets", whatsappSockets),
       ],
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
@@ -378,6 +386,8 @@ export async function startWorkerService(
         await privacyDeletion?.stop();
         await conversationRecovery?.stop();
         await whatsappDispatch?.stop();
+        await whatsappSockets?.stop();
+        await linkedManager?.stop();
         await database.close();
       },
       onFatalShutdown: () => {
@@ -396,6 +406,7 @@ export async function startWorkerService(
     privacyDeletion?.start();
     conversationRecovery?.start();
     whatsappDispatch?.start();
+    whatsappSockets?.start();
   } catch (error) {
     await feedPublisher?.stop();
     await creatorMediaCleanup?.stop();
@@ -408,6 +419,8 @@ export async function startWorkerService(
         await privacyDeletion?.stop();
         await conversationRecovery?.stop();
         await whatsappDispatch?.stop();
+        await whatsappSockets?.stop();
+        await linkedManager?.stop();
     await database.close().catch(() => undefined);
     throw error;
   }

@@ -1,5 +1,6 @@
 import {registerBrowserPushRoutes} from './browser_push_routes.js';
 import {registerWhatsAppLinkRoutes,type WhatsAppLinkPorts} from './whatsapp_link.js';
+import {registerWhatsAppDataRoutes} from './whatsapp_data.js';
 import type {createBrowserPushService} from './browser_push.js';
 import {registerCustomerMemoryRoutes} from './customer_memory_routes.js';
 import type {createCustomerMemoryService} from './customer_memory.js';
@@ -99,6 +100,7 @@ export interface ReadinessCheck {
 
 export interface GatewayAppOptions {
   readonly whatsappLinks?:WhatsAppLinkPorts;
+  readonly whatsappData?:WhatsAppLinkPorts & {pool:import('@masanawa/postgres').Pool;catalogue:NgnDataCataloguePorts;purchases:NgnDataPurchaseRoutes};
   readonly browserPush?:ReturnType<typeof createBrowserPushService>;
   readonly customerMemory?:ReturnType<typeof createCustomerMemoryService>;
   readonly messageControls?:ReturnType<typeof createMessageControlService>;
@@ -487,6 +489,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
 
   if(options.directNgnWallet)registerDirectNgnWalletRoutes(app,options.directNgnWallet);
   if(options.whatsappLinks)registerWhatsAppLinkRoutes(app,options.whatsappLinks);
+  if(options.whatsappData)registerWhatsAppDataRoutes(app,options.whatsappData);
   if(options.ngnSendReview)registerNgnSendReviewRoutes(app,options.ngnSendReview);
   if(options.ngnRequests)registerNgnRequestRoutes(app,options.ngnRequests);
   if(options.ngnCalls)registerNgnCallRoutes(app,options.ngnCalls);

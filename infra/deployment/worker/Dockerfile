@@ -1,6 +1,7 @@
 # Canonical Masanawa AI-answer and reconciliation Worker, not the retired @nurain webhook proxy.
 # Build context is the monorepo root, as for the Gateway Dockerfile.
 FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 
 LABEL org.opencontainers.image.source="https://github.com/Baatiku/Masanawa"
 

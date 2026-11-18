@@ -1,6 +1,5 @@
 import {createOwnerMailbox} from './owner_mailbox.js';
 import {createWhatsAppAdmin} from './whatsapp_admin.js';
-import {createWhatsAppWebhook} from './whatsapp_webhook.js';
 import {createDataReconciliation} from './data_reconciliation.js';
 import {FlutterwaveBillsClient,FlutterwaveHttpTransport} from '@masanawa/providers';
 import { pathToFileURL } from "node:url";
@@ -58,7 +57,6 @@ export interface ServiceProcess extends NodeSignalSource {
 
 export interface ServiceDatabaseDependency {
   readonly whatsappAdmin?:ReturnType<typeof createWhatsAppAdmin>;
-  readonly whatsappWebhook?:ReturnType<typeof createWhatsAppWebhook>;
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
@@ -139,7 +137,6 @@ function createDefaultDatabaseDependency(
   const adminDashboard=createOpsAdminDashboardService({sessions:createPostgresPlatformSessionRepository(database.pool),pool:database.pool,grants:parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),dynamicCapabilities:async(tenantId,userId)=>{const caps=(await database.pool.query(`SELECT capabilities FROM security.ops_admin_roles WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows[0]?.capabilities;return Array.isArray(caps)?caps.filter((c:unknown):c is string=>typeof c==='string'&&/^[a-z]+(?:\.[a-z]+)+$/.test(c)):[];}});
   return Object.freeze({
     whatsappAdmin:createWhatsAppAdmin({pool:database.pool,authorize:adminDashboard.authorize,env}),
-    whatsappWebhook:createWhatsAppWebhook({pool:database.pool,appSecret:env.MASANAWA_META_APP_SECRET,verifyToken:env.MASANAWA_META_WEBHOOK_VERIFY_TOKEN}),
     evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     walletAdmin:createWalletAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     personaAdmin:createPersonaAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
@@ -201,7 +198,6 @@ export async function startOpsService(
     app = appFactory({
       ...(options.appOptions ?? {}),
       ...(database.whatsappAdmin?{whatsappAdmin:database.whatsappAdmin}:{}),
-      ...(database.whatsappWebhook?{whatsappWebhook:database.whatsappWebhook}:{}),
       ...(database.voiceAdmin ? {voiceAdmin:database.voiceAdmin}:{}),
       ...(database.evidenceAdmin ? {evidenceAdmin:database.evidenceAdmin}:{}),
       ...(database.walletAdmin ? {walletAdmin:database.walletAdmin}:{}),
