@@ -169,7 +169,7 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
    }
    // Idle sources back off automatically, reducing provider and server work.
    await pool.query(`UPDATE feed.news_publishers SET lease_until=NULL,last_poll_at=clock_timestamp(),
-     next_poll_at=clock_timestamp()+CASE WHEN $3::integer>0 THEN interval '15 minutes' ELSE interval '45 minutes' END,
+     next_poll_at=clock_timestamp()+CASE WHEN $3::integer>0 THEN interval '15 minutes' ELSE interval '20 minutes' END,
      last_error=NULL WHERE tenant_id=$1 AND publisher_id=$2`,[row.tenant_id,row.publisher_id,imported]);
    return {checked:1,imported};
   }catch(_){

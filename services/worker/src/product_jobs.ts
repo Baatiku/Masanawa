@@ -5,7 +5,8 @@ export function workerProductJobs(env: Readonly<Record<string, string | undefine
   const lite = env.MASANAWA_PRODUCT_SCOPE === "masana-lite";
   return Object.freeze({
     privacyAndChatRecovery: true,
-    publisherNews: env.MASANAWA_NEWS_INGEST_ENABLED === "true",
+    publisherNews: Boolean(env.MASANAWA_PLATFORM_TENANT_ID?.trim()) &&
+      (env.MASANAWA_NEWS_INGEST_ENABLED === undefined || env.MASANAWA_NEWS_INGEST_ENABLED === "true"),
     legacyFinanceAndStatus: !lite,
   });
 }
