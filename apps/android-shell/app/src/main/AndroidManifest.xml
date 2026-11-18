@@ -22,6 +22,12 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/ShellSplashTheme">
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_masanawa_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/masanawa_notification_color" />
         <activity
             android:name=".shell.ShellActivity"
             android:exported="true"
@@ -31,8 +37,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Domain verification requires the release signing fingerprint on
-                 app.masanawa.com/.well-known/assetlinks.json before publication. -->
+            <!-- Domain verification requires the com.masanawa.app signing
+                 fingerprint on app.masanawa.com/.well-known/assetlinks.json. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
