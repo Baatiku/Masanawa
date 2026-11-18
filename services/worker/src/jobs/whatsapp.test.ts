@@ -13,7 +13,7 @@ const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-
   working_hours:{timezone:'Africa/Lagos',days:[0,1,2,3,4,5,6],start:'00:00',end:'23:59'},
 };
 
-function setup(overrides:Record<string,unknown>){
+function setup(overrides:Record<string,unknown>,options:{env?:Record<string,string>;fetch?:typeof fetch}={}){
   const calls:{sql:string;parameters:unknown[]}[]=[];
   const pool={query:async(sql:string,params:unknown[]=[])=>{
     calls.push({sql,parameters:params});
@@ -24,7 +24,8 @@ function setup(overrides:Record<string,unknown>){
     return {rows:[]};
   }};
   const send=vi.fn(async()=> 'wa-receipt');
-  return {calls,send,worker:createWhatsAppWorker({pool:pool as never,env:{},send})};
+  return {calls,send,worker:createWhatsAppWorker({pool:pool as never,env:options.env??{},
+    ...(options.fetch?{fetch:options.fetch}:{}),send})};
 }
 
 describe('WhatsApp availability and owner takeover',()=>{
@@ -48,6 +49,18 @@ describe('WhatsApp availability and owner takeover',()=>{
     expect(outgoing!.parameters[3]).toContain('Welcome');
     expect(outgoing!.parameters[3]).toContain('https://app.masanawa.com');
     expect(mock.send).not.toHaveBeenCalled(); // queued for the outbox
+  });
+  it('queues a safe customer reply and a precise error code when Gemini rejects the request',async()=>{
+    const provider=vi.fn(async()=>new Response('',{status:429})) as unknown as typeof fetch;
+    const mock=setup({body:'What does Masanawa offer?',account_match:'registered'},
+      {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider});
+    await mock.worker.runOnce();
+    expect(provider).toHaveBeenCalledOnce();
+    const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
+    expect(outgoing?.parameters[3]).toContain('I received your message');
+    expect(mock.calls.some(c=>c.sql.includes('last_error_code=$2')&&
+      c.parameters.includes('gemini_quota_exceeded'))).toBe(true);
+    expect(mock.calls.some(c=>c.parameters.includes('reply_generation_unavailable'))).toBe(false);
   });
   it('introduces the assistant after the configured unanswered delay',async()=>{
     const mock=setup({reply_mode:'away',account_match:'registered',body:'Hello'});
