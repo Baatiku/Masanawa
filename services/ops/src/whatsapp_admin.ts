@@ -12,6 +12,7 @@ type Config = {
   name:string; personality:string; instructions:string; greeting:string; language:'auto'|'en'|'ha';
   numberPurpose?:'service'|'personal';ownerName?:string;ownerTitle?:string;
   roleLevel:WhatsAppRoleLevel; permissions:WhatsAppPermission[]; personaId:string|null; voiceId:string|null;
+  liveVoiceName?:'Kore'|'Puck'|'Charon'|'Fenrir'|'Aoede'|'Leda'|'Orus'|'Zephyr';
   textReplies:boolean; voiceReplies:boolean; transcribeVoice:boolean;
   replyMode:'always'|'away'|'manual';awayAfterSeconds:number;absenceMessage:string;rememberContext:boolean;
   workingHours:{timezone:string;days:number[];start:string;end:string}; escalationKeywords:string[];
@@ -52,6 +53,7 @@ function validConfig(value:unknown): value is Config {
     validateWhatsAppPermissions(Number(c.roleLevel),c.permissions)&&
     (c.personaId===null||(typeof c.personaId==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(c.personaId)))&&
     (c.voiceId===null||(typeof c.voiceId==='string'&&/^voice_[A-Za-z0-9_-]{1,160}$/.test(c.voiceId)))&&
+    (c.liveVoiceName===undefined||['Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr'].includes(String(c.liveVoiceName)))&&
     ['textReplies','voiceReplies','transcribeVoice'].every(k=>typeof c[k]==='boolean')&&
     ['always','away','manual'].includes(String(c.replyMode))&&
     Number.isInteger(c.awayAfterSeconds)&&Number(c.awayAfterSeconds)>=30&&Number(c.awayAfterSeconds)<=3600&&
@@ -73,6 +75,37 @@ export function createWhatsAppAdmin(input:Input){
     await input.pool.query('INSERT INTO security.whatsapp_audit(tenant_id,channel_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5::jsonb)',[tenant,id,actor,action,JSON.stringify(metadata)]);
   };
   return {
+    async geminiKeys(auth:string|undefined){
+      const actor=await read(auth);
+      const result=await input.pool.query(`SELECT key_id AS "keyId",label,project_id AS "projectId",
+        key_suffix AS "keySuffix",enabled,cooldown_until AS "cooldownUntil",
+        last_error_code AS "lastErrorCode",last_used_at AS "lastUsedAt",created_at AS "createdAt"
+        FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 ORDER BY created_at DESC`,[actor.tenantId]);
+      return {keys:result.rows,quotaPolicy:'Gemini rate limits apply per Google Cloud project, not per API key.'};
+    },
+    async addGeminiKey(auth:string|undefined,label:string,projectId:string,secret:string){
+      const actor=await write(auth);
+      if(!/^[a-z][a-z0-9-]{4,62}$/.test(projectId)||!label.trim()||label.length>80||
+        !/^[A-Za-z0-9_-]{20,256}$/.test(secret))throw new WhatsAppAdminError(422,'invalid_gemini_key_details');
+      const encrypted=encryptWhatsAppToken(secret,input.env.MASANAWA_WHATSAPP_SESSION_KEY??'');
+      const inserted=await input.pool.query(`INSERT INTO security.whatsapp_gemini_keys
+        (tenant_id,label,project_id,key_ciphertext,key_suffix)
+        VALUES($1,$2,$3,$4,$5) RETURNING key_id`,
+        [actor.tenantId,label.trim(),projectId,encrypted,secret.slice(-4)]);
+      await audit(actor.tenantId,null,actor.actorId,'gemini_key_added',
+        {keyId:inserted.rows[0]?.key_id,projectId});
+      return {added:true};
+    },
+    async removeGeminiKey(auth:string|undefined,keyId:string){
+      const actor=await write(auth);
+      if(!isId(keyId))throw new WhatsAppAdminError(422,'invalid_gemini_key_id');
+      const updated=await input.pool.query(`DELETE FROM security.whatsapp_gemini_keys
+        WHERE tenant_id=$1 AND key_id=$2 RETURNING key_id,project_id`,[actor.tenantId,keyId]);
+      if(!updated.rows.length)throw new WhatsAppAdminError(404,'gemini_key_not_found');
+      await audit(actor.tenantId,null,actor.actorId,'gemini_key_removed',
+        {keyId,projectId:updated.rows[0]?.project_id});
+      return {removed:true};
+    },
     async list(auth:string|undefined){
       const actor=await read(auth);
       const rows=await input.pool.query(`SELECT c.channel_id AS "channelId",c.linked_jid AS "linkedJid",
@@ -116,7 +149,7 @@ export function createWhatsAppAdmin(input:Input){
       const actor=await read(auth);if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       const rows=await input.pool.query(`SELECT a.name,a.personality,a.instructions,a.greeting,a.language,a.role_level AS "roleLevel",
         a.number_purpose AS "numberPurpose",a.owner_name AS "ownerName",a.owner_title AS "ownerTitle",
-        a.permissions,a.persona_id AS "personaId",a.voice_id AS "voiceId",a.text_replies AS "textReplies",
+        a.permissions,a.persona_id AS "personaId",a.voice_id AS "voiceId",a.live_voice_name AS "liveVoiceName",a.text_replies AS "textReplies",
         a.voice_replies AS "voiceReplies",a.transcribe_voice AS "transcribeVoice",
         a.reply_mode AS "replyMode",a.away_after_seconds AS "awayAfterSeconds",
         a.absence_message AS "absenceMessage",a.remember_context AS "rememberContext",a.working_hours AS "workingHours",
@@ -138,7 +171,7 @@ export function createWhatsAppAdmin(input:Input){
         transcribe_voice=$14,working_hours=$15::jsonb,escalation_keywords=$16::jsonb,
         reply_mode=$17,away_after_seconds=$18,absence_message=$19,remember_context=$20,
         number_purpose=COALESCE($22,number_purpose),owner_name=COALESCE($23,owner_name),
-        owner_title=COALESCE($24,owner_title),
+        owner_title=COALESCE($24,owner_title),live_voice_name=COALESCE($25,live_voice_name),
         revision=revision+1,updated_at=clock_timestamp()
         WHERE tenant_id=$1 AND channel_id=$2 AND revision=$21 RETURNING revision::int`,[
           actor.tenantId,id,config.name.trim(),config.personality,config.instructions,config.greeting,config.language,
@@ -146,6 +179,7 @@ export function createWhatsAppAdmin(input:Input){
           config.voiceReplies,config.transcribeVoice,JSON.stringify(config.workingHours),JSON.stringify(config.escalationKeywords),
           config.replyMode,config.awayAfterSeconds,config.absenceMessage,config.rememberContext,expectedRevision,
           config.numberPurpose??null,config.ownerName?.trim()??null,config.ownerTitle?.trim()??null,
+          config.liveVoiceName??null,
         ]);
       if(!rows.rows.length)throw new WhatsAppAdminError(409,'assistant_revision_changed');
       await audit(actor.tenantId,id,actor.actorId,'assistant.updated',{revision:rows.rows[0]!.revision,roleLevel:config.roleLevel,permissions:config.permissions});

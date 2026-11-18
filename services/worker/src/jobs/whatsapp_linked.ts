@@ -6,7 +6,8 @@ import makeWASocket,{
 } from '@whiskeysockets/baileys';
 import type {Pool} from '@masanawa/postgres';
 import {pino} from 'pino';
-import {synthesizeWhatsAppVoice,toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
+import {toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
+import {withGeminiKeyPool} from './whatsapp_live.js';
 
 type Db=Pick<Pool,'query'>;
 type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null};
@@ -303,27 +304,25 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       const audio=await downloadMediaMessage(payload,'buffer',{},
         {logger:pino({level:'silent'}),reuploadRequest:slot.socket.updateMediaMessage}) as Buffer;
       const env=input.env??{};
-      return transcribeWhatsAppAudio({audio,mimeType:media.mimetype,
-        apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash'});
+      const mimeType=media.mimetype;
+      return withGeminiKeyPool({pool:input.pool,tenantId:slot.tenantId,sessionKey:input.sessionKey,env,
+        invoke:apiKey=>transcribeWhatsAppAudio({audio,mimeType,
+          apiKey,model:env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash'})});
     },
-    async sendVoice(channelId:string,jid:string,body:string,voiceId:string|null){
+    async sendVoice(channelId:string,jid:string,body:string,voiceId:string|null,preparedAudio?:Buffer){
       const slot=sockets.get(channelId);
       if(!slot?.connected||!linkedJid(jid))throw Error('whatsapp_linked_socket_unavailable');
       const permission=await input.pool.query(`SELECT 1 FROM security.whatsapp_channels WHERE tenant_id=$1
         AND channel_id=$2 AND enabled=true AND state='connected' AND lease_owner=$3`,[slot.tenantId,channelId,slot.owner]);
       if(!permission.rows.length)throw Error('whatsapp_channel_disabled');
-      const env=input.env??{};
       let encoded:Buffer;
       try {
-        const result=await synthesizeWhatsAppVoice({text:body,voice:voiceId??env.MASANAWA_GEMINI_LIVE_VOICE??'Kore',
-          apiKey:env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY??'',model:env.MASANAWA_WHATSAPP_TTS_MODEL??'gemini-3.8-flash-tts'});
-        encoded=await toWhatsAppOpus(result.data,result.mimeType);
+        if(!preparedAudio)throw Error('live_audio_payload_required');
+        const pcm=Buffer.from(decryptLinkedSecret(preparedAudio,input.sessionKey),'base64');
+        if(!pcm.length||pcm.length>8*1024*1024)throw Error('voice_input_invalid');
+        encoded=await toWhatsAppOpus(pcm,'audio/pcm;rate=24000');
       }catch(error){
-        // No WhatsApp send was attempted: bounded retry cannot duplicate audio.
-        if(error instanceof Error&&error.message==='voice_synthesis_quota_exceeded')
-          throw Error('whatsapp_voice_quota_exceeded');
-        if(error instanceof Error&&error.message==='voice_synthesis_provider_unavailable')
-          throw Error('whatsapp_voice_provider_unavailable');
+        // No WhatsApp send was attempted; caller can safely classify the failure.
         throw Error('whatsapp_audio_preparation_failed');
       }
       const sent=await slot.socket.sendMessage(jid,{audio:encoded,mimetype:'audio/ogg; codecs=opus',ptt:true});

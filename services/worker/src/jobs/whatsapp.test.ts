@@ -94,6 +94,45 @@ describe('WhatsApp availability and owner takeover',()=>{
     expect(outgoing?.parameters[3]).toBe('Wa alaikum assalam. I am Hassan, helping Bello with messages. How may I assist?');
     expect(outgoing?.parameters[3]).not.toContain('https://app.masanawa.com');
   });
+  it('allows Gemini up to 45 seconds instead of cancelling verified 17.5-second responses',async()=>{
+    const provider=vi.fn(async()=>Response.json({candidates:[{content:{parts:[{text:'Wa alaikum assalam.'}]}}]}));
+    const timer=vi.spyOn(AbortSignal,'timeout');
+    try{
+      const mock=setup({body:'Salam',number_purpose:'personal',owner_name:'Bello'},
+        {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider as unknown as typeof fetch});
+      await mock.worker.runOnce();
+      expect(timer).toHaveBeenCalledWith(45000);
+      expect(mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))?.parameters[3])
+        .toBe('Wa alaikum assalam.');
+    }finally{timer.mockRestore();}
+  });
+  it('backs off voice-only jobs for exhausted provider quota without an uncertain WhatsApp send',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',body:'Wa alaikum assalam.',
+      reply_to_message_id:'message-0',media_payload_ciphertext:Buffer.from([1,2])});
+    mock.sendVoice.mockRejectedValueOnce(Error('whatsapp_voice_quota_exceeded'));
+    await mock.worker.runOnce();
+    expect(mock.sendVoice).toHaveBeenCalledOnce();
+    expect(mock.calls.some(c=>c.sql.includes('300*LEAST(attempts,12)')&&
+      c.parameters.includes('whatsapp_voice_quota_exceeded')&&c.parameters.includes(true))).toBe(true);
+    expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(false);
+  });
+  it('does not replay old TTS audio jobs without a Live generation payload',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',
+      body:'Old canned fallback',reply_to_message_id:'message-0',media_payload_ciphertext:null});
+    await mock.worker.runOnce();
+    expect(mock.sendVoice).not.toHaveBeenCalled();
+    expect(mock.calls.some(c=>c.parameters.includes('legacy_audio_requires_live_generation'))).toBe(true);
+  });
+  it('erases the encrypted voice payload after the WhatsApp provider confirms a send',async()=>{
+    const payload=Buffer.from([1,2,3]);
+    const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',
+      media_payload_ciphertext:payload,body:'Wa alaikum assalam.',reply_to_message_id:'message-0'});
+    await mock.worker.runOnce();
+    expect(mock.sendVoice).toHaveBeenCalledWith('channel-1','2348012345678@s.whatsapp.net',
+      'Wa alaikum assalam.',null,payload);
+    expect(mock.calls.some(c=>c.sql.includes('media_payload_ciphertext=NULL')&&
+      c.sql.includes("delivery_state='sent'"))).toBe(true);
+  });
   it('continues returning conversations with only an administrator-verified name',async()=>{
     const provider=vi.fn(async(_url:unknown,_init?:RequestInit)=>Response.json({candidates:[{content:{parts:[{text:'Certainly, Amina. Here is the answer.'}]}}]}));
     const mock=setup({body:'Can you clarify?',welcome_sent_at:'2026-11-17T12:00:00Z',
@@ -128,27 +167,5 @@ describe('WhatsApp availability and owner takeover',()=>{
     await mock.worker.runOnce();
     expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(true);
     expect(mock.calls.some(c=>c.sql.includes("THEN 'failed' ELSE 'pending'"))).toBe(false);
-  });
-  it('allows Gemini up to 45 seconds instead of cancelling 17.5-second responses',async()=>{
-    const provider=vi.fn(async()=>Response.json({candidates:[{content:{parts:[{text:'Wa alaikum assalam.'}]}}]}));
-    const timer=vi.spyOn(AbortSignal,'timeout');
-    try{
-      const mock=setup({body:'Salam',number_purpose:'personal',owner_name:'Bello'},
-        {env:{MASANAWA_GEMINI_API_KEY:'test-key'},fetch:provider as unknown as typeof fetch});
-      await mock.worker.runOnce();
-      expect(timer).toHaveBeenCalledWith(45000);
-      expect(mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))?.parameters[3])
-        .toBe('Wa alaikum assalam.');
-    }finally{timer.mockRestore();}
-  });
-  it('backs off an unsent audio reply when provider quota is exhausted',async()=>{
-    const mock=setup({kind:'send',direction:'outbound',message_kind:'audio',body:'Wa alaikum assalam.',
-      reply_to_message_id:'message-0'});
-    mock.sendVoice.mockRejectedValueOnce(Error('whatsapp_voice_quota_exceeded'));
-    await mock.worker.runOnce();
-    expect(mock.sendVoice).toHaveBeenCalledOnce();
-    expect(mock.calls.some(c=>c.sql.includes('300*LEAST(attempts,12)')&&
-      c.parameters.includes('whatsapp_voice_quota_exceeded')&&c.parameters.includes(true))).toBe(true);
-    expect(mock.calls.some(c=>c.parameters.includes('linked_send_outcome_unknown'))).toBe(false);
   });
 });

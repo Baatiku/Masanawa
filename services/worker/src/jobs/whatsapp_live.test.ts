@@ -1,0 +1,60 @@
+import {describe,expect,it,vi} from 'vitest';
+import {encryptLinkedSecret} from './whatsapp_linked.js';
+import {formatWhatsAppTranscript,generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
+
+class FakeSocket extends EventTarget {
+  sent:unknown[]=[];
+  close(){/* test socket */}
+  send(value:string){this.sent.push(JSON.parse(value));}
+  dispatch(payload:unknown){const event=new Event('message') as Event & {data:string};
+    Object.defineProperty(event,'data',{value:JSON.stringify(payload)});this.dispatchEvent(event);}
+}
+
+describe('WhatsApp Gemini Live audio-first replies',()=>{
+  it('converts headings and emphasis to WhatsApp Markdown without rewriting the spoken words',()=>{
+    expect(formatWhatsAppTranscript('## Help\n\n**Contact us**')).toBe('*Help*\n\n*Contact us*');
+  });
+  it('sends one audio-modal Live request and returns its native output transcription',async()=>{
+    const socket=new FakeSocket();
+    const reply=generateLiveReply({apiKey:'key',model:'gemini-3.8-live',voice:'Kore',system:'Safe assistant',
+      message:'Salam',createSocket:()=>socket as unknown as WebSocket});
+    socket.dispatchEvent(new Event('open'));
+    expect(socket.sent[0]).toMatchObject({setup:{model:'models/gemini-3.8-live',
+      generationConfig:{responseModalities:['AUDIO']},outputAudioTranscription:{}}});
+    socket.dispatch({setupComplete:{}});
+    expect(socket.sent[1]).toMatchObject({clientContent:{turnComplete:true}});
+    socket.dispatch({serverContent:{modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',
+      data:Buffer.from([0,0,3,0]).toString('base64')}}]},outputTranscription:{text:'Wa alaikum assalam.'}}});
+    socket.dispatch({serverContent:{turnComplete:true}});
+    expect(await reply).toEqual({transcript:'Wa alaikum assalam.',pcm:Buffer.from([0,0,3,0])});
+  });
+  it('refuses a text-only response so a transcript can never impersonate delivered audio',async()=>{
+    const socket=new FakeSocket();
+    const promise=generateLiveReply({apiKey:'key',model:'gemini-3.8-live',voice:'Kore',system:'',message:'Hi',
+      createSocket:()=>socket as unknown as WebSocket});
+    socket.dispatchEvent(new Event('open'));socket.dispatch({setupComplete:{}});
+    socket.dispatch({serverContent:{outputTranscription:{text:'Hi'},turnComplete:true}});
+    await expect(promise).rejects.toThrow('live_invalid');
+  });
+  it('switches to a different project on quota failure and cools down the exhausted project',async()=>{
+    const key=Buffer.alloc(32,2).toString('base64');
+    const queries:{sql:string;params:unknown[]}[]=[];
+    const pool={query:vi.fn(async(sql:string,params:unknown[]=[])=>{
+      queries.push({sql,params});
+      if(sql.includes('FROM security.whatsapp_gemini_keys'))return {rows:[
+        {key_id:'a',project_id:'project-one',key_ciphertext:encryptLinkedSecret('key-one',key)},
+        {key_id:'a2',project_id:'project-one',key_ciphertext:encryptLinkedSecret('key-two',key)},
+        {key_id:'b',project_id:'project-two',key_ciphertext:encryptLinkedSecret('key-three',key)},
+      ]};
+      return {rows:[]};
+    })};
+    const invoke=vi.fn(async(apiKey:string)=>{
+      if(apiKey==='key-one')throw new LiveProviderError('live_quota');
+      return 'voice-ready';
+    });
+    expect(await withGeminiKeyPool({pool:pool as never,tenantId:'tenant',sessionKey:key,env:{},invoke}))
+      .toBe('voice-ready');
+    expect(invoke.mock.calls.map(c=>c[0])).toEqual(['key-one','key-three']);
+    expect(queries.some(q=>q.sql.includes('cooldown_until=')&&q.params[1]==='project-one'&&q.params[2]===300)).toBe(true);
+  });
+});

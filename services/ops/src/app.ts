@@ -208,6 +208,9 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     const channelQuery=Type.Object({channelId:Type.String({maxLength:50})},{additionalProperties:false});
     const threadQuery=Type.Object({threadId:Type.String({maxLength:50})},{additionalProperties:false});
     app.get('/v1/admin/whatsapp',async(q,r)=>handle(r,()=>wa.list(q.headers.authorization)));
+    app.get('/v1/admin/whatsapp/gemini-keys',async(q,r)=>handle(r,()=>wa.geminiKeys(q.headers.authorization)));
+    app.post('/v1/admin/whatsapp/gemini-keys',{schema:{body:Type.Object({label:Type.String({minLength:1,maxLength:80}),projectId:Type.String({minLength:5,maxLength:63}),apiKey:Type.String({minLength:20,maxLength:256})},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.addGeminiKey(q.headers.authorization,q.body.label,q.body.projectId,q.body.apiKey)));
+    app.delete('/v1/admin/whatsapp/gemini-keys',{schema:{body:Type.Object({keyId:Type.String({maxLength:50})},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.removeGeminiKey(q.headers.authorization,q.body.keyId)));
     app.get('/v1/admin/whatsapp/qr',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.qr(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/config',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.config(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/threads',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.threads(q.headers.authorization,q.query.channelId)));

@@ -240,6 +240,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0122_persistent_session_rotation.sql",
       "security/0123_whatsapp_ai.sql",
       "security/0124_whatsapp_number_identity.sql",
+      "security/0125_whatsapp_gemini_key_pool.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",
