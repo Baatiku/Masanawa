@@ -58,11 +58,13 @@ export async function getSettledBillstackTransfer(input: {
   catch { throw new BillstackTransactionError('billstack.invalid_response'); }
   if (envelope.status !== true) throw new BillstackTransactionError('billstack.transaction_lookup_unavailable');
   const data = record(envelope.data);
-  // Billstack's merchant statement reports settled transfers as PAID. The
-  // transaction lookup can also report SUCCESS; neither status alone proves
-  // funding without the independent is_settled flag and matching references.
+  // Live Billstack 9PSB reserved-account deposits report PAID / INWARD.
+  // Earlier provider records can report SUCCESS / TRANSFER. Only these
+  // inbound methods are eligible, and neither status nor method alone proves
+  // funding without settlement, exact references and an assigned bank account.
   const status = typeof data.status === 'string' ? data.status.trim().toUpperCase() : '';
-  if (!['SUCCESS', 'PAID'].includes(status) || data.is_settled !== true || data.method !== 'TRANSFER')
+  if (!['SUCCESS', 'PAID'].includes(status) || data.is_settled !== true ||
+    (data.method !== 'TRANSFER' && data.method !== 'INWARD'))
     throw new BillstackTransactionError('billstack.transaction_not_settled');
   if (data.session_id !== input.sessionId || data.transaction_ref !== input.sessionId)
     throw new BillstackTransactionError('billstack.transaction_id_mismatch');
