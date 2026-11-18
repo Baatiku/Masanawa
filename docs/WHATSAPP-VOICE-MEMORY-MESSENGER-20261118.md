@@ -29,7 +29,9 @@ the underlying two applications use identical generation or billing flows.
   authority, or instructions overriding the assistant's policy.
 - First-time personal-number contacts explicitly hear they are speaking to the
   named **AI assistant helping the owner**. Returning contacts get continuity,
-  without repeated introductions. Sender names and gender are not inferred.
+  without repeated introductions. The greeting marker is written only after
+  WhatsApp accepts the first outbound text, not when generation is queued.
+  Sender names and gender are not inferred.
 - Messenger already uses canonical authenticated chat history and the
   `customerMemory` service in Gateway. Durable saved facts require its account-
   scoped user permission, extraction review, and deletion controls; we do not

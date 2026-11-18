@@ -169,9 +169,9 @@ export function createWhatsAppWorker(input:Input){
       Date.now()-new Date(source.last_away_notice_at).getTime()>6*3600*1000))await input.pool.query(`UPDATE security.whatsapp_threads
       SET last_away_notice_at=clock_timestamp() WHERE tenant_id=$1 AND thread_id=$2`,
       [source.tenant_id,source.thread_id]);
-    if(source.first_contact)await input.pool.query(`UPDATE security.whatsapp_threads
-      SET welcome_sent_at=coalesce(welcome_sent_at,clock_timestamp()) WHERE tenant_id=$1 AND thread_id=$2`,
-      [source.tenant_id,source.thread_id]);
+    // Do not mark a contact as introduced until the outbox confirms that the
+    // first text was accepted by WhatsApp. A queued/failed reply is not a
+    // greeting the contact actually received.
     return true;
   }
   async function enqueueHandoff(source:Row,text:string){
@@ -466,7 +466,13 @@ export function createWhatsAppWorker(input:Input){
     await input.pool.query(`WITH sent AS (
       UPDATE security.whatsapp_messages SET provider_message_id=$2,delivery_state='sent',
         media_payload_ciphertext=NULL
-      WHERE message_id=$1 AND provider_message_id IS NULL RETURNING message_id
+      WHERE message_id=$1 AND provider_message_id IS NULL
+      RETURNING message_id,tenant_id,thread_id,kind,reply_to_message_id
+    ), greeted AS (
+      UPDATE security.whatsapp_threads t SET welcome_sent_at=coalesce(t.welcome_sent_at,clock_timestamp())
+      FROM sent s WHERE t.tenant_id=s.tenant_id AND t.thread_id=s.thread_id
+        AND s.kind='text' AND s.reply_to_message_id IS NOT NULL
+      RETURNING t.thread_id
     ) UPDATE security.whatsapp_jobs SET state='completed',claimed_at=NULL,last_error_code=NULL
       WHERE job_id=$3 AND state='claimed' AND EXISTS(SELECT 1 FROM sent)`,[row.message_id,providerId,row.job_id]);
   }

@@ -90,6 +90,7 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
       jobs=await db.query(`SELECT state,last_error_code FROM security.whatsapp_jobs WHERE message_id=$1`,[firstId]);
       expect(jobs.rows[0]?.state).toBe('completed');
       expect((await db.query<{delivery_state:string}>(`SELECT delivery_state FROM security.whatsapp_messages WHERE message_id=$1`,[firstId])).rows[0]?.delivery_state).toBe('sent');
+      expect((await db.query<{welcome_sent_at:string|null}>(`SELECT welcome_sent_at FROM security.whatsapp_threads WHERE thread_id=$1`,[threadId])).rows[0]?.welcome_sent_at).not.toBeNull();
       expect(sends).toBe(1);
 
       // A separate operator send has no reply_to_message_id. Once the remote
