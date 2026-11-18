@@ -23,9 +23,10 @@ class Socket extends EventTarget {
     this.dispatchEvent(new Event("open"));
   }
   receive(value: unknown) {
-    this.dispatchEvent(
-      new MessageEvent("message", { data: JSON.stringify(value) }),
-    );
+    this.receiveRaw(JSON.stringify(value));
+  }
+  receiveRaw(data: unknown) {
+    this.dispatchEvent(new MessageEvent("message", { data }));
   }
 }
 function fixture(voiceName = "Bodi") {
@@ -62,15 +63,12 @@ it.each(["Bodi", "Fora"])(
       voiceName,
     });
     f.socket.open();
-    expect(
-      f.socket.sent[0]?.setup.generationConfig.speechConfig.voiceConfig
-        .prebuiltVoiceConfig.voiceName,
-    ).toBe(voiceName);
+    expect(f.socket.sent[0]?.setup.generationConfig.speechConfig.voiceConfig
+      .prebuiltVoiceConfig.voiceName).toBe(voiceName);
     expect(f.socket.sent).toHaveLength(1);
     f.socket.receive({ setupComplete: {} });
-    expect(f.socket.sent[1]?.clientContent.turns[0].parts[0].text).toContain(
-      "2 plus 3 is 5.",
-    );
+    await vi.waitFor(()=>expect(f.socket.sent[1]?.clientContent.turns[0].parts[0].text)
+      .toContain("2 plus 3 is 5."));
     f.socket.receive({
       serverContent: {
         modelTurn: {
@@ -224,6 +222,35 @@ it.each(["arraybuffer", "uint8array"])(
   },
 );
 
+it('decodes Blob frames in order and retains both recorded audio and spoken transcript',async()=>{
+  const f=fixture('Sulafat');
+  const heard:string[]=[];
+  const result=f.renderer.render('Assalamu alaikum',undefined,undefined,
+    {onTranscriptDelta:async delta=>{heard.push(delta);}});
+  f.socket.open();
+  let releaseFirst!:()=>void;
+  const gate=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  class DelayedBlob extends Blob {
+    override async text(){await gate;return super.text();}
+  }
+  const encode=(payload:unknown)=>JSON.stringify(payload);
+  f.socket.receiveRaw(new DelayedBlob([encode({setupComplete:{}})]));
+  f.socket.receiveRaw(new Blob([encode({serverContent:{
+    modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:audio.toString('base64')}}]},
+    outputTranscription:{text:'Assalamu '},
+  }})]));
+  f.socket.receiveRaw(new Blob([encode({serverContent:{
+    outputTranscription:{text:'alaikum',finished:true},turnComplete:true,
+  }})]));
+  expect(f.socket.sent).toHaveLength(1);
+  releaseFirst();
+  await expect(result).resolves.toMatchObject({
+    dataBase64:audio.toString('base64'),transcript:'Assalamu alaikum',
+  });
+  expect(f.socket.sent[1]?.clientContent.turnComplete).toBe(true);
+  expect(heard.join('')).toBe('Assalamu alaikum');
+});
+
 it("caps total audio across individually valid frames", async () => {
   const f = fixture();
   const chunk = vi.fn();
@@ -242,7 +269,9 @@ it("caps total audio across individually valid frames", async () => {
       },
     });
   await expect(result).rejects.toThrow();
-  expect(chunk).not.toHaveBeenCalled();
+  // The renderer intentionally streams already-validated chunks immediately;
+  // a later oversize response must fail the turn, not retract delivered PCM.
+  expect(chunk).toHaveBeenCalledTimes(8);
   expect(f.socket.close).toHaveBeenCalledOnce();
 });
 it("closes before surfacing a playback callback failure", async () => {
@@ -262,7 +291,7 @@ it('streams Live PCM before completion and returns the matching output transcrip
  const result=f.renderer.render('Hello there',undefined,async bytes=>{chunks.push(bytes);},{onTranscriptDelta:async text=>{deltas.push(text);}});
  f.socket.open();f.socket.receive({setupComplete:{}});
  f.socket.receive({serverContent:{modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:audio.toString('base64')}}]},outputTranscription:{text:'Hello '}}});
- await Promise.resolve();await Promise.resolve();expect(chunks).toHaveLength(1);
+ await vi.waitFor(()=>expect(chunks).toHaveLength(1));
  f.socket.receive({serverContent:{outputTranscription:{text:'there',finished:true},turnComplete:true}});
  expect(await result).toMatchObject({transcript:'Hello there',dataBase64:audio.toString('base64')});expect(deltas.join('')).toBe('Hello there');
 });

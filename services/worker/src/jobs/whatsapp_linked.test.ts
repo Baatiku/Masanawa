@@ -1,9 +1,23 @@
 import {randomBytes} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState,eligibleWhatsAppUpsert} from './whatsapp_linked.js';
+import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState,eligibleWhatsAppUpsert,recordLinkedCallEvent} from './whatsapp_linked.js';
 
 describe('encrypted WhatsApp linked-device session',()=>{
   const key=randomBytes(32).toString('base64');
+  it('records real incoming call alerts without storing caller ID or pretending to answer',async()=>{
+    const calls:{sql:string;params:unknown[]}[]=[];
+    const pool={query:async(sql:string,params:unknown[])=>{
+      calls.push({sql,params});return {rows:[]};
+    }};
+    const scope={tenantId:'tenant-a',channelId:'channel-a'};
+    await recordLinkedCallEvent(pool as never,scope,{id:'provider-call-id',status:'offer'});
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.params[2]).toBe('call.incoming');
+    expect(calls[0]!.params[3]).toContain('"status":"offer"');
+    expect(calls[0]!.params[3]).not.toContain('provider-call-id');
+    await recordLinkedCallEvent(pool as never,scope,{id:'group-call',status:'offer',isGroup:true});
+    expect(calls).toHaveLength(1);
+  });
   it('ingests recent offline catch-up messages but not old WhatsApp history',()=>{
     const now=Date.parse('2026-11-18T10:00:00Z');
     const seconds=Math.floor(now/1000);

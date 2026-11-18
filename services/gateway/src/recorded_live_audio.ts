@@ -61,6 +61,10 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
         let audioComplete = false;
         let completing = false;
         let callbacks = Promise.resolve();
+        // Native Gemini Live can emit JSON as Blob, ArrayBuffer or text. Keep
+        // asynchronous Blob decoding in receive order, so a later turnComplete
+        // can never overtake a preceding audio or transcription frame.
+        let received = Promise.resolve();
         let transcriptionTimer: ReturnType<typeof setTimeout> | undefined;
         const timer = setTimeout(
           () => fail("Recorded speech deadline exceeded"),
@@ -99,8 +103,12 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
           });
         }
         function onFailure(event?: Event) {
-          if (event?.type === "close" && audioComplete) { finish(); return; }
-          fail("Recorded speech connection failed");
+          if (event?.type === "close") {
+            void received.then(() => {
+              if (audioComplete) finish();
+              else fail("Recorded speech connection failed");
+            });
+          } else fail("Recorded speech connection failed");
         }
         function onAbort() {
           fail("Recorded speech cancelled");
@@ -140,13 +148,20 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
         }
         function onMessage(event: MessageEvent) {
           if (settled) return;
-          try {
+          // Event listeners must not process each Blob in its own async task;
+          // that loses ordering between audio, transcript and turnComplete.
+          received = received.then(async () => {
+            if (settled) return;
             const data: unknown = event.data;
             let frame: string;
             if (typeof data === "string") {
               if (Buffer.byteLength(data, "utf8") > 2 * 1024 * 1024)
                 throw new Error("Invalid frame");
               frame = data;
+            } else if (data instanceof Blob) {
+              if (data.size > 2 * 1024 * 1024)
+                throw new Error("Invalid frame");
+              frame = await data.text();
             } else if (
               data instanceof ArrayBuffer ||
               ArrayBuffer.isView(data)
@@ -231,9 +246,7 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
               transcriptionTimer ??= setTimeout(finish, 3_000);
             }
             if (audioComplete && transcriptFinished) finish();
-          } catch {
-            fail("Recorded speech response invalid");
-          }
+          }).catch(() => fail("Recorded speech response invalid"));
         }
         socket.addEventListener("open", onOpen);
         socket.addEventListener("message", onMessage);

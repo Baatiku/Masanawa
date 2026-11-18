@@ -18,6 +18,18 @@ function setup(){
 }
 
 describe('WhatsApp number identity admin protection',()=>{
+  it.each(['Algenib','Algieba','Sulafat','Gacrux','Zubenelgenubi'])('accepts official Live voice %s',async voice=>{
+    const {api,query}=setup();
+    await api.save(undefined,channelId,1,{...legacyConfig,liveVoiceName:voice});
+    const updated=query.mock.calls.find(c=>c[0].includes('UPDATE security.whatsapp_assistants'))!;
+    expect(updated[1]?.at(-1)).toBe(voice);
+  });
+  it('rejects an unrecognized Live voice before touching storage',async()=>{
+    const {api,query}=setup();
+    await expect(api.save(undefined,channelId,1,{...legacyConfig,liveVoiceName:'not-a-voice'}))
+      .rejects.toMatchObject({statusCode:422,code:'invalid_assistant_settings'});
+    expect(query).not.toHaveBeenCalled();
+  });
   it('saves a personal founder identity per number while preserving old-client compatibility',async()=>{
     const {api,query}=setup();
     await api.save(undefined,channelId,1,{...legacyConfig,numberPurpose:'personal',ownerName:'Bello Abubakar',ownerTitle:'Founder and CEO'});

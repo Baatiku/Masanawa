@@ -12,7 +12,7 @@ type Config = {
   name:string; personality:string; instructions:string; greeting:string; language:'auto'|'en'|'ha';
   numberPurpose?:'service'|'personal';ownerName?:string;ownerTitle?:string;
   roleLevel:WhatsAppRoleLevel; permissions:WhatsAppPermission[]; personaId:string|null; voiceId:string|null;
-  liveVoiceName?:'Kore'|'Puck'|'Charon'|'Fenrir'|'Aoede'|'Leda'|'Orus'|'Zephyr';
+  liveVoiceName?:string;
   textReplies:boolean; voiceReplies:boolean; transcribeVoice:boolean;
   replyMode:'always'|'away'|'manual';awayAfterSeconds:number;absenceMessage:string;rememberContext:boolean;
   workingHours:{timezone:string;days:number[];start:string;end:string}; escalationKeywords:string[];
@@ -24,6 +24,13 @@ type Input = {
   fetch?:typeof fetch;
 };
 const isId = (s:string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+export const WHATSAPP_GEMINI_LIVE_VOICES = [
+  'Zephyr','Puck','Charon','Kore','Fenrir','Leda','Orus','Aoede',
+  'Callirrhoe','Autonoe','Enceladus','Iapetus','Umbriel','Algieba',
+  'Despina','Erinome','Algenib','Rasalgethi','Laomedeia','Achernar',
+  'Alnilam','Schedar','Gacrux','Pulcherrima','Achird','Zubenelgenubi',
+  'Vindemiatrix','Sadachbia','Sadaltager','Sulafat',
+] as const;
 
 export function encryptWhatsAppToken(token:string,keyBase64:string):Buffer {
   const key=Buffer.from(keyBase64,'base64');
@@ -53,7 +60,7 @@ function validConfig(value:unknown): value is Config {
     validateWhatsAppPermissions(Number(c.roleLevel),c.permissions)&&
     (c.personaId===null||(typeof c.personaId==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(c.personaId)))&&
     (c.voiceId===null||(typeof c.voiceId==='string'&&/^voice_[A-Za-z0-9_-]{1,160}$/.test(c.voiceId)))&&
-    (c.liveVoiceName===undefined||['Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr'].includes(String(c.liveVoiceName)))&&
+    (c.liveVoiceName===undefined||WHATSAPP_GEMINI_LIVE_VOICES.includes(c.liveVoiceName as typeof WHATSAPP_GEMINI_LIVE_VOICES[number]))&&
     ['textReplies','voiceReplies','transcribeVoice'].every(k=>typeof c[k]==='boolean')&&
     ['always','away','manual'].includes(String(c.replyMode))&&
     Number.isInteger(c.awayAfterSeconds)&&Number(c.awayAfterSeconds)>=30&&Number(c.awayAfterSeconds)<=3600&&
