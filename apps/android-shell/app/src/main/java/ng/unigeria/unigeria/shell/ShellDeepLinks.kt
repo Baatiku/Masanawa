@@ -2,11 +2,13 @@ package ng.unigeria.unigeria.shell
 
 import java.net.URI
 import java.net.URLEncoder
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 /** Navigation hints are deliberately not authorization or payment instructions. */
 internal object ShellDeepLinks {
     private val character = Regex("^character_[A-Za-z0-9_-]{4,128}$")
+    private val publicProfile = Regex("^[A-Za-z0-9_-]{2,160}$")
     fun route(raw: String?): String? {
       return try {
         val uri = URI(raw ?: return null)
@@ -26,7 +28,9 @@ internal object ShellDeepLinks {
                 if (parts.size == 1 && character.matches(parts[0]) && query == null) profile(parts[0])
                 else if (parts.isEmpty() && query != null) {
                     val value = query.split('&').singleOrNull()?.split('=', limit = 2)
-                    if (value?.size == 2 && value[0] == "persona" && character.matches(value[1])) profile(value[1]) else null
+                    val persona = if (value?.size == 2 && value[0] == "persona")
+                        URLDecoder.decode(value[1], StandardCharsets.UTF_8.name()) else null
+                    if (persona != null && publicProfile.matches(persona)) profile(persona) else null
                 } else null
             }
             "wallet" -> if (query == null && (parts.isEmpty() || parts[0] in setOf("activity", "requests", "transaction", "inquiry"))) tab("wallet") else null
