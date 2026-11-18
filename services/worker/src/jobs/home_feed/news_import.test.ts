@@ -2,6 +2,7 @@ import {describe,it,expect,vi} from 'vitest';
 import type {Pool} from '@masanawa/postgres';
 import {createNewsFeedPoller,ensurePlatformNewsPublishers,parseNewsFeed} from './news_import.js';
 import {newsCatalog,safeNewsArticleUrl} from './news_catalog.js';
+import {workerProductJobs} from '../../product_jobs.js';
 
 const now=()=>new Date().toUTCString();
 const rss=(items:string)=>'<rss version="2.0"><channel>'+items+'</channel></rss>';
@@ -10,6 +11,12 @@ const item=(url:string,title='Osun flood warning',description='Officials in Osog
  '</link><pubDate>'+published+'</pubDate></item>';
 
 describe('news RSS original-source ingestion',()=>{
+ it('activates a configured platform tenant without a second hidden news flag',()=>{
+  expect(workerProductJobs({MASANAWA_PRODUCT_SCOPE:'masana-lite'}).publisherNews).toBe(false);
+  expect(workerProductJobs({MASANAWA_PLATFORM_TENANT_ID:'tenant_platform'}).publisherNews).toBe(true);
+  expect(workerProductJobs({MASANAWA_PLATFORM_TENANT_ID:'tenant_platform',MASANAWA_NEWS_INGEST_ENABLED:'true'}).publisherNews).toBe(true);
+  expect(workerProductJobs({MASANAWA_PLATFORM_TENANT_ID:'tenant_platform',MASANAWA_NEWS_INGEST_ENABLED:'false'}).publisherNews).toBe(false);
+ });
  it('accepts only pinned publisher URLs and strips tracking query tokens',()=>{
   const bbc=newsCatalog.find(x=>x.id==='bbc')!;
   expect(safeNewsArticleUrl(bbc,'https://www.bbc.com/news/articles/abc?utm_source=rss'))
