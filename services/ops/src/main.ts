@@ -5,6 +5,8 @@ import {FlutterwaveBillsClient,FlutterwaveHttpTransport} from '@masanawa/provide
 import { pathToFileURL } from "node:url";
 import {createVoiceAdmin} from './voice_admin.js';
 import {createWalletAdmin} from './wallet_admin.js';
+import {createBillstackPaymentAdmin} from './billstack_payment_admin.js';
+import {getSettledBillstackTransfer} from '@masanawa/providers';
 import {createPersonaAdmin} from './persona_admin.js';
 import {createPortraitAdmin} from './portrait_admin.js';
 import {createRoleAdmin} from './role_admin.js';
@@ -12,7 +14,7 @@ import {createContentAdmin} from './content_admin.js';
 import {createUserAdmin} from './user_admin.js';
 import {createDataAdmin} from './data_admin.js';
 import {createEvidenceAdmin} from './evidence_admin.js';
-import {PgHomeFeedRepository} from '@masanawa/postgres';
+import {PgHomeFeedRepository,createNgnWalletRepository} from '@masanawa/postgres';
 import type {
   AgentPresentationRepository,
   CharacterSkillAssignmentRepository,
@@ -60,6 +62,7 @@ export interface ServiceDatabaseDependency {
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
+  readonly billstackPaymentAdmin?: ReturnType<typeof createBillstackPaymentAdmin>;
   readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
   readonly portraitAdmin?: ReturnType<typeof createPortraitAdmin>;
   readonly roleAdmin?: ReturnType<typeof createRoleAdmin>;
@@ -139,6 +142,14 @@ function createDefaultDatabaseDependency(
     whatsappAdmin:createWhatsAppAdmin({pool:database.pool,authorize:adminDashboard.authorize,env}),
     evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     walletAdmin:createWalletAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    billstackPaymentAdmin:createBillstackPaymentAdmin({pool:database.pool,authorize:adminDashboard.authorize,
+      deposit:createNgnWalletRepository(database.pool).deposit,
+      ...(env.MASANAWA_BILLSTACK_SECRET_KEY?.trim()||env.BILLSTACK_SECRET_KEY?.trim()?{
+        transaction:(sessionId:string)=>getSettledBillstackTransfer({
+          secretKey:(env.MASANAWA_BILLSTACK_SECRET_KEY?.trim()||env.BILLSTACK_SECRET_KEY?.trim())!,sessionId,
+        }),
+      }:{}),
+    }),
     personaAdmin:createPersonaAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     portraitAdmin:createPortraitAdmin({pool:database.pool,authorize:adminDashboard.authorize,publicBaseUrl:env.MASANAWA_PUBLIC_BASE_URL}),
     roleAdmin:createRoleAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
@@ -201,6 +212,7 @@ export async function startOpsService(
       ...(database.voiceAdmin ? {voiceAdmin:database.voiceAdmin}:{}),
       ...(database.evidenceAdmin ? {evidenceAdmin:database.evidenceAdmin}:{}),
       ...(database.walletAdmin ? {walletAdmin:database.walletAdmin}:{}),
+      ...(database.billstackPaymentAdmin ? {billstackPaymentAdmin:database.billstackPaymentAdmin}:{}),
       ...(database.personaAdmin ? {personaAdmin:database.personaAdmin}:{}),
       ...(database.portraitAdmin ? {portraitAdmin:database.portraitAdmin}:{}),
       ...(database.roleAdmin ? {roleAdmin:database.roleAdmin}:{}),

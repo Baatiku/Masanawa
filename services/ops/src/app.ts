@@ -5,6 +5,7 @@ import type {createDataReconciliation} from './data_reconciliation.js';
 import Fastify from "fastify";
 import {VoiceAdminError,type createVoiceAdmin} from './voice_admin.js';
 import {WalletAdminError,type createWalletAdmin} from './wallet_admin.js';
+import type {createBillstackPaymentAdmin} from './billstack_payment_admin.js';
 import {PersonaAdminError,type createPersonaAdmin} from './persona_admin.js';
 import type {createPortraitAdmin} from './portrait_admin.js';
 import type {createRoleAdmin} from './role_admin.js';
@@ -33,6 +34,7 @@ export interface OpsAppOptions {
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
+  readonly billstackPaymentAdmin?: ReturnType<typeof createBillstackPaymentAdmin>;
   readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
   readonly portraitAdmin?: ReturnType<typeof createPortraitAdmin>;
   readonly roleAdmin?: ReturnType<typeof createRoleAdmin>;
@@ -276,6 +278,19 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     app.get('/v1/admin/wallet/account',{schema:{querystring:Type.Object({userId:Type.String({maxLength:254})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.read(request.headers.authorization,request.query.userId)));
     app.get('/v1/admin/wallet/receipt',{schema:{querystring:Type.Object({userId:Type.String({maxLength:160}),operationId:Type.String({maxLength:160})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.receipt(request.headers.authorization,request.query.userId,request.query.operationId)));
     app.post('/v1/admin/wallet/adjust',{schema:{body:Type.Object({userId:Type.String({maxLength:160}),operationId:Type.String({minLength:16,maxLength:160}),mode:Type.Union([Type.Literal('credit'),Type.Literal('set_balance')]),amountKobo:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),expectedVersion:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),reason:Type.String({minLength:10,maxLength:1000}),fundingReference:Type.String({minLength:3,maxLength:200})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.walletAdmin!.adjust(request.headers.authorization,request.body)));
+  }
+  if(options.billstackPaymentAdmin){
+    const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{
+      try{return await run();}catch(error){
+        reply.code(error instanceof WalletAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);
+        return {error:error instanceof WalletAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'recovery.unavailable'};
+      }
+    };
+    app.get('/v1/admin/payments',{schema:{querystring:Type.Object({
+      limit:Type.Optional(Type.Integer({minimum:1,maximum:100})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))
+    },{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.billstackPaymentAdmin!.list(request.headers.authorization,request.query.limit??40,request.query.offset??0)));
+    app.post('/v1/admin/payments/reconcile',{schema:{body:Type.Object({sessionId:Type.String({minLength:20,maxLength:40,pattern:'^[0-9]+$'})},{additionalProperties:false})}},
+      async(request,reply)=>execute(reply,()=>options.billstackPaymentAdmin!.reconcile(request.headers.authorization,request.body.sessionId)));
   }
   if (options.adminDashboard) {
     const admin = options.adminDashboard;

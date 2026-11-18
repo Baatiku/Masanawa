@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import {getSettledBillstackTransfer,BillstackTransactionError} from '@masanawa/providers';
 const endpoint = "https://api.billstack.co/v2/thirdparty/generateVirtualAccount/";
 export interface BillstackReservedAccount {
   reference: string; accountNumber: string; accountName: string; bankName: string; bankId: BillstackBankId;
@@ -45,17 +46,8 @@ export function createBillstackReservedAccountClient(input:{secretKey:string; ba
   return {
     /** Independent, read-only bank transaction proof; never creates an account. */
     async transaction(sessionId:string):Promise<{eventId:string;accountReference:string;accountNumber:string;amountKobo:number;receivedAt:string;bankName:string}>{
-      if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(sessionId))throw new BillstackProviderError('invalid_transaction_id');
-      let response:Response;
-      try{response=await fetcher('https://api.billstack.co/v2/thirdparty/getTransaction/',{method:'POST',headers:{authorization:'Bearer '+input.secretKey,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({session_id:sessionId}),signal:AbortSignal.timeout(15000),redirect:'error'});}catch{throw new BillstackProviderError('transaction_lookup_unavailable');}
-      if(!response.ok)throw new BillstackProviderError('transaction_lookup_unavailable');
-      const envelope=object(await response.json());if(envelope.status!==true)throw new BillstackProviderError('transaction_lookup_unavailable');
-      const data=object(envelope.data);
-      if(data.status!=='SUCCESS'||data.is_settled!==true||data.method!=='TRANSFER')throw new BillstackProviderError('transaction_not_settled');
-      if(data.session_id!==sessionId||data.transaction_ref!==sessionId)throw new BillstackProviderError('transaction_id_mismatch');
-      const accountNumber=text(data.nuban,10,10);if(!/^\d{10}$/.test(accountNumber))throw new BillstackProviderError('invalid_response');
-      const receivedAt=text(data.created_at,1,100);if(!Number.isFinite(Date.parse(receivedAt)))throw new BillstackProviderError('invalid_response');
-      return {eventId:sessionId,accountReference:text(data.reference),accountNumber,amountKobo:billstackAmountKobo(data.amount),receivedAt,bankName:text(data.bank,1,100)};
+      try{return await getSettledBillstackTransfer({secretKey:input.secretKey,sessionId,fetcher});}
+      catch(error){if(error instanceof BillstackTransactionError)throw new BillstackProviderError(error.code.replace(/^billstack\./,''));throw error;}
     },
     /** Documented read-only lookup despite POST transport. Never allocate on
      * a lookup failure; bind the provider merchant reference to our owner row. */
