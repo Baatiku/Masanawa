@@ -26,7 +26,12 @@ jobs:
       # GitHub's Android runner already includes cmdline-tools. The legacy
       # setup-android action still installs the removed `tools` SDK package.
       - name: Install Android SDK platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDK_MANAGER="$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -name sdkmanager -type f -print -quit)"
+          test -n "$SDK_MANAGER"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          "$SDK_MANAGER" --sdk_root="$SDK_ROOT" 'platforms;android-36' 'build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.1.0'
