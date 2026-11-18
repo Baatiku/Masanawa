@@ -26,4 +26,21 @@ describe('published persona identity for all conversation media', () => {
    expect(await reader.readPublished(scope)).toBeNull();
   } finally {await db.close();}
  }, 30000);
+ it('resolves only a constitution-bound civic agency and never an arbitrary agency label',async()=>{
+  const db=new PGlite();try{
+   await db.exec(`CREATE SCHEMA agents;
+    CREATE TABLE agents.admin_persona_configs(tenant_id text,character_id text,state text,main_prompt text,tone text,biography text,context text,research_enabled boolean,revision bigint);
+    CREATE SCHEMA identity;
+    CREATE TABLE identity.characters(tenant_id text,character_id text,active_character_version_id text,state text);
+    CREATE TABLE identity.character_versions(tenant_id text,character_id text,character_version_id text,state text,constitution jsonb);
+    INSERT INTO identity.characters VALUES('tenant-a','agency-a','version-a','active');
+    INSERT INTO identity.character_versions VALUES('tenant-a','agency-a','version-a','published',
+     '{"biography":"Independent guide to identity enrolment.","disclosurePolicy":{"representation":"independent_civic_ai_guide","civicAgencyId":"nimc"}}');`);
+   const reader=createPublishedPersonaReader(db as any),scope={tenantId:'tenant-a',characterId:'agency-a',characterVersionId:'version-a'} as any;
+   const actual=await reader.readPublished(scope);
+   expect(actual?.civicAgency).toMatchObject({id:'nimc',short:'NIMC',name:'National Identity Management Commission',sourceUrl:'https://nimc.gov.ng/'});
+   await db.exec(`UPDATE identity.character_versions SET constitution=jsonb_set(constitution,'{disclosurePolicy,representation}','"unauthorized_official"')`);
+   expect((await reader.readPublished(scope))?.civicAgency).toBeUndefined();
+  }finally{await db.close();}
+ },30000);
 });
