@@ -84,6 +84,7 @@ describe('news RSS original-source ingestion',()=>{
   expect(await poller.runOnce()).toEqual({checked:newsCatalog.length,imported:0,failed:1,enrolled:newsCatalog.length});
   expect(fetched).toEqual(newsCatalog.map(source=>source.feed));
   expect(query.mock.calls.some(([sql])=>String(sql).includes('last_error=\'feed_unavailable\''))).toBe(true);
+  expect(query.mock.calls.some(([sql])=>String(sql).includes("interval '20 minutes'"))).toBe(true);
  });
  it('does not provision or poll an unknown platform tenant',async()=>{
   const query=vi.fn();
