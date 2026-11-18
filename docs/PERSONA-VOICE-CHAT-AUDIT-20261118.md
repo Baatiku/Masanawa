@@ -16,7 +16,7 @@
 
 ## Context and impersonation boundaries
 
-- A Masanawa AI simulation **speaks in a character's documented perspective** without claiming to be the real official, government office, a live human operator or a government-endorsed representative. Explicit disclosure remains mandatory.
+- A Masanawa AI persona **speaks from a person's documented public-profile perspective** without claiming to be the real official, government office, a live human operator or a government-endorsed representative. Explicit disclosure remains mandatory.
 - Public-official factual answers use only current, admitted, reviewed evidence IDs and checked quotations; missing, expired or contradictory evidence should result in uncertainty, not fabricated positions. Citizen private memory never rewrites public knowledge.
 - A civic agency guide is restricted to its constitution-bound agency, public mandate and cited official starting URL. No ability to check applications, receive fees, issue documents or promise appointments without a separately verified, authorized tool and receipt.
 - Administrator prompt/context changes shape style and knowledge but cannot grant capabilities, switch persona identities, authorize payments or access another user's history.
