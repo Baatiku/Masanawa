@@ -1,9 +1,18 @@
 import {randomBytes} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState} from './whatsapp_linked.js';
+import {encryptLinkedSecret,decryptLinkedSecret,createLinkedAuthState,eligibleWhatsAppUpsert} from './whatsapp_linked.js';
 
 describe('encrypted WhatsApp linked-device session',()=>{
   const key=randomBytes(32).toString('base64');
+  it('ingests recent offline catch-up messages but not old WhatsApp history',()=>{
+    const now=Date.parse('2026-11-18T10:00:00Z');
+    const seconds=Math.floor(now/1000);
+    expect(eligibleWhatsAppUpsert('notify',seconds,now)).toBe(true);
+    expect(eligibleWhatsAppUpsert('append',seconds-60,now)).toBe(true);
+    expect(eligibleWhatsAppUpsert('append',seconds-500,now)).toBe(false);
+    expect(eligibleWhatsAppUpsert('append',seconds+500,now)).toBe(false);
+    expect(eligibleWhatsAppUpsert('append',0,now)).toBe(false);
+  });
   it('encrypts every QR and Signal secret with authenticated randomized ciphertext',()=>{
     const a=encryptLinkedSecret('session credential',key);
     const b=encryptLinkedSecret('session credential',key);
