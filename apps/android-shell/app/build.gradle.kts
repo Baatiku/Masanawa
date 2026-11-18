@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -8,24 +9,16 @@ android {
     buildFeatures { resValues = true }
 
     defaultConfig {
-        // The existing Flutter package ID is retained for a future in-place migration.
-        // Do not publish over the Flutter application until signing and device qualification.
-        applicationId = "ng.unigeria.unigeria"
+        // Source of truth: the owner's Firebase google-services.json registers
+        // com.masanawa.app. This is a NEW identity, not an in-place Flutter update.
+        applicationId = "com.masanawa.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 9
-        versionName = "1.2.0-shell"
+        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 10
+        versionName = "1.2.1-shell"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Firebase Android app identifiers come from the same managed values used
-        // by the existing Flutter app. Never commit provider credentials.
-        mapOf(
-            "masanawa_firebase_api_key" to "FIREBASE_API_KEY",
-            "masanawa_firebase_app_id" to "FIREBASE_APP_ID",
-            "masanawa_firebase_sender_id" to "FIREBASE_MESSAGING_SENDER_ID",
-            "masanawa_firebase_project_id" to "FIREBASE_PROJECT_ID",
-        ).forEach { (resource, environment) ->
-            resValue("string", resource, System.getenv(environment)?.trim().orEmpty())
-        }
+        // The Google Services plugin reads the exact provided JSON config.
+        // It fails the build if the app's package does not match a JSON client.
     }
 
     val keyFile = System.getenv("SHELL_RELEASE_KEYSTORE_PATH")?.let(::file)?.takeIf { it.isFile }
@@ -43,9 +36,9 @@ android {
 
     buildTypes {
         debug {
-            // Keep testing reversible: the preview installs alongside the
-            // Flutter app instead of replacing it or wiping its local data.
-            applicationIdSuffix = ".shelltest"
+            // Use the Firebase-registered package in debug. A .shelltest
+            // suffix would not match the supplied JSON client; the old Flutter
+            // app uses a different package and is not replaced.
             versionNameSuffix = "-debug"
         }
         release {
