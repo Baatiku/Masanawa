@@ -95,6 +95,7 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
 
       // A separate operator send has no reply_to_message_id. Once the remote
       // outcome is ambiguous it must be held, including across further polls.
+      await db.query(`UPDATE security.whatsapp_threads SET mode='human' WHERE thread_id=$1`,[threadId]);
       const uncertain=await db.query<{message_id:string}>(`INSERT INTO security.whatsapp_messages
         (tenant_id,thread_id,channel_id,direction,kind,body,delivery_state)
         VALUES('tenant',$1,$2,'outbound','text','Human reply','queued') RETURNING message_id`,[threadId,channelId]);

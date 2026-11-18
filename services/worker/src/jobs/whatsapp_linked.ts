@@ -367,8 +367,11 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     async send(channelId:string,jid:string,body:string){
       const slot=sockets.get(channelId);
       if(!slot?.connected||!linkedJid(jid))throw Error('whatsapp_linked_socket_unavailable');
+      // The Worker checks whether this is an authorized human-takeover send
+      // before calling us. Pausing the AI must not drop the linked socket or
+      // prevent that human reply from being delivered.
       const permission=await input.pool.query(`SELECT 1 FROM security.whatsapp_channels
-        WHERE tenant_id=$1 AND channel_id=$2 AND enabled=true AND state='connected' AND lease_owner=$3`,
+        WHERE tenant_id=$1 AND channel_id=$2 AND state='connected' AND lease_owner=$3`,
         [slot.tenantId,channelId,slot.owner]);
       if(!permission.rows.length)throw Error('whatsapp_channel_disabled');
       const sent=await slot.socket.sendMessage(jid,{text:body});
