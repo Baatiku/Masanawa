@@ -16,14 +16,14 @@ describe('Billstack administrator payment recovery',()=>{
   expect(()=>confirmedBillstackDeposit(proof,[account,account])).toThrow();
  });
  function fixture(){
-  const query=vi.fn(async(sql:string)=>{
+  const query=vi.fn(async(sql:string,_params?:unknown[])=>{
    if(sql.includes('FROM gb_wallet.billstack_accounts'))return {rows:[account]};
    if(sql.includes('RETURNING check_id'))return {rows:[{checkId:'1',checkedAt:'2026-11-18T00:00:00Z'}]};
    return {rows:[]};
   });
   const authorize=vi.fn(async()=>actor);
   const transaction=vi.fn(async()=>proof);
-  const deposit=vi.fn(async()=>({state:'credited' as const,eventId:session}));
+  const deposit=vi.fn(async():Promise<{state:'credited'|'duplicate';eventId:string}>=>({state:'credited',eventId:session}));
   const service=createBillstackPaymentAdmin({pool:{query} as never,authorize,transaction,deposit});
   return {service,query,authorize,transaction,deposit};
  }
