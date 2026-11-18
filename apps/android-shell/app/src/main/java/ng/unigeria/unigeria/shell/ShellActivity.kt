@@ -278,6 +278,8 @@ class ShellActivity : ComponentActivity() {
         super.onResume()
         if (!protectScreen) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         webView.onResume()
+        if (WebOriginPolicy.isTrusted(webView.url))
+            webView.evaluateJavascript("window.dispatchEvent(new Event('masanawa-native-resume'))", null)
     }
 
     override fun onStop() {
@@ -501,8 +503,11 @@ class ShellActivity : ComponentActivity() {
             "push-token-request" -> {
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this,
                         Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    pendingPushReply = reply
-                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    if (payload.optBoolean("prompt", true)) {
+                        pendingPushReply = reply
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else reply.postMessage(
+                        "{\"type\":\"push-error\",\"message\":\"Notification permission is disabled.\"}")
                 } else sendPushToken(reply)
             }
             "push-token-delete" -> ShellPush.deleteToken(this)
