@@ -19,6 +19,7 @@ type Row = {
   assistant_name:string;greeting:string;personality:string;instructions:string;language:string;
   number_purpose:'service'|'personal';owner_name:string;owner_title:string;
   permissions:string[];role_level:number;text_replies:boolean;voice_replies:boolean;transcribe_voice:boolean;voice_id:string|null;
+  live_voice_name:string;
   reply_mode:'always'|'away'|'manual';away_after_seconds:number;absence_message:string;remember_context:boolean;
   escalation_keywords:string[];last_message_at:Date|string;
   working_hours:{timezone:string;days:number[];start:string;end:string};
@@ -137,12 +138,8 @@ export function createWhatsAppWorker(input:Input){
       try{
         // Custom Masanawa voice enrollment IDs are not Google prebuilt Live
         // voice names. Never send an unsupported custom ID as prebuiltVoiceConfig.
-        const googleVoices=new Set(['Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr',
-          'Achernar','Algenib','Algieba','Alnilam','Autonoe','Callirrhoe','Despina','Enceladus',
-          'Erinome','Gacrux','Iapetus','Laomedeia','Pulcherrima','Rasalgethi','Sadachbia',
-          'Sadaltager','Schedar','Sulafat','Umbriel','Vindemiatrix','Zubenelgenubi']);
-        const selectedVoice=googleVoices.has(source.voice_id??'')?source.voice_id!:
-          (input.env.MASANAWA_GEMINI_LIVE_VOICE??'Kore');
+        const googleVoices=new Set(['Kore','Puck','Charon','Fenrir','Aoede','Leda','Orus','Zephyr']);
+        const selectedVoice=googleVoices.has(source.live_voice_name)?source.live_voice_name:'Kore';
         const generated=await withGeminiKeyPool({pool:input.pool,tenantId:source.tenant_id,
           sessionKey:input.env.MASANAWA_WHATSAPP_SESSION_KEY??'',env:input.env,
           invoke:apiKey=>generateLiveReply({apiKey,model:input.env.MASANAWA_WHATSAPP_LIVE_MODEL??'gemini-3.8-live',
@@ -485,7 +482,7 @@ export function createWhatsAppWorker(input:Input){
           c.enabled,c.state,
           a.name AS assistant_name,a.greeting,a.personality,a.instructions,a.language,
           a.number_purpose,a.owner_name,a.owner_title,
-          a.permissions,a.role_level,a.text_replies,a.voice_replies,a.transcribe_voice,a.voice_id,
+          a.permissions,a.role_level,a.text_replies,a.voice_replies,a.transcribe_voice,a.voice_id,a.live_voice_name,
           a.reply_mode,a.away_after_seconds,a.absence_message,a.remember_context,
           a.escalation_keywords,a.working_hours
           FROM security.whatsapp_jobs j JOIN security.whatsapp_messages m ON j.message_id=m.message_id
