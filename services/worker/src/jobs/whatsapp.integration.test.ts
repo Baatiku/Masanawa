@@ -2,8 +2,54 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {describe,expect,it} from 'vitest';
 import {createWhatsAppWorker} from './whatsapp.js';
+import {createWhatsAppMemoryWorker,readWhatsAppMemory} from './whatsapp_memory.js';
+import {persistLinkedHistory} from './whatsapp_linked.js';
 
 describe('WhatsApp outbox PostgreSQL recovery',()=>{
+  it('builds contact artifacts while paused, resumes after old history arrives, and never queues a reply',async()=>{
+    const db=new PGlite();
+    try{
+      await db.exec(`CREATE SCHEMA identity;CREATE SCHEMA security;
+        CREATE TABLE identity.users(tenant_id text,user_id text,state text,PRIMARY KEY(tenant_id,user_id));`);
+      for(const name of ['0123_whatsapp_ai','0124_whatsapp_number_identity','0125_whatsapp_gemini_key_pool',
+        '0126_whatsapp_gemini_keys_key_only','0128_whatsapp_incoming_calls','0130_whatsapp_contact_memory'])
+        await db.exec(await readFile(new URL(`../../../../packages/security/migrations/${name}.sql`,import.meta.url),'utf8'));
+      const lease='00000000-0000-4000-8000-000000000001';
+      const channel=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
+        (tenant_id,enabled,state,lease_owner) VALUES('tenant',false,'connected',$1) RETURNING channel_id`,[lease]);
+      const channelId=channel.rows[0]!.channel_id;
+      await db.query(`INSERT INTO security.whatsapp_assistants(tenant_id,channel_id,reply_mode)
+        VALUES('tenant',$1,'manual')`,[channelId]);
+      const owner={tenantId:'tenant',channelId,owner:lease};
+      const older=(id:string,timestamp:number,text:string)=>({key:{remoteJid:'2348012345678@s.whatsapp.net',id},
+        messageTimestamp:timestamp,message:{conversation:text}});
+      const first=older('earlier',1600001000,'I am working with the owner on the irrigation project.');
+      const ignored=older('protected',1600002000,'My bank account PIN is 1234');
+      expect((await persistLinkedHistory(db as never,owner,[first,ignored])).imported).toBe(2);
+      expect((await persistLinkedHistory(db as never,owner,[first])).imported).toBe(0);
+      const thread=(await db.query<{thread_id:string}>(`SELECT thread_id FROM security.whatsapp_threads`)).rows[0]!.thread_id;
+      let calls=0;
+      const makeWorker=()=>createWhatsAppMemoryWorker({pool:db as never,env:{GEMINI_API_KEY:'synthetic'},fetch:async(_url,options)=>{
+        const source=String(options?.body);
+        expect(source).not.toContain('1234');
+        const text=calls++===0?'Project: contact says they work with the owner on irrigation.':'Earlier preference: asks for Hausa.';
+        return Response.json({candidates:[{content:{parts:[{text}]}}]});
+      }});
+      await makeWorker().runOnce();
+      expect(await readWhatsAppMemory(db as never,'tenant',thread,'irrigation')).toContain('on irrigation');
+      await persistLinkedHistory(db as never,owner,[older('late',1590000000,'Please speak Hausa')]);
+      await makeWorker().runOnce();
+      await makeWorker().runOnce();
+      expect(calls).toBe(2);
+      expect(await readWhatsAppMemory(db as never,'tenant',thread)).toContain('asks for Hausa');
+      expect(await readWhatsAppMemory(db as never,'other-tenant',thread)).toBe('');
+      expect((await db.query(`SELECT 1 FROM security.whatsapp_jobs`)).rows).toEqual([]);
+      await db.query(`UPDATE security.whatsapp_assistants SET remember_context=false`);
+      await persistLinkedHistory(db as never,owner,[older('new',1600003000,'Unprocessed while memory is off')]);
+      await makeWorker().runOnce();
+      expect(calls).toBe(2);
+    }finally{await db.close();}
+  },30000);
   it('generates and queues an actual first-contact greeting using the production SQL',async()=>{
     const db=new PGlite();
     try{
