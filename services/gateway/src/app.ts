@@ -115,6 +115,7 @@ export interface GatewayAppOptions {
   /** One canonical session and PostgreSQL-backed inbox; no parallel journal. */
   readonly masanaInbox?: MasanaInboxRoutesDeps;
   readonly callHistory?: CallHistoryService;
+  readonly releaseSha?: string;
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
@@ -1339,6 +1340,9 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       ];
 
       const ready = results.every((result) => result.ready);
+      if (options.releaseSha && /^[0-9a-f]{40}$/.test(options.releaseSha)) {
+        reply.header("x-masanawa-release", options.releaseSha).header("cache-control", "no-store");
+      }
       if (!ready) {
         reply.code(503);
       }

@@ -1126,6 +1126,13 @@
       "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
     },
     {
+      "name": "MASANAWA_RELEASE_SHA",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Exact deployed source revision, reported in the Gateway readiness response header."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_CALLS_ENABLED",
       "owner": "ops/worker",
       "classification": "public",

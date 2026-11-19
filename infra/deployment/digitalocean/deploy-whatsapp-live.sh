@@ -6,6 +6,8 @@ umask 077
 
 release_sha="${1:?Provide an exact main-branch release SHA}"
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid release SHA'; exit 1; }
+calls_option="${2:-keep}"
+[[ "$calls_option" =~ ^(keep|true|false)$ ]] && [ "$#" -le 2 ] || { echo 'Invalid WhatsApp calls setting'; exit 1; }
 test "$(id -u)" -eq 0 && test "$(hostname)" = 'masanawa-pilot-lon1'
 cd /opt/masanawa/current
 test -f compose.yaml && test -f /etc/masanawa/compose.env
@@ -94,13 +96,31 @@ probe(){
   shift 2
   docker exec "masanawa-$service-1" node -e '
     const [service, fallback, ...checks]=process.argv.slice(1);
-    const port=process.env["MASANAWA_"+service.toUpperCase()+"_PORT"]||process.env.PORT||fallback;
-    Promise.all(checks.map(async check=>{
-      const [path,expected]=check.split("=");
-      const r=await fetch("http://127.0.0.1:"+port+path,{signal:AbortSignal.timeout(5000)});
-      console.log(service+" "+path+" HTTP "+r.status);
-      if(r.status!==Number(expected))throw Error("unexpected HTTP status");
-    })).catch(error=>{console.error(service+" check: "+(error.cause?.code||error.message));process.exitCode=1;});' \
+    const prefix="MASANAWA_"+service.toUpperCase();
+    const port=process.env[prefix+"_PORT"]||process.env.PORT||fallback;
+    const bind=process.env[prefix+"_HOST"]||process.env.HOST;
+    const host=!bind||bind==="0.0.0.0"||bind==="localhost"?"127.0.0.1":bind==="::"?"[::1]":bind.includes(":")?"["+bind+"]":bind;
+    const wait=require("node:timers/promises").setTimeout;
+    async function ready(){
+      const deadline=Date.now()+90000;
+      while(true){
+        try{
+          const results=await Promise.all(checks.map(async check=>{
+            const [path,expected]=check.split("=");
+            const response=await fetch("http://"+host+":"+port+path,{signal:AbortSignal.timeout(2500)});
+            await response.body?.cancel();
+            if(response.status!==Number(expected))throw Error(path+" HTTP "+response.status);
+            return path+" HTTP "+response.status;
+          }));
+          for(const result of results)console.log(service+" "+result);
+          return;
+        }catch(error){
+          if(Date.now()>=deadline)throw error;
+          await wait(2000);
+        }
+      }
+    }
+    ready().catch(error=>{console.error(service+" check: "+(error.cause?.code||error.message));process.exitCode=1;});' \
     "$service" "$fallback_port" "$@"
 }
 
@@ -127,6 +147,22 @@ echo 'Applying forward-only schema checks with the application services paused..
 stage='apply migrations'
 "${dc[@]}" run --rm --no-deps -T --interactive=false migrate \
   >"$backup/migrations.log" 2>&1
+stage='prepare release settings'
+python3 - "$runtime_file" "$release_sha" "$calls_option" <<'PY'
+import os,sys,tempfile
+from pathlib import Path
+path=Path(sys.argv[1])
+settings={'MASANAWA_RELEASE_SHA':sys.argv[2]}
+if sys.argv[3]!='keep': settings['MASANAWA_WHATSAPP_CALLS_ENABLED']=sys.argv[3]
+lines=[line for line in path.read_bytes().splitlines(keepends=True)
+       if not any(line.lstrip().startswith((key+'=').encode()) for key in settings)]
+contents=b''.join(lines)
+if contents and not contents.endswith(b'\n'): contents+=b'\n'
+contents+=b''.join(f'{key}={value}\n'.encode() for key,value in settings.items())
+with tempfile.NamedTemporaryFile(dir=path.parent,delete=False) as f:
+    f.write(contents);f.flush();os.fsync(f.fileno());name=f.name
+os.chmod(name,0o600);os.replace(name,path)
+PY
 echo 'Upgrading application services; QR identity and wallet records are preserved...'
 stage='start Gateway and Ops'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
