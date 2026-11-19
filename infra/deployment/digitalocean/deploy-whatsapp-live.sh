@@ -9,7 +9,7 @@ release_sha="${1:?Provide an exact main-branch release SHA}"
 test "$(id -u)" -eq 0 && test "$(hostname)" = 'masanawa-pilot-lon1'
 cd /opt/masanawa/current
 test -f compose.yaml && test -f /etc/masanawa/compose.env
-for cmd in docker python3 flock curl; do command -v "$cmd" >/dev/null; done
+for cmd in docker python3 flock; do command -v "$cmd" >/dev/null; done
 
 exec 9>>/etc/masanawa/whatsapp-release.lock
 flock -n 9 || { echo 'WhatsApp release is already running'; exit 1; }
@@ -61,26 +61,48 @@ export MASANAWA_OPS_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-ops:$release_sha"
 export MASANAWA_WORKER_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-worker:$release_sha"
 dc=(docker compose -p masanawa --env-file /etc/masanawa/compose.env \
   -f compose.yaml --profile ops --profile worker)
-stage=preflight
+stage='preflight'
+changed=false
 
 rollback(){
   trap - ERR INT TERM
-  if [ "$stage" = preflight ]; then
+  echo "Deployment stopped at $stage (installer line $1)."
+  if [ "$changed" = false ]; then
     echo 'Preflight stopped; running services were not replaced.'
   else
+    for svc in gateway ops worker; do
+      docker inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} image={{.Config.Image}}' \
+        "masanawa-$svc-1" >"$backup/$svc.failed-state" 2>&1 || true
+      docker logs --tail 80 "masanawa-$svc-1" >"$backup/$svc.failed-startup.log" 2>&1 || true
+    done
     echo 'Restoring previous application images without touching PostgreSQL or Signal keys...'
     cp -p "$backup/compose.before" /etc/masanawa/compose.env
     cp -p "$backup/runtime.before" "$runtime_file"
     export MASANAWA_GATEWAY_IMAGE="$old_gateway"
     export MASANAWA_OPS_IMAGE="$old_ops"
     export MASANAWA_WORKER_IMAGE="$old_worker"
-    "${dc[@]}" up -d --no-build --no-deps --force-recreate gateway ops worker \
+    "${dc[@]}" up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 gateway ops worker \
       >"$backup/rollback.log" 2>&1 || echo 'Inspect private rollback.log for recovery.'
   fi
   echo "Private checkpoint: $backup"
   exit 1
 }
-trap rollback ERR INT TERM
+trap 'rollback "$LINENO"' ERR INT TERM
+
+probe(){
+  local service="$1" fallback_port="$2"
+  shift 2
+  docker exec "masanawa-$service-1" node -e '
+    const [service, fallback, ...checks]=process.argv.slice(1);
+    const port=process.env["MASANAWA_"+service.toUpperCase()+"_PORT"]||process.env.PORT||fallback;
+    Promise.all(checks.map(async check=>{
+      const [path,expected]=check.split("=");
+      const r=await fetch("http://127.0.0.1:"+port+path,{signal:AbortSignal.timeout(5000)});
+      console.log(service+" "+path+" HTTP "+r.status);
+      if(r.status!==Number(expected))throw Error("unexpected HTTP status");
+    })).catch(error=>{console.error(service+" check: "+(error.cause?.code||error.message));process.exitCode=1;});' \
+    "$service" "$fallback_port" "$@"
+}
 
 "${dc[@]}" config --quiet
 echo 'Pulling exact published images before touching the working number...'
@@ -98,27 +120,27 @@ printf '%s\n' "checkpoint_reason=owner-confirmed-working-voice-notes" \
   "source_checkpoint=dccebe9c61bc783c1baa4993de415f241a20f828" \
   "source_release=$release_sha" >"$backup/checkpoint.txt"
 
-stage=upgrading
+stage='stop applications'
+changed=true
 echo 'Applying forward-only schema checks with the application services paused...'
 "${dc[@]}" stop -t 35 worker gateway ops >"$backup/stop.log" 2>&1
+stage='apply migrations'
 "${dc[@]}" run --rm --no-deps -T --interactive=false migrate \
   >"$backup/migrations.log" 2>&1
 echo 'Upgrading application services; QR identity and wallet records are preserved...'
+stage='start Gateway and Ops'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
   --wait --wait-timeout 180 gateway ops >"$backup/gateway-ops.log" 2>&1
-curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3100/readyz >/dev/null
-docker exec masanawa-ops-1 node -e '
-  Promise.all(["/readyz","/v1/admin/whatsapp"].map(async path=>{
-    const r=await fetch("http://127.0.0.1:3002"+path,{signal:AbortSignal.timeout(5000)});
-    if(r.status!==(path==="/readyz"?200:401))throw Error(path+":"+r.status);
-  })).catch(()=>process.exit(1));'
+stage='check Gateway'
+probe gateway 3000 /readyz=200
+stage='check Ops'
+probe ops 3002 /readyz=200 /v1/admin/whatsapp=401
+stage='start Worker'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
   --wait --wait-timeout 150 worker >"$backup/worker.log" 2>&1
-docker exec masanawa-worker-1 node -e '
-  Promise.all(["/readyz"].map(async path=>{
-    const r=await fetch("http://127.0.0.1:3001"+path,{signal:AbortSignal.timeout(5000)});
-    if(r.status!==200)throw Error(path+":"+r.status);
-  })).catch(()=>process.exit(1));'
+stage='check Worker'
+probe worker 3001 /readyz=200
+stage='check WhatsApp configuration'
 docker exec masanawa-worker-1 node -e '
   const e=process.env;
   if(e.MASANAWA_WHATSAPP_ENABLED!=="true"||e.MASANAWA_WHATSAPP_MODE!=="linked-device"||
@@ -126,6 +148,7 @@ docker exec masanawa-worker-1 node -e '
   console.log("WhatsApp QR-linked configuration preserved");'
 
 echo 'Saving exact tested image references across future reboots...'
+stage='save image references'
 python3 - <<'PY'
 import os,tempfile
 from pathlib import Path
