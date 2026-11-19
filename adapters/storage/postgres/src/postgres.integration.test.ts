@@ -246,6 +246,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0128_whatsapp_incoming_calls.sql",
       "security/0129_whatsapp_call_outcomes.sql",
       "security/0130_whatsapp_contact_memory.sql",
+      "security/0131_whatsapp_call_offer_observations.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",

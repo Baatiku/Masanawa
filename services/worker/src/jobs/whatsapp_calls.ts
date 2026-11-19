@@ -5,12 +5,13 @@ import type {Pool} from '@masanawa/postgres';
 import type {WASocket} from '@whiskeysockets/baileys';
 import {pino} from 'pino';
 import {createCallPlayback,openWhatsAppCallLive,renderCallDisclosure,renderCallUnavailable} from './whatsapp_call_audio.js';
+import {callObservationRef} from './whatsapp_call_signals.js';
 import {readWhatsAppMemory} from './whatsapp_memory.js';
 import {withGeminiKeyPool} from './whatsapp_live.js';
 import {resolveWhatsAppLiveVoice} from './whatsapp_voices.js';
 
 type Db=Pick<Pool,'query'>;
-type Identity={tenantId:string;channelId:string;owner:string};
+type Identity={tenantId:string;channelId:string;owner:string;targetId?:string};
 type Env=Readonly<Record<string,string|undefined>>;
 type EndReason='remote'|'paused'|'timeout'|'provider_failed'|'media_failed'|'disconnected'|
   'session_unavailable'|'offer_expired'|'busy'|'accept_failed'|'connect_timeout'|'media_timeout'|'policy_unavailable';
@@ -71,7 +72,7 @@ export async function readCallPolicy(pool:Db,identity:Identity,peer:string,calle
 type Dependencies={pool:Db;identity:Identity;env:Env;sessionKey:string;acquire:()=>boolean;release:()=>void;
   lookupSession?:(id:string)=>Promise<IncomingSession|undefined>;
   disclosure?:typeof renderCallDisclosure;unavailable?:typeof renderCallUnavailable;openLive?:typeof openWhatsAppCallLive};
-type CallKey=[tenantId:string,channelId:string,reference:string];
+type CallKey=[tenantId:string,channelId:string,reference:string,offerReference:string|null];
 type PendingOffer={offer:CallOffer;timer:ReturnType<typeof setTimeout>};
 
 export function createWhatsAppCallHandler(input:Dependencies){
@@ -83,18 +84,19 @@ export function createWhatsAppCallHandler(input:Dependencies){
   let disclosure:Promise<Buffer>|undefined,unavailable:Promise<Buffer>|undefined;
   const validId=(id:string)=>typeof id==='string'&&id.length>0&&id.length<=128;
   const keyFor=(id:string):CallKey=>[identity.tenantId,identity.channelId,
-    createHash('sha256').update(`${identity.channelId}|${id}`).digest('hex')];
+    createHash('sha256').update(`${identity.channelId}|${id}`).digest('hex'),
+    identity.targetId?callObservationRef(identity.targetId,id):null];
   const fresh=(offer:CallOffer)=>Math.abs(Date.now()-offer.date.getTime())<=OFFER_TTL;
 
   async function claim(key:CallKey){
-    const result=await pool.query(`INSERT INTO security.whatsapp_incoming_calls(tenant_id,channel_id,reference) VALUES($1,$2,$3)
+    const result=await pool.query(`INSERT INTO security.whatsapp_incoming_calls(tenant_id,channel_id,reference,offer_reference) VALUES($1,$2,$3,$4)
       ON CONFLICT DO NOTHING RETURNING reference`,key);
     return result.rows.length>0;
   }
 
   function finish(key:CallKey,reason:EndReason){
     return pool.query(`UPDATE security.whatsapp_incoming_calls SET ended_at=clock_timestamp(),end_reason=$4
-      WHERE tenant_id=$1 AND channel_id=$2 AND reference=$3 AND ended_at IS NULL`,[...key,reason]);
+      WHERE tenant_id=$1 AND channel_id=$2 AND reference=$3 AND ended_at IS NULL`,[...key.slice(0,3),reason]);
   }
 
   function removeOffer(id:string){
@@ -111,8 +113,8 @@ export function createWhatsAppCallHandler(input:Dependencies){
 
   async function recordMiss(id:string,reason:EndReason){
     // Store only the reference and a bounded reason. Duplicated signaling must not alter the first attempt.
-    await pool.query(`INSERT INTO security.whatsapp_incoming_calls(tenant_id,channel_id,reference,ended_at,end_reason)
-      VALUES($1,$2,$3,clock_timestamp(),$4) ON CONFLICT DO NOTHING`,[...keyFor(id),reason]);
+    await pool.query(`INSERT INTO security.whatsapp_incoming_calls(tenant_id,channel_id,reference,offer_reference,ended_at,end_reason)
+      VALUES($1,$2,$3,$4,clock_timestamp(),$5) ON CONFLICT DO NOTHING`,[...keyFor(id),reason]);
   }
 
   function correlate(id:string,session:IncomingSession){
@@ -256,7 +258,7 @@ export function createWhatsAppCallHandler(input:Dependencies){
             answerRecorded=true;
             clearTimeout(setupTimer);
             answer=pool.query(`UPDATE security.whatsapp_incoming_calls SET answered_at=clock_timestamp()
-              WHERE tenant_id=$1 AND channel_id=$2 AND reference=$3 AND ended_at IS NULL`,key);
+              WHERE tenant_id=$1 AND channel_id=$2 AND reference=$3 AND ended_at IS NULL`,key.slice(0,3));
             void answer.catch(()=>stop('media_failed'));
           }catch{void stop('media_failed');}
         },samples/16);
@@ -273,6 +275,12 @@ export function createWhatsAppCallHandler(input:Dependencies){
     void accept().catch(()=>stop('policy_unavailable'));
   }
 
+  function lookup(id:string){
+    if(input.lookupSession)void input.lookupSession(id).then(found=>{
+      if(found)correlate(id,found);
+    }).catch(()=>undefined);
+  }
+
   return {
     session(session:IncomingSession){
       if(stopped||!validId(session.callId)||session.ended||sessions.size>=24)return;
@@ -281,7 +289,7 @@ export function createWhatsAppCallHandler(input:Dependencies){
       sessions.set(session.callId,session);
       setTimeout(()=>{if(sessions.get(session.callId)===session)sessions.delete(session.callId);},OFFER_TTL).unref();
     },
-    signal(offer:CallOffer){
+    signal(offer:CallOffer, fromWire=false){
       const {id}=offer;
       if(stopped||!validId(id))return;
       if(['reject','terminate','timeout'].includes(offer.status)){
@@ -291,18 +299,23 @@ export function createWhatsAppCallHandler(input:Dependencies){
       if(offer.status!=='offer'||offer.offline!==false||offer.isGroup!==false||offer.isVideo!==false||
         offer.groupJid||offer.linkToken||offer.isCallLink||!(offer.date instanceof Date)||
         !/^[0-9]{5,32}(?:_\d+)?(?::\d+)?@(s\.whatsapp\.net|lid)$/.test(offer.from)||
-        active?.id===id||offers.has(id)||offers.size>=24)return;
+        active?.id===id||offers.size>=24)return;
       if(!fresh(offer)){void recordMiss(id,'offer_expired').catch(()=>undefined);return;}
 
-      const timer=setTimeout(()=>skip(id,'session_unavailable'),3000);
+      const pending=offers.get(id);
+      if(pending){
+        // A parsed offer confirms the SDK has processed this stanza and can
+        // now be queried safely. A raw offer waits for its session event.
+        if(!fromWire)lookup(id);
+        return;
+      }
+      const timer=setTimeout(()=>skip(id,'session_unavailable'),fromWire?OFFER_TTL:3000);
       timer.unref();
       offers.set(id,{offer,timer});
       const session=sessions.get(id);
       if(session){correlate(id,session);return;}
       // The SDK can register a session without replaying its incoming-session event.
-      if(input.lookupSession)void input.lookupSession(id).then(found=>{
-        if(found)correlate(id,found);
-      }).catch(()=>undefined);
+      if(!fromWire)lookup(id);
     },
     async stop(){
       stopped=true;

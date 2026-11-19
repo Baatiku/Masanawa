@@ -8,11 +8,12 @@ import type {Pool} from '@masanawa/postgres';
 import {pino} from 'pino';
 import {toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
 import {withGeminiKeyPool} from './whatsapp_live.js';
+import {readIncomingCallOffers,recordIncomingCallOffer} from './whatsapp_call_signals.js';
 import {createWhatsAppCallingSocket,createWhatsAppCallHandler} from './whatsapp_calls.js';
 
 type Db=Pick<Pool,'query'>;
 type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null;call_target_channel_id:string|null};
-type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>;
+type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;targetId:string|null;connected:boolean;botMessageIds:Set<string>;
   flushAuth:()=>Promise<void>;calls?:ReturnType<typeof createWhatsAppCallHandler>};
 const linkedJid=(jid:string)=>/^[0-9]{5,32}@(s\.whatsapp\.net|lid)$/.test(jid);
 
@@ -253,7 +254,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       syncFullHistory:false,markOnlineOnConnect:false,getMessage:async()=>undefined};
     const callSocket=channel.call_target_channel_id?await createWhatsAppCallingSocket(settings):undefined;
     const socket=callSocket??makeWASocket(settings);
-    const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,connected:false,botMessageIds:new Set(),flushAuth:auth.flush};
+    const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,targetId:channel.call_target_channel_id,connected:false,botMessageIds:new Set(),flushAuth:auth.flush};
     sockets.set(channel.channel_id,slot);
     socket.ev.on('creds.update',update=>{
       Object.assign(auth.state.creds,update);
@@ -304,8 +305,22 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         }
       }
     })().catch(()=>markError(slot,'connection_update_failed'));});
-    if(callSocket){
-      const calls=createWhatsAppCallHandler({pool:input.pool,identity:slot,env:input.env??{},sessionKey:input.sessionKey,
+    const targetId=channel.call_target_channel_id;
+    if(callEnabled)socket.ws.on('CB:call',node=>{
+      if(sockets.get(slot.channelId)!==slot)return;
+      for(const offer of readIncomingCallOffers(node)){
+        void recordIncomingCallOffer(input.pool,{...slot,targetId},offer.id).catch(()=>undefined);
+        if(!slot.connected||!offer.fullVoiceOffer||!Number.isFinite(offer.sentAt))continue;
+        const recipient=targetId?slot:[...sockets.values()].find(candidate=>
+          candidate.tenantId===slot.tenantId&&candidate.targetId===slot.channelId&&candidate.connected);
+        // A messaging-side offer can supply metadata, but only a native
+        // incoming-session event on the dedicated call device can accept it.
+        recipient?.calls?.signal({id:offer.id,from:offer.from,date:new Date(offer.sentAt),status:'offer',
+          isGroup:false,isVideo:false,offline:false,...(offer.callerPn?{callerPn:offer.callerPn}:{})},true);
+      }
+    });
+    if(callSocket&&targetId){
+      const calls=createWhatsAppCallHandler({pool:input.pool,identity:{...slot,targetId},env:input.env??{},sessionKey:input.sessionKey,
         lookupSession:id=>callSocket.getCall(id),
         acquire:()=>{
           if(callInProgress)return false;

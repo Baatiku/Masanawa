@@ -18,7 +18,7 @@ describe('WhatsApp manual-off persistence',()=>{
       for(const filename of ['0123_whatsapp_ai.sql','0124_whatsapp_number_identity.sql',
         '0125_whatsapp_gemini_key_pool.sql','0126_whatsapp_gemini_keys_key_only.sql',
         '0127_whatsapp_gemini_full_voices.sql','0128_whatsapp_incoming_calls.sql',
-        '0129_whatsapp_call_outcomes.sql','0130_whatsapp_contact_memory.sql'])
+        '0129_whatsapp_call_outcomes.sql','0130_whatsapp_contact_memory.sql','0131_whatsapp_call_offer_observations.sql'])
         await db.exec(await readFile(new URL(`../../../packages/security/migrations/${filename}`,import.meta.url),'utf8'));
       const inserted=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels(tenant_id,enabled,state)
         VALUES('tenant',true,'connected') RETURNING channel_id`);
@@ -55,6 +55,16 @@ describe('WhatsApp manual-off persistence',()=>{
         VALUES('tenant',$1,'linked-device','call.incoming','{"video":false}')`,[id]);
       expect(await admin.calls(undefined,id)).toMatchObject({callDeviceOnline:true,lastMessagingOfferAt:expect.any(Date),
         calls:[{answeredAt:null,endReason:'session_unavailable'}]});
+      await db.query(`INSERT INTO security.whatsapp_call_offer_observations
+        (tenant_id,channel_id,reference,offered_at,messaging_at,call_device_at)
+        VALUES('tenant',$1,repeat('b',64),clock_timestamp()-interval '30 seconds',clock_timestamp(),NULL),
+          ('tenant',$1,repeat('c',64),clock_timestamp()-interval '40 seconds',NULL,clock_timestamp()),
+          ('tenant',$1,repeat('d',64),clock_timestamp()-interval '50 seconds',clock_timestamp(),clock_timestamp())`,[id]);
+      await db.query(`UPDATE security.whatsapp_incoming_calls SET offer_reference=repeat('d',64)
+        WHERE tenant_id='tenant' AND channel_id=$1`,[created.pairingId]);
+      expect((await admin.calls(undefined,id)).calls).toMatchObject([
+        {endReason:'session_unavailable'},{endReason:'messaging_only'},{endReason:'offer_not_handled'},
+      ]);
 
       expect(await admin.save(undefined,id,1,policy)).toEqual({revision:2});
       expect(await admin.config(undefined,id)).toMatchObject({replyMode:'manual',revision:2});
