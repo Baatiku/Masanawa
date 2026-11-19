@@ -11,11 +11,11 @@
 | Canonical Fastify Gateway | Yes, after successful migration; host loopback `127.0.0.1:3100` | 768 MiB / Node 512 MiB heap limit | One REST/streaming API for Flutter and web |
 | Web-only Ops API | **Explicit `ops` profile** after migration and owner grant | 256 MiB / Node 160 MiB heap limit | Same canonical PostgreSQL and Gateway session authority |
 | Caddy HTTPS proxy | **Explicit `public` profile**, only after DNS/TLS checks | 96 MiB | Reverse proxy; never authenticates as a second app |
-| Canonical Worker | **Explicit `worker` profile; not pilot-approved** | 320 MiB if started | **Must remain off** until legacy jobs are retired and resource/lease/job safety qualified |
+| Canonical Worker | **Explicit `worker` profile; not pilot-approved** | 640 MiB if started | **Must remain off** until legacy jobs are retired and resource/lease/job safety qualified |
 | Cloudflare news gateway | External existing Worker+D1 | External free/paid provider allowance | Public article metadata only; not chat, accounts, Wallet or memory |
 | Cloudflare Site frontend | External existing Site | External provider allowance | Non-authoritative browser UI; uses the same Gateway |
 
-The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. If measured memory/CPU cannot safely support a feature, leave that feature off; a resize requires separate owner authorization. Docker `mem_limit` is not a promise of performance or no OOM. The WhatsApp Worker has a 448 MiB limit. The release check loads the Worker imports and call media together to leave space for live sockets and audio.
+The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. If measured memory/CPU cannot safely support a feature, leave that feature off; a resize requires separate owner authorization. Docker `mem_limit` is not a promise of performance or no OOM. The WhatsApp Worker has a 640 MiB limit after a live incoming call exhausted the previous 448 MiB cap. The release check loads the Worker and initializes the native VoIP stack. Confirm live call memory separately on the Droplet.
 
 ### Managed WhatsApp releases
 

@@ -25,6 +25,10 @@ if (process.argv.includes('--check')) {
   const timeout = setTimeout(() => { throw Error('WhatsApp call engine did not initialize'); }, 15_000);
   try {
     await engine.initialize();
+    // Reach the stack setup used when accepting a call, with a synthetic
+    // identity and no link, WAN socket, provider credentials or caller audio.
+    engine.initVoipStack('15550100000:1@s.whatsapp.net', '15550100000@s.whatsapp.net', '');
+    await engine.waitForVoipStackReady();
     const rssMiB = Math.round(process.memoryUsage().rss / 1048576);
     if (rssMiB > 384) throw Error(`Worker and call media startup used ${rssMiB} MiB`);
     console.log(`WhatsApp Worker and call media initialized at ${rssMiB} MiB RSS`);

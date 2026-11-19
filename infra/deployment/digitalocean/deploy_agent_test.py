@@ -84,7 +84,7 @@ class DeploymentAgentTests(unittest.TestCase):
         function = source[source.index('write_worker_override(){'):source.index('\nold_worker_memory=')]
         with tempfile.TemporaryDirectory() as directory:
             override = Path(directory) / 'worker-override.yaml'
-            for previous, expected in [(320, 448), (448, 448), (512, 512)]:
+            for previous, expected in [(320, 640), (448, 640), (640, 640), (768, 768)]:
                 subprocess.run(['bash', '-c', function + '\nwrite_worker_override "$@"',
                                 'fixture', str(previous * 1024 * 1024), str(override)], check=True, timeout=10)
                 self.assertEqual(override.read_text(),

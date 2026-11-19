@@ -74,7 +74,7 @@ jobs:
         run: docker run --rm --network none --user 1000:1000 --entrypoint node masanawa-gateway:pilot --test infra/deployment/digitalocean/qualify-payments.test.mjs
       - name: Initialize WhatsApp call media with the packaged Worker dependencies
         run: >-
-          timeout 25s docker run --rm --network none --memory 448m --memory-swap 448m
+          timeout 25s docker run --rm --network none --memory 640m --memory-swap 640m
           --user 1000:1000 --entrypoint node masanawa-worker:pilot
           --conditions=production --max-old-space-size=224
           services/worker/scripts/prepare-whatsapp-calls.mjs --check

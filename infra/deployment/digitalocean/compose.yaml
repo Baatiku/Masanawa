@@ -165,7 +165,7 @@ services:
       - edge
     init: true
     user: "1000:1000"
-    mem_limit: 448m
+    mem_limit: 640m
     pids_limit: 128
     restart: unless-stopped
     stop_grace_period: 30s
