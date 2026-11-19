@@ -46,8 +46,24 @@ void main() {
       'civicAgencyId':'nimc',
     });
     expect(agent.civicAgencyId, 'nimc');
+    expect(AgentDirectoryEntry.fromJson({...agent.toJson(),'civicAgencyId':'org-federal-ministry-of-communications-innovation-and-digital-economy'}).civicAgencyId,
+      'org-federal-ministry-of-communications-innovation-and-digital-economy');
     expect(agent.withUnverifiedPresence().civicAgencyId, isNull);
     expect(AgentDirectoryEntry.fromJson({...agent.toJson(),'civicAgencyId':'../nimc'}).civicAgencyId,isNull);
+  });
+
+  test('reviewed national institutions have stable live-guide IDs across legacy and new records', () {
+    final original = civicById('nimc')!;
+    expect(original.chatAgencyId, 'nimc');
+    final statistics = civicCatalog.firstWhere((entry) => entry.name == 'National Bureau of Statistics');
+    expect(statistics.chatAgencyId, 'org-national-bureau-of-statistics');
+    expect(statistics.sourceUrl, 'https://nigerianstat.gov.ng/');
+    final senate = civicCatalog.firstWhere((entry) => entry.name == 'Senate of Nigeria');
+    expect(senate.chatAgencyId, 'org-senate-of-nigeria');
+    final budget = civicCatalog.firstWhere((entry) => entry.name == 'Budget Office of the Federation');
+    expect(budget.chatAgencyId, 'org-budget-office-of-the-federation');
+    expect(civicAdditionalInstitutions.length, greaterThan(30));
+    expect(civicCatalog.where((entry) => entry.kind == CivicKind.person).every((entry) => entry.chatAgencyId == null),isTrue);
   });
 
   testWidgets('directory filters and clears search with no blank-screen state', (tester) async {

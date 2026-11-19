@@ -221,7 +221,7 @@ const AgentDirectoryEntrySchema = Type.Object(
       url:Type.String({maxLength:2048}),
     },{additionalProperties:false}),{maxItems:7})),
     publicOfficialSimulation: Type.Optional(Type.Boolean()),
-    civicAgencyId: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9-]{1,39}$'})),
+    civicAgencyId: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9-]{1,127}$'})),
     publicOfficial: Type.Optional(Type.Object({
       officialName:Type.String(),office:Type.String(),identitySourceUrl:Type.String(),
       reviewedAt:Type.String(),reviewExpiresAt:Type.String(),

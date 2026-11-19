@@ -1,4 +1,5 @@
 import {prepareOfficialGrounding,officialAnswerContract,finalizeOfficialAnswer,officialParagraphContract,createOfficialParagraphStream} from './official_answer.js';
+import {prepareCivicAgencyGrounding,civicAgencyAnswerContract,finalizeCivicAgencyAnswer,civicAgencyParagraphContract,createCivicAgencyParagraphStream} from './civic_agency_answer.js';
 import { personaInstructions } from './persona_continuity.js';
 import type {
   AgentInferenceProvider,
@@ -59,8 +60,12 @@ export function createProductionAgentStrategy(input: {
               "You are this Masanawa persona. Support and professional skills are available when relevant; they do not replace your character or turn every conversation into a service interaction.",
             ];
 
-      const grounded=await prepareOfficialGrounding(request,input.inference);
+      const officialGrounded=await prepareOfficialGrounding(request,input.inference);
+      const civicGrounded=officialGrounded.presentation.narrative?.publicOfficial?undefined:
+        await prepareCivicAgencyGrounding(request,input.inference);
+      const grounded=civicGrounded??officialGrounded;
       const official=grounded.presentation.narrative?.publicOfficial;
+      const civic=grounded.presentation.narrative?.civicAgency;
       const instructions = [
         ...personaInstructions(grounded.presentation),
         ...surfaceInstructions,
@@ -118,7 +123,9 @@ export function createProductionAgentStrategy(input: {
       }
 
       const paragraphStream=official&&request.onTextDelta?createOfficialParagraphStream(grounded,request):undefined;
+      const civicStream=civic&&request.onTextDelta?createCivicAgencyParagraphStream(grounded,request):undefined;
       if(official)instructions.push(...(paragraphStream?officialParagraphContract:officialAnswerContract));
+      if(civic)instructions.push(...(civicStream?civicAgencyParagraphContract:civicAgencyAnswerContract));
       const result = await input.inference.generate(
         {
           systemInstructions: Object.freeze(instructions),
@@ -128,10 +135,11 @@ export function createProductionAgentStrategy(input: {
         {
           ...(request.signal ? { signal: request.signal } : {}),
           maxOutputTokens: 4096,
-          ...(paragraphStream?{onTextDelta:paragraphStream.onTextDelta}:!official&&request.onTextDelta ? { onTextDelta: request.onTextDelta } : {}),
+          ...(paragraphStream?{onTextDelta:paragraphStream.onTextDelta}:civicStream?{onTextDelta:civicStream.onTextDelta}:!official&&!civic&&request.onTextDelta ? { onTextDelta: request.onTextDelta } : {}),
         },
       );
-      const reply = paragraphStream?await paragraphStream.finish(result.text):await finalizeOfficialAnswer(result.text,grounded,request);
+      const reply = paragraphStream?await paragraphStream.finish(result.text):civicStream?await civicStream.finish(result.text):
+        official?await finalizeOfficialAnswer(result.text,grounded,request):civic?await finalizeCivicAgencyAnswer(result.text,grounded,request):result.text.trim();
       if (!reply) throw new Error("Production inference returned no text");
       return Object.freeze({
         reply,

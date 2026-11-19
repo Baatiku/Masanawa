@@ -426,7 +426,7 @@ class AgentDirectoryEntry {
           json['publicOfficial'] is Map,
       civicAgencyId:
           json['civicAgencyId'] is String &&
-              RegExp(r'^[a-z][a-z0-9-]{1,39}$')
+              RegExp(r'^[a-z][a-z0-9-]{1,127}$')
                   .hasMatch(json['civicAgencyId'] as String)
           ? json['civicAgencyId'] as String
           : null,

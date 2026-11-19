@@ -1,4 +1,6 @@
 import {contactVoice,isCustomContactVoice,type ContactVoiceGender} from './masana_voice_catalog.js';
+import {createHash} from 'node:crypto';
+import {CIVIC_INSTITUTION_SEEDS} from './civic_institution_seeds.js';
 import {createCanonicalId,nowInstant,type CharacterId,type TenantId} from '@masanawa/contracts';
 import type {Pool} from '@masanawa/postgres';
 import type {AgentPresentationRepository,PlatformAgentProfileRepository,CharacterSkillAssignmentRepository} from '@masanawa/agents';
@@ -9,7 +11,7 @@ import type {PlatformAgentIdentityProvisioner} from './platform_agent_bootstrap.
 /** Independently operated civic AI guides. They explain public functions and
  * never claim to be the named ministry/agency, accept applications or payments,
  * or access government/private records. URLs are public provenance, not APIs. */
-export const CIVIC_AGENCY_CATALOG = Object.freeze(([
+const LEGACY_CIVIC_AGENCY_CATALOG = [
  {id:'inec',name:'Independent National Electoral Commission',short:'INEC',topic:'elections and voter registration',source:'https://www.inecnigeria.org/'},
  {id:'nimc',name:'National Identity Management Commission',short:'NIMC',topic:'national identity, enrolment and NIN guidance',source:'https://nimc.gov.ng/'},
  {id:'nafdac',name:'National Agency for Food and Drug Administration and Control',short:'NAFDAC',topic:'food, drug and product safety regulation',source:'https://nafdac.gov.ng/'},
@@ -26,6 +28,13 @@ export const CIVIC_AGENCY_CATALOG = Object.freeze(([
  {id:'nitda',name:'National Information Technology Development Agency',short:'NITDA',topic:'information technology policy and digital development',source:'https://nitda.gov.ng/'},
  {id:'npa',name:'Nigerian Ports Authority',short:'NPA',topic:'port management and marine services',source:'https://nigerianports.gov.ng/'},
  {id:'faan',name:'Federal Airports Authority of Nigeria',short:'FAAN',topic:'airport facilities and services',source:'https://faan.gov.ng/'},
+] as const;
+/** Preserve existing linked identity IDs while admitting every distinct,
+ * source-reviewed institution in the civic web catalogue. New records use
+ * that catalogue's immutable org-* ID, so future UI bindings need no names. */
+export const CIVIC_AGENCY_CATALOG = Object.freeze(([
+ ...LEGACY_CIVIC_AGENCY_CATALOG,
+ ...CIVIC_INSTITUTION_SEEDS.filter(seed=>!LEGACY_CIVIC_AGENCY_CATALOG.some(existing=>existing.name===seed.name)),
 ] as const).map((seed,index)=>Object.freeze({...seed,gender:(index%2===0?'female':'male') as ContactVoiceGender})));
 
 export function approvedCivicAgencyId(value:unknown):string|null {
@@ -60,13 +69,13 @@ export async function ensureCivicAgencyAgents(input:{
  for(const [index,seed] of CIVIC_AGENCY_CATALOG.entries()){
   const characterId=byId.get(seed.id)??createCanonicalId('character');
   const characterVersionId=createCanonicalId('character-version');
-  const intro=`Independent Masanawa AI guide to ${seed.name} (${seed.short}). Not the agency or its staff.`;
+   const intro=`Independent Masanawa AI guide to ${seed.name}. Not the institution or its staff.`;
   if(!byId.has(seed.id)) {
    await input.identity.provision({tenantId:input.tenantId,characterId,characterVersionId,createdAt:nowInstant(),
     constitution:{schemaVersion:1,displayName:`${seed.short} · AI Guide`,biography:`${intro} Explains ${seed.topic}. Reference: ${seed.source}`,
       personality:['Helpful','Clear','Politically neutral','Evidence-grounded'],
       boundaries:[
-       'Always state that this is an independent Masanawa AI guide, not a government account or authorised officer.',
+       'Disclose independent Masanawa AI-guide status at the first exchange or whenever official authority is relevant; never claim to be a government account or authorised officer.',
        `Discuss ${seed.topic} from publicly attributable information; distinguish law from commentary and uncertainty.`,
        `Direct citizens to ${seed.source} for current official forms, advice, fees and decisions.`,
        'Never ask for NIN, BVN, passwords, passport details, OTPs, or payment to the AI.',
@@ -86,8 +95,15 @@ export async function ensureCivicAgencyAgents(input:{
       : characterVersionId,
     displayName:`${seed.short} · AI Guide`,roleLabel:`Civic AI guide · ${seed.name}`,
     about:`${intro} Public education about ${seed.topic}.`,
-    greeting:`Hello! I'm an independent Masanawa AI guide to ${seed.short}, not the agency. What would you like to understand?`,
+    // Introduction belongs to the first actual generated turn, not a canned
+    // database greeting injected before the citizen asks a question.
+    greeting:null,
     countryCode:'NG',countryName:'Nigeria',visibleInUserApp:true,sortOrder:200+index,revision:1}});
+  } else if(presentation.greeting===`Hello! I'm an independent Masanawa AI guide to ${seed.short}, not the agency. What would you like to understand?`){
+   // Migrate only the exact boilerplate installed by an earlier bootstrap;
+   // preserve administrator-authored greetings and every published identity.
+   await input.presentations.put({expectedRevision:presentation.revision,
+    presentation:{...presentation,greeting:null,revision:presentation.revision+1}});
   }
   const existingProfile=await input.profiles.readForCharacter({tenantId:input.tenantId,characterId});
   const voiceName=contactVoice(seed.gender,index);
@@ -101,7 +117,12 @@ export async function ensureCivicAgencyAgents(input:{
    await input.skillAssignments.put({expectedRevision:null,assignment:{schemaVersion:1,tenantId:input.tenantId,
     characterId,skillVersionIds:Object.freeze([...skills]),revision:1}});
   }
-  const approved=validateMasanaProfile({handle:`civic.${seed.id}`,displayName:`${seed.short} · AI Guide`,
+  // Masana handles have a 40-character limit; preserve historical short IDs
+  // and use a collision-resistant, stable opaque handle for long directory IDs.
+  // PostgreSQL's built-in md5() is used in the reviewed civic-media guard to
+  // verify this exact opaque handle; the constitution still binds the full ID.
+  const handle=`civic.${seed.id.length<=33?seed.id:createHash('md5').update(seed.id).digest('hex').slice(0,24)}`;
+  const approved=validateMasanaProfile({handle,displayName:`${seed.short} · AI Guide`,
     profession:'Independent civic AI guide',biography:intro,lifeStory:`${intro} Information source: ${seed.source}.`,
     languages:['en','ha'],talents:[seed.topic],goals:['Explain public information accurately'],
     roomId:null,portraitMediaId:null,bannerMediaId:null});

@@ -3,6 +3,10 @@ import {CIVIC_AGENCY_CATALOG,approvedCivicAgencyId,ensureCivicAgencyAgents} from
 
 describe('independently operated agency AI guides',()=>{
  it('requires an exact published agency key, not a lookalike or an arbitrary organisation',()=>{
+  expect(CIVIC_AGENCY_CATALOG).toHaveLength(73);
+  expect(approvedCivicAgencyId('org-national-bureau-of-statistics')).toBe('org-national-bureau-of-statistics');
+  expect(approvedCivicAgencyId('org-senate-of-nigeria')).toBe('org-senate-of-nigeria');
+  expect(approvedCivicAgencyId('org-national-identity-management-commission')).toBeNull(); // legacy identity preserved
   expect(approvedCivicAgencyId('nimc')).toBe('nimc');
   expect(approvedCivicAgencyId('NIMC')).toBeNull();
   expect(approvedCivicAgencyId('government')).toBeNull();
@@ -23,7 +27,7 @@ describe('independently operated agency AI guides',()=>{
   const identity={provision:async(value:Record<string,any>)=>{
    const id=value.constitution.disclosurePolicy.civicAgencyId;
    expect(seeded.has(id)).toBe(false);
-   expect(value.constitution.boundaries.join(' ')).toContain('not a government account');
+   expect(value.constitution.boundaries.join(' ')).toContain('never claim to be a government account');
    expect(value.constitution.boundaries.join(' ')).toContain('Never ask for NIN');
    seeded.set(id,{characterId:value.characterId,constitution:value.constitution});
   }};
@@ -42,11 +46,21 @@ describe('independently operated agency AI guides',()=>{
   expect(first).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:CIVIC_AGENCY_CATALOG.length});
   expect(presentations.size).toBe(CIVIC_AGENCY_CATALOG.length);
   expect([...presentations.values()].every(p=>p.visibleInUserApp&&p.displayName.endsWith('AI Guide'))).toBe(true);
+  expect([...presentations.values()].every(p=>p.greeting===null)).toBe(true);
   const keys=[...profiles.keys()];
+  const legacyPresentation=presentations.get(keys[0]!)!;
+  const legacyId=[...seeded.entries()].find(([,record])=>record.characterId===keys[0])![0];
+  const legacySeed=CIVIC_AGENCY_CATALOG.find(seed=>seed.id===legacyId)!;
+  presentations.set(keys[0]!,{...legacyPresentation,greeting:`Hello! I'm an independent Masanawa AI guide to ${legacySeed.short}, not the agency. What would you like to understand?`});
+  const customPresentation=presentations.get(keys[1]!)!;
+  presentations.set(keys[1]!,{...customPresentation,greeting:'An administrator-authored introduction.'});
   const stock=profiles.get(keys[0]!)!;profiles.set(keys[0]!,{...stock,voiceName:'Bodi'});
   const custom=profiles.get(keys[1]!)!;profiles.set(keys[1]!,{...custom,voiceName:'voice_verified_fixture'});
   const second=await ensureCivicAgencyAgents(args);
   expect(second).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:0});
+  expect(presentations.get(keys[0]!)?.greeting).toBeNull();
+  expect(presentations.get(keys[0]!)?.revision).toBe(legacyPresentation.revision+1);
+  expect(presentations.get(keys[1]!)?.greeting).toBe('An administrator-authored introduction.');
   expect(profiles.get(keys[0]!)!.voiceName).toBe('Sulafat');
   expect(profiles.get(keys[0]!)!.revision).toBe(stock.revision+1);
   expect(profiles.get(keys[1]!)!.voiceName).toBe('voice_verified_fixture');
