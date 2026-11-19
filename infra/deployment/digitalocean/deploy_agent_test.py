@@ -49,6 +49,36 @@ class DeploymentAgentTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][-2:], [SHA, 'true'])
             self.assertEqual(json.loads((Path(path) / 'state.json').read_text())['status'], 'failed')
 
+    def test_low_disk_reclaims_only_repullable_unreferenced_release_images(self):
+        source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
+        cleanup = source[source.index('reclaim_release_images(){'):source.index('\ndocker_root=')]
+        docker = r'''docker(){
+          local prefix=ghcr.io/baatiku/masanawa-do-pilot-worker
+          case "$1 $2" in
+            "image ls") printf '%s\n' postgres:18 "$prefix:$old_rev" "$prefix:$release_sha" \
+              "$prefix:$parent_rev" "$prefix:$obsolete_rev" "$prefix:$used_rev" \
+              "$prefix:dccebe9c61bc783c1baa4993de415f241a20f828" ;;
+            "ps -aq") [[ "$4" != *"$used_rev" ]] || echo stopped-container ;;
+            "image rm") printf '%s\n' "$3" >>"$removals" ;;
+            *) return 2 ;;
+          esac
+        }
+        timeout(){ [[ "$5" == *"$obsolete_rev" ]]; }
+        disk_free(){ echo 0; }
+        docker_root=/unused pull_reserve=1
+        old_gateway=none old_ops=none
+        old_worker="ghcr.io/baatiku/masanawa-do-pilot-worker:$old_rev"
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            removals = Path(directory) / 'removals'
+            env = {**os.environ, 'removals': str(removals), 'old_rev': 'a' * 40,
+                   'release_sha': 'b' * 40, 'parent_rev': 'c' * 40,
+                   'obsolete_rev': 'd' * 40, 'used_rev': 'e' * 40}
+            subprocess.run(['bash', '-e', '-c', docker + cleanup + '\nreclaim_release_images'],
+                           env=env, check=True, timeout=10, capture_output=True)
+            self.assertEqual(removals.read_text(),
+                             'ghcr.io/baatiku/masanawa-do-pilot-worker:' + 'd' * 40 + '\n')
+
     def test_worker_memory_override_has_only_the_worker_and_keeps_higher_limits(self):
         source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
         function = source[source.index('write_worker_override(){'):source.index('\nold_worker_memory=')]

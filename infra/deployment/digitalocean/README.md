@@ -34,6 +34,8 @@ request schedules deployment only after both the Foundation and DigitalOcean
 main workflows have passed for that SHA. A failed request runs once and keeps
 its private checkpoint. A retry uses a new request ID after reviewing the error.
 
+With low Docker storage, the installer can release unused local Masanawa image tags that remain downloadable from GHCR. It preserves images referenced by running or stopped containers, the incoming release, and the named voice checkpoint. PostgreSQL volumes and backups stay outside the cache cleanup. The installer checks backup space again after pulling the release.
+
 The Gateway readiness response includes the running commit in
 `x-masanawa-release`. The installer records completion only after the Worker
 readiness and linked-device configuration checks pass. The Droplet retains
