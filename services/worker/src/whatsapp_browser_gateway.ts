@@ -69,17 +69,23 @@ async function stop(removeProfile=false){
 }
 
 async function begin(pair:Pairing){
-  const settings={session:pair.channel_id,deviceName:'Masanawa Call Gateway',headless:false,useChrome:false,logQR:false,
-    autoClose:0,waitForLogin:false,tokenStore:'file',folderNameToken:'/data',
+  const profile='/data/'+pair.channel_id+'-chrome';
+  const settings={session:pair.channel_id,whatsappVersion:'',deviceName:'Masanawa Call Gateway',headless:false,useChrome:false,logQR:false,
+    autoClose:0,deviceSyncTimeout:0,waitForLogin:false,tokenStore:'file',folderNameToken:'/data',
     disableWelcome:true,disableGoogleAnalytics:true,updatesLog:false,
     catchQR:(_base64:string,_ascii:string,_attempt:number,urlCode:string)=>{
       if(pairing===pair&&urlCode&&urlCode.length<4096)void update(pair,'qr_ready',null,urlCode).catch(()=>report('qr_failed'));
     },
     browserArgs:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--use-fake-ui-for-media-stream',
-      '--autoplay-policy=no-user-gesture-required','--disable-background-timer-throttling'],
-    puppeteerOptions:{executablePath:'/usr/bin/chromium',userDataDir:`/data/${pair.channel_id}-chrome`,protocolTimeout:7000},
+      '--autoplay-policy=no-user-gesture-required','--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows','--disable-renderer-backgrounding'],
+    puppeteerOptions:{executablePath:'/usr/bin/chromium',userDataDir:profile,protocolTimeout:15000},
   };
   try{
+    // The app credentials live in cookies and IndexedDB. Remove stale Chromium
+    // process locks left behind by a previous container while preserving both.
+    await Promise.all(['SingletonLock','SingletonSocket','SingletonCookie','DevToolsActivePort']
+      .map(file=>rm(profile+'/'+file,{force:true})));
     const opened=await wpp.create(settings);
     if(pairing!==pair||closing){await opened.close();return;}
     const identity={tenantId:pair.tenant_id,channelId:pair.channel_id,targetId:pair.call_target_channel_id,owner};
