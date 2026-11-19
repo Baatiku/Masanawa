@@ -1133,6 +1133,20 @@
       "description": "Exact deployed source revision, reported in the Gateway readiness response header."
     },
     {
+      "name": "MASANAWA_WHATSAPP_BROWSER_ENABLED",
+      "owner": "ops/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Enables pairing and processing on the isolated Chromium voice call gateway when the global WhatsApp call switch is enabled."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_BROWSER_IMAGE",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Exact release image for the isolated WhatsApp browser call gateway."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_CALLS_ENABLED",
       "owner": "ops/worker",
       "classification": "public",
