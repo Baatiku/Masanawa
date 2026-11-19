@@ -100,7 +100,10 @@ async function begin(pair:Pairing){
       acquire:()=>{if(busy)return false;busy=true;return true;},release:()=>{busy=false;}});
     client=opened;
   }catch{
-    if(pairing===pair){await update(pair,'degraded','browser_start_failed').catch(()=>undefined);await stop();}
+    if(pairing===pair)await update(pair,'degraded','browser_start_failed').catch(()=>undefined);
+    // WPPConnect can throw after launching Chrome but before returning its
+    // handle. Restart the call container to reclaim that browser as well.
+    process.exit(1);
   }finally{clearTimeout(launchTimeout);}
 }
 
