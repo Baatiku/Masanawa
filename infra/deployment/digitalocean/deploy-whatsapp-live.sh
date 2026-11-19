@@ -206,6 +206,9 @@ probe ops 3002 /readyz=200 /v1/admin/whatsapp=401
 stage='start Worker'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
   --wait --wait-timeout 150 worker >"$backup/worker.log" 2>&1
+stage='check Worker memory limit'
+worker_memory="$(docker inspect -f '{{.HostConfig.Memory}}' masanawa-worker-1)"
+test "$worker_memory" -ge "$((448 * 1024 * 1024))"
 stage='check Worker'
 probe worker 3001 /readyz=200
 stage='check WhatsApp configuration'
