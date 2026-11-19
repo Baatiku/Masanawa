@@ -17,7 +17,7 @@ describe('WhatsApp manual-off persistence',()=>{
         CREATE TABLE identity.users(tenant_id text,user_id text,state text,PRIMARY KEY(tenant_id,user_id));`);
       for(const filename of ['0123_whatsapp_ai.sql','0124_whatsapp_number_identity.sql',
         '0125_whatsapp_gemini_key_pool.sql','0126_whatsapp_gemini_keys_key_only.sql',
-        '0127_whatsapp_gemini_full_voices.sql'])
+        '0127_whatsapp_gemini_full_voices.sql','0128_whatsapp_incoming_calls.sql'])
         await db.exec(await readFile(new URL(`../../../packages/security/migrations/${filename}`,import.meta.url),'utf8'));
       const inserted=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels(tenant_id,enabled,state)
         VALUES('tenant',true,'connected') RETURNING channel_id`);
@@ -34,7 +34,19 @@ describe('WhatsApp manual-off persistence',()=>{
         VALUES('tenant',$1,$2,'reply')`,[id,m.rows[0]!.message_id]);
 
       const admin=createWhatsAppAdmin({pool:db as never,
-        authorize:(async()=>({tenantId:'tenant',actorId:'admin'})) as never,env:{}});
+        authorize:(async()=>({tenantId:'tenant',actorId:'admin'})) as never,env:{
+          MASANAWA_WHATSAPP_ENABLED:'true',MASANAWA_WHATSAPP_MODE:'linked-device',
+          MASANAWA_WHATSAPP_SESSION_KEY:Buffer.alloc(32).toString('base64'),MASANAWA_WHATSAPP_CALLS_ENABLED:'true',
+        }});
+      const phone='2348012345678@s.whatsapp.net';
+      await db.query(`UPDATE security.whatsapp_channels SET linked_jid=$2 WHERE channel_id=$1`,[id,phone]);
+      const created=await admin.startCalls(undefined,id) as {pairingId:string};
+      expect(await admin.startCalls(undefined,id)).toMatchObject({pairingId:created.pairingId});
+      expect((await admin.list(undefined)).channels).toHaveLength(1);
+      await expect(admin.changeCalls(undefined,id,'enable',1)).rejects.toMatchObject({statusCode:409});
+      await db.query(`UPDATE security.whatsapp_channels SET state='connected',linked_jid=$2 WHERE channel_id=$1`,[created.pairingId,phone]);
+      expect(await admin.changeCalls(undefined,id,'enable',1)).toMatchObject({enabled:true,revision:2});
+
       expect(await admin.save(undefined,id,1,policy)).toEqual({revision:2});
       expect(await admin.config(undefined,id)).toMatchObject({replyMode:'manual',revision:2});
       const channel=await db.query<{enabled:boolean;revision:number}>(
@@ -43,6 +55,8 @@ describe('WhatsApp manual-off persistence',()=>{
       const jobs=await db.query<{state:string;last_error_code:string}>(
         `SELECT state,last_error_code FROM security.whatsapp_jobs`);
       expect(jobs.rows[0]).toEqual({state:'completed',last_error_code:'assistant_paused'});
+      expect(await admin.calls(undefined,id)).toMatchObject({pairingId:created.pairingId,aiEnabled:false,replyMode:'manual'});
+      await expect(admin.changeCalls(undefined,id,'enable',2)).rejects.toMatchObject({statusCode:409});
 
       // Updating persona settings or reloads cannot unintentionally resume AI.
       await admin.save(undefined,id,2,{...policy,name:'New assistant name',liveVoiceName:'Algenib'});
@@ -56,6 +70,8 @@ describe('WhatsApp manual-off persistence',()=>{
       expect(await admin.change(undefined,id,'enable',2)).toMatchObject({enabled:true});
       expect((await db.query<{enabled:boolean}>(`SELECT enabled FROM security.whatsapp_channels
         WHERE channel_id=$1`,[id])).rows[0]?.enabled).toBe(true);
+      expect(await admin.changeCalls(undefined,id,'disconnect',2)).toMatchObject({state:'disconnected'});
+      expect(await admin.calls(undefined,id)).toMatchObject({pairingId:null,numberState:'connected',aiEnabled:true});
     }finally{await db.close();}
   },30000);
 });

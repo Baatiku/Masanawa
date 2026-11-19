@@ -18,6 +18,7 @@ COPY services ./services
 COPY apps ./apps
 
 RUN pnpm install --frozen-lockfile
+RUN node services/worker/scripts/prepare-whatsapp-calls.mjs
 RUN pnpm --filter @masanawa/worker-service... build
 
 ENV NODE_ENV=production

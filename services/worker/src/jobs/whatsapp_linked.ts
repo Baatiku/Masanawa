@@ -8,10 +8,12 @@ import type {Pool} from '@masanawa/postgres';
 import {pino} from 'pino';
 import {toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
 import {withGeminiKeyPool} from './whatsapp_live.js';
+import {createWhatsAppCallingSocket,createWhatsAppCallHandler} from './whatsapp_calls.js';
 
 type Db=Pick<Pool,'query'>;
-type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null};
-type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>;flushAuth:()=>Promise<void>};
+type Channel={tenant_id:string;channel_id:string;state:string;enabled:boolean;lease_owner:string|null;call_target_channel_id:string|null};
+type Slot={socket:WASocket;tenantId:string;owner:string;channelId:string;connected:boolean;botMessageIds:Set<string>;
+  flushAuth:()=>Promise<void>;calls?:ReturnType<typeof createWhatsAppCallHandler>};
 const linkedJid=(jid:string)=>/^[0-9]{5,32}@(s\.whatsapp\.net|lid)$/.test(jid);
 
 /** Linked-device Baileys exposes call signaling, but NOT a supported audio
@@ -152,9 +154,12 @@ export async function persistLinkedHistory(pool:Db,identity:{tenantId:string;cha
 export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:Readonly<Record<string,string|undefined>>;maxSockets?:number}){
   const sockets=new Map<string,Slot>(),retryAfter=new Map<string,number>();
   const limit=Math.max(1,Math.min(10,input.maxSockets??4));
+  const callEnabled=input.env?.MASANAWA_WHATSAPP_CALLS_ENABLED==='true';
+  let callInProgress=false;
   function close(channelId:string){
     const slot=sockets.get(channelId);if(!slot)return;
     sockets.delete(channelId);
+    void slot.calls?.stop();
     try{slot.socket.end(new Error('whatsapp_socket_replaced'));}catch{/* already closed */}
   }
   async function ingest(slot:Slot,msg:WAMessage){
@@ -243,9 +248,10 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
   }
   async function launch(channel:Channel,leaseOwner:string){
     const auth=await createLinkedAuthState(input.pool,channel.tenant_id,channel.channel_id,input.sessionKey,leaseOwner);
-    const socket=makeWASocket({auth:auth.state,browser:Browsers.ubuntu('Masanawa'),
-      syncFullHistory:false,markOnlineOnConnect:false,
-      getMessage:async()=>undefined});
+    const settings={auth:auth.state,browser:Browsers.ubuntu(channel.call_target_channel_id?'Masanawa Calls':'Masanawa'),
+      syncFullHistory:false,markOnlineOnConnect:false,getMessage:async()=>undefined};
+    const callSocket=channel.call_target_channel_id?await createWhatsAppCallingSocket(settings):undefined;
+    const socket=callSocket??makeWASocket(settings);
     const slot:Slot={socket,tenantId:channel.tenant_id,owner:leaseOwner,channelId:channel.channel_id,connected:false,botMessageIds:new Set(),flushAuth:auth.flush};
     sockets.set(channel.channel_id,slot);
     socket.ev.on('creds.update',update=>{
@@ -263,13 +269,26 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       if(update.connection==='open'){
         const jid=jidNormalizedUser(socket.user?.id??'');
         if(!linkedJid(jid)){await markError(slot,'linked_identity_unavailable');return;}
-        slot.connected=true;
         const result=await input.pool.query(`UPDATE security.whatsapp_channels SET state='connected',linked_jid=$3,
           display_phone=$4,verified_name=$5,qr_ciphertext=NULL,qr_expires_at=NULL,
           last_connected_at=clock_timestamp(),last_error_code=NULL,updated_at=clock_timestamp()
-          WHERE tenant_id=$1 AND channel_id=$2 AND lease_owner=$6 RETURNING channel_id`,
-          [slot.tenantId,slot.channelId,jid,jid.split('@')[0],socket.user?.name??'',slot.owner]);
-        if(!result.rows.length)close(slot.channelId);
+          WHERE tenant_id=$1 AND channel_id=$2 AND lease_owner=$6
+            AND ($7::uuid IS NULL OR EXISTS(SELECT 1 FROM security.whatsapp_channels target
+              WHERE target.tenant_id=$1 AND target.channel_id=$7 AND target.linked_jid=$3))
+          RETURNING channel_id`,
+          [slot.tenantId,slot.channelId,jid,jid.split('@')[0],socket.user?.name??'',slot.owner,channel.call_target_channel_id]);
+        if(!result.rows.length){
+          if(callSocket&&sockets.get(slot.channelId)===slot){
+            // A scan from a different number cannot send audio or reuse an existing messaging identity.
+            await input.pool.query(`UPDATE security.whatsapp_channels SET state='needs_pairing',enabled=false,
+              last_error_code='call_pairing_number_mismatch',qr_ciphertext=NULL,qr_expires_at=NULL
+              WHERE tenant_id=$1 AND channel_id=$2 AND lease_owner=$3`,[slot.tenantId,slot.channelId,slot.owner]);
+            try{await callSocket.logout();}catch{/* the wrong session is still fenced locally */}
+          }
+          close(slot.channelId);
+          return;
+        }
+        slot.connected=true;
       }
       if(update.connection==='close'){
         slot.connected=false;
@@ -284,6 +303,18 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         }
       }
     })().catch(()=>markError(slot,'connection_update_failed'));});
+    if(callSocket){
+      const calls=createWhatsAppCallHandler({pool:input.pool,identity:slot,env:input.env??{},sessionKey:input.sessionKey,
+        acquire:()=>{
+          if(callInProgress)return false;
+          callInProgress=true;
+          return true;
+        },release:()=>{callInProgress=false;}});
+      slot.calls=calls;
+      callSocket.ev.on('call.incoming',session=>{if(slot.connected)calls.session(session);});
+      socket.ev.on('call',events=>{if(slot.connected)for(const call of events.slice(0,20))calls.signal(call);});
+      return;
+    }
     socket.ev.on('messages.upsert',event=>{
       for(const msg of event.messages){
         const messageTime=Number(msg.messageTimestamp?.toString()??0);
@@ -342,8 +373,11 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
   }
   return {
     async runOnce(){
-      const result=await input.pool.query(`SELECT tenant_id,channel_id,state,enabled,lease_owner
-        FROM security.whatsapp_channels WHERE state<>'disconnected' ORDER BY created_at LIMIT 100`);
+      const result=await input.pool.query(`SELECT c.tenant_id,c.channel_id,c.state,c.enabled,c.lease_owner,c.call_target_channel_id
+        FROM security.whatsapp_channels c WHERE c.state<>'disconnected' AND (c.call_target_channel_id IS NULL OR
+          ($1 AND EXISTS(SELECT 1 FROM security.whatsapp_channels target
+            WHERE target.tenant_id=c.tenant_id AND target.channel_id=c.call_target_channel_id AND target.state='connected')))
+        ORDER BY c.call_target_channel_id IS NOT NULL,c.created_at LIMIT 100`,[callEnabled]);
       const rows=result.rows as Channel[],ids=new Set(rows.map(r=>r.channel_id));
       for(const [id,slot] of sockets){
         const channel=rows.find(r=>r.channel_id===id);
@@ -351,15 +385,23 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       }
       for(const channel of rows){
         if(channel.state==='needs_pairing'||retryAfter.get(channel.channel_id)!>Date.now())continue;
-        const leaseOwner=sockets.get(channel.channel_id)?.owner??randomUUID();
+        const slot=sockets.get(channel.channel_id);
+        // Keep the established messaging socket capacity when call answering is enabled.
+        if(!slot&&[...sockets.values()].filter(s=>Boolean(s.calls)===Boolean(channel.call_target_channel_id)).length>=limit)continue;
+        const leaseOwner=slot?.owner??randomUUID();
         const lease=await input.pool.query(`UPDATE security.whatsapp_channels
           SET lease_owner=$2,lease_expires_at=clock_timestamp()+interval '20 seconds'
           WHERE channel_id=$1 AND state NOT IN ('disconnected','needs_pairing')
           AND (lease_owner=$2 OR lease_expires_at IS NULL OR lease_expires_at<clock_timestamp()) RETURNING channel_id`,
           [channel.channel_id,leaseOwner]);
         if(!lease.rows.length){close(channel.channel_id);continue;}
-        if(!sockets.has(channel.channel_id)&&sockets.size<limit){
-          try{await launch(channel,leaseOwner);}catch{retryAfter.set(channel.channel_id,Date.now()+15000);}
+        if(!slot){
+          try{
+            if(channel.call_target_channel_id)await input.pool.query(`UPDATE security.whatsapp_incoming_calls
+              SET ended_at=clock_timestamp(),end_reason='disconnected'
+              WHERE tenant_id=$1 AND channel_id=$2 AND ended_at IS NULL`,[channel.tenant_id,channel.channel_id]);
+            await launch(channel,leaseOwner);
+          }catch{retryAfter.set(channel.channel_id,Date.now()+15000);}
         }
       }
       return {managed:sockets.size,total:ids.size};
@@ -398,9 +440,6 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     async sendVoice(channelId:string,jid:string,body:string,voiceId:string|null,preparedAudio?:Buffer){
       const slot=sockets.get(channelId);
       if(!slot?.connected||!linkedJid(jid))throw Error('whatsapp_linked_socket_unavailable');
-      const permission=await input.pool.query(`SELECT 1 FROM security.whatsapp_channels WHERE tenant_id=$1
-        AND channel_id=$2 AND enabled=true AND state='connected' AND lease_owner=$3`,[slot.tenantId,channelId,slot.owner]);
-      if(!permission.rows.length)throw Error('whatsapp_channel_disabled');
       let encoded:Buffer;
       try {
         if(!preparedAudio)throw Error('live_audio_payload_required');
@@ -411,6 +450,14 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
         // No WhatsApp send was attempted; caller can safely classify the failure.
         throw Error('whatsapp_audio_preparation_failed');
       }
+      // Encoding can take time. Recheck the pause and takeover after it completes.
+      const permission=await input.pool.query(`SELECT 1 FROM security.whatsapp_channels c
+        JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
+        JOIN security.whatsapp_threads t USING(tenant_id,channel_id)
+        WHERE c.tenant_id=$1 AND c.channel_id=$2 AND c.lease_owner=$3 AND t.customer_wa_id=$4
+          AND c.enabled AND c.state='connected' AND a.reply_mode<>'manual' AND t.mode='ai'`,
+      [slot.tenantId,channelId,slot.owner,jid]);
+      if(!permission.rows.length)throw Error('assistant_paused_before_send');
       const sent=await slot.socket.sendMessage(jid,{audio:encoded,mimetype:'audio/ogg; codecs=opus',ptt:true});
       const id=sent?.key.id;if(!id)throw Error('whatsapp_voice_receipt_unknown');
       slot.botMessageIds.add(id);if(slot.botMessageIds.size>2000)slot.botMessageIds.delete(slot.botMessageIds.values().next().value??'');
@@ -418,6 +465,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     },
     async stop(){
       const active=[...sockets.values()];
+      await Promise.allSettled(active.map(slot=>slot.calls?.stop()));
       for(const id of [...sockets.keys()])close(id);
       // Compose restarts must drain every encrypted Signal key write before
       // the Worker closes its PostgreSQL pool, otherwise a scan may be lost.

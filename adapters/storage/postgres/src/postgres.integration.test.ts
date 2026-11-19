@@ -243,6 +243,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0125_whatsapp_gemini_key_pool.sql",
       "security/0126_whatsapp_gemini_keys_key_only.sql",
       "security/0127_whatsapp_gemini_full_voices.sql",
+      "security/0128_whatsapp_incoming_calls.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",

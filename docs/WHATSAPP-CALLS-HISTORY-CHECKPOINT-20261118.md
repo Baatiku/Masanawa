@@ -62,3 +62,37 @@ call hangup and timeout, explicit per-number opt-in, no automatic unsolicited
 outbound dialing, a tested caller disclosure and a measured memory profile.
 VoIP/WASM memory and Chromium overhead need particular care on the 2-GiB host.
 No part of the current milestone claims that a phone call was answered by AI.
+
+### Incoming AI call pilot
+
+The call implementation uses a second linked-device QR for the same number.
+It uses a pinned calling-capable Baileys adapter and separate encrypted QR
+credentials. The messaging socket continues to use `@whiskeysockets/baileys`
+and owns message ingestion and dispatch. A QR scanned from a different number
+does not authorize the calling socket. Enable calling in the pilot runtime with
+`MASANAWA_WHATSAPP_CALLS_ENABLED=true` after deploying the matching Worker, Ops,
+and migration `security/0128`.
+
+In **WhatsApp AI → Call answering**, choose a connected number, select **Pair
+call device**, and scan its QR under **WhatsApp → Linked Devices** on the phone
+holding that number. Confirm the device is connected, then select **Enable call
+answering**. Call answering is initially paused. **Pause call answering** stops
+the calls feature by itself. The number-level **Pause AI replies now** and
+**Manual takeover** also suspend answering and terminate active AI calls. Away
+mode refrains from answering while recent human reply activity is within the
+number’s configured grace period.
+
+The Worker accepts one fresh one-to-one voice call at a time. The caller hears
+the AI disclosure before any of their audio is streamed to Gemini Live. The
+Worker processes both audio directions in memory, relays interruptions, and
+ends the call on provider failure, a pause, disconnection, or the five-minute
+limit. The admin activity shows timing and end reason. It stores no caller
+audio or transcripts. Call answering has no account, wallet, or purchase tools.
+
+For the pilot, pair the same disposable number in both slots. Verify that a new
+caller hears the disclosure, can speak and hear two responses, can interrupt the
+assistant, and can hang up. Pause during a second call and verify the active
+AI call ends and the next call is left for the owner. Confirm text and voice
+notes still work on the messaging slot, and check Worker memory during the live
+test before enabling the feature on the owner's number. Automated audio tests
+simulate the WhatsApp call and Gemini endpoints.

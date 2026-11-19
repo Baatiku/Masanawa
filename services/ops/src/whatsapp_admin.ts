@@ -78,6 +78,7 @@ export function createWhatsAppAdmin(input:Input){
   const read=(auth:string|undefined)=>input.authorize({authorizationHeader:auth,capability:'whatsapp.read'});
   const write=(auth:string|undefined)=>input.authorize({authorizationHeader:auth,capability:'whatsapp.write'});
   const configured=()=>Boolean(input.env.MASANAWA_WHATSAPP_SESSION_KEY&&Buffer.from(input.env.MASANAWA_WHATSAPP_SESSION_KEY,'base64').length===32&&input.env.MASANAWA_WHATSAPP_ENABLED==='true'&&input.env.MASANAWA_WHATSAPP_MODE==='linked-device');
+  const callsConfigured=()=>configured()&&input.env.MASANAWA_WHATSAPP_CALLS_ENABLED==='true';
   const audit=async(tenant:string,id:string|null,actor:string,action:string,metadata:Record<string,unknown>={})=>{
     await input.pool.query('INSERT INTO security.whatsapp_audit(tenant_id,channel_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5::jsonb)',[tenant,id,actor,action,JSON.stringify(metadata)]);
   };
@@ -125,7 +126,7 @@ export function createWhatsAppAdmin(input:Input){
         c.last_error_code AS "lastErrorCode",c.revision::int AS "revision",a.name AS "assistantName",a.role_level AS "roleLevel",
         a.number_purpose AS "numberPurpose"
         FROM security.whatsapp_channels c JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
-        WHERE c.tenant_id=$1 ORDER BY c.created_at DESC LIMIT 100`,[actor.tenantId]);
+        WHERE c.tenant_id=$1 AND c.call_target_channel_id IS NULL ORDER BY c.created_at DESC LIMIT 100`,[actor.tenantId]);
       return {channels:rows.rows,linkedDeviceConfigured:configured(),qrPairingSupported:true,
         onboarding:'Scan the QR using WhatsApp → Linked Devices → Link a device. Private session credentials persist encrypted in PostgreSQL; account restrictions and unlinking remain controlled by WhatsApp.'};
     },
@@ -143,6 +144,66 @@ export function createWhatsAppAdmin(input:Input){
       if(!channel)throw new WhatsAppAdminError(503,'channel_creation_failed');
       await audit(actor.tenantId,channel.channelId,actor.actorId,'channel.created',{mode:'linked_device_qr'});
       return channel;
+    },
+    async calls(auth:string|undefined,id:string){
+      const actor=await read(auth);
+      if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
+      const result=await input.pool.query(`SELECT target.state AS "numberState",target.enabled AS "aiEnabled",
+        a.reply_mode AS "replyMode",c.channel_id AS "pairingId",c.state,c.enabled,c.revision::int,
+        c.last_error_code AS "lastErrorCode"
+        FROM security.whatsapp_channels target JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
+        LEFT JOIN security.whatsapp_channels c ON c.tenant_id=target.tenant_id
+          AND c.call_target_channel_id=target.channel_id AND c.state<>'disconnected'
+        WHERE target.tenant_id=$1 AND target.channel_id=$2 AND target.call_target_channel_id IS NULL`,[actor.tenantId,id]);
+      const pairing=result.rows[0];
+      if(!pairing)throw new WhatsAppAdminError(404,'channel_not_found');
+      const history=await input.pool.query(`SELECT i.reference,i.offered_at AS "offeredAt",
+        i.answered_at AS "answeredAt",i.ended_at AS "endedAt",i.end_reason AS "endReason"
+        FROM security.whatsapp_incoming_calls i JOIN security.whatsapp_channels c USING(tenant_id,channel_id)
+        WHERE c.tenant_id=$1 AND c.call_target_channel_id=$2 ORDER BY i.offered_at DESC LIMIT 30`,[actor.tenantId,id]);
+      return {...pairing,configured:callsConfigured(),calls:history.rows};
+    },
+    async startCalls(auth:string|undefined,id:string){
+      const actor=await write(auth);
+      if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
+      if(!callsConfigured())throw new WhatsAppAdminError(503,'whatsapp_calls_not_configured');
+      const result=await input.pool.query(`INSERT INTO security.whatsapp_channels(tenant_id,call_target_channel_id)
+        SELECT tenant_id,channel_id FROM security.whatsapp_channels
+        WHERE tenant_id=$1 AND channel_id=$2 AND call_target_channel_id IS NULL AND state='connected'
+        ON CONFLICT(tenant_id,call_target_channel_id) WHERE call_target_channel_id IS NOT NULL AND state<>'disconnected'
+        DO UPDATE SET call_target_channel_id=EXCLUDED.call_target_channel_id
+        RETURNING channel_id AS "pairingId",state,revision::int`,[actor.tenantId,id]);
+      const pairing=result.rows[0];
+      if(!pairing)throw new WhatsAppAdminError(409,'whatsapp_call_number_not_connected');
+      await audit(actor.tenantId,id,actor.actorId,'call.pairing_requested');
+      return pairing;
+    },
+    async changeCalls(auth:string|undefined,id:string,action:'enable'|'disable'|'disconnect',revision:number){
+      const actor=await write(auth);
+      if(!isId(id)||!['enable','disable','disconnect'].includes(action)||!Number.isInteger(revision)||revision<1)
+        throw new WhatsAppAdminError(422,'invalid_channel_action');
+      if(action==='enable'&&!callsConfigured())throw new WhatsAppAdminError(503,'whatsapp_calls_not_configured');
+      const result=await input.pool.query(`WITH changed AS (
+        UPDATE security.whatsapp_channels c SET enabled=$3='enable',revision=c.revision+1,updated_at=clock_timestamp(),
+          state=CASE WHEN $3='disconnect' THEN 'disconnected' ELSE c.state END,
+          linked_jid=CASE WHEN $3='disconnect' THEN NULL ELSE c.linked_jid END,
+          qr_ciphertext=CASE WHEN $3='disconnect' THEN NULL ELSE c.qr_ciphertext END,
+          qr_expires_at=CASE WHEN $3='disconnect' THEN NULL ELSE c.qr_expires_at END,
+          lease_owner=CASE WHEN $3='disconnect' THEN NULL ELSE c.lease_owner END,
+          lease_expires_at=CASE WHEN $3='disconnect' THEN NULL ELSE c.lease_expires_at END
+        FROM security.whatsapp_channels target JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
+        WHERE c.tenant_id=$1 AND c.call_target_channel_id=$2 AND c.state<>'disconnected' AND c.revision=$4
+          AND target.tenant_id=c.tenant_id AND target.channel_id=c.call_target_channel_id
+          AND ($3<>'enable' OR (c.state='connected' AND target.state='connected'
+            AND c.linked_jid=target.linked_jid AND target.enabled AND a.reply_mode<>'manual'))
+        RETURNING c.tenant_id,c.channel_id,c.state,c.enabled,c.revision::int
+        ), removed AS (DELETE FROM security.whatsapp_auth_keys k USING changed
+          WHERE $3='disconnect' AND (k.tenant_id,k.channel_id)=(changed.tenant_id,changed.channel_id))
+        SELECT state,enabled,revision FROM changed`,[actor.tenantId,id,action,revision]);
+      const changed=result.rows[0];
+      if(!changed)throw new WhatsAppAdminError(409,'channel_revision_changed_or_unhealthy');
+      await audit(actor.tenantId,id,actor.actorId,`call.${action}`);
+      return changed;
     },
     async qr(auth:string|undefined,id:string){
       const actor=await read(auth);if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
@@ -213,7 +274,7 @@ export function createWhatsAppAdmin(input:Input){
       const actor=await write(auth);
       if(!isId(id)||!['enable','disable','disconnect','reconnect'].includes(action)||!Number.isInteger(expectedRevision)||expectedRevision<1)throw new WhatsAppAdminError(422,'invalid_channel_action');
       const rows=await input.pool.query(`UPDATE security.whatsapp_channels SET
-        enabled=CASE WHEN $3 IN ('enable','reconnect') THEN true ELSE false END,
+        enabled=CASE WHEN $3='enable' THEN true WHEN $3='reconnect' THEN enabled ELSE false END,
         state=CASE WHEN $3='disconnect' THEN 'disconnected' WHEN $3='reconnect' THEN 'pending' ELSE state END,
         linked_jid=CASE WHEN $3='disconnect' THEN NULL ELSE linked_jid END,
         qr_ciphertext=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE qr_ciphertext END,
@@ -221,7 +282,7 @@ export function createWhatsAppAdmin(input:Input){
         lease_owner=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE lease_owner END,
         lease_expires_at=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE lease_expires_at END,
         revision=revision+1,updated_at=clock_timestamp()
-        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$4
+        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$4 AND call_target_channel_id IS NULL
           AND ($3<>'enable' OR (state='connected' AND EXISTS(
             SELECT 1 FROM security.whatsapp_assistants a WHERE a.tenant_id=$1
               AND a.channel_id=$2 AND a.reply_mode<>'manual')))

@@ -72,6 +72,11 @@ jobs:
           build gateway worker ops
       - name: Exercise payment qualification with the real packaged PostgreSQL driver
         run: docker run --rm --network none --user 1000:1000 --entrypoint node masanawa-gateway:pilot --test infra/deployment/digitalocean/qualify-payments.test.mjs
+      - name: Initialize packaged WhatsApp call media within the Worker memory limit
+        run: >-
+          timeout 25s docker run --rm --network none --memory 320m --memory-swap 320m
+          --user 1000:1000 --entrypoint node masanawa-worker:pilot
+          services/worker/scripts/prepare-whatsapp-calls.mjs --check
       - name: Boot migrations and private Ops without package-manager downloads
         shell: bash
         run: |

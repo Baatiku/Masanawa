@@ -8,6 +8,23 @@ export type LiveRequest={apiKey:string;model:string;voice:string;system:string;m
 
 const MAX_PCM=8*1024*1024;
 const MAX_FRAME=12*1024*1024;
+const LIVE_ENDPOINT='wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+
+export function geminiLiveUrl(apiKey:string):string{
+  return LIVE_ENDPOINT+'?key='+encodeURIComponent(apiKey);
+}
+
+export async function readGeminiLiveFrame<T>(frame:unknown,maxBytes=MAX_FRAME):Promise<T>{
+  let raw:string;
+  if(typeof frame==='string')raw=frame;
+  else if(frame instanceof Blob&&frame.size<=maxBytes)raw=await frame.text();
+  else if(frame instanceof ArrayBuffer&&frame.byteLength<=maxBytes)raw=Buffer.from(frame).toString('utf8');
+  else if(ArrayBuffer.isView(frame)&&frame.byteLength<=maxBytes)
+    raw=Buffer.from(frame.buffer,frame.byteOffset,frame.byteLength).toString('utf8');
+  else throw new LiveProviderError('live_invalid');
+  if(raw.length>maxBytes)throw new LiveProviderError('live_invalid');
+  return JSON.parse(raw) as T;
+}
 /** Render native spoken transcript with WhatsApp-supported Markdown delimiters.
  * This never asks another model to rewrite what was said. */
 export function formatWhatsAppTranscript(speech:string):string{
@@ -19,13 +36,16 @@ export function formatWhatsAppTranscript(speech:string):string{
 export class LiveProviderError extends Error {
   constructor(readonly code:'live_quota'|'live_unavailable'|'live_auth'|'live_invalid') {super(code);}
 }
+export function liveProviderError(error:{code?:number;status?:string}):LiveProviderError{
+  return new LiveProviderError(error.code===8||error.code===429||error.status==='RESOURCE_EXHAUSTED'?'live_quota':
+    [7,16,401,403].includes(error.code??0)?'live_auth':'live_unavailable');
+}
 
 export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
   if(!input.apiKey||!/^gemini-[a-z0-9.-]+$/.test(input.model)||!input.message.trim())
     return Promise.reject(new LiveProviderError('live_invalid'));
   // Only the Google's official bidirectional Live API provides outputTranscription.
-  const url='wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key='+encodeURIComponent(input.apiKey);
-  const socket=(input.createSocket??(address=>new WebSocket(address)))(url);
+  const socket=(input.createSocket??(address=>new WebSocket(address)))(geminiLiveUrl(input.apiKey));
   return new Promise<LiveReply>((resolve,reject)=>{
     let settled=false,configured=false,bytes=0;
     // Raw Live WebSockets may deliver JSON in binary frames. Decoding a Blob
@@ -46,30 +66,14 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
     socket.addEventListener('message',event=>{
       received=received.then(async()=>{
         if(settled)return;
-        const frame:unknown=event.data;
-        let raw:string;
-        if(typeof frame==='string')raw=frame;
-        else if(frame instanceof Blob){
-          if(frame.size>MAX_FRAME)throw new LiveProviderError('live_invalid');
-          raw=await frame.text();
-        }else if(frame instanceof ArrayBuffer){
-          if(frame.byteLength>MAX_FRAME)throw new LiveProviderError('live_invalid');
-          raw=Buffer.from(frame).toString('utf8');
-        }else if(ArrayBuffer.isView(frame)){
-          if(frame.byteLength>MAX_FRAME)throw new LiveProviderError('live_invalid');
-          raw=Buffer.from(frame.buffer,frame.byteOffset,frame.byteLength).toString('utf8');
-        }else throw new LiveProviderError('live_invalid');
-        if(raw.length>MAX_FRAME)throw new LiveProviderError('live_invalid');
-        const result=JSON.parse(raw) as {
+        const result=await readGeminiLiveFrame<{
           setupComplete?:unknown;
           error?:{code?:number;status?:string};
           serverContent?:{outputTranscription?:{text?:string};turnComplete?:boolean;
             modelTurn?:{parts?:{inlineData?:{data?:string;mimeType?:string}}[]}};
-        };
+        }>(event.data);
         if(result.error){
-          const code=result.error.code,status=result.error.status;
-          finish(new LiveProviderError(code===8||status==='RESOURCE_EXHAUSTED'?'live_quota':
-            code===7||code===16?'live_auth':'live_unavailable'));return;
+          finish(liveProviderError(result.error));return;
         }
         if(result.setupComplete&&!configured){
           configured=true;
@@ -111,7 +115,7 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
 
 type Db=Pick<Pool,'query'>;
 export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessionKey:string;
-  env:Readonly<Record<string,string|undefined>>;invoke:(apiKey:string)=>Promise<T>}):Promise<T>{
+  env:Readonly<Record<string,string|undefined>>;invoke:(apiKey:string)=>Promise<T>;signal?:AbortSignal}):Promise<T>{
   const available=await input.pool.query(`SELECT key_id,key_ciphertext
     FROM security.whatsapp_gemini_keys WHERE tenant_id=$1 AND enabled
       AND (cooldown_until IS NULL OR cooldown_until<=clock_timestamp())
@@ -120,6 +124,7 @@ export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessio
   // Each credential is independently eligible; the administrator needs only
   // paste the key, and the provider decides which project's quota applies.
   for(const row of available.rows as {key_id:string;key_ciphertext:Buffer}[]){
+    input.signal?.throwIfAborted();
     try{
       const secret=decryptLinkedSecret(row.key_ciphertext,input.sessionKey);
       const result=await input.invoke(secret);
@@ -129,6 +134,7 @@ export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessio
       [input.tenantId,row.key_id]);
       return result;
     }catch(error){
+      input.signal?.throwIfAborted();
       lastError=error;
       const reason=error instanceof Error?error.message:'';
       const code=error instanceof LiveProviderError?error.code:
@@ -143,6 +149,7 @@ export async function withGeminiKeyPool<T>(input:{pool:Db;tenantId:string;sessio
   }
   // Keep the original private runtime key as a final fallback if configured.
   const legacy=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
+  input.signal?.throwIfAborted();
   if(legacy){
     try{return await input.invoke(legacy);}catch(error){lastError=error;}
   }
