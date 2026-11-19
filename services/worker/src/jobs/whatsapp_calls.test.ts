@@ -1,5 +1,6 @@
 import {EventEmitter} from 'node:events';
 import {afterEach,describe,expect,it,vi} from 'vitest';
+import {readIncomingCallOffers} from './whatsapp_call_signals.js';
 import {createCallPlayback,openWhatsAppCallLive} from './whatsapp_call_audio.js';
 import {createWhatsAppCallHandler,type CallOffer,type IncomingSession} from './whatsapp_calls.js';
 
@@ -54,6 +55,38 @@ function fixture(withLookup=false){
 afterEach(()=>vi.useRealTimers());
 
 describe('WhatsApp incoming calls',()=>{
+  it('saves the wire offer as fallback and waits for the native SDK to emit its session',async()=>{
+    vi.useFakeTimers();
+    const {handler,session,lookupSession}=fixture(true);
+    handler.signal(offer(),true);
+    await flush();
+    expect(lookupSession).not.toHaveBeenCalled();
+    expect(session.accept).not.toHaveBeenCalled();
+    handler.session(session);
+    await flush();
+    expect(session.accept).toHaveBeenCalledTimes(1);
+    handler.signal(offer());
+    await flush();
+    expect(session.accept).toHaveBeenCalledTimes(1);
+    await handler.stop();
+  });
+
+  it('distinguishes full voice offers from notices, group links and video offers',()=>{
+    const now=1_800_000_000_000;
+    const node={tag:'call',attrs:{from:'2348012345678:2@lid',t:String(now/1000)},content:[
+      {tag:'offer',attrs:{'call-id':'full'},content:[{tag:'audio',attrs:{}}]},
+      {tag:'offer_notice',attrs:{'call-id':'notice'}},
+      {tag:'offer',attrs:{'call-id':'video'},content:[{tag:'audio',attrs:{}},{tag:'video',attrs:{}}]},
+      {tag:'offer',attrs:{'call-id':'link'},content:[{tag:'link_info',attrs:{}}]},
+      {tag:'offer',attrs:{'call-id':'unknown'},content:[{tag:'audio',attrs:{}}]},
+    ]};
+    expect(readIncomingCallOffers(node,now)).toMatchObject([
+      {id:'full',fullVoiceOffer:true},{id:'notice',fullVoiceOffer:false},{id:'unknown',fullVoiceOffer:true},
+    ]);
+    expect(readIncomingCallOffers(node,now+20_000)).toEqual([]);
+    expect(readIncomingCallOffers({...node,attrs:{...node.attrs,offline:'1'}},now)).toEqual([]);
+  });
+
   it('answers one fresh direct offer, streams the disclosure first and ends an active call on pause',async()=>{
     vi.useFakeTimers();
     const {handler,session,provider,release,query,openLive,pause}=fixture();
@@ -142,7 +175,7 @@ describe('WhatsApp incoming calls',()=>{
     missing.handler.signal(offer());
     await vi.advanceTimersByTimeAsync(3000);
     const miss=missing.query.mock.calls.find(([sql])=>sql.includes('INSERT'))?.[1];
-    expect(miss).toEqual(['tenant','channel',expect.stringMatching(/^[a-f0-9]{64}$/),'session_unavailable']);
+    expect(miss).toEqual(['tenant','channel',expect.stringMatching(/^[a-f0-9]{64}$/),null,'session_unavailable']);
 
     const rejected=fixture(true);
     rejected.session.accept.mockRejectedValueOnce(Error('private provider diagnostics'));

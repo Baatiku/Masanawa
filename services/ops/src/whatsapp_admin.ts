@@ -162,10 +162,26 @@ export function createWhatsAppAdmin(input:Input){
         WHERE target.tenant_id=$1 AND target.channel_id=$2 AND target.call_target_channel_id IS NULL`,[actor.tenantId,id]);
       const pairing=result.rows[0];
       if(!pairing)throw new WhatsAppAdminError(404,'channel_not_found');
-      const history=await input.pool.query(`SELECT i.reference,i.offered_at AS "offeredAt",
-        i.answered_at AS "answeredAt",i.ended_at AS "endedAt",i.end_reason AS "endReason"
+      const history=await input.pool.query(`WITH handled AS (
+        SELECT i.reference,i.offered_at,i.answered_at,i.ended_at,i.end_reason
         FROM security.whatsapp_incoming_calls i JOIN security.whatsapp_channels c USING(tenant_id,channel_id)
-        WHERE c.tenant_id=$1 AND c.call_target_channel_id=$2 ORDER BY i.offered_at DESC LIMIT 30`,[actor.tenantId,id]);
+        WHERE c.tenant_id=$1 AND c.call_target_channel_id=$2
+        ORDER BY i.offered_at DESC LIMIT 30
+      ), signals AS (
+        SELECT o.reference,o.offered_at,NULL::timestamptz AS answered_at,
+          CASE WHEN o.offered_at<clock_timestamp()-interval '18 seconds'
+            THEN o.offered_at+interval '18 seconds' END AS ended_at,
+          CASE WHEN o.offered_at<clock_timestamp()-interval '18 seconds' THEN
+            CASE WHEN o.call_device_at IS NULL THEN 'messaging_only' ELSE 'offer_not_handled' END END AS end_reason
+        FROM security.whatsapp_call_offer_observations o
+        WHERE o.tenant_id=$1 AND o.channel_id=$2 AND NOT EXISTS (
+          SELECT 1 FROM security.whatsapp_incoming_calls i JOIN security.whatsapp_channels c USING(tenant_id,channel_id)
+          WHERE i.tenant_id=o.tenant_id AND i.offer_reference=o.reference AND c.call_target_channel_id=o.channel_id)
+        ORDER BY o.offered_at DESC LIMIT 30
+      ) SELECT reference,offered_at AS "offeredAt",answered_at AS "answeredAt",
+        ended_at AS "endedAt",end_reason AS "endReason"
+        FROM (SELECT * FROM handled UNION ALL SELECT * FROM signals) recent
+        ORDER BY offered_at DESC LIMIT 30`,[actor.tenantId,id]);
       return {...pairing,configured:callsConfigured(),calls:history.rows};
     },
     async startCalls(auth:string|undefined,id:string){
