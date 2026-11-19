@@ -10,7 +10,7 @@ calls_option="${2:-keep}"
 [[ "$calls_option" =~ ^(keep|true|false)$ ]] && [ "$#" -le 2 ] || { echo 'Invalid WhatsApp calls setting'; exit 1; }
 test "$(id -u)" -eq 0 && test "$(hostname)" = 'masanawa-pilot-lon1'
 cd /opt/masanawa/current
-test -f compose.yaml && test -f /etc/masanawa/compose.env
+test -f compose.yaml && test ! -L compose.yaml && test -f /etc/masanawa/compose.env
 for cmd in docker python3 flock; do command -v "$cmd" >/dev/null; done
 
 exec 9>>/etc/masanawa/whatsapp-release.lock
@@ -53,6 +53,7 @@ old_worker="$(docker inspect -f '{{.Config.Image}}' masanawa-worker-1)"
 backup="$(mktemp -d /etc/masanawa/whatsapp-voice-checkpoint-XXXXXXXX)"
 chmod 700 "$backup"
 cp -p /etc/masanawa/compose.env "$backup/compose.before"
+cp -p compose.yaml "$backup/compose-yaml.before"
 cp -p "$runtime_file" "$backup/runtime.before"
 printf '%s\n' "$old_gateway" >"$backup/gateway-image.before"
 printf '%s\n' "$old_ops" >"$backup/ops-image.before"
@@ -79,6 +80,7 @@ rollback(){
     done
     echo 'Restoring previous application images without touching PostgreSQL or Signal keys...'
     cp -p "$backup/compose.before" /etc/masanawa/compose.env
+    cp -p "$backup/compose-yaml.before" compose.yaml
     cp -p "$backup/runtime.before" "$runtime_file"
     export MASANAWA_GATEWAY_IMAGE="$old_gateway"
     export MASANAWA_OPS_IMAGE="$old_ops"
@@ -144,6 +146,36 @@ stage='stop applications'
 changed=true
 echo 'Applying forward-only schema checks with the application services paused...'
 "${dc[@]}" stop -t 35 worker gateway ops >"$backup/stop.log" 2>&1
+stage='set Worker memory limit'
+# Only update the existing Worker limit. Preserve the live host Compose file
+# and its other services, networks, mounts and environment settings.
+python3 - compose.yaml <<'PY_WORKER_MEMORY'
+import os, re, sys, tempfile
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if path.is_symlink() or not path.is_file():
+    raise SystemExit('Expected a regular Compose file')
+source = path.read_bytes()
+workers = list(re.finditer(rb'^  worker:[ \t]*\r?\n(?:(?!^  [a-zA-Z0-9_-]+:)[\s\S])*', source, re.MULTILINE))
+if len(workers) != 1:
+    raise SystemExit('Expected one Worker service in Compose')
+worker = workers[0]
+limits = list(re.finditer(rb'^    mem_limit:[ \t]*(\d+)m[ \t]*\r?$', worker.group(), re.MULTILINE))
+if len(limits) != 1:
+    raise SystemExit('Expected one numeric Worker memory limit')
+limit = limits[0]
+if int(limit[1]) < 448:
+    start, end = (worker.start() + index for index in limit.span(1))
+    updated = source[:start] + b'448' + source[end:]
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as output:
+        output.write(updated)
+        output.flush()
+        os.fsync(output.fileno())
+    os.chmod(output.name, path.stat().st_mode & 0o777)
+    os.replace(output.name, path)
+PY_WORKER_MEMORY
+"${dc[@]}" config --quiet
 stage='apply migrations'
 "${dc[@]}" run --rm --no-deps -T --interactive=false migrate \
   >"$backup/migrations.log" 2>&1
@@ -174,6 +206,9 @@ probe ops 3002 /readyz=200 /v1/admin/whatsapp=401
 stage='start Worker'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
   --wait --wait-timeout 150 worker >"$backup/worker.log" 2>&1
+stage='check Worker memory limit'
+worker_memory="$(docker inspect -f '{{.HostConfig.Memory}}' masanawa-worker-1)"
+test "$worker_memory" -ge "$((448 * 1024 * 1024))"
 stage='check Worker'
 probe worker 3001 /readyz=200
 stage='check WhatsApp configuration'

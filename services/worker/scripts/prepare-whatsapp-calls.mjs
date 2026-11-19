@@ -15,14 +15,19 @@ if (process.argv.includes('--check')) {
   }
   const manager = readFileSync(join(lib, 'Voip', 'call-manager.mjs'), 'utf8');
   if (!manager.includes('session.masanawaAudioBridge ||')) throw Error('Missing call audio bridge patch');
+  // Import the Worker runtime without starting jobs or connecting any sockets.
+  // Loading only WASM leaves out substantial memory from the application and
+  // from the provider's CommonJS copy that owns the call socket.
+  await import('../dist/main.js');
+  require('@innovatorssoft/baileys');
   const { WasmEngine } = await import('@innovatorssoft/baileys/lib/Voip/wasm-engine.mjs');
   const engine = new WasmEngine({ pthreadPoolSize: 1, enableLogs: false });
   const timeout = setTimeout(() => { throw Error('WhatsApp call engine did not initialize'); }, 15_000);
   try {
     await engine.initialize();
     const rssMiB = Math.round(process.memoryUsage().rss / 1048576);
-    if (rssMiB > 240) throw Error(`Call media startup used ${rssMiB} MiB`);
-    console.log(`WhatsApp call media initialized at ${rssMiB} MiB RSS`);
+    if (rssMiB > 384) throw Error(`Worker and call media startup used ${rssMiB} MiB`);
+    console.log(`WhatsApp Worker and call media initialized at ${rssMiB} MiB RSS`);
   } finally {
     clearTimeout(timeout);
     engine.destroy();

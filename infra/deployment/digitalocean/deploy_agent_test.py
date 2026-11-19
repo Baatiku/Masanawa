@@ -49,6 +49,24 @@ class DeploymentAgentTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][-2:], [SHA, 'true'])
             self.assertEqual(json.loads((Path(path) / 'state.json').read_text())['status'], 'failed')
 
+    def test_worker_memory_upgrade_preserves_other_service_limits_and_is_idempotent(self):
+        source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
+        _, _, snippet = source.partition("<<'PY_WORKER_MEMORY'\n")
+        script, _, _ = snippet.partition('\nPY_WORKER_MEMORY')
+        expected = (ROOT / 'compose.yaml').read_bytes()
+        previous = expected.replace(b'    mem_limit: 448m', b'    mem_limit: 320m')
+        self.assertNotEqual(previous, expected)
+        with tempfile.TemporaryDirectory() as path:
+            compose = Path(path) / 'compose.yaml'
+            compose.write_bytes(previous)
+            for _ in range(2):
+                subprocess.run(['python3', '-c', script, str(compose)], check=True, timeout=10)
+                self.assertEqual(compose.read_bytes(), expected)
+            higher = expected.replace(b'    mem_limit: 448m', b'    mem_limit: 512m')
+            compose.write_bytes(higher)
+            subprocess.run(['python3', '-c', script, str(compose)], check=True, timeout=10)
+            self.assertEqual(compose.read_bytes(), higher)
+
     def test_worker_probe_retries_after_connection_refused(self):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):

@@ -15,7 +15,7 @@
 | Cloudflare news gateway | External existing Worker+D1 | External free/paid provider allowance | Public article metadata only; not chat, accounts, Wallet or memory |
 | Cloudflare Site frontend | External existing Site | External provider allowance | Non-authoritative browser UI; uses the same Gateway |
 
-The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. If measured memory/CPU cannot safely support a feature, leave that feature off; a resize requires separate owner authorization. Docker `mem_limit` is not a promise of performance or no OOM.
+The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. If measured memory/CPU cannot safely support a feature, leave that feature off; a resize requires separate owner authorization. Docker `mem_limit` is not a promise of performance or no OOM. The WhatsApp Worker has a 448 MiB limit. The release check loads the Worker imports and call media together to leave space for live sockets and audio.
 
 ### Managed WhatsApp releases
 
