@@ -18,7 +18,7 @@ describe('WhatsApp manual-off persistence',()=>{
       for(const filename of ['0123_whatsapp_ai.sql','0124_whatsapp_number_identity.sql',
         '0125_whatsapp_gemini_key_pool.sql','0126_whatsapp_gemini_keys_key_only.sql',
         '0127_whatsapp_gemini_full_voices.sql','0128_whatsapp_incoming_calls.sql',
-        '0129_whatsapp_call_outcomes.sql','0130_whatsapp_contact_memory.sql','0131_whatsapp_call_offer_observations.sql'])
+        '0129_whatsapp_call_outcomes.sql','0130_whatsapp_contact_memory.sql','0131_whatsapp_call_offer_observations.sql','0132_whatsapp_browser_call_transport.sql'])
         await db.exec(await readFile(new URL(`../../../packages/security/migrations/${filename}`,import.meta.url),'utf8'));
       const inserted=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels(tenant_id,enabled,state)
         VALUES('tenant',true,'connected') RETURNING channel_id`);
@@ -38,11 +38,13 @@ describe('WhatsApp manual-off persistence',()=>{
         authorize:(async()=>({tenantId:'tenant',actorId:'admin'})) as never,env:{
           MASANAWA_WHATSAPP_ENABLED:'true',MASANAWA_WHATSAPP_MODE:'linked-device',
           MASANAWA_WHATSAPP_SESSION_KEY:Buffer.alloc(32).toString('base64'),MASANAWA_WHATSAPP_CALLS_ENABLED:'true',
+          MASANAWA_WHATSAPP_BROWSER_ENABLED:'true',
         }});
       const phone='2348012345678@s.whatsapp.net';
       await db.query(`UPDATE security.whatsapp_channels SET linked_jid=$2 WHERE channel_id=$1`,[id,phone]);
-      const created=await admin.startCalls(undefined,id) as {pairingId:string};
-      expect(await admin.startCalls(undefined,id)).toMatchObject({pairingId:created.pairingId});
+      const created=await admin.startCalls(undefined,id,'native') as {pairingId:string};
+      expect(await admin.startCalls(undefined,id,'native')).toMatchObject({pairingId:created.pairingId});
+      await expect(admin.startCalls(undefined,id,'browser')).rejects.toMatchObject({statusCode:409});
       expect((await admin.list(undefined)).channels).toHaveLength(1);
       await expect(admin.changeCalls(undefined,id,'enable',1)).rejects.toMatchObject({statusCode:409});
       await db.query(`UPDATE security.whatsapp_channels SET state='connected',linked_jid=$2 WHERE channel_id=$1`,[created.pairingId,phone]);
@@ -104,6 +106,11 @@ describe('WhatsApp manual-off persistence',()=>{
       expect(await admin.save(undefined,id,5,{...always,greeting:'Welcome'},5)).toEqual({revision:6});
       expect(await admin.changeCalls(undefined,id,'disconnect',2)).toMatchObject({state:'disconnected'});
       expect(await admin.calls(undefined,id)).toMatchObject({pairingId:null,numberState:'connected',aiEnabled:true});
+      const browser=await admin.startCalls(undefined,id);
+      expect(await admin.calls(undefined,id)).toMatchObject({pairingId:browser.pairingId,callTransport:'browser',
+        browserAvailable:true,callDeviceOnline:false,numberState:'connected',aiEnabled:true});
+      expect(browser.pairingId).not.toBe(created.pairingId);
+      expect((await admin.list(undefined)).channels).toHaveLength(1);
     }finally{await db.close();}
   },30000);
 });

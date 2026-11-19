@@ -219,7 +219,9 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     app.get('/v1/admin/whatsapp/templates',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.templates(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/audit',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.auditEvents(q.headers.authorization,q.query.channelId)));
     app.get('/v1/admin/whatsapp/calls',{schema:{querystring:channelQuery}},async(q,r)=>handle(r,()=>wa.calls(q.headers.authorization,q.query.channelId)));
-    app.post('/v1/admin/whatsapp/calls/pair',{schema:{body:channelQuery}},async(q,r)=>handle(r,()=>wa.startCalls(q.headers.authorization,q.body.channelId)));
+    app.post('/v1/admin/whatsapp/calls/pair',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),
+      transport:Type.Optional(Type.Union([Type.Literal('native'),Type.Literal('browser')]))},{additionalProperties:false})}},
+      async(q,r)=>handle(r,()=>wa.startCalls(q.headers.authorization,q.body.channelId,q.body.transport)));
     app.post('/v1/admin/whatsapp/calls/control',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),expectedRevision:Type.Integer({minimum:1}),action:Type.Union([Type.Literal('enable'),Type.Literal('disable'),Type.Literal('disconnect')])},{additionalProperties:false})}},async(q,r)=>handle(r,()=>wa.changeCalls(q.headers.authorization,q.body.channelId,q.body.action,q.body.expectedRevision)));
     app.post('/v1/admin/whatsapp/onboarding/start',async(q,r)=>handle(r,()=>wa.start(q.headers.authorization)));
     app.put('/v1/admin/whatsapp/config',{schema:{body:Type.Object({channelId:Type.String({maxLength:50}),expectedRevision:Type.Integer({minimum:1}),

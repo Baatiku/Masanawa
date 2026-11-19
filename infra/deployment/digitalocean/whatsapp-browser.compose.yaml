@@ -1,0 +1,22 @@
+services:
+  whatsapp-call-gateway:
+    profiles: [whatsapp-browser]
+    image: ${MASANAWA_WHATSAPP_BROWSER_IMAGE:?Set exact browser gateway image}
+    env_file:
+      - ${MASANAWA_RUNTIME_ENV_FILE:?Set an absolute path to the private runtime env file}
+    networks: [database, edge]
+    volumes:
+      - whatsapp_browser_profile:/data
+    mem_limit: 640m
+    pids_limit: 384
+    restart: unless-stopped
+    stop_grace_period: 20s
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3003/readyz',{signal:AbortSignal.timeout(3000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+volumes:
+  whatsapp_browser_profile:

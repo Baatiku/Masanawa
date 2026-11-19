@@ -11,14 +11,14 @@ calls_option="${2:-keep}"
 test "$(id -u)" -eq 0 && test "$(hostname)" = 'masanawa-pilot-lon1'
 cd /opt/masanawa/current
 test -f compose.yaml && test -f /etc/masanawa/compose.env
-for cmd in docker python3 flock timeout; do command -v "$cmd" >/dev/null; done
+for cmd in docker python3 flock timeout curl; do command -v "$cmd" >/dev/null; done
 
 exec 9>>/etc/masanawa/whatsapp-release.lock
 flock -n 9 || { echo 'WhatsApp release is already running'; exit 1; }
 exec 8>>/etc/masanawa/payments-update.lock
 flock -n 8 || { echo 'Another Masanawa release is running'; exit 1; }
 
-unset MASANAWA_GATEWAY_IMAGE MASANAWA_OPS_IMAGE MASANAWA_WORKER_IMAGE
+unset MASANAWA_GATEWAY_IMAGE MASANAWA_OPS_IMAGE MASANAWA_WORKER_IMAGE MASANAWA_WHATSAPP_BROWSER_IMAGE
 test "$(docker inspect -f '{{.State.Running}}' masanawa-postgres-1)" = true || {
   echo 'The existing PostgreSQL container must be running for the backup'; exit 1;
 }
@@ -50,14 +50,16 @@ disk_free(){
   df --output=avail -B1 -- "$1" | tail -1
 }
 
+old_browser="$(docker inspect -f '{{.Config.Image}}' masanawa-whatsapp-call-gateway-1 2>/dev/null || true)"
+
 reclaim_release_images(){
   local ref used
   # Keep the recovery milestone, every existing container's image, the
   # rollback images and the requested release. Verify registry availability.
   while IFS= read -r ref; do
-    [[ "$ref" =~ ^ghcr\.io/baatiku/masanawa-do-pilot-(gateway|ops|worker):[0-9a-f]{40}$ ]] || continue
+    [[ "$ref" =~ ^ghcr\.io/baatiku/masanawa-do-pilot-(gateway|ops|worker):(browser-)?[0-9a-f]{40}$ ]] || continue
     case "$ref" in
-      "$old_gateway"|"$old_ops"|"$old_worker"|*:"$release_sha"|*:dccebe9c61bc783c1baa4993de415f241a20f828) continue ;;
+      "$old_gateway"|"$old_ops"|"$old_worker"|"${old_browser:-}"|*:"$release_sha"|*:browser-"$release_sha"|*:dccebe9c61bc783c1baa4993de415f241a20f828) continue ;;
     esac
     used="$(docker ps -aq --filter "ancestor=$ref")" || return 1
     [ -z "$used" ] || continue
@@ -70,14 +72,14 @@ reclaim_release_images(){
 
 docker_root="$(docker info --format '{{.DockerRootDir}}')"
 test -n "$docker_root"
-pull_reserve=$((7 * 1024 * 1024 * 1024))
+pull_reserve=$((9 * 1024 * 1024 * 1024))
 backup_reserve=$((2 * 1024 * 1024 * 1024))
 if [ "$(disk_free "$docker_root")" -lt "$pull_reserve" ]; then
   echo 'Docker storage is low. Checking for unused release image caches...'
   reclaim_release_images
 fi
 test "$(disk_free "$docker_root")" -ge "$pull_reserve" || {
-  echo 'Need 7 GiB free in Docker storage for the release images'; exit 1;
+  echo 'Need 9 GiB free in Docker storage for the release images'; exit 1;
 }
 test "$(disk_free /etc/masanawa)" -ge "$backup_reserve" || {
   echo 'Need 2 GiB free on the backup filesystem'; exit 1;
@@ -93,15 +95,23 @@ printf '%s\n' "$old_worker" >"$backup/worker-image.before"
 export MASANAWA_GATEWAY_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-gateway:$release_sha"
 export MASANAWA_OPS_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-ops:$release_sha"
 export MASANAWA_WORKER_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-worker:$release_sha"
+export MASANAWA_WHATSAPP_BROWSER_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-worker:browser-$release_sha"
 dc=(docker compose -p masanawa --env-file /etc/masanawa/compose.env \
   -f compose.yaml --profile ops --profile worker)
 stage='preflight'
 changed=false
 worker_override_path=/etc/masanawa/whatsapp-worker.compose.yaml
+browser_override_path=/etc/masanawa/whatsapp-browser.compose.yaml
 old_dc=("${dc[@]}")
 if [ -f "$worker_override_path" ]; then
   cp -p "$worker_override_path" "$backup/worker-override.before"
   old_dc+=(--file "$backup/worker-override.before")
+fi
+old_services=(gateway ops worker)
+if [ -n "$old_browser" ] && [ -f "$browser_override_path" ]; then
+  cp -p "$browser_override_path" "$backup/browser-override.before"
+  old_dc+=(--profile whatsapp-browser --file "$backup/browser-override.before")
+  old_services+=(whatsapp-call-gateway)
 fi
 
 rollback(){
@@ -121,7 +131,9 @@ rollback(){
     export MASANAWA_GATEWAY_IMAGE="$old_gateway"
     export MASANAWA_OPS_IMAGE="$old_ops"
     export MASANAWA_WORKER_IMAGE="$old_worker"
-    "${old_dc[@]}" up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 gateway ops worker \
+    "${dc[@]}" stop whatsapp-call-gateway >>"$backup/rollback.log" 2>&1 || true
+    if [ -n "$old_browser" ]; then export MASANAWA_WHATSAPP_BROWSER_IMAGE="$old_browser"; fi
+    "${old_dc[@]}" up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 "${old_services[@]}" \
       >"$backup/rollback.log" 2>&1 || echo 'Inspect private rollback.log for recovery.'
   fi
   echo "Private checkpoint: $backup"
@@ -173,10 +185,12 @@ write_worker_override(){
 old_worker_memory="$(docker inspect -f '{{.HostConfig.Memory}}' masanawa-worker-1)"
 write_worker_override "$old_worker_memory" "$backup/worker-override.yaml"
 dc+=(--file "$backup/worker-override.yaml")
+curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/whatsapp-browser.compose.yaml" >"$backup/whatsapp-browser.yaml"
+dc+=(--profile whatsapp-browser --file "$backup/whatsapp-browser.yaml")
 "${dc[@]}" config --quiet
 stage='pull images'
 echo 'Pulling exact published images before touching the working number...'
-"${dc[@]}" pull gateway ops worker >"$backup/pull.log" 2>&1
+"${dc[@]}" pull gateway ops worker whatsapp-call-gateway >"$backup/pull.log" 2>&1
 
 echo 'Saving the known-working voice-note state and a recoverable database dump...'
 docker exec masanawa-postgres-1 sh -ec \
@@ -193,7 +207,7 @@ printf '%s\n' "checkpoint_reason=owner-confirmed-working-voice-notes" \
 stage='stop applications'
 changed=true
 echo 'Applying forward-only schema checks with the application services paused...'
-"${dc[@]}" stop -t 35 worker gateway ops >"$backup/stop.log" 2>&1
+"${dc[@]}" stop -t 35 whatsapp-call-gateway worker gateway ops >"$backup/stop.log" 2>&1
 stage='apply migrations'
 "${dc[@]}" run --rm --no-deps -T --interactive=false migrate \
   >"$backup/migrations.log" 2>&1
@@ -202,7 +216,7 @@ python3 - "$runtime_file" "$release_sha" "$calls_option" <<'PY'
 import os,sys,tempfile
 from pathlib import Path
 path=Path(sys.argv[1])
-settings={'MASANAWA_RELEASE_SHA':sys.argv[2]}
+settings={'MASANAWA_RELEASE_SHA':sys.argv[2],'MASANAWA_WHATSAPP_BROWSER_ENABLED':'true'}
 if sys.argv[3]!='keep': settings['MASANAWA_WHATSAPP_CALLS_ENABLED']=sys.argv[3]
 lines=[line for line in path.read_bytes().splitlines(keepends=True)
        if not any(line.lstrip().startswith((key+'=').encode()) for key in settings)]
@@ -237,13 +251,17 @@ docker exec masanawa-worker-1 node -e '
      !e.MASANAWA_WHATSAPP_SESSION_KEY)process.exit(1);
   console.log("WhatsApp QR-linked configuration preserved");'
 
+stage='start browser calling gateway'
+"${dc[@]}" up -d --no-build --no-deps --force-recreate --wait --wait-timeout 100 whatsapp-call-gateway \
+  >"$backup/browser-gateway.log" 2>&1
+
 echo 'Saving exact tested image references across future reboots...'
 stage='save image references'
-python3 - "$backup/worker-override.yaml" "$worker_override_path" <<'PY'
+python3 - "$backup/worker-override.yaml" "$worker_override_path" "$backup/whatsapp-browser.yaml" "$browser_override_path" <<'PY'
 import os,sys,tempfile
 from pathlib import Path
 p=Path('/etc/masanawa/compose.env')
-rows=p.read_text().splitlines()
+rows=[row for row in p.read_text().splitlines() if not row.startswith('MASANAWA_WHATSAPP_BROWSER_IMAGE=')]
 keys=('MASANAWA_GATEWAY_IMAGE','MASANAWA_OPS_IMAGE','MASANAWA_WORKER_IMAGE')
 for key in keys:
     if sum(x.startswith(key+'=') for x in rows)!=1:
@@ -251,12 +269,13 @@ for key in keys:
 out=[row.split('=',1)[0]+'='+os.environ[row.split('=',1)[0]]
      if row.split('=',1)[0] in keys else row for row in rows]
 with tempfile.NamedTemporaryFile(dir=p.parent,delete=False) as f:
-    f.write(('\n'.join(out)+'\n').encode());f.flush();os.fsync(f.fileno());name=f.name
+    f.write(('\n'.join(out)+'\nMASANAWA_WHATSAPP_BROWSER_IMAGE='+os.environ['MASANAWA_WHATSAPP_BROWSER_IMAGE']+'\n').encode());f.flush();os.fsync(f.fileno());name=f.name
 os.chmod(name,0o600);os.replace(name,p)
-candidate,active=map(Path,sys.argv[1:])
-with tempfile.NamedTemporaryFile(dir=active.parent,delete=False) as f:
-    f.write(candidate.read_bytes());f.flush();os.fsync(f.fileno());name=f.name
-os.chmod(name,0o600);os.replace(name,active)
+for candidate,active in zip(sys.argv[1::2],sys.argv[2::2],strict=True):
+    candidate,active=Path(candidate),Path(active)
+    with tempfile.NamedTemporaryFile(dir=active.parent,delete=False) as f:
+        f.write(candidate.read_bytes());f.flush();os.fsync(f.fileno());name=f.name
+    os.chmod(name,0o600);os.replace(name,active)
 PY
 
 trap - ERR INT TERM
