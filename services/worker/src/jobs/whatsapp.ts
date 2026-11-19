@@ -440,7 +440,12 @@ export function createWhatsAppWorker(input:Input){
       row.last_human_reply_at&&new Date(row.last_human_reply_at).getTime()>=new Date(row.source_created_at).getTime()))){
       await complete(row.job_id,'failed','owner_replied_before_dispatch');return;
     }
-    if(!row.enabled||!row.body){await complete(row.job_id,'failed','channel_disabled_or_empty');return;}
+    // Pausing AI must not prevent an authorized human operator from replying
+    // through a thread explicitly placed in human takeover mode.
+    if((!row.enabled&&row.reply_to_message_id)||!row.body||
+      (!row.reply_to_message_id&&row.mode!=='human')){
+      await complete(row.job_id,'failed','channel_disabled_or_empty');return;
+    }
     if(row.state!=='connected'){
       if(['degraded','connecting','pending','qr_ready'].includes(row.state))
         await deferBeforeDispatch(row.job_id,'linked_socket_reconnecting');
@@ -450,6 +455,19 @@ export function createWhatsAppWorker(input:Input){
     // A linked device can send within a conversation without Cloud API templates.
     // Unknown send outcomes are *never* blindly replayed, since the remote may
     // already have accepted the message.
+    if(row.reply_to_message_id){
+      // The admin may have paused the assistant while Gemini was generating
+      // audio or while a reply was queued. Recheck the durable, current policy
+      // immediately before dispatching each AI text/voice send.
+      const gate=await input.pool.query(`SELECT c.enabled,a.reply_mode,t.mode FROM security.whatsapp_channels c
+        JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
+        JOIN security.whatsapp_threads t USING(tenant_id,channel_id)
+        WHERE c.tenant_id=$1 AND c.channel_id=$2 AND t.thread_id=$3`,
+        [row.tenant_id,row.channel_id,row.thread_id]);
+      if(!gate.rows[0]?.enabled||gate.rows[0]?.reply_mode==='manual'||gate.rows[0]?.mode!=='ai'){
+        await complete(row.job_id,'completed','assistant_paused_before_send');return;
+      }
+    }
     let providerId:string;
     try{providerId=row.message_kind==='audio'&&input.sendVoice?
       await input.sendVoice(row.channel_id,row.customer_wa_id,row.body,row.voice_id,row.media_payload_ciphertext??undefined):

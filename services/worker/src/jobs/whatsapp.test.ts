@@ -14,12 +14,16 @@ const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-
   working_hours:{timezone:'Africa/Lagos',days:[0,1,2,3,4,5,6],start:'00:00',end:'23:59'},
 };
 
-function setup(overrides:Record<string,unknown>,options:{env?:Record<string,string>;fetch?:typeof fetch}={}){
+function setup(overrides:Record<string,unknown>,options:{env?:Record<string,string>;fetch?:typeof fetch;liveGate?:{enabled:boolean;reply_mode:string;mode:string}}={}){
   const calls:{sql:string;parameters:unknown[]}[]=[];
   const pool={query:async(sql:string,params:unknown[]=[])=>{
     calls.push({sql,parameters:params});
     if(sql.includes('RETURNING j.job_id'))return {rows:[{job_id:'job-1'}]};
     if(sql.includes('SELECT j.job_id,j.kind'))return {rows:[{...row,...overrides}]};
+    if(sql.includes('SELECT c.enabled,a.reply_mode,t.mode'))return {rows:[options.liveGate??{
+      enabled:overrides.enabled??row.enabled,reply_mode:overrides.reply_mode??row.reply_mode,
+      mode:overrides.mode??row.mode,
+    }]};
     if(sql.includes('created_at>$3'))return {rows:[]};
     if(sql.includes('count(*)::int'))return {rows:[{count:1}]};
     return {rows:[]};
@@ -44,6 +48,23 @@ describe('WhatsApp availability and owner takeover',()=>{
     await mock.worker.runOnce();
     expect(mock.send).not.toHaveBeenCalled();
     expect(mock.calls.some(c=>c.sql.includes("SET state=$2,last_error_code")&&c.parameters[1]==='completed')).toBe(true);
+  });
+  it('stops an already queued voice reply before network send when admin pauses AI',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',reply_to_message_id:'message-0',
+      message_kind:'audio',body:'Previously generated speech',
+      media_payload_ciphertext:Buffer.from([1,2])},
+    {liveGate:{enabled:false,reply_mode:'manual',mode:'ai'}});
+    await mock.worker.runOnce();
+    expect(mock.sendVoice).not.toHaveBeenCalled();
+    expect(mock.calls.some(c=>c.parameters.includes('assistant_paused_before_send'))).toBe(true);
+  });
+  it('still delivers an authorized human takeover reply while the AI is disabled',async()=>{
+    const mock=setup({kind:'send',direction:'outbound',reply_to_message_id:null,
+      mode:'human',enabled:false,body:'Thank you. I will reply personally.'});
+    await mock.worker.runOnce();
+    expect(mock.send).toHaveBeenCalledOnce();
+    expect(mock.send).toHaveBeenCalledWith('channel-1','2348012345678@s.whatsapp.net',
+      'Thank you. I will reply personally.');
   });
   it('cancels away-mode AI when the real owner has replied since the customer message',async()=>{
     const mock=setup({reply_mode:'away',last_human_reply_at:'2026-11-18T08:00:30Z'});

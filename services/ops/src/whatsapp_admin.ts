@@ -178,14 +178,26 @@ export function createWhatsAppAdmin(input:Input){
           WHERE tenant_id=$1 AND character_id=$2 AND voice_id=$3 AND state='ready'`,[actor.tenantId,config.personaId,config.voiceId]);
         if(!voice.rows.length)throw new WhatsAppAdminError(403,'voice_not_authorized_for_persona');
       }
-      const rows=await input.pool.query(`UPDATE security.whatsapp_assistants SET name=$3,personality=$4,instructions=$5,greeting=$6,
+      const rows=await input.pool.query(`WITH saved AS (UPDATE security.whatsapp_assistants SET name=$3,personality=$4,instructions=$5,greeting=$6,
         language=$7,role_level=$8,permissions=$9::jsonb,persona_id=$10,voice_id=$11,text_replies=$12,voice_replies=$13,
         transcribe_voice=$14,working_hours=$15::jsonb,escalation_keywords=$16::jsonb,
         reply_mode=$17,away_after_seconds=$18,absence_message=$19,remember_context=$20,
         number_purpose=COALESCE($22,number_purpose),owner_name=COALESCE($23,owner_name),
         owner_title=COALESCE($24,owner_title),live_voice_name=COALESCE($25,live_voice_name),
         revision=revision+1,updated_at=clock_timestamp()
-        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$21 RETURNING revision::int`,[
+        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$21 RETURNING revision::int
+        ), paused AS (
+          UPDATE security.whatsapp_channels SET enabled=false,revision=revision+1,updated_at=clock_timestamp()
+          WHERE tenant_id=$1 AND channel_id=$2 AND enabled=true AND $17::text='manual'
+            AND EXISTS(SELECT 1 FROM saved) RETURNING channel_id
+        ), cancelled AS (
+          UPDATE security.whatsapp_jobs j SET state='completed',last_error_code='assistant_paused',claimed_at=NULL
+          WHERE j.tenant_id=$1 AND j.channel_id=$2 AND j.state='pending' AND $17::text='manual'
+            AND EXISTS(SELECT 1 FROM saved)
+            AND (j.kind='reply' OR EXISTS(SELECT 1 FROM security.whatsapp_messages m
+              WHERE m.message_id=j.message_id AND m.reply_to_message_id IS NOT NULL))
+          RETURNING j.job_id
+        ) SELECT revision FROM saved`,[
           actor.tenantId,id,config.name.trim(),config.personality,config.instructions,config.greeting,config.language,
           config.roleLevel,JSON.stringify(config.permissions),config.personaId,config.voiceId,config.textReplies,
           config.voiceReplies,config.transcribeVoice,JSON.stringify(config.workingHours),JSON.stringify(config.escalationKeywords),
@@ -209,7 +221,10 @@ export function createWhatsAppAdmin(input:Input){
         lease_owner=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE lease_owner END,
         lease_expires_at=CASE WHEN $3 IN ('disconnect','reconnect') THEN NULL ELSE lease_expires_at END,
         revision=revision+1,updated_at=clock_timestamp()
-        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$4 AND ($3<>'enable' OR state='connected')
+        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$4
+          AND ($3<>'enable' OR (state='connected' AND EXISTS(
+            SELECT 1 FROM security.whatsapp_assistants a WHERE a.tenant_id=$1
+              AND a.channel_id=$2 AND a.reply_mode<>'manual')))
         RETURNING state,enabled,revision::int`,[actor.tenantId,id,action,expectedRevision]);
       if(!rows.rows.length)throw new WhatsAppAdminError(409,'channel_revision_changed_or_unhealthy');
       if(action==='disconnect')await input.pool.query(`DELETE FROM security.whatsapp_auth_keys WHERE tenant_id=$1 AND channel_id=$2`,[actor.tenantId,id]);

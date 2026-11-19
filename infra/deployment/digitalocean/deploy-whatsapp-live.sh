@@ -99,7 +99,11 @@ printf '%s\n' "checkpoint_reason=owner-confirmed-working-voice-notes" \
   "source_release=$release_sha" >"$backup/checkpoint.txt"
 
 stage=upgrading
-echo 'Upgrading application services; QR identity and database are untouched...'
+echo 'Applying forward-only schema checks with the application services paused...'
+"${dc[@]}" stop -t 35 worker gateway ops >"$backup/stop.log" 2>&1
+"${dc[@]}" run --rm --no-deps -T --interactive=false migrate \
+  >"$backup/migrations.log" 2>&1
+echo 'Upgrading application services; QR identity and wallet records are preserved...'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
   --wait --wait-timeout 180 gateway ops >"$backup/gateway-ops.log" 2>&1
 curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3100/readyz >/dev/null
@@ -142,6 +146,6 @@ trap - ERR INT TERM
 echo 'WHATSAPP VOICE CHECKPOINT AND DEPLOYMENT COMPLETE'
 echo "Source release: $release_sha"
 echo "Private recovery checkpoint: $backup"
-echo 'No WhatsApp pairing was deleted and no database migration was replayed.'
+echo 'No WhatsApp pairing was deleted. Forward-only migrations are logged privately.'
 echo 'Open Masanawa Admin → WhatsApp AI; confirm your linked number reconnects.'
 echo 'Send a new text and voice note to test replies and transcripts.'
