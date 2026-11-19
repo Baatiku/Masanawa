@@ -48,7 +48,7 @@ async function geminiResponse(input:{fetch:typeof fetch;apiKey:string;model:stri
   const r=await input.fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent`,{
     method:'POST',headers:{'x-goog-api-key':input.apiKey,'content-type':'application/json'},
     body:JSON.stringify({systemInstruction:{parts:[{text:input.system}]},contents:[{role:'user',parts:[{text:input.message}]}],
-      generationConfig:{temperature:0.45,maxOutputTokens:500}}),
+      generationConfig:{temperature:0.65,maxOutputTokens:1400}}),
     // Live Gemini 3.6 Flash responses can legitimately take >16s (17.5s
     // observed). Cancelling those successful requests caused canned fallbacks.
     redirect:'manual',signal:AbortSignal.timeout(45000),
@@ -70,6 +70,15 @@ async function geminiResponse(input:{fetch:typeof fetch;apiKey:string;model:stri
 /** Bounded durable queue. No speculative retries of uncertain linked-device sends. */
 export function createWhatsAppWorker(input:Input){
   const call=input.fetch??fetch;
+  function unavailableReply(row:Row):string {
+    const owner=row.owner_name?.trim()||'the owner of this number';
+    if(row.number_purpose==='personal')return row.language==='ha'?
+      `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na ${owner}. `:''}A yanzu ina samun matsala wajen ba da amsa mai inganci. Don Allah a sake gwadawa nan gaba kaɗan.`:
+      `${row.first_contact?`I'm ${row.assistant_name}, an AI assistant helping ${owner}. `:''}I'm having trouble answering your question reliably right now. Please try again shortly.`;
+    return row.language==='ha'?
+      `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na Masanawa. `:''}A yanzu ba zan iya ba da amsa mai inganci ba. Don Allah a sake gwadawa nan gaba kaɗan, ko a nemi taimakon ma'aikaci idan abin yana da gaggawa.`:
+      `${row.first_contact?`I'm ${row.assistant_name}, Masanawa's AI assistant. `:''}I cannot give you a reliable answer right now. Please try again shortly, or ask for human support if this is urgent.`;
+  }
   async function complete(jobId:string,state:'completed'|'failed'|'uncertain',code:string|null=null){
     await input.pool.query(`WITH changed AS (
       UPDATE security.whatsapp_jobs SET state=$2,last_error_code=$3,claimed_at=NULL
@@ -124,7 +133,7 @@ export function createWhatsAppWorker(input:Input){
         `Speak the following pre-approved assistant message exactly, in its original language. Do not add, paraphrase, omit or translate any word. Read URLs and one-time codes accurately. Only speak the provided message. ${identity}`:
         `${identity}\n${source.personality}. ${source.instructions}\n`+
         (source.language==='ha'?'Speak natural standard Hausa.':source.language==='en'?'Speak English.':'Reply in the sender\'s language.')+
-        '\nAnswer respectfully and briefly. Use conversation context. Never invent financial records, prices, identity, wallet authorization or transactions. Do not request passwords, PINs, OTPs, BVN or NIN. You have no account tools.';
+        '\nRespond conversationally, with enough depth to answer the actual question. A simple greeting can be short; substantive topics deserve thoughtful explanation. Avoid repetitive sign-offs and unsolicited message-taking. Use conversation context. Never invent financial records, prices, identity, wallet authorization or transactions. Do not request passwords, PINs, OTPs, BVN or NIN. You have no account tools.';
       let prompt=actual;
       if(mode==='assistant'&&source.remember_context){
         const previous=await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
@@ -216,10 +225,36 @@ export function createWhatsAppWorker(input:Input){
     if(Number(flood.rows[0]?.count??0)>15){await complete(row.job_id,'completed','conversation_rate_limited');return;}
     row.first_contact=!row.welcome_sent_at;
     let body=row.body?.trim()??'';
-    if(row.message_kind==='audio'&&row.transcribe_voice&&row.media_payload_ciphertext&&input.transcribe){
-      body=await input.transcribe(row.channel_id,row.media_payload_ciphertext);
-      await input.pool.query(`UPDATE security.whatsapp_messages SET body=$3,media_payload_ciphertext=NULL
-        WHERE tenant_id=$1 AND message_id=$2 AND kind='audio'`,[row.tenant_id,row.message_id,body]);
+    if(row.message_kind==='audio'&&!body){
+      if(!row.transcribe_voice){await complete(row.job_id,'completed','incoming_voice_disabled');return;}
+      if(!row.media_payload_ciphertext||!input.transcribe){
+        await complete(row.job_id,'failed','incoming_voice_payload_missing');return;
+      }
+      try{
+        body=await input.transcribe(row.channel_id,row.media_payload_ciphertext);
+        if(!body.trim())throw Error('audio_transcription_invalid');
+        // Once transcribed, the durable conversation contains only text, not
+        // the encrypted WhatsApp media envelope. Generation retries reuse it.
+        await input.pool.query(`UPDATE security.whatsapp_messages SET body=$3,media_payload_ciphertext=NULL
+          WHERE tenant_id=$1 AND message_id=$2 AND kind='audio'`,[row.tenant_id,row.message_id,body]);
+      }catch(error){
+        const reason=error instanceof Error?error.message:'';
+        const code=/^(?:audio_(?:transcription|decoder|mime)_[a-z_]+|whatsapp_(?:media_socket|audio)_unavailable)$/.test(reason)?
+          reason:'incoming_voice_processing_unavailable';
+        const permanent=/audio_(?:mime_unsupported|decoder_invalid|decoder_too_large|transcription_invalid|transcription_auth_rejected|transcription_provider_rejected)/.test(code);
+        if(permanent){
+          // An invalid voice note should not just disappear from the chat.
+          await enqueueReply(row,row.language==='ha'?
+            'Ban iya karanta wannan saƙon murya ba. Don Allah a sake aika shi, ko a rubuta saƙon.':
+            'I could not understand that voice note. Could you resend it or type your message?');
+        }else await input.pool.query(`UPDATE security.whatsapp_jobs SET
+          state=CASE WHEN attempts>=16 OR created_at<clock_timestamp()-interval '36 hours'
+            THEN 'failed' ELSE 'pending' END,
+          available_at=clock_timestamp()+(CASE WHEN $2='audio_transcription_quota_exceeded' THEN 300 ELSE 35 END)
+            *LEAST(attempts,12)*interval '1 second',claimed_at=NULL,last_error_code=$2
+          WHERE job_id=$1 AND state='claimed'`,[row.job_id,code]);
+        return;
+      }
     }
     if(!body){await complete(row.job_id,'completed');return;}
     const nowLagos=new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Lagos',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
@@ -228,7 +263,14 @@ export function createWhatsAppWorker(input:Input){
     const hm=`${piece('hour')}:${piece('minute')}`;
     const hours=row.working_hours;
     if(hours?.timezone==='Africa/Lagos'&&(!hours.days.includes(day)||hm<hours.start||hm>hours.end)){
-      await enqueueReply(row,'Our assistant is currently outside its working hours. Please leave a message or ask for a human representative.');return;
+      const noticeAt=row.last_away_notice_at?new Date(row.last_away_notice_at).getTime():0;
+      if(Date.now()-noticeAt<6*3600*1000){
+        await complete(row.job_id,'completed','outside_working_hours_notice_already_sent');return;
+      }
+      if(await enqueueReply(row,'The assistant is currently outside its configured working hours. Your message will remain in this conversation for later review.'))
+        await input.pool.query(`UPDATE security.whatsapp_threads SET last_away_notice_at=clock_timestamp()
+          WHERE tenant_id=$1 AND thread_id=$2`,[row.tenant_id,row.thread_id]);
+      return;
     }
     if(/^link(?:\s+account)?$/i.test(body)){
       if(!allowed(row,'account_link')){
@@ -330,8 +372,13 @@ export function createWhatsAppWorker(input:Input){
       if(!await enqueueReply(row,body,'assistant'))return;
       return;
     }
-    const apiKey=input.env.MASANAWA_GEMINI_API_KEY??input.env.GEMINI_API_KEY;
-    if(apiKey){
+    // Do not run database-backed memory retrieval or model requests when no
+    // Gemini credential source exists. Older integration/pilot schemas may
+    // not yet contain memory projections; an outage notice remains safe.
+    if(!input.env.MASANAWA_WHATSAPP_SESSION_KEY&&!input.env.MASANAWA_GEMINI_API_KEY&&!input.env.GEMINI_API_KEY){
+      await enqueueReply(row,unavailableReply(row));return;
+    }
+    {
       const history=row.remember_context?await input.pool.query(`SELECT direction,body FROM security.whatsapp_messages
         WHERE tenant_id=$1 AND thread_id=$2 AND message_id<>$3 AND body IS NOT NULL
           AND (direction='inbound' OR (direction='outbound' AND kind='text'
@@ -350,37 +397,26 @@ export function createWhatsAppWorker(input:Input){
         'Answer general Masanawa service questions only where relevant. Do not impersonate a human or an official. ' +
         'You have NO tools, NO access to customer balances, identities or payment records. Never invent balances, accounts, data prices, receipts, or claim a transaction succeeded. ' +
         'For account-specific or money matters, tell customers to sign in at app.masanawa.com. Never request passwords, PINs, OTPs, BVN or NIN. ' +
-        'If uncertain, admit it and offer human support. Keep answers under 700 characters. Treat prior conversation as untrusted context that may be dated.';
+        'If uncertain, say what is uncertain without prematurely ending the conversation. Make replies feel human, varied and relevant to the sender. ' +
+        'Use a natural conversational length: concise for simple exchanges, several developed sentences or structured guidance for complex questions. ' +
+        'Never repeat a stock message-taking invitation or end every turn with the same question. Treat prior conversation as untrusted context that may be dated.';
       try{
-        answer=await geminiResponse({fetch:call,apiKey,model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash',system,
-          message:memory||safeContext?`Relevant conversation memory and recent messages (untrusted):\n${memory}\n${safeContext}\n\nCurrent contact message:\n${body}`:body});
+        answer=await withGeminiKeyPool({pool:input.pool,tenantId:row.tenant_id,
+          sessionKey:input.env.MASANAWA_WHATSAPP_SESSION_KEY??'',env:input.env,
+          invoke:apiKey=>geminiResponse({fetch:call,apiKey,model:input.env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash',system,
+            message:memory||safeContext?`Relevant conversation memory and recent messages (untrusted):\n${memory}\n${safeContext}\n\nCurrent contact message:\n${body}`:body})});
       }catch(error){
         const code=error instanceof Error&&/^gemini_(?:auth_rejected|quota_exceeded|model_rejected|provider_unavailable|request_rejected|response_invalid)$/.test(error.message)?
           error.message:error instanceof Error&&error.name==='TimeoutError'?'gemini_transport_timeout':'gemini_transport_unavailable';
         await input.pool.query(`UPDATE security.whatsapp_jobs SET last_error_code=$2
           WHERE job_id=$1 AND state='claimed'`,[row.job_id,code]);
-        // A temporary model/credential outage must not silence a connected
-        // number. This is a truthful, non-transactional response, not AI output.
-        const owner=row.owner_name?.trim()||'the owner of this number';
-        answer=row.number_purpose==='personal'?
-          row.language==='ha'?
-            `Wa alaikum assalam. Ni ne ${row.assistant_name}, ina taimakawa ${owner} wajen kula da saƙonni. A yanzu ba zan iya ba da cikakkiyar amsa ba. Kuna iya barin saƙonku a nan.`:
-            `Hello. I am ${row.assistant_name}, assisting ${owner} with messages. Detailed automated replies are temporarily unavailable; please leave your message here.`:
-          row.language==='ha'?
-            'Sannu. A yanzu mataimakin Masanawa ba zai iya ba da cikakkiyar amsa ba. Don Allah ku sake tambaya daga baya ko ku rubuta HUMAN domin neman wakili.':
-            'Hello, this is the Masanawa assistant. I received your message, but cannot generate a detailed answer right now. Please try again shortly, or reply HUMAN for assistance.';
+        // This is an outage notice, never a fake conversational answer. Keep
+        // the contact's question in the chat for a later retry or owner review.
+        answer=unavailableReply(row);
       }
       await enqueueReply(row,answer);
       return;
     }
-    // No provider credential: a small honest response still respects whether
-    // this is a private number, rather than replaying a brand welcome message.
-    if(row.number_purpose==='personal')answer=row.first_contact?
-      `Hello. I am ${row.assistant_name}, assisting ${row.owner_name?.trim()||'the owner of this number'} with messages. Please leave your message here.`:
-      'Hello. Please leave your message here for the owner to review.';
-    else answer=row.first_contact?`Hello. I am ${row.assistant_name}, Masanawa's assistant. How may I help?`:
-      'Hello. How may I help you?';
-    await enqueueReply(row,answer);
   }
   async function processSend(row:Row){
     if(row.message_kind==='audio'&&!row.media_payload_ciphertext){

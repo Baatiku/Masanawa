@@ -1,18 +1,38 @@
 import {describe,expect,it,vi} from 'vitest';
 import {spawnSync} from 'node:child_process';
-import {transcribeWhatsAppAudio,synthesizeWhatsAppVoice,toWhatsAppOpus} from './whatsapp_media.js';
+import {toGeminiAudio,transcribeWhatsAppAudio,synthesizeWhatsAppVoice,toWhatsAppOpus} from './whatsapp_media.js';
 
 describe('WhatsApp Gemini audio boundary',()=>{
   it('transcribes Hausa speech without requesting private account authority',async()=>{
+    const decoded=Buffer.from('fLaCvoice-note');
     const fetchMock=vi.fn(async(_url:string,init:RequestInit)=>{
       const body=JSON.parse(String(init.body)) as {contents:{parts:{text?:string;inlineData?:{mimeType:string;data:string}}[]}[]};
-      expect(body.contents[0]?.parts[1]?.inlineData).toEqual({mimeType:'audio/ogg',data:Buffer.from('voice-note').toString('base64')});
+      expect(body.contents[0]?.parts[1]?.inlineData).toEqual({mimeType:'audio/flac',data:decoded.toString('base64')});
       expect(body.contents[0]?.parts[0]?.text).toMatch(/Hausa/);
       return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Sannu, ina kwana?'}]}}]})};
     });
     await expect(transcribeWhatsAppAudio({audio:Buffer.from('voice-note'),mimeType:'audio/ogg; codecs=opus',
-      apiKey:'stub',model:'gemini-2.5-flash',fetch:fetchMock as never})).resolves.toBe('Sannu, ina kwana?');
+      apiKey:'stub',model:'gemini-2.5-flash',fetch:fetchMock as never,
+      convert:async()=>({audio:decoded,mimeType:'audio/flac'})})).resolves.toBe('Sannu, ina kwana?');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('decodes actual Ogg/Opus into Gemini-compatible FLAC, without writing media to disk',async()=>{
+    if(spawnSync('ffmpeg',['-version'],{stdio:'ignore'}).status!==0){
+      await expect(toGeminiAudio(Buffer.from('OggS'),'audio/ogg')).rejects.toThrow('audio_decoder_unavailable');
+      return;
+    }
+    const encoded=spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i',
+      'sine=frequency=440:duration=0.3','-c:a','libopus','-f','ogg','pipe:1'],{maxBuffer:1024*1024});
+    expect(encoded.status).toBe(0);
+    const result=await toGeminiAudio(encoded.stdout,'audio/ogg; codecs=opus');
+    expect(result.mimeType).toBe('audio/flac');
+    expect(result.audio.subarray(0,4).toString('ascii')).toBe('fLaC');
+    expect(result.audio.length).toBeGreaterThan(100);
+  });
+  it('preserves supported non-Ogg audio formats',async()=>{
+    const audio=Buffer.from('audio-data');
+    expect(await toGeminiAudio(audio,'audio/mp4')).toEqual({audio,mimeType:'audio/mp4'});
+    expect(await toGeminiAudio(audio,'audio/opus')).toEqual({audio,mimeType:'audio/opus'});
   });
   it('rejects unsupported, empty, oversized or unconfigured audio before network transfer',async()=>{
     const fetchMock=vi.fn();
@@ -21,6 +41,12 @@ describe('WhatsApp Gemini audio boundary',()=>{
     await expect(transcribeWhatsAppAudio({...base,audio:Buffer.alloc(0),mimeType:'audio/ogg'})).rejects.toThrow();
     await expect(transcribeWhatsAppAudio({...base,audio:Buffer.alloc(8*1024*1024+1),mimeType:'audio/ogg'})).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('classifies transcription quota errors so inbound voice can retry safely',async()=>{
+    const fetchMock=vi.fn(async()=>new Response('',{status:429}));
+    await expect(transcribeWhatsAppAudio({audio:Buffer.from('voice-note'),mimeType:'audio/opus',
+      apiKey:'stub',model:'gemini-3.8-flash',fetch:fetchMock as never}))
+      .rejects.toThrow('audio_transcription_quota_exceeded');
   });
   it('converts provider-generated signed 16-bit PCM into WhatsApp Ogg/Opus',async()=>{
     const audio=Buffer.alloc(24000*2/10);
