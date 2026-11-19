@@ -27,6 +27,7 @@ const database=createPostgresServiceDependency({connectionString:databaseUrl,
   applicationName:'masanawa-whatsapp-browser',migrationRoots:platformProductMigrationRoots()});
 const {pool}=database;
 const owner=randomUUID();
+const callsEnabled=env.MASANAWA_WHATSAPP_CALLS_ENABLED==='true'&&env.MASANAWA_WHATSAPP_BROWSER_ENABLED==='true';
 const wpp=require('/opt/masanawa-browser/node_modules/@wppconnect-team/wppconnect') as {
   create(options:Record<string,unknown>):Promise<BrowserClient>;
 };
@@ -81,6 +82,12 @@ async function begin(pair:Pairing){
       '--disable-backgrounding-occluded-windows','--disable-renderer-backgrounding'],
     puppeteerOptions:{executablePath:'/usr/bin/chromium',userDataDir:profile,protocolTimeout:15000},
   };
+  const launchTimeout=setTimeout(()=>{
+    report('startup_timeout');
+    // Chrome can hang before WPPConnect returns a client to close. Let the
+    // isolated container restart and reclaim the browser and virtual devices.
+    process.exit(1);
+  },90000);
   try{
     // The app credentials live in cookies and IndexedDB. Remove stale Chromium
     // process locks left behind by a previous container while preserving both.
@@ -94,7 +101,7 @@ async function begin(pair:Pairing){
     client=opened;
   }catch{
     if(pairing===pair){await update(pair,'degraded','browser_start_failed').catch(()=>undefined);await stop();}
-  }
+  }finally{clearTimeout(launchTimeout);}
 }
 
 async function tick(){
@@ -106,12 +113,12 @@ async function tick(){
       const rows=await pool.query<Pairing>(`WITH next AS (
         SELECT c.tenant_id,c.channel_id,target.linked_jid FROM security.whatsapp_channels c
         JOIN security.whatsapp_channels target ON (target.tenant_id,target.channel_id)=(c.tenant_id,c.call_target_channel_id)
-        WHERE c.call_transport='browser' AND c.state NOT IN ('disconnected','needs_pairing') AND target.linked_jid IS NOT NULL
+        WHERE $2::boolean AND c.call_transport='browser' AND c.state NOT IN ('disconnected','needs_pairing') AND target.linked_jid IS NOT NULL
           AND (c.lease_owner=$1 OR c.lease_expires_at IS NULL OR c.lease_expires_at<clock_timestamp())
         ORDER BY (c.lease_owner=$1) DESC NULLS LAST,c.created_at LIMIT 1 FOR UPDATE OF c SKIP LOCKED
       ) UPDATE security.whatsapp_channels c SET lease_owner=$1,lease_expires_at=clock_timestamp()+interval '20 seconds'
         FROM next WHERE (c.tenant_id,c.channel_id)=(next.tenant_id,next.channel_id)
-        RETURNING c.tenant_id,c.channel_id,c.call_target_channel_id,next.linked_jid`,[owner]);
+        RETURNING c.tenant_id,c.channel_id,c.call_target_channel_id,next.linked_jid`,[owner,callsEnabled]);
       const next=rows.rows[0];
       if(pairing&&pairing.channel_id!==next?.channel_id){
         const previous=await pool.query(`SELECT state FROM security.whatsapp_channels
