@@ -18,7 +18,7 @@ describe('WhatsApp manual-off persistence',()=>{
       for(const filename of ['0123_whatsapp_ai.sql','0124_whatsapp_number_identity.sql',
         '0125_whatsapp_gemini_key_pool.sql','0126_whatsapp_gemini_keys_key_only.sql',
         '0127_whatsapp_gemini_full_voices.sql','0128_whatsapp_incoming_calls.sql',
-        '0129_whatsapp_call_outcomes.sql'])
+        '0129_whatsapp_call_outcomes.sql','0130_whatsapp_contact_memory.sql'])
         await db.exec(await readFile(new URL(`../../../packages/security/migrations/${filename}`,import.meta.url),'utf8'));
       const inserted=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels(tenant_id,enabled,state)
         VALUES('tenant',true,'connected') RETURNING channel_id`);

@@ -311,9 +311,31 @@ export function createWhatsAppAdmin(input:Input){
       const result=await input.pool.query(`SELECT t.thread_id AS "threadId",t.customer_wa_id AS "customerWaId",
         t.customer_name AS "customerName",t.verified_contact_name AS "verifiedContactName",
         t.mode,t.assigned_operator AS "assignedOperator",
-        t.unread_count AS "unreadCount",t.last_message_at AS "lastMessageAt"
+        t.unread_count AS "unreadCount",t.last_message_at AS "lastMessageAt",
+        t.history_dispatch_state AS "historyDispatchState",t.history_dispatched_at AS "historyDispatchedAt",
+        (SELECT min(created_at) FROM security.whatsapp_messages m
+          WHERE (m.tenant_id,m.thread_id)=(t.tenant_id,t.thread_id)) AS "oldestSavedAt",
+        (SELECT count(*)::int FROM security.whatsapp_memory_artifacts m
+          WHERE (m.tenant_id,m.thread_id)=(t.tenant_id,t.thread_id)) AS "memoryArtifacts"
         FROM security.whatsapp_threads t JOIN security.whatsapp_channels c USING(tenant_id,channel_id)
         WHERE t.tenant_id=$1 AND t.channel_id=$2 ORDER BY t.last_message_at DESC LIMIT 100`,[actor.tenantId,id]);return result.rows;
+    },
+    async requestHistory(auth:string|undefined,threadId:string){
+      const actor=await write(auth);
+      if(!isId(threadId))throw new WhatsAppAdminError(422,'invalid_thread');
+      const result=await input.pool.query(`UPDATE security.whatsapp_threads t
+        SET history_requested_at=clock_timestamp(),history_dispatch_state='queued'
+        FROM security.whatsapp_channels c
+        WHERE t.tenant_id=$1 AND t.thread_id=$2 AND (t.tenant_id,t.channel_id)=(c.tenant_id,c.channel_id)
+          AND c.call_target_channel_id IS NULL AND c.state='connected'
+          AND t.history_dispatch_state IS DISTINCT FROM 'queued'
+          AND (t.history_dispatched_at IS NULL OR t.history_dispatched_at<clock_timestamp()-interval '2 minutes')
+          AND EXISTS(SELECT 1 FROM security.whatsapp_messages m WHERE (m.tenant_id,m.thread_id)=(t.tenant_id,t.thread_id)
+            AND m.provider_message_id IS NOT NULL)
+        RETURNING t.channel_id`,[actor.tenantId,threadId]);
+      if(!result.rows[0])throw new WhatsAppAdminError(409,'whatsapp_history_request_unavailable');
+      await audit(actor.tenantId,result.rows[0].channel_id,actor.actorId,'history.requested',{threadId});
+      return {historyDispatchState:'queued'};
     },
     async verifyContactName(auth:string|undefined,threadId:string,name:string){
       const actor=await write(auth);

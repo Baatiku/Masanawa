@@ -93,8 +93,9 @@ export async function createLinkedAuthState(pool:Db,tenantId:string,channelId:st
 }
 
 function contentOf(msg:WAMessage):{kind:'text'|'audio'|'image'|'document'|'unsupported';body:string|null;mediaId:string|null}{
-  const content=msg.message?.ephemeralMessage?.message??msg.message?.viewOnceMessage?.message??
-    msg.message?.viewOnceMessageV2?.message??msg.message;
+  const content=msg.message;
+  if(content?.ephemeralMessage||content?.viewOnceMessage||content?.viewOnceMessageV2||content?.viewOnceMessageV2Extension)
+    return {kind:'unsupported',body:null,mediaId:null};
   if(!content)return {kind:'unsupported',body:null,mediaId:null};
   const text=content.conversation??content.extendedTextMessage?.text;
   if(typeof text==='string')return {kind:'text',body:text.slice(0,4000),mediaId:null};
@@ -317,24 +318,30 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       return;
     }
     socket.ev.on('messages.upsert',event=>{
+      const history:WAMessage[]=[];
       for(const msg of event.messages){
         const messageTime=Number(msg.messageTimestamp?.toString()??0);
-        if(!eligibleWhatsAppUpsert(event.type,messageTime))continue;
+        if(!eligibleWhatsAppUpsert(event.type,messageTime)){
+          history.push(msg);
+          continue;
+        }
         if(msg.key.fromMe)void ingestOwnerReply(slot,msg).catch(()=>markError(slot,'owner_reply_persistence_failed'));
         else void ingest(slot,msg).catch(()=>markError(slot,'inbound_persistence_failed'));
       }
+      if(history.length)storeHistory(history);
     });
-    socket.ev.on('messaging-history.set',event=>{
+    socket.ev.on('messaging-history.set',event=>storeHistory(event.messages));
+    function storeHistory(messages:readonly WAMessage[]){
       if(sockets.get(slot.channelId)!==slot)return;
       // Process sequentially in small asynchronous slices on a 2-GiB pilot;
       // never turn imported old messages into outbound replies.
       void (async()=>{
         let imported=0,ignored=0;
-        for(let i=0;i<event.messages.length;i+=40){
+        for(let i=0;i<messages.length;i+=40){
           if(sockets.get(slot.channelId)!==slot)break;
           const result=await persistLinkedHistory(input.pool,
             {tenantId:slot.tenantId,channelId:slot.channelId,owner:slot.owner},
-            event.messages.slice(i,i+40));
+            messages.slice(i,i+40));
           imported+=result.imported;ignored+=result.ignored;
         }
         await input.pool.query(`INSERT INTO security.whatsapp_audit
@@ -347,7 +354,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
           VALUES($1,$2,'linked-device','history.import_failed','{}'::jsonb)`,
           [slot.tenantId,slot.channelId]).catch(()=>undefined);
       });
-    });
+    }
     socket.ev.on('messages.update',events=>{
       for(const event of events){
         const id=event.key.id;if(!id)return;
@@ -366,6 +373,36 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
           .catch(()=>undefined); // A call log failure must not break the paired session.
       }
     });
+  }
+  async function dispatchHistoryRequest(slot:Slot){
+    if(!slot.connected||slot.calls)return;
+    const result=await input.pool.query(`WITH next AS (
+      SELECT thread_id FROM security.whatsapp_threads
+      WHERE tenant_id=$1 AND channel_id=$2 AND history_dispatch_state='queued'
+        AND NOT EXISTS(SELECT 1 FROM security.whatsapp_threads recent WHERE recent.tenant_id=$1
+          AND recent.channel_id=$2 AND recent.history_dispatched_at>clock_timestamp()-interval '2 minutes')
+        AND EXISTS(SELECT 1 FROM security.whatsapp_channels WHERE tenant_id=$1 AND channel_id=$2
+          AND state='connected' AND lease_owner=$3 AND lease_expires_at>clock_timestamp())
+      ORDER BY history_requested_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    ), sent AS (
+      UPDATE security.whatsapp_threads t SET history_dispatch_state='requested',history_dispatched_at=clock_timestamp()
+      FROM next WHERE t.thread_id=next.thread_id AND t.tenant_id=$1 AND t.channel_id=$2
+      RETURNING t.thread_id,t.customer_wa_id
+    ) SELECT s.thread_id,s.customer_wa_id,m.provider_message_id,m.direction,m.created_at FROM sent s
+      LEFT JOIN LATERAL (SELECT provider_message_id,direction,created_at FROM security.whatsapp_messages
+        WHERE tenant_id=$1 AND thread_id=s.thread_id AND provider_message_id IS NOT NULL
+        ORDER BY created_at,message_id LIMIT 1) m ON true`,[slot.tenantId,slot.channelId,slot.owner]);
+    const anchor=result.rows[0];
+    if(!anchor)return;
+    try{
+      if(sockets.get(slot.channelId)!==slot||!slot.connected||!anchor.provider_message_id)throw Error('history_anchor_unavailable');
+      await slot.socket.fetchMessageHistory(50,{id:anchor.provider_message_id,remoteJid:anchor.customer_wa_id,
+        fromMe:anchor.direction==='outbound'},new Date(anchor.created_at).getTime());
+    }catch{
+      await input.pool.query(`UPDATE security.whatsapp_threads SET history_dispatch_state='failed'
+        WHERE tenant_id=$1 AND channel_id=$2 AND thread_id=$3 AND history_dispatch_state='requested'`,
+      [slot.tenantId,slot.channelId,anchor.thread_id]);
+    }
   }
   async function markError(slot:Slot,code:string,state:'degraded'|'needs_pairing'='degraded'){
     await input.pool.query(`UPDATE security.whatsapp_channels SET state=$3,last_error_code=$4,updated_at=clock_timestamp()
@@ -396,7 +433,8 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
           AND (lease_owner=$2 OR lease_expires_at IS NULL OR lease_expires_at<clock_timestamp()) RETURNING channel_id`,
           [channel.channel_id,leaseOwner]);
         if(!lease.rows.length){close(channel.channel_id);continue;}
-        if(!slot){
+        if(slot)void dispatchHistoryRequest(slot).catch(()=>undefined);
+        else {
           try{
             if(channel.call_target_channel_id)await input.pool.query(`UPDATE security.whatsapp_incoming_calls
               SET ended_at=clock_timestamp(),end_reason='disconnected'

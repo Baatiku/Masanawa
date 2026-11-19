@@ -20,11 +20,11 @@ describe('WhatsApp returning-contact memory',()=>{
       expect(JSON.stringify(options.body)).toContain('unresolved general questions');
       return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Prefers Hausa and is learning about the Masanawa app.'}]}}]})};
     });
-    const summary=await summarizeWhatsAppMemory({apiKey:'test',model:'gemini-2.5-flash',previous:'',conversation:'Customer: Sannu',fetch:call as never});
+    const summary=await summarizeWhatsAppMemory({apiKey:'test',model:'gemini-2.5-flash',conversation:'Customer: Sannu',fetch:call as never});
     expect(summary).toMatch(/Prefers Hausa/);
   });
   it('rejects model-produced financial memory',async()=>{
-    await expect(summarizeWhatsAppMemory({apiKey:'test',model:'test',previous:'',conversation:'Hello',
+    await expect(summarizeWhatsAppMemory({apiKey:'test',model:'test',conversation:'Hello',
       fetch:async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Wallet balance is ₦1,000'}]}}]})}) as never})).rejects.toThrow('memory_response_invalid');
   });
 });
