@@ -427,7 +427,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
   return {
     async runOnce(){
       const result=await input.pool.query(`SELECT c.tenant_id,c.channel_id,c.state,c.enabled,c.lease_owner,c.call_target_channel_id
-        FROM security.whatsapp_channels c WHERE c.state<>'disconnected' AND (c.call_target_channel_id IS NULL OR
+        FROM security.whatsapp_channels c WHERE c.state<>'disconnected' AND c.call_transport='native' AND (c.call_target_channel_id IS NULL OR
           ($1 AND EXISTS(SELECT 1 FROM security.whatsapp_channels target
             WHERE target.tenant_id=c.tenant_id AND target.channel_id=c.call_target_channel_id AND target.state='connected')))
         ORDER BY c.call_target_channel_id IS NOT NULL,c.created_at LIMIT 100`,[callEnabled]);

@@ -1,0 +1,1 @@
+{"name":"masanawa-whatsapp-browser-runtime","version":"1.0.0","private":true,"dependencies":{"@wppconnect-team/wppconnect":"2.3.1"},"overrides":{"@wppconnect/wa-js":"4.6.0"}}

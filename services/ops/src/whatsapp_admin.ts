@@ -150,7 +150,7 @@ export function createWhatsAppAdmin(input:Input){
       if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       const result=await input.pool.query(`SELECT target.state AS "numberState",target.enabled AS "aiEnabled",
         a.reply_mode AS "replyMode",c.channel_id AS "pairingId",c.state,c.enabled,c.revision::int,
-        c.last_error_code AS "lastErrorCode",
+        c.last_error_code AS "lastErrorCode",c.call_transport AS "callTransport",
         COALESCE(c.state='connected' AND c.lease_expires_at>clock_timestamp(),false) AS "callDeviceOnline",
         (SELECT created_at FROM security.whatsapp_audit
           WHERE tenant_id=target.tenant_id AND channel_id=target.channel_id
@@ -182,21 +182,29 @@ export function createWhatsAppAdmin(input:Input){
         ended_at AS "endedAt",end_reason AS "endReason"
         FROM (SELECT * FROM handled UNION ALL SELECT * FROM signals) recent
         ORDER BY offered_at DESC LIMIT 30`,[actor.tenantId,id]);
-      return {...pairing,configured:callsConfigured(),calls:history.rows};
+      return {...pairing,configured:callsConfigured(),browserAvailable:input.env.MASANAWA_WHATSAPP_BROWSER_ENABLED==='true',calls:history.rows};
     },
-    async startCalls(auth:string|undefined,id:string){
+    async startCalls(auth:string|undefined,id:string,transport?:'native'|'browser'){
       const actor=await write(auth);
       if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       if(!callsConfigured())throw new WhatsAppAdminError(503,'whatsapp_calls_not_configured');
-      const result=await input.pool.query(`INSERT INTO security.whatsapp_channels(tenant_id,call_target_channel_id)
-        SELECT tenant_id,channel_id FROM security.whatsapp_channels
+      transport??=input.env.MASANAWA_WHATSAPP_BROWSER_ENABLED==='true'?'browser':'native';
+      if(transport==='browser'&&input.env.MASANAWA_WHATSAPP_BROWSER_ENABLED!=='true')
+        throw new WhatsAppAdminError(503,'whatsapp_browser_calls_not_configured');
+      const result=await input.pool.query(`INSERT INTO security.whatsapp_channels(tenant_id,call_target_channel_id,call_transport)
+        SELECT tenant_id,channel_id,$3 FROM security.whatsapp_channels
         WHERE tenant_id=$1 AND channel_id=$2 AND call_target_channel_id IS NULL AND state='connected'
         ON CONFLICT(tenant_id,call_target_channel_id) WHERE call_target_channel_id IS NOT NULL AND state<>'disconnected'
         DO UPDATE SET call_target_channel_id=EXCLUDED.call_target_channel_id
-        RETURNING channel_id AS "pairingId",state,revision::int`,[actor.tenantId,id]);
+        RETURNING channel_id AS "pairingId",state,revision::int,call_transport`,[actor.tenantId,id,transport]).catch(error=>{
+        if(error?.code==='23505'&&error?.constraint==='whatsapp_browser_call_pairing_capacity')
+          throw new WhatsAppAdminError(409,'whatsapp_browser_call_gateway_in_use');
+        throw error;
+      });
       const pairing=result.rows[0];
       if(!pairing)throw new WhatsAppAdminError(409,'whatsapp_call_number_not_connected');
-      await audit(actor.tenantId,id,actor.actorId,'call.pairing_requested');
+      if(pairing.call_transport!==transport)throw new WhatsAppAdminError(409,'whatsapp_remove_existing_call_pairing');
+      await audit(actor.tenantId,id,actor.actorId,'call.pairing_requested',{transport});
       return pairing;
     },
     async changeCalls(auth:string|undefined,id:string,action:'enable'|'disable'|'disconnect',revision:number){

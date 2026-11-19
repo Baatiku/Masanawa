@@ -70,6 +70,11 @@ jobs:
           --env-file infra/deployment/digitalocean/.env.example
           --file infra/deployment/digitalocean/compose.yaml
           build gateway worker ops
+      - name: Build and smoke-test the isolated WhatsApp browser gateway
+        run: |
+          docker build --build-arg WORKER_BASE=masanawa-worker:pilot -f infra/deployment/worker/browser/Dockerfile -t masanawa-whatsapp-browser:pilot .
+          timeout 30s docker run --rm --network none --memory 640m --memory-swap 640m masanawa-whatsapp-browser:pilot \
+            /bin/sh -ec 'pactl list short sinks | grep -q masanawa_call_output && chromium --no-sandbox --disable-dev-shm-usage --headless --dump-dom about:blank'
       - name: Exercise payment qualification with the real packaged PostgreSQL driver
         run: docker run --rm --network none --user 1000:1000 --entrypoint node masanawa-gateway:pilot --test infra/deployment/digitalocean/qualify-payments.test.mjs
       - name: Initialize WhatsApp call media with the packaged Worker dependencies
@@ -143,3 +148,6 @@ jobs:
           docker push "$gateway"
           docker push "$worker"
           docker push "$ops"
+          browser="ghcr.io/$owner/masanawa-do-pilot-worker:browser-$GITHUB_SHA"
+          docker tag masanawa-whatsapp-browser:pilot "$browser"
+          docker push "$browser"
