@@ -9,6 +9,9 @@ const lib = dirname(provider);
 if (process.argv.includes('--check')) {
   const { RTCPeerConnection } = createRequire(provider)('@roamhq/wrtc');
   if (typeof RTCPeerConnection !== 'function') throw Error('Native WebRTC is unavailable');
+  const { renderCallDisclosure } = await import('../dist/jobs/whatsapp_call_audio.js');
+  const disclosure = await renderCallDisclosure();
+  if (disclosure.length < 32000 || disclosure.length % 2 !== 0) throw Error('Invalid caller disclosure PCM');
   const { WasmEngine } = await import('@innovatorssoft/baileys/lib/Voip/wasm-engine.mjs');
   const engine = new WasmEngine({ pthreadPoolSize: 1, enableLogs: false });
   const timeout = setTimeout(() => { throw Error('WhatsApp call engine did not initialize'); }, 15_000);

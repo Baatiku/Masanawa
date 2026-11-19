@@ -1,6 +1,6 @@
 import {EventEmitter} from 'node:events';
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {createCallPlayback,openWhatsAppCallLive,renderCallDisclosure} from './whatsapp_call_audio.js';
+import {createCallPlayback,openWhatsAppCallLive} from './whatsapp_call_audio.js';
 import {createWhatsAppCallHandler,type CallOffer,type IncomingSession} from './whatsapp_calls.js';
 
 class TestSocket extends EventTarget {
@@ -119,9 +119,4 @@ describe('WhatsApp incoming calls',()=>{
     expect(socket.close).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the caller disclosure locally at the VoIP sample rate',async()=>{
-    const pcm=await renderCallDisclosure();
-    expect(pcm.length).toBeGreaterThan(32000);
-    expect(pcm.length%2).toBe(0);
-  });
 });

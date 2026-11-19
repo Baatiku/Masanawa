@@ -1126,6 +1126,13 @@
       "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
     },
     {
+      "name": "MASANAWA_WHATSAPP_CALLS_ENABLED",
+      "owner": "ops/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Opt-in for incoming WhatsApp voice calls on a separately paired device. Each paired number still requires an explicit admin enable."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_ENABLED",
       "owner": "gateway/channels",
       "classification": "public",
