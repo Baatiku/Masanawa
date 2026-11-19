@@ -2,22 +2,63 @@ import {spawn} from 'node:child_process';
 
 const MAX_AUDIO_BYTES=8*1024*1024;
 
+/** WhatsApp records Ogg/Opus, whereas Gemini's audio/ogg support refers to
+ * Ogg/Vorbis. Decode Opus into a lossless, supported FLAC container. Keep both
+ * the input and decoded output bounded; no media files are written to disk. */
+export async function toGeminiAudio(input:Buffer,mimeType:string,spawnProcess:typeof spawn=spawn):Promise<{audio:Buffer;mimeType:string}>{
+  if(!input.length||input.length>MAX_AUDIO_BYTES)throw Error('audio_transcription_unavailable');
+  const type=mimeType.split(';')[0]?.trim().toLowerCase()??'';
+  if(!['audio/ogg','audio/opus','audio/mp4','audio/mpeg','audio/webm','audio/wav','audio/aac','audio/flac'].includes(type))
+    throw Error('audio_mime_unsupported');
+  if(type!=='audio/ogg')return {audio:input,mimeType:type};
+  return new Promise((resolve,reject)=>{
+    const child=spawnProcess('ffmpeg',['-hide_banner','-loglevel','error','-f','ogg','-i','pipe:0',
+      '-vn','-ac','1','-ar','16000','-c:a','flac','-f','flac','pipe:1'],{stdio:['pipe','pipe','ignore']});
+    const parts:Buffer[]=[];let length=0,settled=false;
+    const end=(error?:Error)=>{
+      if(settled)return;settled=true;clearTimeout(timer);
+      if(error)reject(error);
+      else {
+        const audio=Buffer.concat(parts);
+        if(audio.subarray(0,4).toString('ascii')!=='fLaC')reject(Error('audio_decoder_invalid'));
+        else resolve({audio,mimeType:'audio/flac'});
+      }
+    };
+    const timer=setTimeout(()=>{child.kill('SIGKILL');end(Error('audio_decoder_timeout'));},30000);
+    child.on('error',()=>end(Error('audio_decoder_unavailable')));
+    child.stdout.on('data',(chunk:Buffer)=>{
+      length+=chunk.length;
+      if(length>MAX_AUDIO_BYTES){child.kill('SIGKILL');end(Error('audio_decoder_too_large'));}
+      else parts.push(chunk);
+    });
+    child.on('close',code=>end(code===0?undefined:Error('audio_decoder_failed')));
+    child.stdin.on('error',()=>undefined);
+    child.stdin.end(input);
+  });
+}
+
 /** Inline audio is bounded and sent only to the configured Gemini inference service. */
-export async function transcribeWhatsAppAudio(input:{audio:Buffer;mimeType:string;apiKey:string;model:string;fetch?:typeof fetch}):Promise<string>{
+export async function transcribeWhatsAppAudio(input:{audio:Buffer;mimeType:string;apiKey:string;model:string;fetch?:typeof fetch;
+  convert?:typeof toGeminiAudio}):Promise<string>{
   const {audio,apiKey,model}=input;
   if(!apiKey||!model||!audio.length||audio.length>MAX_AUDIO_BYTES)throw Error('audio_transcription_unavailable');
-  const mimeType=input.mimeType.split(';')[0]?.trim().toLowerCase()??'';
-  if(!['audio/ogg','audio/mp4','audio/mpeg','audio/webm','audio/wav','audio/aac'].includes(mimeType))throw Error('audio_mime_unsupported');
+  const normalized=await (input.convert??toGeminiAudio)(audio,input.mimeType);
   const call=input.fetch??fetch;
   const result=await call(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
     method:'POST',redirect:'error',signal:AbortSignal.timeout(30000),
     headers:{'x-goog-api-key':apiKey,'content-type':'application/json'},
     body:JSON.stringify({contents:[{role:'user',parts:[
       {text:'Transcribe this WhatsApp voice note faithfully as plain text. Preserve its original language, including standard written Hausa where spoken. Do not answer the speaker or add commentary.'},
-      {inlineData:{mimeType,data:audio.toString('base64')}},
-    ]}],generationConfig:{temperature:0,maxOutputTokens:1000}}),
+      {inlineData:{mimeType:normalized.mimeType,data:normalized.audio.toString('base64')}},
+    ]}],generationConfig:{temperature:0,maxOutputTokens:2500}}),
   });
-  if(!result.ok)throw Error('audio_transcription_provider_failed');
+  if(!result.ok){
+    const reason=result.status===429?'audio_transcription_quota_exceeded':
+      result.status===401||result.status===403?'audio_transcription_auth_rejected':
+      result.status>=500?'audio_transcription_provider_unavailable':'audio_transcription_provider_rejected';
+    await result.body?.cancel();
+    throw Error(reason);
+  }
   const data=await result.json() as {candidates?:{content?:{parts?:{text?:string}[]}}[]};
   const transcript=data.candidates?.[0]?.content?.parts?.map(x=>x.text??'').join('').trim()??'';
   if(!transcript||transcript.length>4000)throw Error('audio_transcription_invalid');

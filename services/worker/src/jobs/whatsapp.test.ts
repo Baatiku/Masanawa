@@ -1,5 +1,7 @@
 import {describe,expect,it,vi} from 'vitest';
+import {randomBytes} from 'node:crypto';
 import {createWhatsAppWorker} from './whatsapp.js';
+import {encryptLinkedSecret} from './whatsapp_linked.js';
 
 const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-1',channel_id:'channel-1',
   thread_id:'thread-1',customer_wa_id:'2348012345678@s.whatsapp.net',mode:'ai',body:'Hello',direction:'inbound',
@@ -14,12 +16,16 @@ const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-
   working_hours:{timezone:'Africa/Lagos',days:[0,1,2,3,4,5,6],start:'00:00',end:'23:59'},
 };
 
-function setup(overrides:Record<string,unknown>,options:{env?:Record<string,string>;fetch?:typeof fetch;liveGate?:{enabled:boolean;reply_mode:string;mode:string}}={}){
+function setup(overrides:Record<string,unknown>,options:{env?:Record<string,string>;fetch?:typeof fetch;
+  transcribe?:(channelId:string,ciphertext:Buffer)=>Promise<string>;
+  geminiKeyCiphertext?:Buffer;liveGate?:{enabled:boolean;reply_mode:string;mode:string}}={}){
   const calls:{sql:string;parameters:unknown[]}[]=[];
   const pool={query:async(sql:string,params:unknown[]=[])=>{
     calls.push({sql,parameters:params});
     if(sql.includes('RETURNING j.job_id'))return {rows:[{job_id:'job-1'}]};
     if(sql.includes('SELECT j.job_id,j.kind'))return {rows:[{...row,...overrides}]};
+    if(sql.includes('FROM security.whatsapp_gemini_keys WHERE tenant_id'))return {rows:options.geminiKeyCiphertext?
+      [{key_id:'key-1',key_ciphertext:options.geminiKeyCiphertext}]:[]};
     if(sql.includes('SELECT c.enabled,a.reply_mode,t.mode'))return {rows:[options.liveGate??{
       enabled:overrides.enabled??row.enabled,reply_mode:overrides.reply_mode??row.reply_mode,
       mode:overrides.mode??row.mode,
@@ -31,7 +37,7 @@ function setup(overrides:Record<string,unknown>,options:{env?:Record<string,stri
   const send=vi.fn(async()=> 'wa-receipt');
   const sendVoice=vi.fn(async()=> 'wa-voice-receipt');
   return {calls,send,sendVoice,worker:createWhatsAppWorker({pool:pool as never,env:options.env??{},
-    ...(options.fetch?{fetch:options.fetch}:{}),send,sendVoice})};
+    ...(options.fetch?{fetch:options.fetch}:{}),...(options.transcribe?{transcribe:options.transcribe}:{}),send,sendVoice})};
 }
 
 describe('WhatsApp availability and owner takeover',()=>{
@@ -77,7 +83,7 @@ describe('WhatsApp availability and owner takeover',()=>{
     await mock.worker.runOnce();
     const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
     expect(outgoing).toBeDefined();
-    expect(outgoing!.parameters[3]).toContain('I am Assistant');
+    expect(outgoing!.parameters[3]).toContain("I'm Assistant");
     expect(outgoing!.parameters[3]).not.toContain('Welcome');
     expect(outgoing!.parameters[3]).not.toContain('https://app.masanawa.com');
     expect(mock.send).not.toHaveBeenCalled(); // queued for the outbox
@@ -91,10 +97,58 @@ describe('WhatsApp availability and owner takeover',()=>{
     expect(provider).toHaveBeenCalledWith(expect.stringContaining('/models/gemini-3.8-flash:generateContent'),
       expect.any(Object));
     const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
-    expect(outgoing?.parameters[3]).toContain('I received your message');
+    expect(outgoing?.parameters[3]).toContain('I cannot give you a reliable answer');
     expect(mock.calls.some(c=>c.sql.includes('last_error_code=$2')&&
       c.parameters.includes('gemini_quota_exceeded'))).toBe(true);
     expect(mock.calls.some(c=>c.parameters.includes('reply_generation_unavailable'))).toBe(false);
+  });
+  it('transcribes inbound WhatsApp voice notes, persists the transcript and replies to its question',async()=>{
+    const transcribe=vi.fn(async()=> 'Could you explain how elections work in Nigeria?');
+    const provider=vi.fn(async(_url:string,_init:RequestInit)=>Response.json({candidates:[{content:{parts:[{text:
+      'Elections determine who represents citizens. Here is how the process works.'}]}}]}));
+    const mock=setup({message_kind:'audio',body:null,media_payload_ciphertext:Buffer.from([1,2,3]),
+      transcribe_voice:true,welcome_sent_at:'2026-11-17T12:00:00Z'},
+    {env:{MASANAWA_GEMINI_API_KEY:'test-key'},transcribe,fetch:provider as unknown as typeof fetch});
+    await mock.worker.runOnce();
+    expect(transcribe).toHaveBeenCalledWith('channel-1',Buffer.from([1,2,3]));
+    const saved=mock.calls.find(c=>c.sql.includes("WHERE tenant_id=$1 AND message_id=$2 AND kind='audio'"));
+    expect(saved?.parameters[2]).toBe('Could you explain how elections work in Nigeria?');
+    const payload=JSON.parse(String((provider.mock.calls[0]![1] as RequestInit).body));
+    expect(payload.contents[0].parts[0].text).toContain('Could you explain how elections work in Nigeria?');
+    expect(mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))?.parameters[3])
+      .toContain('Elections determine who represents citizens');
+  });
+  it('retries a definitely unsent voice transcription failure without inventing a reply',async()=>{
+    const transcribe=vi.fn(async()=>{throw Error('audio_transcription_quota_exceeded');});
+    const mock=setup({message_kind:'audio',body:null,transcribe_voice:true,
+      media_payload_ciphertext:Buffer.from([1,2,3])},{transcribe});
+    await mock.worker.runOnce();
+    expect(mock.calls.some(c=>c.sql.includes('attempts>=16')&&
+      c.parameters.includes('audio_transcription_quota_exceeded'))).toBe(true);
+    expect(mock.calls.some(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))).toBe(false);
+  });
+  it('reuses a previously saved voice transcript after a generation retry',async()=>{
+    const transcribe=vi.fn();
+    const provider=vi.fn(async()=>Response.json({candidates:[{content:{parts:[{text:'Certainly.'}]}}]}));
+    const mock=setup({message_kind:'audio',body:'Could you clarify?',media_payload_ciphertext:null,
+      transcribe_voice:true},{env:{MASANAWA_GEMINI_API_KEY:'test-key'},transcribe,
+      fetch:provider as unknown as typeof fetch});
+    await mock.worker.runOnce();
+    expect(transcribe).not.toHaveBeenCalled();
+    expect(provider).toHaveBeenCalledOnce();
+  });
+  it('uses encrypted administrator-managed Gemini keys for text, without a legacy env key',async()=>{
+    const sessionKey=randomBytes(32).toString('base64');
+    const provider=vi.fn(async(_url:string,_init:RequestInit)=>Response.json({candidates:[{content:{parts:[{text:
+      'That is an interesting question. Let us explore it carefully.'}]}}]}));
+    const mock=setup({body:'Tell me about this topic',welcome_sent_at:'2026-11-17T12:00:00Z'},
+      {env:{MASANAWA_WHATSAPP_SESSION_KEY:sessionKey},
+        geminiKeyCiphertext:encryptLinkedSecret('admin-managed-key',sessionKey),fetch:provider as unknown as typeof fetch});
+    await mock.worker.runOnce();
+    expect((provider.mock.calls[0]![1] as RequestInit).headers).toMatchObject({'x-goog-api-key':'admin-managed-key'});
+    const payload=JSON.parse(String((provider.mock.calls[0]![1] as RequestInit).body));
+    expect(payload.systemInstruction.parts[0].text).not.toContain('under 700 characters');
+    expect(payload.generationConfig.maxOutputTokens).toBeGreaterThan(500);
   });
   it('introduces the assistant after the configured unanswered delay',async()=>{
     const mock=setup({reply_mode:'away',account_match:'registered',body:'Hello'});
@@ -171,7 +225,7 @@ describe('WhatsApp availability and owner takeover',()=>{
     const prompt=String(JSON.parse(String((provider.mock.calls[0]![1] as RequestInit).body)).systemInstruction.parts[0].text);
     expect(prompt).toContain('confirmed by an administrator as "Amina"');
     expect(prompt).toContain('do not introduce yourself');
-    expect(prompt).toContain('Do not claim that they are offline or away');
+    expect(prompt).toContain('Do not claim they are offline or away');
     expect(mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'))?.parameters[3])
       .toBe('Certainly, Amina. Here is the answer.');
   });

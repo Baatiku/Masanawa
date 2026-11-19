@@ -88,6 +88,55 @@ describe('WhatsApp outbox PostgreSQL recovery',()=>{
       expect(out.rows[0]).toMatchObject({kind:'text',delivery_state:'queued'});
     }finally{await db.close();}
   },30000);
+  it('stores an incoming voice transcript and queues a real text reply without replaying the audio',async()=>{
+    const db=new PGlite();
+    try{
+      await db.exec(`CREATE SCHEMA identity; CREATE SCHEMA security;
+        CREATE TABLE identity.users(tenant_id text NOT NULL,user_id text NOT NULL,state text NOT NULL,
+          PRIMARY KEY(tenant_id,user_id));`);
+      for(const name of ['0123_whatsapp_ai','0124_whatsapp_number_identity',
+        '0125_whatsapp_gemini_key_pool','0126_whatsapp_gemini_keys_key_only'])
+        await db.exec(await readFile(new URL(`../../../../packages/security/migrations/${name}.sql`,import.meta.url),'utf8'));
+      const channel=(await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels
+        (tenant_id,enabled,state) VALUES('tenant',true,'connected') RETURNING channel_id`)).rows[0]!.channel_id;
+      await db.query(`INSERT INTO security.whatsapp_assistants
+        (tenant_id,channel_id,voice_replies,transcribe_voice,remember_context)
+        VALUES('tenant',$1,false,true,false)`,[channel]);
+      const thread=(await db.query<{thread_id:string}>(`INSERT INTO security.whatsapp_threads
+        (tenant_id,channel_id,customer_wa_id) VALUES('tenant',$1,'2348098765432@s.whatsapp.net')
+        RETURNING thread_id`,[channel])).rows[0]!.thread_id;
+      const original=Buffer.from('encrypted-envelope');
+      const message=(await db.query<{message_id:string}>(`INSERT INTO security.whatsapp_messages
+        (tenant_id,thread_id,channel_id,direction,kind,media_payload_ciphertext)
+        VALUES('tenant',$1,$2,'inbound','audio',$3) RETURNING message_id`,[thread,channel,original])).rows[0]!.message_id;
+      await db.query(`INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
+        VALUES('tenant',$1,$2,'reply')`,[channel,message]);
+      let transcriptions=0,completions=0;
+      const worker=createWhatsAppWorker({pool:db as never,env:{MASANAWA_GEMINI_API_KEY:'test-key'},
+        send:async()=> 'wa-receipt',transcribe:async(_channel,ciphertext)=>{
+          expect(Buffer.from(ciphertext)).toEqual(original);transcriptions++;return 'What does NIMC do?';
+        },fetch:async()=>{
+          completions++;return Response.json({candidates:[{content:{parts:[{text:
+            'NIMC manages Nigeria’s national identity system.'}]}}]});
+        }});
+      expect((await worker.runOnce()).claimed).toBe(1);
+      const job=(await db.query<{state:string;last_error_code:string|null}>(`SELECT state,last_error_code
+        FROM security.whatsapp_jobs WHERE message_id=$1`,[message])).rows[0];
+      expect(job).toMatchObject({state:'completed',last_error_code:null});
+      expect(transcriptions).toBe(1);
+      expect(completions).toBe(1);
+      const inbound=(await db.query<{body:string;media_payload_ciphertext:Buffer|null}>(`SELECT body,media_payload_ciphertext
+        FROM security.whatsapp_messages WHERE message_id=$1`,[message])).rows[0]!;
+      expect(inbound.body).toBe('What does NIMC do?');
+      expect(inbound.media_payload_ciphertext).toBeNull();
+      const outbound=await db.query<{body:string;kind:string}>(`SELECT body,kind FROM security.whatsapp_messages
+        WHERE thread_id=$1 AND direction='outbound'`,[thread]);
+      expect(outbound.rows).toEqual([{body:'NIMC manages Nigeria’s national identity system.',kind:'text'}]);
+      await worker.runOnce();
+      expect(transcriptions).toBe(1);
+      expect(completions).toBe(1);
+    }finally{await db.close();}
+  },30000);
   it('safely retries a pre-dispatch socket outage but never replays an uncertain send',async()=>{
     const db=new PGlite();
     try{
