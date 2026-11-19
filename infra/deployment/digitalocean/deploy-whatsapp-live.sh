@@ -166,7 +166,7 @@ stage='validate Worker memory override'
 write_worker_override(){
   local previous="$1"
   [[ "$previous" =~ ^[0-9]+$ ]] || return 1
-  worker_limit=$((448 * 1024 * 1024))
+  worker_limit=$((640 * 1024 * 1024))
   if [ "$previous" -gt "$worker_limit" ]; then worker_limit="$previous"; fi
   printf 'services:\n  worker:\n    mem_limit: %s\n' "$worker_limit" >"$2"
 }
