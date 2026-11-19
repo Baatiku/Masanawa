@@ -2,11 +2,14 @@
 // incoming call ID approved by the server's existing policy and lease.
 export async function browserAction(action:string,id?:string):Promise<unknown>{
   // WA-JS exposes dynamic internal stores whose shapes vary by WhatsApp version.
-  const browser=globalThis as unknown as {WPP?:any;masanawaCallArm?:Promise<void>;masanawaOffers?:Map<string,{call:any;seenAt:number}>};
+  const browser=globalThis as unknown as {WPP?:any;masanawaCallArm?:Promise<void>;masanawaQrRefreshAt?:number;masanawaOffers?:Map<string,{call:any;seenAt:number}>};
   const W=browser.WPP;
   const store=W?.whatsapp?.CallStore;
   const text=(value:any):string=>typeof value==='string'||typeof value==='number'?String(value):
     typeof value?._serialized==='string'?value._serialized:String(value?.toString?.()??'');
+  const safely=async<T>(read:()=>T|Promise<T>):Promise<T|undefined>=>{
+    try{return await read();}catch{return undefined;}
+  };
   const readState=async(call:any)=>text(typeof call?.getState==='function'?await call.getState():call?.state??call?.status).toUpperCase();
   const models=()=>{
     const list=store?.getModelsArray?.()??[];
@@ -14,8 +17,35 @@ export async function browserAction(action:string,id?:string):Promise<unknown>{
     return active?[active,...list.filter((call:any)=>call!==active)]:list;
   };
   if(action==='poll'){
-    const connected=Boolean(await W?.conn?.isAuthenticated?.());
-    const hosts=connected?[text(await W?.conn?.getMyUserId?.()),text(await W?.conn?.getMyUserLid?.())].filter(Boolean):[];
+    const stream=await safely(()=>W?.conn?.getStreamData?.());
+    const socket=text(await safely(()=>W?.whatsapp?.Socket?.state));
+    const mode=text(stream?.mode);
+    const progress=[text(stream?.info),text(await safely(()=>W?.whatsapp?.Stream?.displayInfo)),mode,socket];
+    const registered=Boolean(await safely(()=>W?.conn?.isRegistered?.()));
+    const authenticated=Boolean(await safely(()=>W?.conn?.isAuthenticated?.()));
+    const mainReady=await safely(()=>W?.conn?.isMainReady?.());
+    const blocked=progress.some(state=>['CONFLICT','PROXYBLOCK','TOS_BLOCK','SMB_TOS_BLOCK','DEPRECATED_VERSION'].includes(state));
+    const connected=!blocked&&Boolean((registered||authenticated)&&(mainReady??socket==='CONNECTED'));
+    const syncing=registered||authenticated||progress.some(state=>['PAIRING','SYNCING','RESUMING'].includes(state));
+    if(!connected){
+      const qrContainer=typeof document==='undefined'?null:document.querySelector('canvas')?.closest('[data-ref]');
+      const refresh=qrContainer?.querySelector<HTMLButtonElement>('button');
+      if(!blocked&&!syncing&&refresh&&Date.now()-(browser.masanawaQrRefreshAt??0)>5000){
+        browser.masanawaQrRefreshAt=Date.now();
+        refresh.click();
+      }
+      const code=blocked||syncing||refresh||socket==='UNPAIRED_IDLE'?'':qrContainer?.getAttribute('data-ref')??'';
+      const qr=code.length>25&&code.length<4096?code:'';
+      return {connected:false,hosts:[],calls:[],ready:false,blocked,syncing,qr};
+    }
+    // WA-JS getMyUserLid calls getMeLidUserOrThrow, including during sync.
+    // A missing LID must not discard an independently available phone ID.
+    const identities=await Promise.all([
+      safely(()=>W?.conn?.getMyUserId?.()),
+      safely(()=>W?.conn?.getMyUserLid?.()),
+      safely(()=>W?.whatsapp?.UserPrefs?.getMaybeMePnUser?.()),
+    ]);
+    const hosts=[...new Set(identities.map(text).filter(Boolean))];
     const usable=!!store&&(typeof W?.whatsapp?.getVoipStackInterface==='function'||typeof W?.call?.accept==='function');
     if(connected&&usable&&!browser.masanawaOffers&&typeof W?.on==='function'){
       const pending=new Map<string,{call:any;seenAt:number}>();
@@ -44,7 +74,7 @@ export async function browserAction(action:string,id?:string):Promise<unknown>{
       offers.push({id:key,peer:text(call.peerJid??call.sender),phone:text(call.callerPn),
         state:'INCOMING_RING',video:call.isVideo===true,group:call.isGroup===true});
     }
-    return {connected,hosts,calls:offers,ready};
+    return {connected,hosts,calls:offers,ready,blocked,syncing,qr:''};
   }
   const call=models().find((current:any)=>text(current.id??current.callId)===id);
   if(!call)return action==='accept'?false:null;

@@ -15,7 +15,7 @@ type BrowserClient={
   close():Promise<void>;
 };
 type Pairing={tenant_id:string;channel_id:string;call_target_channel_id:string;linked_jid:string};
-type Poll={connected:boolean;hosts:string[];calls:BrowserOffer[];ready:boolean};
+type Poll={connected:boolean;hosts:string[];calls:BrowserOffer[];ready:boolean;qr:string;blocked:boolean;syncing:boolean};
 const require=createRequire(import.meta.url);
 const report=(code:string)=>process.stderr.write(`{"event":"whatsapp.browser.${code}"}\n`);
 const direct=/^\d{5,32}(?::\d+)?@(s\.whatsapp\.net|c\.us|lid)$/;
@@ -37,20 +37,25 @@ let pairing:Pairing|undefined,client:BrowserClient|undefined,launch:Promise<void
 let handler:ReturnType<typeof createWhatsAppCallHandler>|undefined;
 let current:BrowserIncomingSession|undefined;
 const seen=new Map<string,number>();
-let healthyAt=Date.now(),renewAt=0,lastState='';
+let healthyAt=Date.now(),renewAt=0,lastState='',lastCode:string|null=null,lastQr='',lastOnlineAt=0;
 let busy=false;
 
 async function update(pair:Pairing,state:string,code:string|null=null,qr:string|null=null){
+  if(lastState===state&&lastCode===code&&(!qr||qr===lastQr))return;
   const changed=await pool.query(`UPDATE security.whatsapp_channels SET state=$4,last_error_code=$5,
     qr_ciphertext=$6,qr_expires_at=CASE WHEN $6::bytea IS NULL THEN NULL ELSE clock_timestamp()+interval '55 seconds' END,
     linked_jid=CASE WHEN $4='connected' THEN $7 ELSE linked_jid END,updated_at=clock_timestamp()
     WHERE tenant_id=$1 AND channel_id=$2 AND lease_owner=$3 AND call_transport='browser'
       AND state<>'disconnected' AND lease_expires_at>clock_timestamp()
-      AND ($4<>'qr_ready' OR state<>'connected')
       AND ($4<>'connected' OR state<>'needs_pairing')
     RETURNING channel_id`,[pair.tenant_id,pair.channel_id,owner,state,code,
     qr?encryptLinkedSecret(qr,sessionKey!):null,pair.linked_jid]);
-  if(changed.rows.length)lastState=state;
+  if(changed.rows.length){
+    if(state!==lastState||code!==lastCode)report(code??state);
+    lastState=state;
+    lastCode=code;
+    if(qr)lastQr=qr;
+  }
 }
 
 async function stop(removeProfile=false){
@@ -58,6 +63,9 @@ async function stop(removeProfile=false){
   client=undefined;
   pairing=undefined;
   lastState='';
+  lastCode=null;
+  lastQr='';
+  lastOnlineAt=0;
   seen.clear();
   await handler?.stop();
   handler=undefined;
@@ -74,9 +82,6 @@ async function begin(pair:Pairing){
   const settings={session:pair.channel_id,whatsappVersion:'',deviceName:'Masanawa Call Gateway',headless:false,useChrome:false,logQR:false,
     autoClose:0,deviceSyncTimeout:0,waitForLogin:false,tokenStore:'file',folderNameToken:'/data',
     disableWelcome:true,disableGoogleAnalytics:true,updatesLog:false,
-    catchQR:(_base64:string,_ascii:string,_attempt:number,urlCode:string)=>{
-      if(pairing===pair&&urlCode&&urlCode.length<4096)void update(pair,'qr_ready',null,urlCode).catch(()=>report('qr_failed'));
-    },
     browserArgs:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--use-fake-ui-for-media-stream',
       '--autoplay-policy=no-user-gesture-required','--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows','--disable-renderer-backgrounding'],
@@ -134,21 +139,41 @@ async function tick(){
     if(!pairing||!client||!handler)return;
     const pair=pairing,activeClient=client;
     const result=await client.page.evaluate<Poll>(browserAction,'poll');
-    if(!result.connected||!result.hosts.length||!result.ready){
-      if(lastState==='connected'){await handler.stop();await update(pair,'degraded','browser_call_transport_unavailable');await stop();}
+    const now=Date.now();
+    if(!result.connected){
+      current?.observe(null);
+      // A navigation or a brief WhatsApp reconnect should not restart the
+      // browser or clear a scan that the server is still processing.
+      if(lastState==='connected'&&now-lastOnlineAt<10000)return;
+      if(result.blocked)await update(pair,'degraded','browser_pairing_blocked');
+      else if(result.syncing)await update(pair,'connecting','browser_pairing_syncing');
+      else if(result.qr){
+        if(result.qr!==lastQr)await update(pair,'qr_ready',null,result.qr);
+      }else if(lastState!=='qr_ready')await update(pair,'connecting','browser_waiting_for_qr');
       return;
     }
-    if(!result.hosts.some(host=>jidNormalizedUser(host.replace(/@c\.us$/,'@s.whatsapp.net'))===pair.linked_jid)){
+    const hosts=result.hosts.map(host=>jidNormalizedUser(host.replace(/@c\.us$/,'@s.whatsapp.net'))).filter(host=>direct.test(host));
+    if(!hosts.includes(pair.linked_jid)){
+      // Wait for a comparable identity before treating the scan as a mismatch.
+      // An LID and a phone JID for the same account are different identifiers.
+      if(!hosts.some(host=>host.split('@')[1]===pair.linked_jid.split('@')[1])){
+        await update(pair,'connecting','browser_pairing_identity_pending');
+        return;
+      }
       await update(pair,'needs_pairing','call_pairing_number_mismatch');
       await stop(true);
       return;
     }
+    if(!result.ready){
+      await update(pair,'connecting','browser_call_interface_pending');
+      return;
+    }
+    lastOnlineAt=now;
     if(lastState!=='connected')await update(pair,'connected');
     if(lastState!=='connected')return;
 
     current?.observe(result.calls.find(offer=>offer.id===current?.callId)?.state??null);
     if(current?.ended)current=undefined;
-    const now=Date.now();
     for(const [id,At] of seen)if(now-At>5*60_000)seen.delete(id);
     for(const offer of result.calls){
       if(!offer.id||offer.id.length>128||!direct.test(offer.peer)||offer.video||offer.group||
@@ -170,7 +195,7 @@ async function tick(){
     }
   }catch{
     report('poll_failed');
-    if(lastState==='connected'&&pairing){
+    if(lastState==='connected'&&pairing&&Date.now()-lastOnlineAt>=10000){
       await update(pairing,'degraded','browser_runtime_lost').catch(()=>undefined);
       await stop();
     }

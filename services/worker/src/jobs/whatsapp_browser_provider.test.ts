@@ -12,13 +12,14 @@ describe('WhatsApp browser call gateway',()=>{
     let incoming:(event:typeof call)=>void=()=>undefined;
     const context=runInNewContext(`(${browserAction.toString()})`,{
       WPP:{
-        conn:{isAuthenticated:()=>true,getMyUserId:()=>({_serialized:'2348010000000@c.us'})},
+        conn:{isAuthenticated:()=>true,isMainReady:()=>true,getMyUserId:()=>({_serialized:'2348010000000@c.us'}),
+          getMyUserLid:()=>{throw Error('LID unavailable during device registration');}},
         on:(name:string,callback:typeof incoming)=>{if(name==='call.incoming_call')incoming=callback;},
         call:{enableCallInterface},
         whatsapp:{CallStore:store,getVoipStackInterface:async()=>({acceptCall:nativeAccept})},
       },
     });
-    expect(await context('poll')).toMatchObject({connected:true,ready:true,calls:[]});
+    expect(await context('poll')).toMatchObject({connected:true,ready:true,hosts:['2348010000000@c.us'],calls:[]});
     expect(enableCallInterface).toHaveBeenCalledOnce();
     incoming(call);
     expect(await context('poll')).toMatchObject({calls:[{id:call.id,peer:'2348012345678@c.us',state:'INCOMING_RING'}]});
@@ -27,6 +28,40 @@ describe('WhatsApp browser call gateway',()=>{
     expect(await context('accept','different-call')).toBe(false);
     expect(await context('accept',call.id)).toBe(true);
     expect(nativeAccept).toHaveBeenCalledExactlyOnceWith(true,false);
+  });
+
+  it('tracks scan and sync separately from QR refresh and connection',async()=>{
+    let ready=false;
+    const stream={mode:'QR',info:'NORMAL'};
+    const socket={state:'UNPAIRED'};
+    const click=vi.fn();
+    let refresh=false;
+    const qr='current-browser-offer-with-a-fresh-code';
+    const poll=runInNewContext(`(${browserAction.toString()})`,{
+      document:{querySelector:()=>({closest:()=>({
+        getAttribute:()=>qr,querySelector:()=>refresh?{click}:null,
+      })})},
+      WPP:{
+        conn:{isRegistered:()=>ready,isMainReady:()=>ready,getStreamData:()=>stream,
+          getMyUserId:()=>({_serialized:'2348010000000@c.us'})},
+        call:{enableCallInterface:async()=>undefined,accept:async()=>true},
+        on:()=>undefined,whatsapp:{Socket:socket,CallStore:{}},
+      },
+    });
+    expect(await poll('poll')).toMatchObject({connected:false,syncing:false,qr});
+    socket.state='UNPAIRED_IDLE';
+    refresh=true;
+    expect(await poll('poll')).toMatchObject({connected:false,syncing:false,qr:''});
+    await poll('poll');
+    expect(click).toHaveBeenCalledOnce();
+    socket.state='PAIRING';
+    stream.info='PAIRING';
+    expect(await poll('poll')).toMatchObject({connected:false,syncing:true,qr:''});
+    ready=true;
+    socket.state='CONNECTED';
+    stream.mode='MAIN';
+    stream.info='NORMAL';
+    expect(await poll('poll')).toMatchObject({connected:true,ready:true,hosts:['2348010000000@c.us'],qr:''});
   });
 
   it('cannot attach audio to a declined or already ended browser call',async()=>{
