@@ -2273,6 +2273,7 @@ export async function startGatewayService(
       ...(masana ? {masana} : {}),
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
+      ...(env.MASANAWA_RELEASE_SHA ? {releaseSha:env.MASANAWA_RELEASE_SHA} : {}),
       productScope,
       directNgn:true,
       ...(composedBrowserPush?{browserPush:composedBrowserPush}:{}),...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),...(composedMessageControls?{messageControls:composedMessageControls}:{}),

@@ -34,7 +34,9 @@ describe("gateway service bootstrap", () => {
     }
   });
   it("reports health without implying dependency readiness", async () => {
+    const releaseSha = "a".repeat(40);
     const app = createGatewayApp({
+      releaseSha,
       now: () => toInstant("2026-10-01T16:00:00Z"),
       readinessChecks: [
         {
@@ -56,6 +58,8 @@ describe("gateway service bootstrap", () => {
     const readiness = await app.inject({ method: "GET", url: "/readyz" });
     expect(readiness.statusCode).toBe(503);
     expect(readiness.json().status).toBe("not-ready");
+    expect(readiness.headers["x-masanawa-release"]).toBe(releaseSha);
+    expect(readiness.headers["cache-control"]).toBe("no-store");
   });
 
   it("preserves validated retry/correlation keys without treating them as authority", async () => {

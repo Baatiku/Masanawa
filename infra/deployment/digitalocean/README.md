@@ -17,6 +17,30 @@
 
 The 2 GiB server is **only a low-concurrency pilot**. Do not run Gateway+PostgreSQL+worker+proxy+voice inference+other businesses on it. Build images on GitHub Actions/GHCR, not on the RAM-constrained Droplet. Gateway, PostgreSQL, Ops and proxy together have a 1,696 MiB container limit, leaving little host headroom. Do **not** also start the worker until measured resource safety is established. If measured memory/CPU cannot safely support a feature, leave that feature off; a resize requires separate owner authorization. Docker `mem_limit` is not a promise of performance or no OOM.
 
+### Managed WhatsApp releases
+
+The existing Droplet can pull reviewed releases without inbound SSH. From its
+root console once, download `infra/deployment/digitalocean/deploy-agent.py`
+from the exact approved GitHub commit and run it with `python3 ... install`.
+The systemd timer makes outbound HTTPS requests to GitHub and needs no token
+on the Droplet. Keep `deploy/digitalocean-production` writable only to the
+maintainers allowed to publish production release requests.
+
+To request a deployment from an authenticated GitHub workspace, commit
+`digitalocean-release.json` at the root of that branch with `requestId` (a
+new identifier), `releaseSha` (the full main-branch commit SHA) and an optional
+Boolean `whatsappCallsEnabled`. Commits to `main` build the images. The release
+request schedules deployment only after both the Foundation and DigitalOcean
+main workflows have passed for that SHA. A failed request runs once and keeps
+its private checkpoint. A retry uses a new request ID after reviewing the error.
+
+The Gateway readiness response includes the running commit in
+`x-masanawa-release`. The installer records completion only after the Worker
+readiness and linked-device configuration checks pass. The Droplet retains
+the last request status at `/var/lib/masanawa-deploy/state.json` and operational
+details in `journalctl -u masanawa-deploy.service`. To pause scheduled releases,
+disable `masanawa-deploy.timer` from the Droplet console.
+
 ### Step 0 — gates, before creating resources
 
 1. DigitalOcean account, billing, chosen region and SSH key require an authenticated operator. None are asserted to exist. Do not provision or pay without this.
