@@ -474,7 +474,8 @@ export function createWhatsAppWorker(input:Input){
       await input.send(row.channel_id,row.customer_wa_id,row.body);}
     catch(error){
       const safeCode=error instanceof Error?error.message:'';
-      if(['whatsapp_linked_socket_unavailable','whatsapp_audio_preparation_failed',
+      if(safeCode==='assistant_paused_before_send')await complete(row.job_id,'completed',safeCode);
+      else if(['whatsapp_linked_socket_unavailable','whatsapp_audio_preparation_failed',
         'whatsapp_voice_quota_exceeded','whatsapp_voice_provider_unavailable'].includes(safeCode))
         await deferBeforeDispatch(row.job_id,safeCode);
       else await complete(row.job_id,'uncertain','linked_send_outcome_unknown');
