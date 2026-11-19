@@ -9,9 +9,12 @@ const lib = dirname(provider);
 if (process.argv.includes('--check')) {
   const { RTCPeerConnection } = createRequire(provider)('@roamhq/wrtc');
   if (typeof RTCPeerConnection !== 'function') throw Error('Native WebRTC is unavailable');
-  const { renderCallDisclosure } = await import('../dist/jobs/whatsapp_call_audio.js');
-  const disclosure = await renderCallDisclosure();
-  if (disclosure.length < 32000 || disclosure.length % 2 !== 0) throw Error('Invalid caller disclosure PCM');
+  const { renderCallDisclosure, renderCallUnavailable } = await import('../dist/jobs/whatsapp_call_audio.js');
+  for (const pcm of await Promise.all([renderCallDisclosure(), renderCallUnavailable()])) {
+    if (pcm.length < 32000 || pcm.length % 2 !== 0) throw Error('Invalid caller announcement PCM');
+  }
+  const manager = readFileSync(join(lib, 'Voip', 'call-manager.mjs'), 'utf8');
+  if (!manager.includes('session.masanawaAudioBridge ||')) throw Error('Missing call audio bridge patch');
   const { WasmEngine } = await import('@innovatorssoft/baileys/lib/Voip/wasm-engine.mjs');
   const engine = new WasmEngine({ pthreadPoolSize: 1, enableLogs: false });
   const timeout = setTimeout(() => { throw Error('WhatsApp call engine did not initialize'); }, 15_000);
@@ -53,6 +56,30 @@ if (process.argv.includes('--check')) {
   replaceOnce(join(lib, 'Voip', 'call-manager.mjs'),
     '                void this.#ensureSessionEngine(session).catch(() => {});',
     '                // Initialize media when the application accepts this offer.');
+  // Without a native capture-start callback, the SDK starts the capture at
+  // connection only for built-in sources other than silence. Our PCM bridge
+  // takes over startAudio and uses silence as the SDK's default source.
+  replaceOnce(join(lib, 'Voip', 'call-manager.mjs'),
+    'if (callState === 6 && !session.audioFeeder && session._audioSource && session._audioSource !== "silence") {',
+    'if (callState === 6 && !session.audioFeeder && (session.masanawaAudioBridge || (session._audioSource && session._audioSource !== "silence"))) {');
+  // A pause or lease loss during media negotiation also fences late acceptance
+  // while the SDK is still delivering its terminate stanza.
+  for (const next of [
+    '// 3. Send accept third',
+    '// Start the WASM media path now that the peer has our accept on the wire.',
+  ]) {
+    const guard = 'if (session.ended) {\n                    return session;\n                }\n\n                ' + next;
+    replaceOnce(join(lib, 'Voip', 'call-manager.mjs'), guard,
+      guard.replace('session.ended', 'session.ended || session.masanawaAudioBridge === false'));
+  }
+  replaceOnce(join(lib, 'Voip', 'call-manager.mjs'),
+    '                    if (session.engine && session._capturePtr && !session.ended) {',
+    '                    if (session.masanawaAudioBridge && !session._capturePtr) throw new Error("Call audio capture unavailable");\n' +
+    '                    if (session.engine && session._capturePtr && !session.ended) {');
+  // link_info can exist without a creator or group token.
+  replaceOnce(join(lib, 'Socket', 'messages-recv.js'),
+    "const linkInfo = WABinary_1.getBinaryNodeChild(infoChild, 'link_info')",
+    "const linkInfo = WABinary_1.getBinaryNodeChild(infoChild, 'link_info')\n                call.isCallLink = Boolean(linkInfo)");
 }
 
 function replaceOnce(path, before, after) {

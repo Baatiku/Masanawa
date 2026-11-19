@@ -17,7 +17,8 @@ describe('WhatsApp manual-off persistence',()=>{
         CREATE TABLE identity.users(tenant_id text,user_id text,state text,PRIMARY KEY(tenant_id,user_id));`);
       for(const filename of ['0123_whatsapp_ai.sql','0124_whatsapp_number_identity.sql',
         '0125_whatsapp_gemini_key_pool.sql','0126_whatsapp_gemini_keys_key_only.sql',
-        '0127_whatsapp_gemini_full_voices.sql','0128_whatsapp_incoming_calls.sql'])
+        '0127_whatsapp_gemini_full_voices.sql','0128_whatsapp_incoming_calls.sql',
+        '0129_whatsapp_call_outcomes.sql'])
         await db.exec(await readFile(new URL(`../../../packages/security/migrations/${filename}`,import.meta.url),'utf8'));
       const inserted=await db.query<{channel_id:string}>(`INSERT INTO security.whatsapp_channels(tenant_id,enabled,state)
         VALUES('tenant',true,'connected') RETURNING channel_id`);
@@ -46,6 +47,14 @@ describe('WhatsApp manual-off persistence',()=>{
       await expect(admin.changeCalls(undefined,id,'enable',1)).rejects.toMatchObject({statusCode:409});
       await db.query(`UPDATE security.whatsapp_channels SET state='connected',linked_jid=$2 WHERE channel_id=$1`,[created.pairingId,phone]);
       expect(await admin.changeCalls(undefined,id,'enable',1)).toMatchObject({enabled:true,revision:2});
+      await db.query(`UPDATE security.whatsapp_channels SET lease_expires_at=clock_timestamp()+interval '5 minutes'
+        WHERE channel_id=$1`,[created.pairingId]);
+      await db.query(`INSERT INTO security.whatsapp_incoming_calls(tenant_id,channel_id,reference,ended_at,end_reason)
+        VALUES('tenant',$1,repeat('a',64),clock_timestamp(),'session_unavailable')`,[created.pairingId]);
+      await db.query(`INSERT INTO security.whatsapp_audit(tenant_id,channel_id,actor_id,action,metadata)
+        VALUES('tenant',$1,'linked-device','call.incoming','{"video":false}')`,[id]);
+      expect(await admin.calls(undefined,id)).toMatchObject({callDeviceOnline:true,lastMessagingOfferAt:expect.any(Date),
+        calls:[{answeredAt:null,endReason:'session_unavailable'}]});
 
       expect(await admin.save(undefined,id,1,policy)).toEqual({revision:2});
       expect(await admin.config(undefined,id)).toMatchObject({replyMode:'manual',revision:2});

@@ -7,11 +7,16 @@ const GEMINI_RATE=24000;
 const MAX_PENDING_SAMPLES=RATE*12;
 const DISCLOSURE='This is the Masanawa A I assistant. Your voice is sent to Google Gemini to answer this call. How can I help?';
 
-export async function renderCallDisclosure():Promise<Buffer>{
+const UNAVAILABLE='The A I assistant is temporarily unavailable. Please send a WhatsApp message or try again later.';
+
+export function renderCallDisclosure(){return renderCallSpeech(DISCLOSURE);}
+export function renderCallUnavailable(){return renderCallSpeech(UNAVAILABLE);}
+
+async function renderCallSpeech(text:string):Promise<Buffer>{
   const {stdout}=await promisify(execFile)('ffmpeg',['-nostdin','-hide_banner','-loglevel','error','-f','lavfi',
-    '-i',`flite=text=${DISCLOSURE}:voice=slt`,'-ac','1','-ar',String(RATE),'-f','s16le','pipe:1'],
+    '-i',`flite=text=${text}:voice=slt`,'-ac','1','-ar',String(RATE),'-f','s16le','pipe:1'],
   {encoding:'buffer',timeout:3500,maxBuffer:RATE*2*12});
-  if(!stdout.length||stdout.length%2)throw Error('whatsapp_call_disclosure_unavailable');
+  if(!stdout.length||stdout.length%2)throw Error('whatsapp_call_speech_unavailable');
   return stdout;
 }
 
