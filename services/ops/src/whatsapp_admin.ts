@@ -230,26 +230,34 @@ export function createWhatsAppAdmin(input:Input){
         FROM security.whatsapp_assistants a WHERE a.tenant_id=$1 AND a.channel_id=$2`,[actor.tenantId,id]);
       if(!rows.rows[0])throw new WhatsAppAdminError(404,'channel_not_found');return rows.rows[0];
     },
-    async save(auth:string|undefined,id:string,expectedRevision:number,config:unknown){
+    async save(auth:string|undefined,id:string,expectedRevision:number,config:unknown,expectedChannelRevision?:number){
       const actor=await write(auth);
       if(!isId(id)||!Number.isInteger(expectedRevision)||expectedRevision<1||!validConfig(config))throw new WhatsAppAdminError(422,'invalid_assistant_settings');
+      if(expectedChannelRevision!==undefined&&(!Number.isInteger(expectedChannelRevision)||expectedChannelRevision<1||config.replyMode==='manual'))
+        throw new WhatsAppAdminError(422,'invalid_assistant_settings');
       if(config.voiceId){
         // Reuse a consented, provider-confirmed enrollment from Masanawa's voice infrastructure.
         const voice=await input.pool.query(`SELECT 1 FROM agents.admin_voice_enrollments
           WHERE tenant_id=$1 AND character_id=$2 AND voice_id=$3 AND state='ready'`,[actor.tenantId,config.personaId,config.voiceId]);
         if(!voice.rows.length)throw new WhatsAppAdminError(403,'voice_not_authorized_for_persona');
       }
-      const rows=await input.pool.query(`WITH saved AS (UPDATE security.whatsapp_assistants SET name=$3,personality=$4,instructions=$5,greeting=$6,
+      // Lock the channel before saving so a simultaneous pause or reconnect cannot be overwritten by a stale resume.
+      const rows=await input.pool.query(`WITH target AS MATERIALIZED (
+        SELECT channel_id FROM security.whatsapp_channels
+        WHERE tenant_id=$1 AND channel_id=$2 AND call_target_channel_id IS NULL
+          AND ($26::int IS NULL OR (revision=$26 AND state='connected'))
+        FOR UPDATE
+      ), saved AS (UPDATE security.whatsapp_assistants SET name=$3,personality=$4,instructions=$5,greeting=$6,
         language=$7,role_level=$8,permissions=$9::jsonb,persona_id=$10,voice_id=$11,text_replies=$12,voice_replies=$13,
         transcribe_voice=$14,working_hours=$15::jsonb,escalation_keywords=$16::jsonb,
         reply_mode=$17,away_after_seconds=$18,absence_message=$19,remember_context=$20,
         number_purpose=COALESCE($22,number_purpose),owner_name=COALESCE($23,owner_name),
         owner_title=COALESCE($24,owner_title),live_voice_name=COALESCE($25,live_voice_name),
         revision=revision+1,updated_at=clock_timestamp()
-        WHERE tenant_id=$1 AND channel_id=$2 AND revision=$21 RETURNING revision::int
-        ), paused AS (
-          UPDATE security.whatsapp_channels SET enabled=false,revision=revision+1,updated_at=clock_timestamp()
-          WHERE tenant_id=$1 AND channel_id=$2 AND enabled=true AND $17::text='manual'
+        WHERE tenant_id=$1 AND channel_id=(SELECT channel_id FROM target) AND revision=$21 RETURNING revision::int
+        ), availability AS (
+          UPDATE security.whatsapp_channels SET enabled=($17::text<>'manual'),revision=revision+1,updated_at=clock_timestamp()
+          WHERE tenant_id=$1 AND channel_id=$2 AND ($17::text='manual' OR $26::int IS NOT NULL)
             AND EXISTS(SELECT 1 FROM saved) RETURNING channel_id
         ), cancelled AS (
           UPDATE security.whatsapp_jobs j SET state='completed',last_error_code='assistant_paused',claimed_at=NULL
@@ -264,10 +272,11 @@ export function createWhatsAppAdmin(input:Input){
           config.voiceReplies,config.transcribeVoice,JSON.stringify(config.workingHours),JSON.stringify(config.escalationKeywords),
           config.replyMode,config.awayAfterSeconds,config.absenceMessage,config.rememberContext,expectedRevision,
           config.numberPurpose??null,config.ownerName?.trim()??null,config.ownerTitle?.trim()??null,
-          config.liveVoiceName??null,
+          config.liveVoiceName??null,expectedChannelRevision??null,
         ]);
       if(!rows.rows.length)throw new WhatsAppAdminError(409,'assistant_revision_changed');
-      await audit(actor.tenantId,id,actor.actorId,'assistant.updated',{revision:rows.rows[0]!.revision,roleLevel:config.roleLevel,permissions:config.permissions});
+      await audit(actor.tenantId,id,actor.actorId,'assistant.updated',{revision:rows.rows[0]!.revision,roleLevel:config.roleLevel,permissions:config.permissions,
+        replyMode:config.replyMode,...(expectedChannelRevision===undefined?{}:{resumed:true})});
       return rows.rows[0];
     },
     async change(auth:string|undefined,id:string,action:'enable'|'disable'|'disconnect'|'reconnect',expectedRevision:number){

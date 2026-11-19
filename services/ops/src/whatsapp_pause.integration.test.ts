@@ -64,12 +64,25 @@ describe('WhatsApp manual-off persistence',()=>{
         replyMode:'manual',liveVoiceName:'Algenib'});
       expect((await db.query<{enabled:boolean}>(`SELECT enabled FROM security.whatsapp_channels
         WHERE channel_id=$1`,[id])).rows[0]?.enabled).toBe(false);
-      // Resumption requires a deliberate channel-enable action.
-      await expect(admin.change(undefined,id,'enable',2)).rejects.toMatchObject({statusCode:409});
-      await admin.save(undefined,id,3,{...policy,replyMode:'always'});
-      expect(await admin.change(undefined,id,'enable',2)).toMatchObject({enabled:true});
+      await expect(admin.change(undefined,id,'enable',3)).rejects.toMatchObject({statusCode:409});
+      const always={...policy,name:' New assistant ',replyMode:'always',language:'ha',
+        numberPurpose:'personal',ownerName:' Owner ',ownerTitle:' Founder ',liveVoiceName:'Sulafat',
+        textReplies:false,voiceReplies:true,transcribeVoice:false,rememberContext:false,
+        workingHours:{timezone:'Africa/Lagos',days:[1,3,5],start:'09:00',end:'18:30'},
+        escalationKeywords:['speak to a human','complaint']};
+      await expect(admin.save(undefined,id,3,always,2)).rejects.toMatchObject({statusCode:409});
+      expect(await admin.config(undefined,id)).toMatchObject({replyMode:'manual',revision:3});
+      expect(await admin.save(undefined,id,3,always,3)).toEqual({revision:4});
+      expect(await admin.config(undefined,id)).toMatchObject({...always,name:'New assistant',ownerName:'Owner',ownerTitle:'Founder',revision:4});
       expect((await db.query<{enabled:boolean}>(`SELECT enabled FROM security.whatsapp_channels
         WHERE channel_id=$1`,[id])).rows[0]?.enabled).toBe(true);
+
+      // A separate pause remains in place during ordinary edits. An explicit
+      // save-and-resume also works when Always was already stored while paused.
+      expect(await admin.change(undefined,id,'disable',4)).toMatchObject({enabled:false,revision:5});
+      await admin.save(undefined,id,4,{...always,greeting:'Welcome'});
+      expect(await admin.calls(undefined,id)).toMatchObject({aiEnabled:false,replyMode:'always'});
+      expect(await admin.save(undefined,id,5,{...always,greeting:'Welcome'},5)).toEqual({revision:6});
       expect(await admin.changeCalls(undefined,id,'disconnect',2)).toMatchObject({state:'disconnected'});
       expect(await admin.calls(undefined,id)).toMatchObject({pairingId:null,numberState:'connected',aiEnabled:true});
     }finally{await db.close();}

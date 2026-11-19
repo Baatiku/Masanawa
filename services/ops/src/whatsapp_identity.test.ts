@@ -22,7 +22,7 @@ describe('WhatsApp number identity admin protection',()=>{
     const {api,query}=setup();
     await api.save(undefined,channelId,1,{...legacyConfig,liveVoiceName:voice});
     const updated=query.mock.calls.find(c=>c[0].includes('UPDATE security.whatsapp_assistants'))!;
-    expect(updated[1]?.at(-1)).toBe(voice);
+    expect(updated[1]?.[24]).toBe(voice);
   });
   it('rejects an unrecognized Live voice before touching storage',async()=>{
     const {api,query}=setup();
@@ -34,11 +34,11 @@ describe('WhatsApp number identity admin protection',()=>{
     const {api,query}=setup();
     await api.save(undefined,channelId,1,{...legacyConfig,numberPurpose:'personal',ownerName:'Bello Abubakar',ownerTitle:'Founder and CEO'});
     const newRequest=query.mock.calls.find(c=>c[0].includes('UPDATE security.whatsapp_assistants'))!;
-    expect(newRequest[1]?.slice(21)).toEqual(['personal','Bello Abubakar','Founder and CEO',null]);
+    expect(newRequest[1]?.slice(21,25)).toEqual(['personal','Bello Abubakar','Founder and CEO',null]);
     query.mockClear();
     await api.save(undefined,channelId,1,legacyConfig);
     const oldRequest=query.mock.calls.find(c=>c[0].includes('UPDATE security.whatsapp_assistants'))!;
-    expect(oldRequest[1]?.slice(21)).toEqual([null,null,null,null]);
+    expect(oldRequest[1]?.slice(21,25)).toEqual([null,null,null,null]);
   });
   it('rejects invalid identities or embedded newline instructions before updating storage',async()=>{
     const {api,query}=setup();
