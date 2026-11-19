@@ -6,7 +6,7 @@ import makeWASocket,{
 } from '@whiskeysockets/baileys';
 import type {Pool} from '@masanawa/postgres';
 import {pino} from 'pino';
-import {toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
+import {toGeminiAudio,toWhatsAppOpus,transcribeWhatsAppAudio} from './whatsapp_media.js';
 import {withGeminiKeyPool} from './whatsapp_live.js';
 import {readIncomingCallOffers,recordIncomingCallOffer} from './whatsapp_call_signals.js';
 import {createWhatsAppCallingSocket,createWhatsAppCallHandler} from './whatsapp_calls.js';
@@ -482,13 +482,19 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
       const content=payload.message?.ephemeralMessage?.message??payload.message?.viewOnceMessage?.message??
         payload.message?.viewOnceMessageV2?.message??payload.message;
       const media=content?.audioMessage;
-      if(!media||!media.mimetype||Number(media.fileLength?.toString()??0)>8*1024*1024)throw Error('whatsapp_audio_invalid');
+      if(!media||Number(media.fileLength?.toString()??0)>8*1024*1024)throw Error('whatsapp_audio_invalid');
       const audio=await downloadMediaMessage(payload,'buffer',{},
         {logger:pino({level:'silent'}),reuploadRequest:slot.socket.updateMediaMessage}) as Buffer;
       const env=input.env??{};
-      const mimeType=media.mimetype;
+      // Some linked-device PTT envelopes omit mimetype even though the audio
+      // bytes are the standard WhatsApp Ogg/Opus container.
+      const mimeType=media.mimetype??(media.ptt?'audio/ogg; codecs=opus':'');
+      if(!mimeType)throw Error('whatsapp_audio_invalid');
+      // Conversion is key-independent: never decode the same voice note again
+      // if the credential pool must try a different Gemini project.
+      const normalized=await toGeminiAudio(audio,mimeType);
       return withGeminiKeyPool({pool:input.pool,tenantId:slot.tenantId,sessionKey:input.sessionKey,env,
-        invoke:apiKey=>transcribeWhatsAppAudio({audio,mimeType,
+        invoke:apiKey=>transcribeWhatsAppAudio({audio:normalized.audio,mimeType:normalized.mimeType,
           apiKey,model:env.MASANAWA_WHATSAPP_GEMINI_MODEL??'gemini-3.8-flash'})});
     },
     async sendVoice(channelId:string,jid:string,body:string,voiceId:string|null,preparedAudio?:Buffer){
