@@ -305,6 +305,7 @@ export function createLinkedDeviceManager(input:{pool:Db;sessionKey:string;env?:
     })().catch(()=>markError(slot,'connection_update_failed'));});
     if(callSocket){
       const calls=createWhatsAppCallHandler({pool:input.pool,identity:slot,env:input.env??{},sessionKey:input.sessionKey,
+        lookupSession:id=>callSocket.getCall(id),
         acquire:()=>{
           if(callInProgress)return false;
           callInProgress=true;

@@ -18,6 +18,7 @@ class Session extends EventEmitter<{ended:[];error:[];connected:[];audio:[Float3
   isVideo=false;
   isIncoming=true;
   isWaiting=false;
+  masanawaAudioBridge?:boolean;
   send=vi.fn();
   startAudio:IncomingSession['startAudio']=vi.fn();
   stopAudio=vi.fn();
@@ -33,19 +34,21 @@ const flush=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 const offer=():CallOffer=>({id:'example-call',status:'offer',date:new Date(),isVideo:false,isGroup:false,offline:false,
   from:'2348012345678:2@s.whatsapp.net'});
 
-function fixture(){
+function fixture(withLookup=false){
   let allowed=true;
-  const query=vi.fn(async(sql:string)=>({rows:sql.includes('SELECT a.name')?
+  const query=vi.fn(async(sql:string,_values?:unknown[])=>({rows:sql.includes('SELECT a.name')?
     allowed?[{name:'Example',owner_name:'',number_purpose:'service',instructions:'',personality:'',language:'en',live_voice_name:'Algenib'}]:[]:
     sql.includes('ON CONFLICT DO NOTHING')?[{reference:'recorded'}]:[]}));
   const session=new Session();
   const provider={sendAudio:vi.fn(),close:vi.fn()};
   const openLive=vi.fn(async()=>provider);
   const acquire=vi.fn(()=>true),release=vi.fn();
+  const lookupSession=vi.fn(async()=>session);
   const handler=createWhatsAppCallHandler({pool:{query} as never,identity:{tenantId:'tenant',channelId:'channel',owner:'worker'},
     env:{MASANAWA_GEMINI_API_KEY:'fake-key'},sessionKey:'fake',acquire,release,openLive,
-    disclosure:async()=>Buffer.alloc(1280,64)});
-  return {handler,session,provider,acquire,release,query,openLive,pause:()=>{allowed=false;}};
+    ...(withLookup?{lookupSession}:{}),disclosure:async()=>Buffer.alloc(1280,64),
+    unavailable:async()=>Buffer.alloc(1280,96)});
+  return {handler,session,provider,acquire,release,query,openLive,lookupSession,pause:()=>{allowed=false;}};
 }
 
 afterEach(()=>vi.useRealTimers());
@@ -84,7 +87,8 @@ describe('WhatsApp incoming calls',()=>{
     vi.useFakeTimers();
     const {handler,session,acquire,openLive,pause}=fixture();
     handler.session(session);
-    for(const flags of [{isGroup:true},{isVideo:true},{offline:true},{date:new Date(Date.now()-60_000)}])
+    for(const flags of [{isGroup:true},{isVideo:true},{offline:true},{isCallLink:true},
+      {id:'stale',date:new Date(Date.now()-60_000)}])
       handler.signal({...offer(),...flags});
     expect(acquire).not.toHaveBeenCalled();
     pause();
@@ -95,6 +99,63 @@ describe('WhatsApp incoming calls',()=>{
     expect(session.accept).not.toHaveBeenCalled();
     expect(session.end).not.toHaveBeenCalled();
     await handler.stop();
+  });
+
+  it('uses the registered SDK session and accepts while Gemini is still connecting',async()=>{
+    vi.useFakeTimers();
+    const {handler,session,provider,openLive,lookupSession}=fixture(true);
+    let ready!:()=>void;
+    openLive.mockImplementation(()=>new Promise(resolve=>{ready=()=>resolve(provider);}));
+    handler.signal(offer());
+    await flush();
+    expect(lookupSession).toHaveBeenCalledWith(session.callId);
+    expect(session.accept).toHaveBeenCalledTimes(1);
+    expect(session.masanawaAudioBridge).toBe(true);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(session.send).toHaveBeenCalledTimes(2);
+    session.emit('audio',new Float32Array(320));
+    expect(provider.sendAudio).not.toHaveBeenCalled();
+    ready();
+    await flush();
+    session.emit('audio',new Float32Array(320));
+    expect(provider.sendAudio).toHaveBeenCalledTimes(1);
+    await handler.stop();
+    expect(session.masanawaAudioBridge).toBe(false);
+  });
+
+  it('plays a local fallback and records a Gemini startup failure',async()=>{
+    vi.useFakeTimers();
+    const {handler,session,openLive,query}=fixture(true);
+    openLive.mockRejectedValueOnce(Error('provider unavailable'));
+    handler.signal(offer());
+    await flush();
+    await vi.advanceTimersByTimeAsync(340);
+    expect(session.send.mock.calls[0]?.[0][0]).toBeGreaterThan(0);
+    expect(session.send.mock.calls[2]?.[0][0]).toBeGreaterThan(session.send.mock.calls[0]?.[0][0]);
+    expect(query.mock.calls.find(([sql])=>sql.includes('SET ended_at'))?.[1]?.[3]).toBe('provider_failed');
+    expect(session.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('records offer, acceptance and media failures without caller details',async()=>{
+    vi.useFakeTimers();
+    const missing=fixture();
+    missing.handler.signal(offer());
+    await vi.advanceTimersByTimeAsync(3000);
+    const miss=missing.query.mock.calls.find(([sql])=>sql.includes('INSERT'))?.[1];
+    expect(miss).toEqual(['tenant','channel',expect.stringMatching(/^[a-f0-9]{64}$/),'session_unavailable']);
+
+    const rejected=fixture(true);
+    rejected.session.accept.mockRejectedValueOnce(Error('private provider diagnostics'));
+    rejected.handler.signal(offer());
+    await flush();
+    expect(rejected.query.mock.calls.find(([sql])=>sql.includes('SET ended_at'))?.[1]?.[3]).toBe('accept_failed');
+
+    const silent=fixture(true);
+    silent.session.accept.mockImplementation(async()=>{silent.session.emit('connected');});
+    silent.handler.signal(offer());
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(silent.query.mock.calls.find(([sql])=>sql.includes('SET ended_at'))?.[1]?.[3]).toBe('media_timeout');
+    expect(silent.query.mock.calls.some(([sql])=>sql.includes('SET answered_at'))).toBe(false);
   });
 
   it('bridges PCM in both directions and drops model playback on interruption',async()=>{

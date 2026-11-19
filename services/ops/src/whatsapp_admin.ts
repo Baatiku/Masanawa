@@ -150,7 +150,12 @@ export function createWhatsAppAdmin(input:Input){
       if(!isId(id))throw new WhatsAppAdminError(422,'invalid_channel');
       const result=await input.pool.query(`SELECT target.state AS "numberState",target.enabled AS "aiEnabled",
         a.reply_mode AS "replyMode",c.channel_id AS "pairingId",c.state,c.enabled,c.revision::int,
-        c.last_error_code AS "lastErrorCode"
+        c.last_error_code AS "lastErrorCode",
+        COALESCE(c.state='connected' AND c.lease_expires_at>clock_timestamp(),false) AS "callDeviceOnline",
+        (SELECT created_at FROM security.whatsapp_audit
+          WHERE tenant_id=target.tenant_id AND channel_id=target.channel_id
+            AND action='call.incoming' AND metadata->>'video'='false'
+          ORDER BY created_at DESC LIMIT 1) AS "lastMessagingOfferAt"
         FROM security.whatsapp_channels target JOIN security.whatsapp_assistants a USING(tenant_id,channel_id)
         LEFT JOIN security.whatsapp_channels c ON c.tenant_id=target.tenant_id
           AND c.call_target_channel_id=target.channel_id AND c.state<>'disconnected'
