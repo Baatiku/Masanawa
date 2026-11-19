@@ -16,6 +16,7 @@ it('renders only real supplied citations and verbatim quotations, failing closed
   expect(renderOfficialAnswer(typeof bad==='string'?bad:JSON.stringify(bad),official)).toContain('not have enough reviewed evidence');
  }
  expect(renderOfficialAnswer(JSON.stringify({status:'insufficient'}),official,'ha')).toContain('Ba ni da isassun');
+ expect(renderOfficialAnswer(JSON.stringify({status:'partial',answer:'The documented term is 1999–2007; the available records do not establish the earlier biography.',evidenceIds:['bio']}),official)).toContain('https://grokipedia.com/page/Example');
 });
 it('transcribes captionless speech and translates queries ephemerally before scoped retrieval',async()=>{
  const read=vi.fn(async()=>official),inference={generate:vi.fn(async()=>({text:JSON.stringify({transcript:'Me ya ce game da man fetur?',query:'fuel subsidy policy man fetur',language:'ha'})}))};

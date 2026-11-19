@@ -4,7 +4,7 @@ import type { CharacterId, CharacterVersionId, TenantId } from '@masanawa/contra
 import {approvedCivicAgencyId,CIVIC_AGENCY_CATALOG} from './civic_agency_bootstrap.js';
 
 /** Read only the exact admitted published identity, never a draft or another tenant. */
-export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials?:ReturnType<typeof import('./public_official_knowledge.js').createOfficialKnowledgeReader>) {
+export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials?:ReturnType<typeof import('./public_official_knowledge.js').createOfficialKnowledgeReader>,agencies?:ReturnType<typeof import('./civic_agency_evidence.js').createCivicAgencyEvidenceReader>) {
   return Object.freeze({
     async readPublished(input: {tenantId: TenantId; characterId: CharacterId; characterVersionId: CharacterVersionId;query?:string}): Promise<AgentPersonaNarrative | null> {
       const result = await pool.query(`SELECT v.constitution FROM identity.character_versions v
@@ -27,7 +27,8 @@ export function createPublishedPersonaReader(pool: Pick<Pool, 'query'>,officials
       const civicAgency=agencyId?CIVIC_AGENCY_CATALOG.find(item=>item.id===agencyId):undefined;
       const official=await officials?.read(input.tenantId,input.characterId,input.characterVersionId,input.query,config?.research_enabled!==false);
       if(value.publicOfficial&&!official)throw Object.assign(new Error('official_dossier_review_required'),{statusCode:409});
-      return Object.freeze({...(config?{adminInstructions:{mainPrompt:String(config.main_prompt),tone:String(config.tone),context:String(config.context),revision:String(config.revision)}}:{}),...(official?{publicOfficial:official}:{}),...(civicAgency?{civicAgency:{id:civicAgency.id,name:civicAgency.name,short:civicAgency.short,topic:civicAgency.topic,sourceUrl:civicAgency.source}}:{}),biography:config?.biography?String(config.biography):value.biography.slice(0,8000),personality:list('personality',8,300),languages:list('languages',12,32)});
+      const evidence=civicAgency&&agencies?await agencies.read(civicAgency.id,input.query??''):undefined;
+      return Object.freeze({...(config?{adminInstructions:{mainPrompt:String(config.main_prompt),tone:String(config.tone),context:String(config.context),revision:String(config.revision)}}:{}),...(official?{publicOfficial:official}:{}),...(civicAgency?{civicAgency:{id:civicAgency.id,name:civicAgency.name,short:civicAgency.short,topic:civicAgency.topic,sourceUrl:civicAgency.source,...('kind' in civicAgency?{kind:civicAgency.kind,jurisdiction:civicAgency.jurisdiction,...('parentName' in civicAgency?{parentName:civicAgency.parentName}:{})}:{}),...(evidence?{evidence}:{})}}:{}),biography:config?.biography?String(config.biography):value.biography.slice(0,8000),personality:list('personality',8,300),languages:list('languages',12,32)});
     },
   });
 }

@@ -36,11 +36,18 @@ describe('published persona identity for all conversation media', () => {
     INSERT INTO identity.characters VALUES('tenant-a','agency-a','version-a','active');
     INSERT INTO identity.character_versions VALUES('tenant-a','agency-a','version-a','published',
      '{"biography":"Independent guide to identity enrolment.","disclosurePolicy":{"representation":"independent_civic_ai_guide","civicAgencyId":"nimc"}}');`);
-   const reader=createPublishedPersonaReader(db as any),scope={tenantId:'tenant-a',characterId:'agency-a',characterVersionId:'version-a'} as any;
+   const queries:string[]=[];
+   const evidence=[{id:'reviewed_nimc',title:'NIMC Act',sourceUrl:'https://nimc.gov.ng/',sourceDate:'2026-11-17',sourceDateKind:'review' as const,content:'National identity administration.'}];
+   const agencyReader={read:async(id:string,query:string)=>{expect(id).toBe('nimc');queries.push(query);return evidence;}};
+   const reader=createPublishedPersonaReader(db as any,undefined,agencyReader as any),scope={tenantId:'tenant-a',characterId:'agency-a',characterVersionId:'version-a'} as any;
    const actual=await reader.readPublished(scope);
    expect(actual?.civicAgency).toMatchObject({id:'nimc',short:'NIMC',name:'National Identity Management Commission',sourceUrl:'https://nimc.gov.ng/'});
+   expect(actual?.civicAgency?.evidence).toEqual(evidence);
+   expect((await reader.readPublished({...scope,query:'agency history'}))?.civicAgency?.evidence).toEqual(evidence);
+   expect(queries).toEqual(['','agency history']);
    await db.exec(`UPDATE identity.character_versions SET constitution=jsonb_set(constitution,'{disclosurePolicy,representation}','"unauthorized_official"')`);
    expect((await reader.readPublished(scope))?.civicAgency).toBeUndefined();
+   expect(queries).toEqual(['','agency history']); // no retrieval for a forged role
   }finally{await db.close();}
  },30000);
 });

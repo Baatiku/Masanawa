@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../agents/agent_directory.dart';
 import '../state/agent_directory_state.dart';
-import '../state/ai_chat_state.dart';
 import '../theme/masanawa_theme.dart';
 import 'civic_catalog.dart';
 import 'civic_directory_screen.dart';
@@ -31,22 +30,20 @@ class CivicProfileScreen extends ConsumerWidget {
     // No name-only, fuzzy or institution-name impersonation binding.
     // Person links require reviewed official identity; institution links use
     // the independently approved canonical agency ID from the server.
-    AgentDirectoryEntry? matched;
-    for (final agent in agents) {
-      if (entry.kind == CivicKind.institution &&
-          agent.civicAgencyId == entry.id) {
-        matched = agent;
-        break;
+    final personSourceUnique = entry.kind == CivicKind.person &&
+        civicCatalog.where((person) => person.kind == CivicKind.person && person.sourceUrl == entry.sourceUrl).length == 1;
+    final candidates = agents.where((agent) {
+      if (entry.kind == CivicKind.institution || entry.kind == CivicKind.department) {
+        return entry.chatAgencyId != null && agent.civicAgencyId == entry.chatAgencyId;
       }
-      if (entry.kind == CivicKind.person &&
-          agent.publicOfficial?.current == true &&
-            agent.publicOfficial?.officialName.toLowerCase() == entry.name.toLowerCase() &&
-            agent.publicOfficialSimulation) {
-          matched = agent;
-          break;
-      }
-    }
-    final admitted = matched;
+      return entry.kind == CivicKind.person && personSourceUnique &&
+          agent.publicOfficialSimulation && agent.publicOfficial?.current == true &&
+          agent.publicOfficial?.sourceUrl == entry.sourceUrl &&
+          agent.publicOfficial?.officialName.toLowerCase() == entry.name.toLowerCase();
+    }).toList(growable:false);
+    // A source-ambiguous person or two competing chat identities cannot be
+    // admitted by a directory display name.
+    final admitted = candidates.length == 1 ? candidates.single : null;
     return DefaultTabController(
       length:3,
       child:Scaffold(
@@ -80,7 +77,6 @@ class CivicProfileScreen extends ConsumerWidget {
               const SizedBox(height:8),
               if (admitted != null) FilledButton.icon(
                 onPressed:() {
-                  ref.read(aiChatProvider.notifier).seedGreeting(admitted.characterId,admitted.greeting);
                   context.push('/chat/${Uri.encodeComponent(admitted.characterId)}');
                 },
                 icon:const Icon(Icons.chat_outlined),label:const Text('Chat with AI persona · ₦2/reply'),
@@ -101,6 +97,16 @@ class CivicProfileScreen extends ConsumerWidget {
           ],
           body:TabBarView(children:[
             _CivicTab(children:[
+              if (admitted != null) _Section(title:'Guided learning · ₦2 per successful AI reply',child:Wrap(
+                spacing:8,runSpacing:8,children:[
+                  for (final lesson in _civicLearningTopics(entry))
+                    ActionChip(
+                      avatar:const Icon(Icons.school_outlined,size:17),
+                      label:Text(lesson.$1),
+                      onPressed:()=>context.push('/chat/${Uri.encodeComponent(admitted.characterId)}?prompt=${Uri.encodeQueryComponent(lesson.$2)}'),
+                    ),
+                ],
+              )),
               _Section(title:'Overview',child:SelectableText(entry.summary,style:theme.textTheme.bodyLarge?.copyWith(height:1.55))),
               if (entry.tenures.isNotEmpty) _Section(title:'Offices held',child:Column(children:[
                 for (final t in entry.tenures) _LineItem(icon:Icons.history_toggle_off,title:t.title,subtitle:'${t.from} — ${t.to}'),
@@ -162,6 +168,22 @@ class CivicProfileScreen extends ConsumerWidget {
       const SnackBar(content:Text('The source could not be opened.')),
     );
   }
+}
+
+/// Citizen-selected study topics, not prewritten AI responses. These launch
+/// the existing canonical, billed conversation only after an explicit tap.
+List<(String,String)> _civicLearningTopics(CivicEntry entry) {
+  final name=entry.name;
+  if(entry.kind==CivicKind.person)return [
+    ('Life story','Explain the documented life and educational background of $name, with a chronological narrative and sources. Separate missing facts from confirmed events.'),
+    ('Public career','Guide me through the offices, dates, decisions and publicly documented achievements of $name. Explain the historical context and distinguish claims from outcomes.'),
+    ('Revision questions','Help me study the sourced public biography of $name through an interactive lesson and questions, remembering what we have already covered.'),
+  ];
+  return [
+    ('Explore this institution','Give me a guided tour of $name: its origins, legal purpose, organisation, responsibilities and relationship with other Nigerian institutions, citing sources.'),
+    ('Citizen services','Teach me which public services $name is responsible for and how to verify current official procedures, documents and fees. Do not guess uncertain requirements.'),
+    ('Learn step by step','Help me learn about $name in a sequence of connected short lessons, checking my understanding and continuing from where we stop.'),
+  ];
 }
 
 class _Section extends StatelessWidget {

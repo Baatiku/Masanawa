@@ -37,7 +37,9 @@ export interface AgentPersonaNarrative {
   readonly adminInstructions?:Readonly<{mainPrompt:string;tone:string;context:string;revision:string}>;
   readonly publicOfficial?: import('./public-official.js').PublicOfficialPersona;
   /** Only the verified civic-agency seed binding may populate this field. */
-  readonly civicAgency?: Readonly<{id:string;name:string;short:string;topic:string;sourceUrl:string}>;
+  readonly civicAgency?: Readonly<{id:string;name:string;short:string;topic:string;sourceUrl:string;
+    kind?:'Agency'|'Institution'|'Ministry'|'Directorate';jurisdiction?:string;parentName?:string;
+    evidence?:readonly {id:string;title:string;sourceUrl:string;sourceDate:string;sourceDateKind:'review'|'retrieval';content:string}[]}>;
   readonly biography: string;
   readonly personality: readonly string[];
   readonly languages: readonly string[];
@@ -59,6 +61,8 @@ export interface AgentStrategyRequest {
   readonly userMemory?:readonly {recordId:string;revision:number;type:string;content:string;sourceReference:string;expiresAt:string|null}[];
   /** Server-only, authorized read of current public evidence; never a customer DTO. */
   readonly readPublicEvidence?: (query:string)=>Promise<import('./public-official.js').PublicOfficialPersona>;
+  /** Identity-bound agency research. It can never authorize official services. */
+  readonly readCivicEvidence?: (query:string)=>Promise<NonNullable<AgentPersonaNarrative['civicAgency']>>;
   readonly conversationHistory?: readonly AgentConversationHistoryMessage[];
   readonly onTextDelta?: (delta: string) => void | Promise<void>;
   readonly surface?: AgentConversationSurface;
