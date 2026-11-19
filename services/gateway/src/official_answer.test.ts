@@ -50,3 +50,16 @@ it('streams complete source-checked paragraphs without exposing partial JSON or 
 it('accepts pretty-printed complete objects while withholding incomplete official paragraphs',async()=>{
  const {createOfficialParagraphStream}=await import('./official_answer.js');const deltas:string[]=[];const base={...request({kind:'text',text:'Term record'}),onTextDelta:async(text:string)=>{deltas.push(text);}};const grounded={presentation:base.presentation,input:base.input,language:'en',conversation:false,query:'term'};const raw=JSON.stringify({status:'answered',answer:'The term is recorded in the biography.',evidenceIds:['bio'],quotations:[]},null,2);const stream=createOfficialParagraphStream(grounded,base);await stream.onTextDelta(raw.slice(0,-1));expect(deltas).toEqual([]);await stream.onTextDelta(raw.slice(-1));expect(deltas).toHaveLength(1);expect(await stream.finish(raw)).toBe(deltas[0]);
 });
+
+it('answers a greeting without keyword expansion and falls back to the original factual query when expansion fails',async()=>{
+  const inference={generate:vi.fn(async()=>{throw Error('provider query expansion timed out');})};
+  const greeting=await prepareOfficialGrounding(request({kind:'text',text:'Hello!'}),inference);
+  expect(greeting.conversation).toBe(true);
+  expect(inference.generate).not.toHaveBeenCalled();
+  const readPublicEvidence=vi.fn(async()=>official);
+  const input={...request({kind:'text',text:'When did you serve?'}),readPublicEvidence};
+  const grounded=await prepareOfficialGrounding(input,inference);
+  expect(grounded.conversation).toBe(false);
+  expect(readPublicEvidence).toHaveBeenCalledWith('When did you serve?');
+  expect(grounded.presentation.narrative?.publicOfficial).toBe(official);
+});

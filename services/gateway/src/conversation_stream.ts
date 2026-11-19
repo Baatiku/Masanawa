@@ -3,6 +3,7 @@ import { once } from "node:events";
 import type { FastifyReply } from "fastify";
 
 export interface ConversationStreamCallbacks {
+  onAccepted(): Promise<void>;
   onTextDelta(delta: string): Promise<void>;
   onAudioPcmChunk(dataBase64: string): Promise<void>;
   onAudioTranscriptDelta(delta: string): Promise<void>;
@@ -38,6 +39,7 @@ export async function streamConversationReply(
   };
   try {
     const result = await execute({
+      onAccepted: () => emit({ type: "accepted" }),
       onTextDelta: async text => { if (text) await emit({ type: "delta", text }); },
       onAudioPcmChunk: async dataBase64 => { if (dataBase64) await emit({ type: "audio", mimeType: "audio/pcm;rate=24000", sampleRate: 24000, dataBase64 }); },
       onAudioTranscriptDelta: async text => { if (text) await emit({ type: "audio-transcript", text }); },

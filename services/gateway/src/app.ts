@@ -1068,6 +1068,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
             characterSessionId: request.params.characterSessionId,
             characterId: request.body.characterId,
             text: request.body.text,
+            textOnly: request.headers["x-masanawa-reply-mode"] === "text",
             requestId: parseCanonicalId(
               "request",
               request.headers["x-request-id"] as string,
@@ -1101,6 +1102,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
           characterSessionId: request.params.characterSessionId,
           characterId: request.body.characterId,
           text: request.body.text,
+            textOnly: request.headers["x-masanawa-reply-mode"] === "text",
           requestId: parseCanonicalId("request", request.headers["x-request-id"] as string),
           correlationId: parseCanonicalId("correlation", request.headers["x-correlation-id"] as string),
           ...callbacks, signal,
