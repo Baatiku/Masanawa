@@ -11,7 +11,7 @@ calls_option="${2:-keep}"
 test "$(id -u)" -eq 0 && test "$(hostname)" = 'masanawa-pilot-lon1'
 cd /opt/masanawa/current
 test -f compose.yaml && test -f /etc/masanawa/compose.env
-for cmd in docker python3 flock; do command -v "$cmd" >/dev/null; done
+for cmd in docker python3 flock timeout; do command -v "$cmd" >/dev/null; done
 
 exec 9>>/etc/masanawa/whatsapp-release.lock
 flock -n 9 || { echo 'WhatsApp release is already running'; exit 1; }
@@ -21,9 +21,6 @@ flock -n 8 || { echo 'Another Masanawa release is running'; exit 1; }
 unset MASANAWA_GATEWAY_IMAGE MASANAWA_OPS_IMAGE MASANAWA_WORKER_IMAGE
 test "$(docker inspect -f '{{.State.Running}}' masanawa-postgres-1)" = true || {
   echo 'The existing PostgreSQL container must be running for the backup'; exit 1;
-}
-test "$(df --output=avail -B1 /etc/masanawa | tail -1)" -gt 2147483648 || {
-  echo 'Need 2 GiB free disk space for backup'; exit 1;
 }
 
 runtime_file="$(python3 - <<'PY'
@@ -48,6 +45,43 @@ PY
 old_gateway="$(docker inspect -f '{{.Config.Image}}' masanawa-gateway-1)"
 old_ops="$(docker inspect -f '{{.Config.Image}}' masanawa-ops-1)"
 old_worker="$(docker inspect -f '{{.Config.Image}}' masanawa-worker-1)"
+
+disk_free(){
+  df --output=avail -B1 -- "$1" | tail -1
+}
+
+reclaim_release_images(){
+  local ref used
+  # Keep the recovery milestone, every existing container's image, the
+  # rollback images and the requested release. Verify registry availability.
+  while IFS= read -r ref; do
+    [[ "$ref" =~ ^ghcr\.io/baatiku/masanawa-do-pilot-(gateway|ops|worker):[0-9a-f]{40}$ ]] || continue
+    case "$ref" in
+      "$old_gateway"|"$old_ops"|"$old_worker"|*:"$release_sha"|*:dccebe9c61bc783c1baa4993de415f241a20f828) continue ;;
+    esac
+    used="$(docker ps -aq --filter "ancestor=$ref")" || return 1
+    [ -z "$used" ] || continue
+    timeout 15 docker manifest inspect "$ref" >/dev/null 2>&1 || continue
+    docker image rm "$ref" >/dev/null || continue
+    echo "Released unused image cache: $ref"
+    if [ "$(disk_free "$docker_root")" -ge "$pull_reserve" ]; then break; fi
+  done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' | tac)
+}
+
+docker_root="$(docker info --format '{{.DockerRootDir}}')"
+test -n "$docker_root"
+pull_reserve=$((7 * 1024 * 1024 * 1024))
+backup_reserve=$((2 * 1024 * 1024 * 1024))
+if [ "$(disk_free "$docker_root")" -lt "$pull_reserve" ]; then
+  echo 'Docker storage is low. Checking for unused release image caches...'
+  reclaim_release_images
+fi
+test "$(disk_free "$docker_root")" -ge "$pull_reserve" || {
+  echo 'Need 7 GiB free in Docker storage for the release images'; exit 1;
+}
+test "$(disk_free /etc/masanawa)" -ge "$backup_reserve" || {
+  echo 'Need 2 GiB free on the backup filesystem'; exit 1;
+}
 backup="$(mktemp -d /etc/masanawa/whatsapp-voice-checkpoint-XXXXXXXX)"
 chmod 700 "$backup"
 cp -p /etc/masanawa/compose.env "$backup/compose.before"
