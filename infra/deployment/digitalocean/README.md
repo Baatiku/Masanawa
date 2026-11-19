@@ -37,6 +37,7 @@ its private checkpoint. A retry uses a new request ID after reviewing the error.
 The Gateway readiness response includes the running commit in
 `x-masanawa-release`. The installer records completion only after the Worker
 readiness and linked-device configuration checks pass. The Droplet retains
+the Worker memory override at `/etc/masanawa/whatsapp-worker.compose.yaml` after a successful upgrade. Include it as the second Compose file if manually recreating the Worker. The Droplet retains
 the last request status at `/var/lib/masanawa-deploy/state.json` and operational
 details in `journalctl -u masanawa-deploy.service`. To pause scheduled releases,
 disable `masanawa-deploy.timer` from the Droplet console.
