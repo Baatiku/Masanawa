@@ -58,8 +58,12 @@ official, grant approvals, invent facts, or request identity/payment secrets.
 
 ## Retained safety boundaries
 
-- No migrations, wallet or ₦2/reply ledger changes, government authentication,
-  unsourced officeholder assignments, or hidden contact disclosure.
+- One additive, DDL-only reviewed-catalog migration extends the existing
+  civic media-rights approval guard to all 73 identities, verifying each
+  long-name opaque handle against the published constitution. Apply it before
+  agency bootstrap. No table/data rewrite, wallet or ₦2/reply ledger changes,
+  government authentication, unsourced officeholder assignments, or hidden
+  contact disclosure.
 - No changes to paired WhatsApp session, Signal keys, owner takeover, message
   outbox, voice renderer, Gemini tenant key pool or manual pause behavior.
 - Independent educational persona disclosure applies at first interaction

@@ -119,7 +119,9 @@ export async function ensureCivicAgencyAgents(input:{
   }
   // Masana handles have a 40-character limit; preserve historical short IDs
   // and use a collision-resistant, stable opaque handle for long directory IDs.
-  const handle=`civic.${seed.id.length<=33?seed.id:createHash('sha256').update(seed.id).digest('hex').slice(0,24)}`;
+  // PostgreSQL's built-in md5() is used in the reviewed civic-media guard to
+  // verify this exact opaque handle; the constitution still binds the full ID.
+  const handle=`civic.${seed.id.length<=33?seed.id:createHash('md5').update(seed.id).digest('hex').slice(0,24)}`;
   const approved=validateMasanaProfile({handle,displayName:`${seed.short} · AI Guide`,
     profession:'Independent civic AI guide',biography:intro,lifeStory:`${intro} Information source: ${seed.source}.`,
     languages:['en','ha'],talents:[seed.topic],goals:['Explain public information accurately'],

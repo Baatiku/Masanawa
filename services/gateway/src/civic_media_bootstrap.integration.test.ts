@@ -1,6 +1,7 @@
 import {it,expect} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
 import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {createCanonicalId,nowInstant} from '@masanawa/contracts';
 import {withTransaction,createPostgresIdentityRepository,createPostgresAgentPresentationRepository,
  createPostgresCharacterSkillAssignmentRepository,createPostgresPlatformAgentProfileRepository} from '@masanawa/postgres';
@@ -36,7 +37,13 @@ it('recovers civic startup interrupted by the stock-media guard while retaining 
   const interrupted=(await db.query<{character_id:string}>('SELECT character_id FROM identity.characters WHERE tenant_id=$1',[tenantId])).rows;
   expect(interrupted).toHaveLength(1);
   await db.exec(await readFile(new URL('../../../packages/masana/migrations/0017_civic_agency_optional_media.sql',import.meta.url),'utf8'));
-  expect(await ensureCivicAgencyAgents(args)).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:CIVIC_AGENCY_CATALOG.length-1});
+  // The earlier guard recognizes only the original 16 guides; newly reviewed
+  // org-* identities remain refused until the additive reviewed-catalog guard.
+  await expect(ensureCivicAgencyAgents(args)).rejects.toThrow('masana_media_unverified');
+  const beforeExpansion=(await db.query<{character_id:string}>('SELECT character_id FROM identity.characters WHERE tenant_id=$1',[tenantId])).rows.length;
+  expect(beforeExpansion).toBe(17); // 16 legacy guides plus the first interrupted new guide
+  await db.exec(await readFile(new URL('../../../packages/masana/migrations/0018_reviewed_civic_catalog_media.sql',import.meta.url),'utf8'));
+  expect(await ensureCivicAgencyAgents(args)).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:CIVIC_AGENCY_CATALOG.length-beforeExpansion});
   expect(await ensureCivicAgencyAgents(args)).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:0});
   const approved=(await db.query<{character_id:string;profile:Record<string,unknown>}>(
    "SELECT character_id,profile FROM masana.character_revisions WHERE tenant_id=$1 AND state='approved'",[tenantId])).rows;
@@ -44,6 +51,12 @@ it('recovers civic startup interrupted by the stock-media guard while retaining 
   expect(approved.some(row=>row.character_id===interrupted[0]!.character_id)).toBe(true);
   expect(approved.every(row=>row.profile.portraitMediaId===null&&row.profile.bannerMediaId===null)).toBe(true);
   const guide=approved.find(row=>row.profile.civicAgencyId==='inec')!;
+  const longGuide=approved.find(row=>(row.profile.civicAgencyId as string).length>33)!;
+  const longId=longGuide.profile.civicAgencyId as string;
+  expect(longGuide.profile.handle).toBe(`civic.${createHash('md5').update(longId).digest('hex').slice(0,24)}`);
+  await expect(db.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at)
+   VALUES($1,$2,2,'approved',$3::jsonb,'test',now())`,[tenantId,longGuide.character_id,JSON.stringify({...longGuide.profile,handle:'civic.lookalike'})]))
+   .rejects.toThrow('masana_media_unverified');
   for(const change of [{portraitMediaId:'unreviewed-photo'},{civicAgencyId:'nimc',handle:'civic.nimc'},{handle:'masana.lookalike'}]){
    await expect(db.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at)
     VALUES($1,$2,2,'approved',$3::jsonb,'test',now())`,[tenantId,guide.character_id,JSON.stringify({...guide.profile,...change})]))
@@ -58,4 +71,4 @@ it('recovers civic startup interrupted by the stock-media guard while retaining 
    VALUES($1,$2,1,'approved',$3::jsonb,'test',now())`,[tenantId,characterId,JSON.stringify(guide.profile)]))
    .rejects.toThrow('masana_media_unverified');
  }finally{await db.close();}
-},60000);
+},90000);
