@@ -20,7 +20,7 @@ function fixture() {
   const queries:string[] = [];
   const query = vi.fn(async (sql:string, params:unknown[] = []) => {
     queries.push(sql);
-    if(sql.includes("FROM agents.mobile_turn_commands"))return {rows:[{completed:true}]};
+    if(sql.startsWith("SELECT 1 FROM agents.mobile_turn_commands"))return {rows:[{completed:true}]};
     if (sql.startsWith("SELECT slot,sha256")) {
       const [tenant,user,character,request]=params;
       return {rows:rows.filter(x=>x.tenant_id===tenant&&x.user_id===user&&
