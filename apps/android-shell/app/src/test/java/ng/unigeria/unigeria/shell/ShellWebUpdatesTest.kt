@@ -24,6 +24,8 @@ class ShellWebUpdatesTest {
 
     @Test fun safeReloadDefersInteractionAndRefreshesServiceWorkers() {
         assertTrue(ShellWebUpdates.safeToReloadScript.contains("__masanawaCanAutoUpdate"))
+        assertTrue(ShellWebUpdates.safeToReloadScript.contains(".wa-voice-review"))
+        assertTrue(ShellWebUpdates.safeToReloadScript.contains(".masana-call-screen"))
         assertTrue(ShellWebUpdates.safeToReloadScript.contains("audio,video"))
         assertTrue(ShellWebUpdates.reloadScript.contains("reg.update()"))
         assertTrue(ShellWebUpdates.reloadScript.contains("location.reload()"))

@@ -78,6 +78,9 @@ internal object ShellWebUpdates {
         try {
           if (document.visibilityState !== 'visible') return false;
           if (window.__masanawaCanAutoUpdate?.() === false) return false;
+          // Match the real Masanawa voice-review and in-call views as well as
+          // an optional explicit web-app guard. Never discard a draft clip.
+          if (document.querySelector('.wa-voice-review,dialog.masana-call-screen[open]')) return false;
           if (document.querySelector('input:focus,textarea:focus,[contenteditable="true"]:focus')) return false;
           if (document.querySelector('[aria-busy="true"],[data-recording="true"],[data-chat-streaming="true"]')) return false;
           if (Array.from(document.querySelectorAll('textarea,input:not([type="hidden"]),[contenteditable="true"]'))

@@ -53,6 +53,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import androidx.webkit.JavaScriptReplyProxy
@@ -307,6 +308,11 @@ class ShellActivity : ComponentActivity() {
     override fun onStop() {
         CookieManager.getInstance().flush()
         super.onStop()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && pendingWebRefresh) maybeRefreshWeb()
     }
 
     override fun onDestroy() {
@@ -725,6 +731,7 @@ class ShellActivity : ComponentActivity() {
     private fun maybeRefreshWeb() {
         webUpdateHandler.removeCallbacks(webUpdateRetry)
         if (!pendingWebRefresh || isFinishing || isDestroyed || !::webView.isInitialized) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         if (callActive || fileCallback != null || pendingMediaRequest != null ||
             !WebOriginPolicy.isTrusted(webView.url) || !firstPageVisible || hasWindowFocus().not()) {
             webUpdateHandler.postDelayed(webUpdateRetry, ShellWebUpdates.RETRY_INTERVAL_MS)
