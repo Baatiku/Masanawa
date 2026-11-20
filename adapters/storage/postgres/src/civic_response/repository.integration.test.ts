@@ -58,7 +58,7 @@ describe('Response Centre SQL authorization, review and audit',()=>{
   it('immediately lists reported locations and safe metadata while protecting reporter identity',async()=>{
     const repo=createCivicResponseRepository(pool);
     const reporter={tenantId:'tenant_response',userId:'citizen_public'};
-    const fresh=await repo.create(reporter,{...draft,requestKey:'public_incident_request_2026',publicConsent:false});
+    const fresh=await repo.create(reporter,{...draft,requestKey:'public_incident_request_2026',publicConsent:false,locationLga:'Ibadan North',locationDetails:'western market entrance'});
     const id=fresh.incident.id;
     expect(await repo.publicIncidents()).toEqual([]);
     await expect(repo.reviewPublication(staff,id,{expectedRevision:1,reason:'Premature attempted publication',publish:true,publicTitle:'Reviewed water supply outage',publicSummary:'This report describes an infrastructure problem needing public attention.'})).rejects.toMatchObject({code:'publication_not_permitted'});
@@ -67,7 +67,7 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     expect(consented.publicationStatus).toBe('pending_review');
     const pending=await repo.publicIncidents();
     expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({publicationStatus:'pending_review',title:'New community incident report',locationState:'Oyo'});
+    expect(pending[0]).toMatchObject({publicationStatus:'pending_review',title:'New community incident report',locationState:'Oyo',locationLga:'Ibadan North',locationDetails:'western market entrance'});
     expect(JSON.stringify(pending)).not.toContain('citizen_public');
     const reviewed=await repo.reviewPublication(staff,id,{expectedRevision:2,reason:'Reviewed for privacy, no identifiable details',publish:true,
       publicTitle:'Power supply safety problem in Oyo',publicSummary:'A reported public electrical hazard has been logged for internal review. No official dispatch has been confirmed.'});
@@ -86,5 +86,21 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     expect(revoked.publicationStatus).toBe('private');
     expect(await repo.publicIncidents()).toEqual([]);
     expect((await repo.events(staff,id,true)).map(x=>x.action)).toEqual(expect.arrayContaining(['publication_requested','publication_approved','publication_consent_withdrawn']));
+  });
+  it('shows an opted-in citizen-reviewed synopsis immediately while stripping contact numbers',async()=>{
+    const repo=createCivicResponseRepository(pool);
+    const result=await repo.create({tenantId:'tenant_response',userId:'citizen_live'},{
+      ...draft,requestKey:'request_live_public_20261120',publicConsent:true,
+      title:'Exposed power cables near the community market',
+      description:'Exposed electricity cables are lying on the main road. Call 08012345678 for updates.',
+      locationLga:'Ibadan North',locationDetails:'Main market junction, Ibadan'
+    });
+    const publicRows=await repo.publicIncidents({state:'Oyo'});
+    const row=publicRows.find(item=>item.reference===result.incident.reference);
+    expect(row).toMatchObject({publicationStatus:'pending_review',locationLga:'Ibadan North',locationDetails:'Main market junction, Ibadan',
+      title:'Exposed power cables near the community market'});
+    expect(row.summary).toContain('Exposed electricity cables');
+    expect(row.summary).not.toContain('08012345678');
+    expect(JSON.stringify(row)).not.toContain('citizen_live');
   });
 });
