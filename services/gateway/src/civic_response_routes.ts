@@ -15,7 +15,7 @@ const IncidentBody=Type.Object({
   locationLga:Type.Optional(small),locationDetails:Type.Optional(Type.String({maxLength:600})),
   incidentAt:Type.Optional(Type.Union([Type.String({maxLength:36}),Type.Null()])),
   latitude:optionalNumber,longitude:optionalNumber,peopleAtRisk:Type.Optional(Type.Union([Type.Integer({minimum:0,maximum:1000000}),Type.Null()])),
-  injuriesReported:boolOrNull,dangerOngoing:boolOrNull,reporterSafe:boolOrNull,consentToContact:Type.Optional(Type.Boolean()),
+  injuriesReported:boolOrNull,dangerOngoing:boolOrNull,reporterSafe:boolOrNull,consentToContact:Type.Optional(Type.Boolean()),publicConsent:Type.Optional(Type.Boolean()),
   contactPreference:Type.Optional(small),sourceMode:small,languageCode:Type.Optional(Type.String({maxLength:12})),
   structuredFacts:Type.Optional(Type.Record(Type.String({maxLength:60}),Type.Unknown())),
 },{additionalProperties:false});
@@ -66,13 +66,16 @@ function failure(error:unknown,reply:{code:(code:number)=>unknown}) {
   reply.code(status);return {error:error instanceof CivicResponseError?error.code:status===401?'sign_in_required':'response_service_unavailable'};
 }
 
-/** Only verified agency contacts are public. All reports require the shared customer session. */
+/** Only hand-reviewed and explicitly consented incident summaries may be public. */
 export function registerCivicResponseRoutes(app:FastifyInstance,options:Options) {
   const repo=options.repository;
   const admitInterview=providerBudget(20,120),admitTranscription=providerBudget(4,20);
   app.get('/v1/response/categories',async()=>({categories:repo.categories()}));
   app.get('/v1/response/contacts',{schema:{querystring:Type.Object({state:Type.Optional(small),serviceType:Type.Optional(small)},{additionalProperties:false})}},async(req,reply)=>{
     try{return {contacts:await repo.contacts(req.query as {state?:string;serviceType?:string})}}catch(error){return failure(error,reply)}
+  });
+  app.get('/v1/response/public-incidents',{schema:{querystring:Type.Object({category:Type.Optional(Type.String({maxLength:60,pattern:'^[a-z_]+$'})),state:Type.Optional(Type.String({maxLength:80})),limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
+    try{return {incidents:await repo.publicIncidents(req.query as {category?:string;state?:string;limit?:number;offset?:number})}}catch(error){return failure(error,reply)}
   });
   app.get('/v1/response/incidents',{schema:{querystring:Type.Object({limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
     try{const actor=await options.authorize(req.headers.authorization);const q=req.query as {limit?:number;offset?:number};return {incidents:await repo.myIncidents(actor,q.limit??30,q.offset??0)}}catch(error){return failure(error,reply)}
@@ -89,6 +92,9 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
   });
   app.post('/v1/response/incidents/:id/update',{schema:{params:ID,body:Type.Object({message:Type.String({minLength:3,maxLength:4000}),expectedRevision:Type.Integer({minimum:1})},{additionalProperties:false})}},async(req,reply)=>{
     try{const actor=await options.authorize(req.headers.authorization);return {incident:await repo.appendReporterUpdate(actor,(req.params as {id:string}).id,req.body as {message:string;expectedRevision:number})}}catch(error){return failure(error,reply)}
+  });
+  app.post('/v1/response/incidents/:id/public-consent',{schema:{params:ID,body:Type.Object({consent:Type.Boolean(),expectedRevision:Type.Integer({minimum:1})},{additionalProperties:false})}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);return {incident:await repo.setPublicConsent(actor,(req.params as {id:string}).id,req.body as {consent:boolean;expectedRevision:number})}}catch(error){return failure(error,reply)}
   });
   app.post('/v1/response/interview',{schema:{body:Type.Object({history:Type.Array(Type.Object({role:Type.Union([Type.Literal('citizen'),Type.Literal('assistant')]),text:Type.String({minLength:1,maxLength:2000})},{additionalProperties:false}),{minItems:1,maxItems:18}),language:Type.Optional(Type.String({maxLength:15}))},{additionalProperties:false})}},async(req,reply)=>{
     try{

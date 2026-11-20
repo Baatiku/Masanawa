@@ -30,6 +30,9 @@ export const RESPONSE_STATUSES = Object.freeze(['submitted','triage','needs_info
 export type IncidentStatus = typeof RESPONSE_STATUSES[number];
 const statusSet = new Set<string>(RESPONSE_STATUSES);
 const categorySet = new Set<string>(RESPONSE_CATEGORIES.map(c=>c.id));
+// Never expose safeguarding, accusations, health, identity or person-centred reports.
+export const PUBLIC_REPORT_CATEGORIES = Object.freeze(['fire_rescue','road_transport','disaster','infrastructure','water_sanitation','environment','public_services'] as const);
+const publicCategorySet = new Set<string>(PUBLIC_REPORT_CATEGORIES);
 const urgencies = new Set(['routine','priority','urgent','immediate']);
 const contactPreferences = new Set(['in_app','phone','email']);
 const sourceModes = new Set(['typed','voice_note','voice_interview']);
@@ -48,6 +51,7 @@ export type NewIncident = {
   locationState:string;locationLga?:string;locationDetails?:string;incidentAt?:string|null;
   latitude?:number|null;longitude?:number|null;peopleAtRisk?:number|null;injuriesReported?:boolean|null;
   dangerOngoing?:boolean|null;reporterSafe?:boolean|null;consentToContact?:boolean;
+  publicConsent?:boolean;
   contactPreference?:string;sourceMode:string;languageCode?:string;structuredFacts?:Record<string,unknown>;
 };
 
@@ -69,7 +73,7 @@ function validateNew(body: NewIncident) {
     facts:safeFacts};
 }
 
-const INCIDENT_VIEW = `id,reference,title,description,category,subcategory,urgency,incident_at AS "incidentAt",location_state AS "locationState",location_lga AS "locationLga",location_details AS "locationDetails",latitude,longitude,people_at_risk AS "peopleAtRisk",injuries_reported AS "injuriesReported",danger_ongoing AS "dangerOngoing",reporter_safe AS "reporterSafe",consent_to_contact AS "consentToContact",contact_preference AS "contactPreference",source_mode AS "sourceMode",language_code AS "languageCode",structured_facts AS "structuredFacts",status,assigned_agency_id AS "assignedAgencyId",external_reference AS "externalReference",dispatch_confirmed_at AS "dispatchConfirmedAt",reporter_update AS "reporterUpdate",revision,created_at AS "createdAt",updated_at AS "updatedAt"`;
+const INCIDENT_VIEW = `id,reference,title,description,category,subcategory,urgency,incident_at AS "incidentAt",location_state AS "locationState",location_lga AS "locationLga",location_details AS "locationDetails",latitude,longitude,people_at_risk AS "peopleAtRisk",injuries_reported AS "injuriesReported",danger_ongoing AS "dangerOngoing",reporter_safe AS "reporterSafe",consent_to_contact AS "consentToContact",public_consent AS "publicConsent",publication_status AS "publicationStatus",public_title AS "publicTitle",public_summary AS "publicSummary",published_at AS "publishedAt",contact_preference AS "contactPreference",source_mode AS "sourceMode",language_code AS "languageCode",structured_facts AS "structuredFacts",status,assigned_agency_id AS "assignedAgencyId",external_reference AS "externalReference",dispatch_confirmed_at AS "dispatchConfirmedAt",reporter_update AS "reporterUpdate",revision,created_at AS "createdAt",updated_at AS "updatedAt"`;
 
 export function createCivicResponseRepository(pool: Pool) {
   return {
@@ -90,12 +94,12 @@ export function createCivicResponseRepository(pool: Pool) {
         const result=await client.query(`INSERT INTO civic_response.incidents
           (id,reference,tenant_id,reporter_id,request_key,title,description,category,subcategory,urgency,incident_at,
            location_state,location_lga,location_details,latitude,longitude,people_at_risk,injuries_reported,danger_ongoing,reporter_safe,
-           consent_to_contact,contact_preference,source_mode,language_code,structured_facts)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+           consent_to_contact,contact_preference,source_mode,language_code,structured_facts,public_consent,publication_status)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,CASE WHEN $26 THEN 'pending_review' ELSE 'private' END)
           ON CONFLICT (tenant_id,reporter_id,request_key) DO NOTHING RETURNING ${INCIDENT_VIEW}`,
           [id,reference,actor.tenantId,actor.userId,body.requestKey,safe.title,safe.description,body.category,safe.subcategory,body.urgency,body.incidentAt??null,
            safe.state,safe.lga,safe.location,body.latitude??null,body.longitude??null,body.peopleAtRisk??null,body.injuriesReported??null,body.dangerOngoing??null,body.reporterSafe??null,
-           !!body.consentToContact,body.contactPreference??'in_app',body.sourceMode,safe.language,JSON.stringify(safe.facts)]);
+           !!body.consentToContact,body.contactPreference??'in_app',body.sourceMode,safe.language,JSON.stringify(safe.facts),!!body.publicConsent]);
         if(result.rows.length){
           await client.query(`INSERT INTO civic_response.incident_events(incident_id,tenant_id,actor_id,actor_role,action,new_status,reason) VALUES($1,$2,$3,'reporter','created','submitted','Citizen submitted incident')`,[id,actor.tenantId,actor.userId]);
           return {incident:result.rows[0],created:true,dispatchConfirmed:false};
@@ -114,6 +118,33 @@ export function createCivicResponseRepository(pool: Pool) {
       const res=await pool.query(`SELECT ${INCIDENT_VIEW} FROM civic_response.incidents WHERE tenant_id=$1 AND reporter_id=$2 AND id=$3::uuid AND hidden_at IS NULL`,[actor.tenantId,actor.userId,id]);
       if(!res.rows[0])throw new CivicResponseError(404,'incident_not_found');
       return res.rows[0];
+    },
+    /** Strict public projection: no raw narrative, witness details, precise location or identifiers. */
+    async publicIncidents(input:{category?:string;state?:string;limit?:number;offset?:number}={}) {
+      const limit=Math.min(50,Math.max(1,input.limit??20)),offset=Math.min(10000,Math.max(0,input.offset??0));
+      if(input.category&&!publicCategorySet.has(input.category))return [];
+      const result=await pool.query(`SELECT reference,public_title AS "title",public_summary AS "summary",category,
+        location_state AS "locationState",status,published_at AS "publishedAt",updated_at AS "updatedAt"
+        FROM civic_response.incidents WHERE publication_status='published' AND public_consent=true AND hidden_at IS NULL
+        AND category=ANY($1::text[]) AND ($2::text IS NULL OR category=$2) AND ($3::text IS NULL OR location_state=$3)
+        ORDER BY published_at DESC,id DESC LIMIT $4 OFFSET $5`,[PUBLIC_REPORT_CATEGORIES,input.category??null,input.state??null,limit,offset]);
+      return result.rows;
+    },
+    async setPublicConsent(actor:ResponseActor,id:string,input:{consent:boolean;expectedRevision:number}) {
+      requireRevision(input.expectedRevision);
+      if(typeof input.consent!=='boolean')throw new CivicResponseError(400,'invalid_public_consent');
+      return withTransaction(pool,async client=>{
+        const result=await client.query(`UPDATE civic_response.incidents SET public_consent=$5,
+          publication_status=CASE WHEN $5 THEN 'pending_review' ELSE 'private' END,
+          published_at=NULL,publication_reviewed_by=NULL,
+          revision=revision+1,updated_at=clock_timestamp()
+          WHERE id=$1::uuid AND tenant_id=$2 AND reporter_id=$3 AND revision=$4 AND hidden_at IS NULL
+          RETURNING ${INCIDENT_VIEW}`,[id,actor.tenantId,actor.userId,input.expectedRevision,input.consent]);
+        if(!result.rows[0])throw new CivicResponseError(409,'incident_changed_or_missing');
+        await client.query(`INSERT INTO civic_response.incident_events(incident_id,tenant_id,actor_id,actor_role,action,reason)
+          VALUES($1,$2,$3,'reporter',$4,$5)`,[id,actor.tenantId,actor.userId,input.consent?'publication_requested':'publication_consent_withdrawn',input.consent?'Reporter requested a reviewed public summary':'Reporter withdrew public publication consent']);
+        return result.rows[0];
+      });
     },
     async appendReporterUpdate(actor:ResponseActor,id:string,input:{message:string;expectedRevision:number}) {
       requireRevision(input.expectedRevision);
@@ -162,6 +193,8 @@ export function createCivicResponseRepository(pool: Pool) {
         const set:string[]=[];const vals:unknown[]=[id,actor.tenantId,input.expectedRevision];
         for(const [key,col] of Object.entries(columns)){if(Object.hasOwn(patch,key)){vals.push(patch[key as keyof typeof patch]);set.push(`${col}=$${vals.length}`);}}
         if(input.hide!==undefined)set.push(input.hide?`hidden_at=clock_timestamp(),hidden_reason=$${vals.push(input.reason)}`:'hidden_at=NULL,hidden_reason=NULL');
+        // Withdrawing a case or moving it into a protected category immediately unpublishes it.
+        if(input.hide===true||(input.category!==undefined&&!publicCategorySet.has(input.category))){set.push("publication_status='private'","published_at=NULL");}
         if(!set.length)throw new CivicResponseError(400,'empty_change');
         // Only a deliberate, evidenced manual confirmation can mark actual agency receipt.
         // Selecting an agency by itself is NOT a dispatch or an acknowledgement.
@@ -182,6 +215,30 @@ export function createCivicResponseRepository(pool: Pool) {
         await client.query(`INSERT INTO civic_response.incident_events(incident_id,tenant_id,actor_id,actor_role,action,previous_status,new_status,reason,changes) VALUES($1,$2,$3,'operator',$4,$5,$6,$7,$8::jsonb)`,
           [id,actor.tenantId,actor.userId,input.hide?'visibility_changed':requestedConfirmation?'official_receipt_recorded':'admin_updated',row.status,res.rows[0].status,input.reason,JSON.stringify(auditChanges)]);
         return res.rows[0];
+      });
+    },
+    async reviewPublication(actor:ResponseActor,id:string,input:{expectedRevision:number;reason:string;publish:boolean;publicTitle?:string;publicSummary?:string}) {
+      requireRevision(input.expectedRevision);
+      if(trim(input.reason,1000).length<8||input.reason.length>1000||typeof input.publish!=='boolean')throw new CivicResponseError(400,'publication_reason_required');
+      const title=trim(input.publicTitle,140),summary=trim(input.publicSummary,600);
+      if(input.publish&&(title.length<8||summary.length<20||input.publicTitle?.length!==title.length||input.publicSummary?.length!==summary.length))throw new CivicResponseError(400,'invalid_public_summary');
+      // A second server-side safeguard against common accidental personal data disclosure.
+      if(input.publish&&/(?:\b\d{7,}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/|\b(?:BVN|NIN|passport number)\b)/i.test(`${title} ${summary}`))throw new CivicResponseError(422,'public_summary_contains_sensitive_data');
+      return withTransaction(pool,async client=>{
+        const previous=await client.query(`SELECT * FROM civic_response.incidents WHERE id=$1::uuid AND tenant_id=$2 FOR UPDATE`,[id,actor.tenantId]);
+        const row=previous.rows[0];if(!row)throw new CivicResponseError(404,'incident_not_found');
+        if(row.revision!==input.expectedRevision)throw new CivicResponseError(409,'incident_revision_conflict');
+        if(input.publish&&(!row.public_consent||row.hidden_at||!publicCategorySet.has(row.category)))throw new CivicResponseError(422,'publication_not_permitted');
+        const result=await client.query(`UPDATE civic_response.incidents SET publication_status=$4,
+          public_title=CASE WHEN $5 THEN $6 ELSE public_title END,
+          public_summary=CASE WHEN $5 THEN $7 ELSE public_summary END,
+          published_at=CASE WHEN $5 THEN clock_timestamp() ELSE NULL END,
+          publication_reviewed_by=$8,revision=revision+1,updated_at=clock_timestamp()
+          WHERE id=$1::uuid AND tenant_id=$2 AND revision=$3 RETURNING ${INCIDENT_VIEW}`,
+          [id,actor.tenantId,input.expectedRevision,input.publish?'published':'private',input.publish,title,summary,actor.userId]);
+        await client.query(`INSERT INTO civic_response.incident_events(incident_id,tenant_id,actor_id,actor_role,action,reason,changes)
+          VALUES($1,$2,$3,'operator',$4,$5,$6::jsonb)`,[id,actor.tenantId,actor.userId,input.publish?'publication_approved':'publication_retracted',input.reason,JSON.stringify({from:row.publication_status,to:input.publish?'published':'private',publicTitle:input.publish?title:null})]);
+        return result.rows[0];
       });
     },
     async saveContact(actorId:string,input:{id:string;name:string;acronym?:string;serviceType:string;scope:string;state?:string|null;lga?:string|null;address?:string|null;phone?:string|null;email?:string|null;website?:string|null;sourceUrl:string;verifiedAt:string;verificationStatus:string;routingTags?:string[];publicNotes?:string;latitude?:number|null;longitude?:number|null;expectedRevision:number;reason:string;removed?:boolean}) {

@@ -11,7 +11,7 @@ function app(){
     categories:vi.fn(()=>[{id:'infrastructure',label:'Infrastructure'}]),contacts:vi.fn(async()=>[{id:'ng-emergency-112',phone:'112',verificationStatus:'verified'}]),
     create:vi.fn(async()=>({created:true,incident:{id:'ea46a4b0-4349-4106-bb32-ddb331ed901f',reference:'MR-20261120-EA46A4B0'}})),
     myIncidents:vi.fn(async()=>[]),myIncident:vi.fn(async()=>({title:'Private report'})),events:vi.fn(async()=>[]),
-    appendReporterUpdate:vi.fn(async()=>({revision:2})),adminList:vi.fn(),adminIncident:vi.fn(),adminUpdate:vi.fn(),saveContact:vi.fn(),
+    appendReporterUpdate:vi.fn(async()=>({revision:2})),setPublicConsent:vi.fn(async()=>({publicConsent:false})),publicIncidents:vi.fn(async()=>[{reference:'MR-PUBLIC-1',title:'Reviewed water outage',summary:'A public water supply outage is under review.',locationState:'Oyo',category:'water_sanitation',status:'triage'}]),adminList:vi.fn(),adminIncident:vi.fn(),adminUpdate:vi.fn(),saveContact:vi.fn(),
   };
   const server=Fastify();registerCivicResponseRoutes(server,{repository:service as never,
     authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;}});
@@ -34,6 +34,18 @@ describe('Masanawa Response route boundary',()=>{
     expect(r.statusCode).toBe(201);expect(r.json()).toMatchObject({created:true,agencyForwarded:false,emergencyDispatch:false});
     expect(service.create).toHaveBeenCalledWith(reporter,expect.objectContaining({category:'infrastructure'}));
     expect((await server.inject({method:'POST',url:'/v1/response/incidents',headers:{authorization:'Bearer valid'},payload:{...report,title:'x'}})).statusCode).toBe(400);
+    await server.close();
+  });
+  it('supports a no-login public feed, while requiring the reporter identity to change publication consent',async()=>{
+    const {server,service}=app();
+    const publicResult=await server.inject({url:'/v1/response/public-incidents?state=Oyo&limit=10'});
+    expect(publicResult.statusCode).toBe(200);
+    expect(publicResult.json().incidents[0]).toMatchObject({title:'Reviewed water outage'});
+    expect(service.publicIncidents).toHaveBeenCalledWith({state:'Oyo',limit:10});
+    const path='/v1/response/incidents/ea46a4b0-4349-4106-bb32-ddb331ed901f/public-consent';
+    expect((await server.inject({method:'POST',url:path,payload:{consent:true,expectedRevision:1}})).statusCode).toBe(401);
+    expect((await server.inject({method:'POST',url:path,headers:{authorization:'Bearer valid'},payload:{consent:false,expectedRevision:2}})).statusCode).toBe(200);
+    expect(service.setPublicConsent).toHaveBeenCalledWith(reporter,expect.any(String),{consent:false,expectedRevision:2});
     await server.close();
   });
   it('guides dangerous situations toward 112 without inventing AI availability',async()=>{

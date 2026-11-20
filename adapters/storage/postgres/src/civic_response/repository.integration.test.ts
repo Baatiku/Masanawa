@@ -15,7 +15,7 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     sourceMode:'typed'};
   beforeAll(async()=>{
     db=new PGlite();
-    for(const name of ['0133_civic_response_centre.sql','0134_civic_response_verified_directory.sql'])
+    for(const name of ['0133_civic_response_centre.sql','0134_civic_response_verified_directory.sql','0135_civic_response_public_feed.sql'])
       await db.exec(await readFile(new URL(`../../../../../packages/security/migrations/${name}`,import.meta.url),'utf8'));
     let tail=Promise.resolve();
     pool={query:(sql:string,args:unknown[]=[])=>db.query(sql,args),connect:async()=>{
@@ -54,5 +54,33 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     const logs=await repo.events(staff,id,true);
     expect(logs.filter(item=>item.actorRole==='operator')).toHaveLength(3);
     await expect(db.query(`DELETE FROM civic_response.incident_events WHERE incident_id=$1::uuid`,[id])).rejects.toThrow('civic_response_event_history_immutable');
+  });
+  it('publishes only opt-in, reviewed and redacted public fields; revocation removes it immediately',async()=>{
+    const repo=createCivicResponseRepository(pool);
+    const reporter={tenantId:'tenant_response',userId:'citizen_public'};
+    const fresh=await repo.create(reporter,{...draft,requestKey:'public_incident_request_2026',publicConsent:false});
+    const id=fresh.incident.id;
+    expect(await repo.publicIncidents()).toEqual([]);
+    await expect(repo.reviewPublication(staff,id,{expectedRevision:1,reason:'Premature attempted publication',publish:true,publicTitle:'Reviewed water supply outage',publicSummary:'This report describes an infrastructure problem needing public attention.'})).rejects.toMatchObject({code:'publication_not_permitted'});
+    await expect(repo.setPublicConsent(citizen,id,{consent:true,expectedRevision:1})).rejects.toMatchObject({code:'incident_changed_or_missing'});
+    const consented=await repo.setPublicConsent(reporter,id,{consent:true,expectedRevision:1});
+    expect(consented.publicationStatus).toBe('pending_review');
+    expect(await repo.publicIncidents()).toEqual([]);
+    const reviewed=await repo.reviewPublication(staff,id,{expectedRevision:2,reason:'Reviewed for privacy, no identifiable details',publish:true,
+      publicTitle:'Power supply safety problem in Oyo',publicSummary:'A reported public electrical hazard has been logged for internal review. No official dispatch has been confirmed.'});
+    expect(reviewed.publicationStatus).toBe('published');
+    const publicResult=await repo.publicIncidents({state:'Oyo'});
+    expect(publicResult).toHaveLength(1);
+    expect(Object.keys(publicResult[0]!).sort()).toEqual(['category','locationState','publishedAt','reference','status','summary','title','updatedAt'].sort());
+    expect(JSON.stringify(publicResult)).not.toContain('western market entrance');
+    expect(JSON.stringify(publicResult)).not.toContain('citizen_public');
+    expect((await repo.publicIncidents({state:'Lagos'}))).toHaveLength(0);
+    const other=await repo.create(reporter,{...draft,requestKey:'public_medical_req_2026',category:'medical',publicConsent:true});
+    await expect(repo.reviewPublication(staff,other.incident.id,{expectedRevision:1,reason:'Sensitive medical details must remain private',publish:true,
+      publicTitle:'Medical problem in community',publicSummary:'This medical report contains information that must not be visible.'})).rejects.toMatchObject({code:'publication_not_permitted'});
+    const revoked=await repo.setPublicConsent(reporter,id,{consent:false,expectedRevision:3});
+    expect(revoked.publicationStatus).toBe('private');
+    expect(await repo.publicIncidents()).toEqual([]);
+    expect((await repo.events(staff,id,true)).map(x=>x.action)).toEqual(expect.arrayContaining(['publication_requested','publication_approved','publication_consent_withdrawn']));
   });
 });
