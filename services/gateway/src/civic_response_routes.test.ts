@@ -6,7 +6,7 @@ const reporter={tenantId:'tenant_verified',userId:'user_verified'};
 const report={requestKey:'request_response_test_001',title:'Unsafe electrical cable',description:'An exposed live power cable has fallen near the local market.',
   category:'infrastructure',subcategory:'Exposed electrical wires',urgency:'urgent',locationState:'Oyo',sourceMode:'typed'};
 
-function app(){
+function app(geminiKey?:string){
   const service={
     categories:vi.fn(()=>[{id:'infrastructure',label:'Infrastructure'}]),contacts:vi.fn(async()=>[{id:'ng-emergency-112',phone:'112',verificationStatus:'verified'}]),
     create:vi.fn(async()=>({created:true,incident:{id:'ea46a4b0-4349-4106-bb32-ddb331ed901f',reference:'MR-20261120-EA46A4B0'}})),
@@ -14,7 +14,7 @@ function app(){
     appendReporterUpdate:vi.fn(async()=>({revision:2})),setPublicConsent:vi.fn(async()=>({publicConsent:false})),publicIncidents:vi.fn(async()=>[{reference:'MR-PUBLIC-1',title:'Reviewed water outage',summary:'A public water supply outage is under review.',locationState:'Oyo',category:'water_sanitation',status:'triage'}]),adminList:vi.fn(),adminIncident:vi.fn(),adminUpdate:vi.fn(),saveContact:vi.fn(),
   };
   const server=Fastify();registerCivicResponseRoutes(server,{repository:service as never,
-    authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;}});
+    authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;},...(geminiKey?{geminiKey}:{})});
   return {server,service};
 }
 
@@ -56,6 +56,30 @@ describe('Masanawa Response route boundary',()=>{
     const audio=await server.inject({method:'POST',url:'/v1/response/transcribe',headers:{authorization:'Bearer valid'},payload:{mimeType:'audio/webm',dataBase64:'A'.repeat(200)}});
     expect(audio.statusCode).toBe(503);expect(audio.json().error).toBe('voice_transcription_not_configured');
     await server.close();
+  });
+  it('issues one-use native live credentials only to authenticated reporters, with bounded usage',async()=>{
+    const {server}=app('test-only-secret');
+    const fetchBefore=globalThis.fetch;
+    const calls:{url:string;init:RequestInit}[]=[];
+    globalThis.fetch=vi.fn(async(url:string,init:RequestInit)=>{
+      calls.push({url,init});
+      return Response.json({name:'temporary_credential_1234567890'});
+    }) as typeof fetch;
+    try{
+      const input={method:'POST' as const,url:'/v1/response/live-token',headers:{authorization:'Bearer valid'},payload:{}};
+      expect((await server.inject({...input,headers:{}})).statusCode).toBe(401);
+      const first=await server.inject(input);
+      expect(first.statusCode).toBe(200);
+      expect(first.json().websocketUrl).toContain('access_token=temporary_credential_');
+      expect(JSON.stringify(first.json())).not.toContain('test-only-secret');
+      expect(calls[0]?.url).toContain('/v1beta/auth_tokens');
+      const options=JSON.parse(String(calls[0]?.init.body));
+      expect(options).toMatchObject({uses:1,fieldMask:'model,generationConfig'});
+      expect(options.bidiGenerateContentSetup.generationConfig.responseModalities).toEqual(['AUDIO']);
+      expect((await server.inject(input)).statusCode).toBe(200);
+      expect((await server.inject(input)).statusCode).toBe(429);
+      expect(calls).toHaveLength(2);
+    }finally{globalThis.fetch=fetchBefore;await server.close();}
   });
   it('bounds conversational AI traffic per signed-in reporter before invoking the provider',async()=>{
     const {server}=app();

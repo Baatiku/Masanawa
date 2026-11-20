@@ -37,6 +37,14 @@ const urgencies = new Set(['routine','priority','urgent','immediate']);
 const contactPreferences = new Set(['in_app','phone','email']);
 const sourceModes = new Set(['typed','voice_note','voice_interview']);
 const trim = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0,max) : '';
+// Redact machine-detectable identifiers before displaying a citizen-approved public synopsis.
+const publicText=(value:string,max:number)=>value
+  .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'[contact removed]')
+  .replace(/(?:\+?234|0)[0-9][0-9 -]{8,15}[0-9]/g,'[phone removed]')
+  .replace(/\b(?:BVN|NIN|passport\s*number)\s*[:#-]?\s*[A-Z0-9-]+/gi,'[identifier removed]')
+  .replace(/\b\d{8,}\b/g,'[identifier removed]')
+  .replace(/https?:\/\/\S+/gi,'[link removed]')
+  .trim().slice(0,max);
 const validNumber = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isFinite(n) && n>=min && n<=max ? n : null;
 
 export class CivicResponseError extends Error {
@@ -94,12 +102,14 @@ export function createCivicResponseRepository(pool: Pool) {
         const result=await client.query(`INSERT INTO civic_response.incidents
           (id,reference,tenant_id,reporter_id,request_key,title,description,category,subcategory,urgency,incident_at,
            location_state,location_lga,location_details,latitude,longitude,people_at_risk,injuries_reported,danger_ongoing,reporter_safe,
-           consent_to_contact,contact_preference,source_mode,language_code,structured_facts,public_consent,publication_status)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,CASE WHEN $26 THEN 'pending_review' ELSE 'private' END)
+           consent_to_contact,contact_preference,source_mode,language_code,structured_facts,public_consent,publication_status,public_title,public_summary)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,CASE WHEN $26 THEN 'pending_review' ELSE 'private' END,$27,$28)
           ON CONFLICT (tenant_id,reporter_id,request_key) DO NOTHING RETURNING ${INCIDENT_VIEW}`,
           [id,reference,actor.tenantId,actor.userId,body.requestKey,safe.title,safe.description,body.category,safe.subcategory,body.urgency,body.incidentAt??null,
            safe.state,safe.lga,safe.location,body.latitude??null,body.longitude??null,body.peopleAtRisk??null,body.injuriesReported??null,body.dangerOngoing??null,body.reporterSafe??null,
-           !!body.consentToContact,body.contactPreference??'in_app',body.sourceMode,safe.language,JSON.stringify(safe.facts),!!body.publicConsent]);
+           !!body.consentToContact,body.contactPreference??'in_app',body.sourceMode,safe.language,JSON.stringify(safe.facts),!!body.publicConsent,
+            body.publicConsent&&publicCategorySet.has(body.category)?publicText(safe.title,180):null,
+            body.publicConsent&&publicCategorySet.has(body.category)?publicText(safe.description,900):null]);
         if(result.rows.length){
           await client.query(`INSERT INTO civic_response.incident_events(incident_id,tenant_id,actor_id,actor_role,action,new_status,reason) VALUES($1,$2,$3,'reporter','created','submitted','Citizen submitted incident')`,[id,actor.tenantId,actor.userId]);
           return {incident:result.rows[0],created:true,dispatchConfirmed:false};
@@ -119,15 +129,18 @@ export function createCivicResponseRepository(pool: Pool) {
       if(!res.rows[0])throw new CivicResponseError(404,'incident_not_found');
       return res.rows[0];
     },
-    /** Strict public projection: no raw narrative, witness details, precise location or identifiers. */
+    /** Consented incident locations and citizen-reviewed summaries are visible; reporter identity stays private. */
     async publicIncidents(input:{category?:string;state?:string;limit?:number;offset?:number}={}) {
       const limit=Math.min(50,Math.max(1,input.limit??20)),offset=Math.min(10000,Math.max(0,input.offset??0));
       if(input.category&&!publicCategorySet.has(input.category))return [];
-      const result=await pool.query(`SELECT reference,public_title AS "title",public_summary AS "summary",category,
-        location_state AS "locationState",status,published_at AS "publishedAt",updated_at AS "updatedAt"
-        FROM civic_response.incidents WHERE publication_status='published' AND public_consent=true AND hidden_at IS NULL
+      const result=await pool.query(`SELECT reference,
+        CASE WHEN publication_status='published' THEN public_title ELSE COALESCE(public_title,'New community incident report') END AS "title",
+        CASE WHEN publication_status='published' THEN public_summary ELSE COALESCE(public_summary,'An incident has been reported. Details are awaiting independent review.') END AS "summary",
+        category,location_state AS "locationState",location_lga AS "locationLga",location_details AS "locationDetails",status,
+        publication_status AS "publicationStatus",COALESCE(published_at,created_at) AS "publishedAt",updated_at AS "updatedAt"
+        FROM civic_response.incidents WHERE publication_status IN ('pending_review','published') AND public_consent=true AND hidden_at IS NULL
         AND category=ANY($1::text[]) AND ($2::text IS NULL OR category=$2) AND ($3::text IS NULL OR location_state=$3)
-        ORDER BY published_at DESC,id DESC LIMIT $4 OFFSET $5`,[PUBLIC_REPORT_CATEGORIES,input.category??null,input.state??null,limit,offset]);
+        ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT $4 OFFSET $5`,[PUBLIC_REPORT_CATEGORIES,input.category??null,input.state??null,limit,offset]);
       return result.rows;
     },
     async setPublicConsent(actor:ResponseActor,id:string,input:{consent:boolean;expectedRevision:number}) {

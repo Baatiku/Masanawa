@@ -69,7 +69,7 @@ function failure(error:unknown,reply:{code:(code:number)=>unknown}) {
 /** Only hand-reviewed and explicitly consented incident summaries may be public. */
 export function registerCivicResponseRoutes(app:FastifyInstance,options:Options) {
   const repo=options.repository;
-  const admitInterview=providerBudget(20,120),admitTranscription=providerBudget(4,20);
+  const admitInterview=providerBudget(20,120),admitTranscription=providerBudget(4,20),admitLive=providerBudget(2,12);
   app.get('/v1/response/categories',async()=>({categories:repo.categories()}));
   app.get('/v1/response/contacts',{schema:{querystring:Type.Object({state:Type.Optional(small),serviceType:Type.Optional(small)},{additionalProperties:false})}},async(req,reply)=>{
     try{return {contacts:await repo.contacts(req.query as {state?:string;serviceType?:string})}}catch(error){return failure(error,reply)}
@@ -95,6 +95,27 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
   });
   app.post('/v1/response/incidents/:id/public-consent',{schema:{params:ID,body:Type.Object({consent:Type.Boolean(),expectedRevision:Type.Integer({minimum:1})},{additionalProperties:false})}},async(req,reply)=>{
     try{const actor=await options.authorize(req.headers.authorization);return {incident:await repo.setPublicConsent(actor,(req.params as {id:string}).id,req.body as {consent:boolean;expectedRevision:number})}}catch(error){return failure(error,reply)}
+  });
+  // One-use, short-lived credential: the permanent key and raw audio stay off the client/gateway respectively.
+  app.post('/v1/response/live-token',{schema:{body:Type.Object({},{additionalProperties:false})}},async(req,reply)=>{
+    try{
+      const actor=await options.authorize(req.headers.authorization);
+      if(!options.geminiKey){reply.code(503);return {error:'live_reporting_not_configured'};}
+      admitLive(actor);
+      const now=Date.now(),expiresAt=new Date(now+15*60_000).toISOString();
+      const provider=await fetch('https://generativelanguage.googleapis.com/v1beta/auth_tokens',{
+        method:'POST',signal:AbortSignal.timeout(20_000),
+        headers:{'content-type':'application/json','x-goog-api-key':options.geminiKey},
+        body:JSON.stringify({uses:1,expireTime:expiresAt,newSessionExpireTime:new Date(now+60_000).toISOString(),
+          fieldMask:'model,generationConfig',bidiGenerateContentSetup:{model:'models/gemini-3.8-live',generationConfig:{responseModalities:['AUDIO']}}}),
+      });
+      if(!provider.ok){reply.code(503);return {error:'live_reporting_unavailable'};}
+      const payload=await provider.json() as {name?:unknown};
+      if(typeof payload.name!=='string'||payload.name.length<16){reply.code(503);return {error:'live_reporting_unavailable'};}
+      reply.header('Cache-Control','no-store');
+      return {websocketUrl:'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token='+encodeURIComponent(payload.name),
+        model:'gemini-3.8-live',expiresAt};
+    }catch(error){return failure(error,reply)}
   });
   app.post('/v1/response/interview',{schema:{body:Type.Object({history:Type.Array(Type.Object({role:Type.Union([Type.Literal('citizen'),Type.Literal('assistant')]),text:Type.String({minLength:1,maxLength:2000})},{additionalProperties:false}),{minItems:1,maxItems:18}),language:Type.Optional(Type.String({maxLength:15}))},{additionalProperties:false})}},async(req,reply)=>{
     try{
