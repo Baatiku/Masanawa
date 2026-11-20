@@ -14,6 +14,25 @@
   --brand-soft: #e7f5ef;
 }
 
+/* Civic incident response desk: consistent admin chrome, touch-sized controls. */
+.response-admin-layout{display:grid;grid-template-columns:minmax(290px,.85fr) minmax(400px,1.4fr);gap:18px;align-items:start}
+.response-admin-layout .admin-surface{max-height:calc(100vh - 215px);overflow:auto;scrollbar-gutter:stable}
+.response-filters{display:flex;gap:10px;padding:15px 18px;border-bottom:1px solid #e6eee8}
+.response-filters input{flex:1;min-width:0}.response-filters input,.response-filters select,.response-edit-form input,.response-edit-form select,.response-edit-form textarea{background:#f7f9f8;border:1px solid #dce7de;color:#273c30;padding:12px 13px;border-radius:10px;font:inherit;font-size:14px;min-height:45px;max-width:100%}
+.response-edit-form textarea{min-height:80px;resize:vertical;line-height:1.55}
+.response-queue{display:grid}.response-queue-item{min-width:0;width:100%;text-align:left;display:flex;justify-content:space-between;gap:12px;align-items:start;padding:16px 19px;border:0;border-bottom:1px solid #edf1ee;background:white;color:#263e30;cursor:pointer}
+.response-queue-item:hover,.response-queue-item.active{background:#eaf7ef}.response-queue-item.active{box-shadow:inset 3px 0 #169b68}
+.response-queue-item>span:first-child{display:grid;gap:6px;min-width:0}.response-queue-item strong{font-size:13px;line-height:1.4;overflow-wrap:anywhere}.response-queue-item small{font-size:11px;color:#73877b;line-height:1.45}
+.response-queue-trailing{display:grid;gap:6px;justify-items:end;flex-shrink:0;max-width:108px;text-align:right}.response-level{font-size:11px;font-weight:700;text-transform:capitalize;color:#2c7751;border-radius:99px;padding:5px 8px;background:#eaf7ec}
+.response-level.urgent,.response-level.immediate{color:#a5302c;background:#fff0ef}.response-level.priority{color:#9b681e;background:#fff4df}
+.response-checkbox{display:flex;align-items:center;gap:8px;color:#4a6454;font-size:12px;white-space:nowrap;cursor:pointer}
+.response-edit-form{display:grid;gap:18px;padding:22px}.response-edit-form label{display:grid;gap:8px;font-size:12px;font-weight:700;color:#345042;min-width:0}.response-field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.response-meta{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12px;color:#607f6c;background:#f3f7f4;padding:12px;border-radius:10px;overflow-wrap:anywhere}.response-meta code{font-size:11px}
+.response-admin-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.response-admin-actions button{min-height:44px}.response-success{margin:0 0 18px;font-size:13px;white-space:normal}
+.response-timeline{padding:20px 22px;border-top:1px solid #e3ede5}.response-timeline h3{font-size:14px;margin:0 0 20px}.response-timeline>div{display:flex;gap:13px;padding:0 0 17px}.response-timeline-dot{height:10px;width:10px;background:#189968;border-radius:50%;margin-top:4px;flex:none}.response-timeline>div>div{display:grid;gap:4px}.response-timeline strong{font-size:12px}.response-timeline small{font-size:11px;color:#7a9081}.response-timeline p{font-size:12px;margin:0;line-height:1.5}
+@media(max-width:1050px){.response-admin-layout{grid-template-columns:1fr}.response-admin-layout .admin-surface{max-height:none}}
+@media(max-width:580px){.response-filters{flex-direction:column}.response-field-grid{grid-template-columns:1fr}.response-edit-form{padding:17px}.response-queue-item{padding:14px}.response-queue-trailing{max-width:92px}}
+
 /* Web-only control centre. Existing agent editor styles remain scoped below. */
 .admin-layout{--admin-ink:#162a25;--admin-green:#127854;min-height:100vh;display:flex;background:#f6f8f6;color:var(--admin-ink)}
 .admin-sidebar{width:258px;flex:0 0 258px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:#10352c;color:#ecf8f2;overflow-y:auto;z-index:30;scrollbar-width:thin;scrollbar-color:#41695c transparent}

@@ -7,9 +7,9 @@ function permitted(path: string, method: string): boolean {
     "/v1/admin/me", "/v1/admin/summary", "/v1/admin/users", "/v1/admin/agent-runs",
     "/v1/admin/operations", "/v1/admin/audit", "/v1/admin/news", "/v1/admin/wallet",
     "/v1/admin/payments", "/v1/admin/wallet/account",
-    "/v1/admin/data", "/v1/admin/calls", "/v1/admin/moderation", "/v1/agents", "/v1/skills", "/readyz",
-  ].includes(path) || /^\/v1\/agents\/[^/]+\/skills$/.test(path);
-  if (method === "POST") return ["/v1/admin/payments/reconcile","/v1/admin/wallet/adjust"].includes(path);
+    "/v1/admin/data", "/v1/admin/calls", "/v1/admin/moderation", "/v1/admin/incidents", "/v1/admin/response/contacts", "/v1/agents", "/v1/skills", "/readyz",
+  ].includes(path) || /^\/v1\/agents\/[^/]+\/skills$/.test(path) || /^\/v1\/admin\/incidents\/[0-9a-f-]{36}$/.test(path);
+  if (method === "POST") return ["/v1/admin/payments/reconcile","/v1/admin/wallet/adjust","/v1/admin/response/contacts"].includes(path) || /^\/v1\/admin\/incidents\/[0-9a-f-]{36}\/update$/.test(path);
   if (method === "PUT") return /^\/v1\/agents\/[^/]+\/(presentation|skills)$/.test(path);
   return false;
 }
@@ -23,9 +23,9 @@ async function route(request: Request, context: Context, method: "GET" | "PUT" |
     if (!permitted(path, method)) return apiReply({ error: "This admin action is not available." }, 404);
     const url = new URL(request.url);
     const query = new URLSearchParams(url.searchParams);
-    for (const key of query.keys()) if (!["state", "limit", "offset",...(path==='/v1/admin/wallet/account'?["userId"]:[])].includes(key)) return apiReply({ error: "Invalid filter." }, 400);
+    for (const key of query.keys()) if (!["state", "status", "category", "includeHidden", "limit", "offset",...(path==='/v1/admin/wallet/account'?["userId"]:[])].includes(key)) return apiReply({ error: "Invalid filter." }, 400);
     const body = method === "GET" ? undefined : await request.text();
-    if (body && body.length > 8_192) return apiReply({ error: "Request too large." }, 413);
+    if (body && body.length > 20_000) return apiReply({ error: "Request too large." }, 413);
     if (path === "/readyz") {
       const gate = await authorizedOps("/v1/admin/me");
       if (!gate.response.ok) return apiReply({ error: "Administrator grant required." }, gate.response.status);
