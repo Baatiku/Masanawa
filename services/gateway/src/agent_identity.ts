@@ -76,7 +76,9 @@ export function createPgAgentMasanaIdentityReader(
         const photo=reviewed&&row.requested_portrait==null?OFFICIAL_PORTRAITS.find(p=>p.characterId===row.character_id&&p.officialName===reviewed.officialName):undefined;
         const subject=reviewed?OFFICIAL_ROSTER_MANIFEST.find(p=>p.characterId===row.character_id&&p.officialName===reviewed.officialName):undefined;
         const portrait=photo?{url:publicOfficialMediaUrl(photo.assetKey),sourceUrl:photo.sourceUrl,credit:photo.credit,licenseLabel:photo.licenseLabel,...(photo.licenseUrl?{licenseUrl:photo.licenseUrl}:{})}:undefined;
-        const party=subject?{code:subject.party,name:OFFICIAL_PARTIES[subject.party].name,emblemUrl:partyEmblemUrl(subject.party),sourceUrl:subject.rosterSourceUrl,checkedAt:subject.rosterCheckedAt}:undefined;
+        // Judicial, central-bank and other nonpartisan offices must never be
+        // misrepresented as members of a political party merely for the UI.
+        const party=subject?.party?{code:subject.party,name:OFFICIAL_PARTIES[subject.party].name,emblemUrl:partyEmblemUrl(subject.party),sourceUrl:subject.rosterSourceUrl,checkedAt:subject.rosterCheckedAt}:undefined;
         const civicAgencyId=row.profile_approved_by==='masanawa-civic-seed-v1'
           ? approvedCivicAgencyId(row.civic_agency_id) : null;
         result.set(row.character_id as CharacterId,
