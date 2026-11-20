@@ -186,7 +186,7 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect(JSON.parse((await greeting)[0].toString())).toHaveProperty('openingAudio');
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
       expect(f.received[0]?.setup).not.toHaveProperty('playbackAcknowledgement');
-      expect(JSON.stringify(f.received)).toContain('Say “Hello”');
+      expect(JSON.stringify(f.received)).toContain('follow-up question');
       const connected=once(client,'message');
       client.send(JSON.stringify({greetingPlayback:true}));
       expect(JSON.parse((await connected)[0].toString())).toMatchObject({setupComplete:{},greetedByRelay:true});
