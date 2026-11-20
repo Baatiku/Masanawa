@@ -55,7 +55,7 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     const app=Fastify();installNgnCallRelay(app,relay);
     const origin=await app.listen({host:'127.0.0.1',port:0});
     const providerGrant={token:'provider-private-token',
-      websocketUrl:'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=provider-private-token',
+      websocketUrl:'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=provider-private-token',
       model:'fixture-live-model',voiceName:'ApprovedVoice',systemInstruction:'Canonical persona',
       expiresAt:new Date(Date.now()+60000).toISOString()};
     const issue=()=>relay.issue(actor,characterId,id,providerGrant,validateOwner);
@@ -135,7 +135,7 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     try{
       const first=await f.open(await f.issue());await f.setup(first);
       const update=once(first,'message');
-      f.provider()!.send(JSON.stringify({sessionResumptionUpdate:{newHandle:'server-observed-handle'}}));
+      f.provider()!.send(JSON.stringify({sessionResumptionUpdate:{resumable:true,newHandle:'server-observed-handle'}}));
       await update;await new Promise(resolve=>setTimeout(resolve,20));
       const closed=once(first,'close');
       const next=await f.issue();await closed;
@@ -147,6 +147,28 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect(receipt).toMatchObject({budgetKobo:500,state:'completed'});
       expect(receipt.chargedKobo).toBe(Math.ceil(receipt.verifiedConnectedMs/1000)*100);
       expect(receipt.verifiedConnectedMs).toBeGreaterThanOrEqual(40);
+    }finally{await f.cleanup()}
+  });
+  it('relays native audio and its transcript across multiple conversational turns, then settles the original call',async()=>{
+    const f=await fixture();
+    try {
+      const client=await f.open(await f.issue());await f.setup(client);
+      expect(f.received[0]?.setup).toMatchObject({contextWindowCompression:{slidingWindow:{}}});
+      for (const text of ['Hello', 'I can help with that too']) {
+        const audio={data:'AQAAAA==',mimeType:'audio/pcm;rate=24000'};
+        const frames=[
+          {serverContent:{modelTurn:{parts:[{inlineData:audio}]}}},
+          {serverContent:{outputTranscription:{text,finished:true},turnComplete:true}},
+        ];
+        for (const frame of frames) {
+          const received=once(client,'message');
+          f.provider()!.send(Buffer.from(JSON.stringify(frame)));
+          expect(JSON.parse((await received)[0].toString())).toEqual(frame);
+        }
+        expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
+      }
+      const closed=once(client,'close');client.close(1000);await closed;
+      expect(await f.relay.finish(f.actor,f.id)).toMatchObject({admissionId:f.id,state:'completed',budgetKobo:500});
     }finally{await f.cleanup()}
   });
   it('expired one-use grants fail closed without a charge',async()=>{

@@ -196,3 +196,17 @@ it('pins each persona voice in provider constraints and the returned call grant'
  }
  expect(selected).toEqual(['Bodi','Fola']);
 });
+
+it("opens the relay provider with server-side Live credentials and the approved persona", async () => {
+  const fetchImpl = vi.fn<typeof fetch>();
+  const grant = await createGeminiLiveTokenService({
+    apiKey: "fixture-private-key", authorizer, voiceName: "Sulafat", fetchImpl, serverRelayProvider: true,
+  }).mint({ characterId, authorizationHeader: "Bearer valid-user" });
+  const url = new URL(grant.websocketUrl);
+  expect(url.pathname).toBe("/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent");
+  expect(url.searchParams.get("key")).toBe("fixture-private-key");
+  expect(grant.token).toBe("");
+  expect(grant.voiceName).toBe("Sulafat");
+  expect(grant.systemInstruction).toContain("Amina");
+  expect(fetchImpl).not.toHaveBeenCalled();
+});

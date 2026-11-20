@@ -539,3 +539,5 @@ Follow `docs/design/persona-profile-design-guide.png` as the visual guide (ficti
 ### Public-official roster readiness
 
 The new selected-party subjects use separate canonical IDs and start as private drafts. Only a current reviewed dossier plus an actual published public biography makes one selectable for Chat/Call. Profile Biography prefers the current full reviewed life story over the short directory overview; expired/offline verification drops the full identity grant. Once a cohort is ready, old specialist public profiles retire without deleting private conversations or finance; account support remains. No fictional portraits, generated official posts or blank biographies are presented as a completed official persona.
+
+Masana voice calls keep the original admission and transcript when the provider rotates its socket. The connected timer and Hang up stay available while the connection recovers. The Gateway settles the original call when the user hangs up or reaches the approved limit.
