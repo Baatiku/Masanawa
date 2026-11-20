@@ -12,6 +12,9 @@ export const OFFICIAL_BIOGRAPHY_HOSTS = Object.freeze([
  'en.wikipedia.org','britannica.com','statehouse.gov.ng','nass.gov.ng','inecnigeria.org',
  'premiumtimesng.com','punchng.com','channelstv.com','thecable.ng','vanguardngr.com',
  'dailypost.ng','guardian.ng','tribuneonlineng.com','funsodoherty.org','dumolulu-briggs.org','jamilgwamna.org','nseph.org','tell.ng','citypeopleonline.com','dailytrust.com','thisdaylive.com','bbc.com','reuters.com','apnews.com','von.gov.ng','withinnigeria.com',
+ // Primary institutional biographies for the November national-leadership
+ // launch. URLs still require HTTPS, specific paths and no query wrappers.
+ 'officeofthespeaker.ng','supremecourt.gov.ng','osgf.gov.ng','efcc.gov.ng','cbn.gov.ng','finance.gov.ng','fcda.gov.ng',
 ] as const);
 export function isApprovedBiographySourceUrl(value:unknown):value is string{
  if(isGrokipediaArticleUrl(value))return true;

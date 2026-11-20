@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
-import {officialLaunchPackets,OFFICIAL_LAUNCH_REVIEW_EXPIRES} from './official_launch_admission.js';
+import {officialLaunchPackets,OFFICIAL_LAUNCH_REVIEW_EXPIRES,NATIONAL_LEADERSHIP_REVIEW_EXPIRES} from './official_launch_admission.js';
 import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
 it('binds every reviewed biography to its stable subject and uses a fixed review expiry',()=>{
  const tenant=createCanonicalId('tenant'),now=new Date('2026-10-29T12:00:00Z');
@@ -16,6 +16,12 @@ it('binds every reviewed biography to its stable subject and uses a fixed review
  }
  expect(packets.slice(0,4).map(p=>p.officialName)).toEqual(OFFICIAL_ROSTER_MANIFEST.slice(0,4).map(s=>s.officialName));
  expect(officialLaunchPackets(tenant,[],now)).toEqual([]);
- expect(officialLaunchPackets(tenant,undefined,new Date('2026-11-29'))).toEqual([]);
+ const newLeaders=officialLaunchPackets(tenant,undefined,new Date('2026-11-21T12:00:00Z'))
+   .filter(p=>p.reviewExpiresAt===NATIONAL_LEADERSHIP_REVIEW_EXPIRES);
+ expect(newLeaders).toHaveLength(9);
+ expect(new Set(newLeaders.map(p=>p.officialName)).size).toBe(9);
+ expect(newLeaders.every(p=>p.evidence.every(e=>e.sourceDate==='2026-11-20'))).toBe(true);
+ expect(officialLaunchPackets(tenant,undefined,new Date('2026-11-29')).length).toBe(9);
+ expect(officialLaunchPackets(tenant,undefined,new Date('2027-02-16'))).toEqual([]);
  expect(()=>officialLaunchPackets(tenant,[{...OFFICIAL_ROSTER_MANIFEST[0]!,officialName:'Other person'}],now)).toThrow('identity_conflict');
 });

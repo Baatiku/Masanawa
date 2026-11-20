@@ -3,6 +3,7 @@
  * publication date. Stable character IDs bind each text to its actual subject.
  * Self biographies and opinion articles remain identified in the summary. */
 import type {MasanaBiographicalFacts} from '@masanawa/masana';
+import {NATIONAL_LEADERSHIP_BIOGRAPHIES} from './national_leadership_biographies.js';
 export interface OfficialLaunchBiography {readonly characterId:string;readonly officialName:string;
  readonly displayName:string;readonly sourceUrl:string;readonly checkedAt:string;
  readonly summary:string;readonly biographicalFacts?:MasanaBiographicalFacts;}
@@ -694,5 +695,6 @@ export const OFFICIAL_LAUNCH_BIOGRAPHIES:readonly OfficialLaunchBiography[]=Obje
     "characterId": "character_01a189e8-72ec-70ed-be49-54d6085a9a42",
     "officialName": "Shehu-Gusau Ibrahim",
     "checkedAt": "2026-10-29"
-  }
+  },
+  ...NATIONAL_LEADERSHIP_BIOGRAPHIES,
 ]);
