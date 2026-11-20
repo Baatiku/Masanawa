@@ -126,7 +126,7 @@ export function createCivicResponseRepository(pool: Pool) {
       const result=await pool.query(`SELECT reference,
         CASE WHEN publication_status='published' THEN public_title ELSE 'New community incident report' END AS "title",
         CASE WHEN publication_status='published' THEN public_summary ELSE 'An incident has been reported. Details are awaiting independent review.' END AS "summary",
-        category,location_state AS "locationState",status,
+        category,location_state AS "locationState",location_lga AS "locationLga",location_details AS "locationDetails",status,
         publication_status AS "publicationStatus",COALESCE(published_at,created_at) AS "publishedAt",updated_at AS "updatedAt"
         FROM civic_response.incidents WHERE publication_status IN ('pending_review','published') AND public_consent=true AND hidden_at IS NULL
         AND category=ANY($1::text[]) AND ($2::text IS NULL OR category=$2) AND ($3::text IS NULL OR location_state=$3)
