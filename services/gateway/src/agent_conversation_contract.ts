@@ -46,7 +46,6 @@ export interface AgentConversationService {
     readonly characterSessionId: string;
     readonly characterId: string;
     readonly text: string;
-    readonly textOnly?: boolean;
     readonly onAccepted?: () => void | Promise<void>;
     readonly requestId: RequestId;
     readonly correlationId: CorrelationId;

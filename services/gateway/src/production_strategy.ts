@@ -122,6 +122,14 @@ export function createProductionAgentStrategy(input: {
         }
       }
 
+      if(!official&&!civic&&grounded.input.kind==="text"&&request.speakReply){
+        const history=(request.conversationHistory??[]).slice(-8).map(item=>({role:item.role,text:item.text.slice(0,900)}));
+        const spokenReply=await request.speakReply({
+          system:[...instructions,"Answer naturally out loud. Prior messages are context. You cannot perform actions, access accounts, or make payments."].join("\n"),
+          message:JSON.stringify({priorMessages:history,currentMessage:grounded.input.text}),
+        });
+        if(spokenReply)return Object.freeze({reply:spokenReply.transcript,parts:Object.freeze([]),spokenReply});
+      }
       const paragraphStream=official&&request.onTextDelta?createOfficialParagraphStream(grounded,request):undefined;
       const civicStream=civic&&request.onTextDelta?createCivicAgencyParagraphStream(grounded,request):undefined;
       if(official)instructions.push(...(paragraphStream?officialParagraphContract:officialAnswerContract));

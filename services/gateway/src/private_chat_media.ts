@@ -140,6 +140,8 @@ export function createPrivateChatMediaService(input: Readonly<{
       "expires_at,octet_length(payload) AS size_bytes FROM agents.private_chat_media " +
       "WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 " +
       "AND request_id=ANY($4::text[]) AND expires_at>clock_timestamp() " +
+      "AND (slot<8 OR EXISTS (SELECT 1 FROM agents.mobile_turn_commands t WHERE " +
+      "t.tenant_id=$1 AND t.user_id=$2 AND t.character_id=$3 AND t.request_id=private_chat_media.request_id AND t.state='completed')) " +
       "ORDER BY request_id,slot",
       [who.tenantId,who.userId,who.characterId,ids],
     );
@@ -159,7 +161,9 @@ export function createPrivateChatMediaService(input: Readonly<{
     const r=await input.pool.query(
       "SELECT kind,mime_type,filename,payload,sha256,expires_at FROM agents.private_chat_media " +
       "WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND request_id=$4 " +
-      "AND slot=$5 AND expires_at>clock_timestamp()",
+      "AND slot=$5 AND expires_at>clock_timestamp() " +
+      "AND ($5<8 OR EXISTS (SELECT 1 FROM agents.mobile_turn_commands t WHERE " +
+      "t.tenant_id=$1 AND t.user_id=$2 AND t.character_id=$3 AND t.request_id=$4 AND t.state='completed'))",
       [who.tenantId,who.userId,who.characterId,id,slot],
     );
     const entry=r.rows[0];
@@ -173,14 +177,19 @@ export function createPrivateChatMediaService(input: Readonly<{
   }
 
   async function put(header:string|undefined,request:PrivateChatMediaInput){return store(await owner(header,request.characterId),request);}
-  async function saveReplyAudio(scope:import('@masanawa/agents').CharacterSessionScope,requestId:string,audio:{dataBase64:string;mimeType:string}){
-    const proof=(await input.pool.query(`SELECT 1 FROM agents.mobile_turn_commands WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4 AND request_id=$5 AND state='completed'`,[scope.tenantId,scope.userId,scope.characterId,scope.relationshipId,parseCanonicalId('request',requestId)])).rows[0];
+  async function saveReplyAudio(scope:import('@masanawa/agents').CharacterSessionScope,requestId:string,
+    audio:{dataBase64:string;mimeType:string},state:'completed'|'pending'='completed'){
+    const proof=(await input.pool.query(`SELECT 1 FROM agents.mobile_turn_commands WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3 AND relationship_id=$4 AND request_id=$5 AND state=$6`,[scope.tenantId,scope.userId,scope.characterId,scope.relationshipId,parseCanonicalId('request',requestId),state])).rows[0];
     if(!proof)throw new Error('chat.media.completed_reply_required');
     audio={...audio,mimeType:audio.mimeType.toLowerCase()};
     if(!['audio/wav','audio/pcm;rate=24000','audio/l16;rate=24000','audio/l16'].includes(audio.mimeType))throw new RangeError('chat.media.reply_audio_invalid');
     if(audio.mimeType!=='audio/wav'){const pcm=Buffer.from(audio.dataBase64,'base64');if(pcm.length%2||pcm.length>8*1024*1024-44||pcm.toString('base64')!==audio.dataBase64)throw new RangeError('chat.media.reply_audio_invalid');const header=Buffer.alloc(44);header.write('RIFF');header.writeUInt32LE(36+pcm.length,4);header.write('WAVEfmt ',8);header.writeUInt32LE(16,16);header.writeUInt16LE(1,20);header.writeUInt16LE(1,22);header.writeUInt32LE(24000,24);header.writeUInt32LE(48000,28);header.writeUInt16LE(2,32);header.writeUInt16LE(16,34);header.write('data',36);header.writeUInt32LE(pcm.length,40);audio={mimeType:'audio/wav',dataBase64:Buffer.concat([header,pcm]).toString('base64')};}
     return store(scope,{characterId:scope.characterId,requestId,slot:8,kind:'voice',mimeType:audio.mimeType,dataBase64:audio.dataBase64,name:'Voice reply'},true);
   }
-  return Object.freeze({put,get,list,owner,saveReplyAudio});
+  // Slot 8 stays private and invisible while its owning turn is pending. No
+  // completed turn can expose a transcript before its audio has been stored.
+  const stageReplyAudio=(scope:Parameters<typeof saveReplyAudio>[0],requestId:string,audio:Parameters<typeof saveReplyAudio>[2])=>
+    saveReplyAudio(scope,requestId,audio,'pending');
+  return Object.freeze({put,get,list,owner,saveReplyAudio,stageReplyAudio});
 }
 

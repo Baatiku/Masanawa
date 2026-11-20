@@ -11,6 +11,7 @@ import {
 import type {
   AgentRunRepository,
   AgentStrategy,
+  AgentStrategyResult,
   CharacterSessionRepository,
   MobileShellRepository,
   MobileTurnCommand,
@@ -20,7 +21,7 @@ import type {
   AgentConversationAdmission,
   AgentConversationService,
 } from "./agent_conversation_contract.js";
-import type { NativeAudioRenderer } from "./native_audio.js";
+import type { NativeAudioRenderer, NativeAudioRenderResult } from "./native_audio.js";
 import type { AgentBillingAssistant } from "./agent_billing_assistant.js";
 import type { AgentTeachingAssistant } from "./agent_teaching_assistant.js";
 import type { AgentCryptoAssistant } from "./agent_crypto_assistant.js";
@@ -98,13 +99,14 @@ export function createAgentConversationService(input: {
     forScope(scope:import('@masanawa/agents').CharacterSessionScope,query:string):Promise<NonNullable<import('@masanawa/agents').AgentStrategyRequest['userMemory']>>;
     propose(scope:import('@masanawa/agents').CharacterSessionScope,text:string,requestId:string):Promise<void>;
   };
-  readonly saveReplyAudio?:(scope:import('@masanawa/agents').CharacterSessionScope,requestId:string,audio:{dataBase64:string;mimeType:string})=>Promise<unknown>;
+  readonly stageReplyAudio?:(scope:import('@masanawa/agents').CharacterSessionScope,requestId:string,audio:{dataBase64:string;mimeType:string})=>Promise<unknown>;
   readonly sessions: CharacterSessionRepository;
   readonly runs: AgentRunRepository;
   readonly authorizer: AgentConversationAuthorizer;
   readonly strategy: AgentStrategy;
   /** New paid turns require current account/recovery authority before any hold. */
   readonly beforeTurn?: (authorizationHeader:string|undefined)=>Promise<void>;
+  readonly generateSpokenReply?: (text:string,system:string,signal?:AbortSignal,voice?:string)=>Promise<NativeAudioRenderResult>;
   readonly nativeAudio?: NativeAudioRenderer;
   readonly voiceForCharacter?: (scope: import("@masanawa/agents").CharacterSessionScope) => Promise<string | undefined>;
   readonly mobileShell?: MobileShellRepository;
@@ -146,6 +148,9 @@ export function createAgentConversationService(input: {
     };
   }
 
+  const spokenText=(reply:string,official:boolean)=>official?
+    reply.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,'$1').replace(/https?:\/\/\S+/g,''):reply;
+
   async function renderAudio(
     reply: string,
     scope: import("@masanawa/agents").CharacterSessionScope,
@@ -159,7 +164,7 @@ export function createAgentConversationService(input: {
       const voiceName = await input.voiceForCharacter?.(scope);
       if (audioSignal.aborted) return undefined;
       return input.nativeAudio!.render(
-        official?reply.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,'$1').replace(/https?:\/\/\S+/g,''):reply, audioSignal,
+        spokenText(reply,official), audioSignal,
         onAudioPcmChunk ? async (chunk) => {
           if (!audioSignal.aborted) await onAudioPcmChunk(chunk.toString("base64"));
         } : undefined,
@@ -170,6 +175,15 @@ export function createAgentConversationService(input: {
         },
       );
     }, signal);
+  }
+
+  async function stagePairedAudio(scope:import("@masanawa/agents").CharacterSessionScope,
+    requestId:string,audio:NativeAudioRenderResult|undefined,signal?:AbortSignal){
+    if(!input.stageReplyAudio)return;
+    signal?.throwIfAborted();
+    if(!audio)throw new PlatformError({code:"agent.voice_unavailable",category:"unavailable",
+      message:"The audio reply was unavailable. Try again.",retryable:true});
+    await input.stageReplyAudio(scope,requestId,audio);
   }
 
   async function conversationHistory(scope: import("@masanawa/agents").CharacterSessionScope, requestId:string) {
@@ -299,7 +313,7 @@ export function createAgentConversationService(input: {
             });
         const direct = billingDirect ?? cryptoDirect;
         const inferenceText = teachingPreparation?.text ?? text;
-        const generated = direct ?? await input.strategy.execute({
+        const generated: AgentStrategyResult = direct ?? await input.strategy.execute({
           agentRunId,
           characterSessionId,
           characterVersionId: session.characterVersionId,
@@ -319,6 +333,16 @@ export function createAgentConversationService(input: {
               request.onTextDelta
             ? { onTextDelta: request.onTextDelta }
             : {}),
+          ...(!teachingPreparation&&!input.billingAssistant&&!input.cryptoAssistant&&input.generateSpokenReply?{
+            speakReply: async ({message,system}:{message:string;system:string})=>{
+              const audio=await optionalAudioReply(async signal=>{
+                const voice=await input.voiceForCharacter?.(admission.scope);
+                return input.generateSpokenReply!(message,system,signal,voice);
+              },request.signal,25_000);
+              request.signal?.throwIfAborted();
+              return audio?.transcript?.trim()?{...audio,transcript:audio.transcript.trim()}:undefined;
+            },
+          }:{}),
           input: Object.freeze({ kind: "text" as const, text: inferenceText }),
         });
         const cryptoResult = direct || teachingPreparation
@@ -347,7 +371,19 @@ export function createAgentConversationService(input: {
         if (!reply) throw new Error("empty strategy reply");
         recordMasanaQuality(admission.scope.characterId,reply);
 
+        stage = "prepare_audio";
+        const audio = (!direct && !teachingPreparation && !cryptoResult && !input.billingAssistant
+          ? generated.spokenReply : undefined) ?? await renderAudio(
+          reply,
+          admission.scope,
+          request.signal,
+          request.onAudioPcmChunk,
+          request.onAudioTranscriptDelta,
+          !!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency),
+        );
+        await stagePairedAudio(admission.scope,request.requestId,audio,request.signal);
         stage = "save_reply";
+
         await input.runs.finish({
           authority: admission.authority,
           scope: admission.scope,
@@ -383,17 +419,7 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = request.textOnly ? undefined : await renderAudio(
-          reply,
-          admission.scope,
-          request.signal,
-          request.onAudioPcmChunk,
-          request.onAudioTranscriptDelta,
-          !!admission.presentation.narrative?.publicOfficial,
-        );
-        if(audio)await input.saveReplyAudio?.(admission.scope,request.requestId,audio).catch(()=>undefined);
-        const memory = input.customerMemory?.propose(admission.scope,text,request.requestId).catch(()=>undefined);
-        if (!request.textOnly) await memory;
+        await input.customerMemory?.propose(admission.scope,text,request.requestId).catch(()=>undefined);
         return Object.freeze({
           reply,
           agentRunId,
@@ -403,7 +429,7 @@ export function createAgentConversationService(input: {
                 audioBase64: audio.dataBase64,
                 audioMimeType: audio.mimeType,
                 audioDurationMs: audio.durationMs,
-                ...(audio.transcript ? {audioTranscript:audio.transcript} : {}),
+                audioTranscript:audio.transcript??spokenText(reply,!!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency)),
               }
             : {}),
         });
@@ -548,6 +574,9 @@ export function createAgentConversationService(input: {
         if (!reply) throw new Error("empty strategy reply");
         recordMasanaQuality(admission.scope.characterId,reply);
 
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency));
+        await stagePairedAudio(admission.scope,request.requestId,audio,request.signal);
+
         await input.runs.finish({
           authority: admission.authority,
           scope: admission.scope,
@@ -583,8 +612,6 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!admission.presentation.narrative?.publicOfficial);
-        if(audio)await input.saveReplyAudio?.(admission.scope,request.requestId,audio).catch(()=>undefined);
         return Object.freeze({
           reply,
           agentRunId,
@@ -594,7 +621,7 @@ export function createAgentConversationService(input: {
                 audioBase64: audio.dataBase64,
                 audioMimeType: audio.mimeType,
                 audioDurationMs: audio.durationMs,
-                ...(audio.transcript ? {audioTranscript:audio.transcript} : {}),
+                audioTranscript:audio.transcript??spokenText(reply,!!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency)),
               }
             : {}),
         });
@@ -749,6 +776,9 @@ export function createAgentConversationService(input: {
         if (!reply) throw new Error("empty strategy reply");
         recordMasanaQuality(admission.scope.characterId,reply);
 
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency));
+        await stagePairedAudio(admission.scope,request.requestId,audio,request.signal);
+
         await input.runs.finish({
           authority: admission.authority,
           scope: admission.scope,
@@ -776,8 +806,6 @@ export function createAgentConversationService(input: {
           }).catch(() => undefined);
         }
 
-        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!admission.presentation.narrative?.publicOfficial);
-        if(audio)await input.saveReplyAudio?.(admission.scope,request.requestId,audio).catch(()=>undefined);
         return Object.freeze({
           reply,
           agentRunId,
@@ -787,7 +815,7 @@ export function createAgentConversationService(input: {
                 audioBase64: audio.dataBase64,
                 audioMimeType: audio.mimeType,
                 audioDurationMs: audio.durationMs,
-                ...(audio.transcript ? {audioTranscript:audio.transcript} : {}),
+                audioTranscript:audio.transcript??spokenText(reply,!!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency)),
               }
             : {}),
         });

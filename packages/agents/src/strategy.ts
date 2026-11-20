@@ -57,6 +57,8 @@ export type AgentConversationSurface = "mobile" | "whatsapp" | "telegram";
 export type AgentConversationRepresentation = "platform-agent" | "public-twin";
 
 export interface AgentStrategyRequest {
+  /** Optional server-only path for producing a reply and its spoken transcript together. */
+  readonly speakReply?: (input:{system:string;message:string})=>Promise<AgentSpokenReply|undefined>;
   /** Confirmed, account/relationship-scoped memory supplied only by the server. */
   readonly userMemory?:readonly {recordId:string;revision:number;type:string;content:string;sourceReference:string;expiresAt:string|null}[];
   /** Server-only, authorized read of current public evidence; never a customer DTO. */
@@ -76,7 +78,15 @@ export interface AgentStrategyRequest {
   readonly input: AgentStrategyInput;
 }
 
+export interface AgentSpokenReply {
+  readonly transcript: string;
+  readonly dataBase64: string;
+  readonly mimeType: string;
+  readonly durationMs: number;
+}
+
 export interface AgentStrategyResult {
+  readonly spokenReply?: AgentSpokenReply;
   readonly reply: string;
   readonly parts: readonly unknown[];
 }

@@ -103,6 +103,23 @@ describe.skipIf(!databaseUrl)("private chat media PostgreSQL lifecycle", () => {
     expect(await runMigrations(pool, characterSessionMigrationRoots())).toEqual([]);
   });
 
+  it("withholds staged audio until the matching transcript is completed",async()=>{
+    const service=device(),requestId=createCanonicalId("request");
+    const scope={tenantId,userId:alice,characterId,relationshipId};
+    await pool.query(`INSERT INTO agents.mobile_turn_commands
+      (tenant_id,user_id,character_id,relationship_id,character_session_id,request_id,kind,user_text,payload_hash,state)
+      VALUES($1,$2,$3,$4,$5,$6,'text','Hello',$7,'pending')`,
+      [tenantId,alice,characterId,relationshipId,createCanonicalId("character-session"),requestId,
+        createHash("sha256").update("Hello").digest("hex")]);
+    await service.stageReplyAudio(scope,requestId,{mimeType:"audio/l16;rate=24000",dataBase64:"AAAAAA=="});
+    expect(await service.list("Bearer alice",characterId,[requestId])).toEqual([]);
+    expect(await service.get("Bearer alice",characterId,requestId,8)).toBeNull();
+    await pool.query(`UPDATE agents.mobile_turn_commands SET state='completed',reply='Hello there.' WHERE request_id=$1`,[requestId]);
+    expect(await service.list("Bearer alice",characterId,[requestId])).toMatchObject([{requestId,slot:8,kind:"voice"}]);
+    expect(await service.get("Bearer alice",characterId,requestId,8)).toMatchObject({mimeType:"audio/wav"});
+    expect(await service.get("Bearer bob",characterId,requestId,8)).toBeNull();
+  });
+
   it("fences another account, tenant and Masana even when request identity is known", async () => {
     const requestId = createCanonicalId("request");
     await device().put("Bearer alice", upload(requestId));

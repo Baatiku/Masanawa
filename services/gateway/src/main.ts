@@ -589,6 +589,7 @@ export async function startGatewayService(
   let msnBalanceAuthorizer: MsnBalanceAuthority | undefined;
   let strategy = options.agentStrategy;
   let nativeAudio;
+  let generateSpokenReply:ReturnType<typeof createGeminiRecordedLiveAudioRenderer>["generateReply"]|undefined;
   let liveVoiceTokens: LiveVoiceTokenService | undefined;
   let mbLiveVoiceTokens: LiveVoiceTokenService | undefined;
   let twinProduction: TwinProductionRuntime | undefined =
@@ -1149,11 +1150,13 @@ export async function startGatewayService(
         env.MASANAWA_GEMINI_LIVE_VOICE?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_LIVE_VOICE?.trim() ||
         "Bodi";
-      nativeAudio ??= createGeminiRecordedLiveAudioRenderer({
+      const recordedLive = createGeminiRecordedLiveAudioRenderer({
         apiKey: liveApiKey,
         model: liveModel,
         voiceName: liveVoice,
       });
+      nativeAudio ??= recordedLive;
+      generateSpokenReply=recordedLive.generateReply;
       if (conversationAuthorizer) {
         liveVoiceTokens = createGeminiLiveTokenService({
           apiKey: liveApiKey,
@@ -1559,18 +1562,20 @@ export async function startGatewayService(
             await customerAuth.authorizeSensitiveMutation({authorizationHeader});
           }}),
           ...(nativeAudio ? { nativeAudio } : {}),
+          ...(generateSpokenReply ? {generateSpokenReply} : {}),
           voiceForCharacter: async (scope) => {
             if(database.featurePool){
               const custom=await database.featurePool.query(`SELECT e.voice_id FROM agents.admin_voice_assignments a JOIN agents.admin_voice_enrollments e ON e.tenant_id=a.tenant_id AND e.character_id=a.character_id AND e.request_id=a.request_id AND e.state='ready' WHERE a.tenant_id=$1 AND a.character_id=$2 AND a.active=true`,[scope.tenantId,scope.characterId]);
               if(custom.rows[0]?.voice_id)return custom.rows[0].voice_id as string;
             }
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
-            if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
+            if (!profile) return undefined;
+            if (profile.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
             throw Object.assign(new Error('Persona voice configuration is unavailable'),{code:'agent.voice_unavailable'});
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
           ...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),
-          ...(composedPrivateChatMedia?{saveReplyAudio:composedPrivateChatMedia.saveReplyAudio}:{}),
+          ...(composedPrivateChatMedia&&database.mobileShell?{stageReplyAudio:composedPrivateChatMedia.stageReplyAudio}:{}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),
           sessionDurationMs: 24 * 60 * 60 * 1000,
         })
