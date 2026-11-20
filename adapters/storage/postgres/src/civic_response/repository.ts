@@ -123,11 +123,14 @@ export function createCivicResponseRepository(pool: Pool) {
     async publicIncidents(input:{category?:string;state?:string;limit?:number;offset?:number}={}) {
       const limit=Math.min(50,Math.max(1,input.limit??20)),offset=Math.min(10000,Math.max(0,input.offset??0));
       if(input.category&&!publicCategorySet.has(input.category))return [];
-      const result=await pool.query(`SELECT reference,public_title AS "title",public_summary AS "summary",category,
-        location_state AS "locationState",status,published_at AS "publishedAt",updated_at AS "updatedAt"
-        FROM civic_response.incidents WHERE publication_status='published' AND public_consent=true AND hidden_at IS NULL
+      const result=await pool.query(`SELECT reference,
+        CASE WHEN publication_status='published' THEN public_title ELSE 'New community incident report' END AS "title",
+        CASE WHEN publication_status='published' THEN public_summary ELSE 'An incident has been reported. Details are awaiting independent review.' END AS "summary",
+        category,location_state AS "locationState",status,
+        publication_status AS "publicationStatus",COALESCE(published_at,created_at) AS "publishedAt",updated_at AS "updatedAt"
+        FROM civic_response.incidents WHERE publication_status IN ('pending_review','published') AND public_consent=true AND hidden_at IS NULL
         AND category=ANY($1::text[]) AND ($2::text IS NULL OR category=$2) AND ($3::text IS NULL OR location_state=$3)
-        ORDER BY published_at DESC,id DESC LIMIT $4 OFFSET $5`,[PUBLIC_REPORT_CATEGORIES,input.category??null,input.state??null,limit,offset]);
+        ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT $4 OFFSET $5`,[PUBLIC_REPORT_CATEGORIES,input.category??null,input.state??null,limit,offset]);
       return result.rows;
     },
     async setPublicConsent(actor:ResponseActor,id:string,input:{consent:boolean;expectedRevision:number}) {
