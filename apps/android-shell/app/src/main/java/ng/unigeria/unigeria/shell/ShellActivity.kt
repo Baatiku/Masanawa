@@ -298,7 +298,9 @@ class ShellActivity : ComponentActivity() {
         // No background service, push permission, or forced restart is needed.
         webUpdateHandler.removeCallbacks(webUpdatePoll)
         webUpdateHandler.post(webUpdatePoll)
-        if (pendingWebRefresh) maybeRefreshWeb()
+        // Post past onResume so Android's lifecycle and window focus are restored
+        // before evaluating the pending refresh from a previous foreground session.
+        if (pendingWebRefresh) webUpdateHandler.postDelayed({ maybeRefreshWeb() }, 500L)
     }
 
     override fun onStop() {
