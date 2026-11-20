@@ -17,7 +17,7 @@ interface StreamReply {
   readonly audioDurationMs?: number;
   readonly audioTranscript?: string;
 }
-/** Shared by text, voice-note and attachment streams; client close cancels work. */
+/** Once admitted to the durable turn journal, complete within a server deadline. */
 export async function streamConversationReply(
   reply: FastifyReply,
   execute: (callbacks: ConversationStreamCallbacks, signal: AbortSignal) => Promise<StreamReply>,
@@ -28,18 +28,28 @@ export async function streamConversationReply(
   reply.raw.setHeader("cache-control", "no-cache, no-transform");
   reply.raw.setHeader("x-content-type-options", "nosniff");
   const controller = new AbortController();
-  let finished = false;
-  const abort = () => { if (!finished) controller.abort(); };
+  const disconnected = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 115_000);
+  let accepted = false;
+  const abort = () => {
+    disconnected.abort();
+    if (!accepted) controller.abort();
+  };
   reply.raw.once("close", abort);
   const emit = async (event: Record<string, unknown>) => {
-    if (controller.signal.aborted || reply.raw.destroyed || reply.raw.writableEnded) return;
+    if (disconnected.signal.aborted || reply.raw.destroyed || reply.raw.writableEnded) return;
     if (!reply.raw.write(JSON.stringify(event) + "\n")) {
-      await once(reply.raw, "drain", { signal: controller.signal });
+      await once(reply.raw, "drain", { signal: AbortSignal.any([disconnected.signal, controller.signal]) })
+        .catch(error => { if (!disconnected.signal.aborted) throw error; });
     }
   };
   try {
     const result = await execute({
-      onAccepted: () => emit({ type: "accepted" }),
+      async onAccepted() {
+        if (controller.signal.aborted) return;
+        accepted = true;
+        await emit({ type: "accepted" });
+      },
       onTextDelta: async text => { if (text) await emit({ type: "delta", text }); },
       onAudioPcmChunk: async dataBase64 => { if (dataBase64) await emit({ type: "audio", mimeType: "audio/pcm;rate=24000", sampleRate: 24000, dataBase64 }); },
       onAudioTranscriptDelta: async text => { if (text) await emit({ type: "audio-transcript", text }); },
@@ -47,10 +57,10 @@ export async function streamConversationReply(
     await emit({ type: "done", ...result });
   } catch (error) {
     const walletFailure=replyWalletFailure(error);
-    if (!controller.signal.aborted) await emit({ type: "error",code:walletFailure?.code??"turn_failed",
+    if (!disconnected.signal.aborted) await emit({ type: "error",code:walletFailure?.code??"turn_failed",
       ...(walletFailure?{message:walletFailure.message}:{}) }).catch(() => undefined);
   } finally {
-    finished = true;
+    clearTimeout(deadline);
     reply.raw.off("close", abort);
     if (!reply.raw.writableEnded && !reply.raw.destroyed) reply.raw.end();
   }

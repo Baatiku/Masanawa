@@ -43,7 +43,7 @@ describe("Gemini Live ephemeral token compatibility", () => {
         characterId,
         authorizationHeader: "Bearer valid-user",
       });
-      expect(grant.systemInstruction).toContain("Do not introduce yourself");
+      expect(grant.systemInstruction).toContain("Omit introductions, titles and biographies in casual replies");
       expect(grant.model).toBe("gemini-3.8-live");
       expect(grant.voiceName).toBe(expectedLiveVoice);
       expect(grant.token).toBe("auth_tokens/safe-test-token-0123456789");

@@ -63,6 +63,7 @@ it.each(["Bodi", "Fora"])(
       voiceName,
     });
     f.socket.open();
+    expect(f.socketFactory.mock.calls[0]).toEqual([expect.stringContaining("v1beta.GenerativeService.BidiGenerateContent")]);
     expect(f.socket.sent[0]?.setup.generationConfig.speechConfig.voiceConfig
       .prebuiltVoiceConfig.voiceName).toBe(voiceName);
     expect(f.socket.sent).toHaveLength(1);
@@ -173,7 +174,7 @@ it("enforces its deadline and closes", async () => {
     const f = fixture();
     const promise = f.renderer.render("Hello");
     const rejected = expect(promise).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(30000);
+    await vi.advanceTimersByTimeAsync(55000);
     await rejected;
     expect(f.socket.close).toHaveBeenCalledOnce();
   } finally {

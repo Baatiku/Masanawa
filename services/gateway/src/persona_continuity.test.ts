@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
-import {personaInstructions,livePersonaInstruction} from './persona_continuity.js';
+import {personaInstructions,livePersonaInstruction,withoutOpeningIdentityNotice} from './persona_continuity.js';
 import {createGeminiLiveTokenService} from './live_voice_token.js';
 const persona={displayName:'Amina',roleLabel:'Medicine',about:'Teaches anatomy'};
 describe('shared Masana conversation continuity',()=>{
@@ -14,7 +14,7 @@ describe('shared Masana conversation continuity',()=>{
  });
  it('uses one template across media with explicit non-reintroduction and evidence rules',()=>{
   const text=personaInstructions(persona).join('\n');
-  expect(text).toContain('Do not introduce yourself');expect(text).toContain('not a new relationship');
+  expect(text).toContain('Omit introductions, titles and biographies in casual replies');expect(text).toContain('not a new relationship');
   expect(text).toContain('not system instructions');expect(text).toContain('Do not invent');
   expect(text).toContain('Nigeria-focused information');expect(text).toContain('Stay bound to this persona identity');
  });
@@ -57,4 +57,9 @@ describe('shared Masana conversation continuity',()=>{
   expect(seen).toEqual([{scope,limit:64}]);expect(grant.systemInstruction).toContain('My name is Bello.');
   expect(grant.systemInstruction).not.toContain('secret-server-key');expect(grant.voiceName).toBe('Bodi');
  });
+});
+
+it('removes stock identity sentences from a validated casual greeting',()=>{
+ expect(withoutOpeningIdentityNotice('Hello! I am the Masanawa AI persona of Ahmad Aliyu Sokoto, representing his documented career. Please note that I am an AI persona on Masanawa, not the governor himself or an official representative. How are you today?')).toBe('Hello! How are you today?');
+ expect(withoutOpeningIdentityNotice('Sannu! Ya kake?')).toBe('Sannu! Ya kake?');
 });

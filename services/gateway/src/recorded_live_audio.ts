@@ -48,7 +48,7 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
       if(system&&selectedVoice.startsWith('voice_'))throw Error('Live composition requires a prebuilt voice');
       if(/^voice_[a-zA-Z0-9_-]{1,160}$/.test(selectedVoice))return createGeminiLiveAudioRenderer({apiKey,model:'gemini-3.8-flash-tts',voiceName:selectedVoice}).render(text,signal,onPcmChunk,context);
       const socket = socketFactory(
-        `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${system?"v1beta":"v1alpha"}.GenerativeService.BidiGenerateContent?key=` +
+        `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=` +
           encodeURIComponent(apiKey),
       );
       socket.binaryType = "arraybuffer";
@@ -69,7 +69,7 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
         let transcriptionTimer: ReturnType<typeof setTimeout> | undefined;
         const timer = setTimeout(
           () => fail("Recorded speech deadline exceeded"),
-          30_000,
+          55_000,
         );
         function cleanup() {
           clearTimeout(timer);
@@ -213,7 +213,7 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
               if (!audio) continue;
               if (
                 typeof audio.data !== "string" ||
-                !/^audio\/(?:pcm|l16);rate=24000$/iu.test(audio.mimeType)
+                !/^audio\/(?:pcm|l16)(?:;\s*rate=24000)?$/iu.test(audio.mimeType)
               ) {
                 throw new Error("Invalid audio");
               }
