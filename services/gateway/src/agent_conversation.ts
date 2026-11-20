@@ -245,6 +245,7 @@ export function createAgentConversationService(input: {
           payloadHash: hashTurnPayload(text),
         });
         if (claim.state === "existing") return replayTurn(claim.command);
+        await Promise.resolve().then(() => request.onAccepted?.()).catch(() => undefined);
         await input.mobileShell.appendEvent({
           scope: admission.scope,
           characterSessionId,
@@ -254,6 +255,7 @@ export function createAgentConversationService(input: {
       }
 
       const agentRunId = createCanonicalId("agent-run");
+      let stage = "create_run";
       try {
       await input.runs.create({
         authority: admission.authority,
@@ -275,6 +277,7 @@ export function createAgentConversationService(input: {
         },
       });
 
+        stage = "generate_reply";
         const teachingPreparation = await input.teachingAssistant?.prepare({
           scope: admission.scope,
           text,
@@ -344,6 +347,7 @@ export function createAgentConversationService(input: {
         if (!reply) throw new Error("empty strategy reply");
         recordMasanaQuality(admission.scope.characterId,reply);
 
+        stage = "save_reply";
         await input.runs.finish({
           authority: admission.authority,
           scope: admission.scope,
@@ -379,7 +383,7 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = await renderAudio(
+        const audio = request.textOnly ? undefined : await renderAudio(
           reply,
           admission.scope,
           request.signal,
@@ -388,7 +392,8 @@ export function createAgentConversationService(input: {
           !!admission.presentation.narrative?.publicOfficial,
         );
         if(audio)await input.saveReplyAudio?.(admission.scope,request.requestId,audio).catch(()=>undefined);
-        await input.customerMemory?.propose(admission.scope,text,request.requestId).catch(()=>undefined);
+        const memory = input.customerMemory?.propose(admission.scope,text,request.requestId).catch(()=>undefined);
+        if (!request.textOnly) await memory;
         return Object.freeze({
           reply,
           agentRunId,
@@ -403,6 +408,8 @@ export function createAgentConversationService(input: {
             : {}),
         });
       } catch (error) {
+        console.warn(JSON.stringify({event:"agent.text_turn_failed",stage,
+          reason:request.signal?.aborted?"client_disconnected":"processing_failed"}));
         await input.runs
           .finish({
             authority: admission.authority,
