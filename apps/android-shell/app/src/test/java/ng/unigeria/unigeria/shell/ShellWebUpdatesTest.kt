@@ -10,8 +10,12 @@ class ShellWebUpdatesTest {
         assertFalse(ShellWebUpdates.changed(null, original))
         assertFalse(ShellWebUpdates.changed(original, original))
         assertTrue(ShellWebUpdates.changed(original, published))
-        assertTrue(ShellWebUpdates.changed(original, ShellWebUpdates.versionFingerprint(
-            "{\"revision\":\"abcde12345-build7\"}")!!))
+        // A marker/HTML fingerprint transition is not proof of a deployment.
+        val release = ShellWebUpdates.versionFingerprint("{\"revision\":\"abcde12345-build7\"}")!!
+        assertFalse(ShellWebUpdates.sameSource(original, release))
+        assertFalse(ShellWebUpdates.changed(original, release))
+        assertTrue(ShellWebUpdates.sameSource(release, "release:abcde12345-build8"))
+        assertTrue(ShellWebUpdates.changed(release, "release:abcde12345-build8"))
     }
 
     @Test fun rejectsInvalidOrOversizedDocuments() {
