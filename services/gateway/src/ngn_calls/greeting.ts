@@ -9,7 +9,7 @@ export function callGreeting(greeting?:string|null):CallGreeting {
 
 export function callOpeningTurn(greeting:CallGreeting) {
   return {clientContent:{turns:[{role:"user",parts:[{text:
-    `The call just connected. Speak first, out loud. Say “${greeting}” and pause to listen. Say only the greeting. Do not use a tool for this opening.`,
+    `The call has connected. Speak first, out loud. Begin with “${greeting}”, then add one brief, warm and natural follow-up question inviting the caller to speak. Use your persona's conversational style; don't repeat a fixed script. Keep the whole opening under six seconds, then pause and listen. Do not use a tool for this opening.`,
   }]}],turnComplete:true}};
 }
 
@@ -29,3 +29,4 @@ export function audibleGreetingFrame(message:Record<string,unknown>):number {
   }
   return bytes;
 }
+
