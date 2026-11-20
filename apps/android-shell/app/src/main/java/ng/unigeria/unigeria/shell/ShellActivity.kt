@@ -65,6 +65,7 @@ import java.io.File
 class ShellActivity : ComponentActivity() {
     private lateinit var container: FrameLayout
     private lateinit var webView: WebView
+    private lateinit var articleReader: ShellArticleReader
     private lateinit var failureView: View
     private lateinit var failureText: TextView
     private lateinit var loadingBar: ProgressBar
@@ -213,12 +214,14 @@ class ShellActivity : ComponentActivity() {
         }?.forEach { it.delete() }
         webView = newWebView()
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
+        articleReader = ShellArticleReader(this, container)
         setupLoadingBar()
         setupFailureView()
         setContentView(container)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (articleReader.back()) return
                 if (!WebOriginPolicy.isTrusted(webView.url)) {
                     fallbackBack()
                     return
@@ -271,6 +274,7 @@ class ShellActivity : ComponentActivity() {
         // A customer-authorized foreground microphone session must not be
         // paused with the UI while the foreground call service is active.
         if (!callActive) webView.onPause()
+        articleReader.onPause()
         super.onPause()
     }
 
@@ -278,6 +282,7 @@ class ShellActivity : ComponentActivity() {
         super.onResume()
         if (!protectScreen) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         webView.onResume()
+        articleReader.onResume()
         if (WebOriginPolicy.isTrusted(webView.url))
             webView.evaluateJavascript("window.dispatchEvent(new Event('masanawa-native-resume'))", null)
     }
@@ -294,6 +299,7 @@ class ShellActivity : ComponentActivity() {
         pendingMediaRequest = null
         fileCallback?.onReceiveValue(null)
         fileCallback = null
+        articleReader.close()
         container.removeView(webView)
         webView.destroy()
         downloads.close()
@@ -494,6 +500,7 @@ class ShellActivity : ComponentActivity() {
 
     private fun handleNativeMessage(payload: JSONObject, reply: JavaScriptReplyProxy) {
         when (payload.optString("type")) {
+            "open-article" -> articleReader.open(payload.optString("url"))
             "privacy" -> {
                 protectScreen = payload.optBoolean("enabled", false)
                 if (protectScreen) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -687,3 +694,4 @@ class ShellActivity : ComponentActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
 }
+
