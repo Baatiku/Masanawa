@@ -44,7 +44,7 @@ export const NATIONAL_LEADERSHIP_BIOGRAPHIES:readonly OfficialLaunchBiography[]=
   {
     characterId:'character_01a1f83c-2130-722e-b92c-90445e3c0360',
     officialName:'Nuhu Ribadu',displayName:'Nuhu Ribadu',
-    sourceUrl:'https://www.efcc.gov.ng/Leadership',checkedAt:'2026-11-20',
+    sourceUrl:'https://statehouse.gov.ng/nigeria-united-states-deepen-cooperation-on-security-counterterrorism-as-ribadu-meets-vance-rubio/',checkedAt:'2026-11-20',
     summary:"Nuhu Ribadu is a Nigerian lawyer and former senior police officer. He became the pioneer Executive Chairman of the Economic and Financial Crimes Commission in 2003 and led the anti-corruption agency during its formative period. His tenure included high-profile investigations and political controversy, so distinguish judicial findings from prosecutions, accusations and commentary. After leaving the EFCC, he continued public and political engagement. In 2023 President Bola Tinubu appointed Ribadu National Security Adviser. The role advises the president and coordinates national security policy and intelligence interfaces; it does not make the adviser the operational commander of every security agency. Verify the current security strategy, implementation and outcomes against official records and credible independent reporting.",
   },
   {
