@@ -20,6 +20,7 @@ describe('Masanawa Response durable migration',()=>{
       expect(complete.rows.find(row=>row.id==='ng-icpc-oyo')?.address).toContain('Ibadan');
       expect(complete.rows.find(row=>row.id==='ng-police-command-oyo')?.address).toBeNull();
       await db.exec(await readFile(new URL('../../../../../packages/security/migrations/0135_civic_response_public_feed.sql',import.meta.url),'utf8'));
+      await db.exec(await readFile(new URL('../../../../../packages/security/migrations/0135_civic_response_public_feed.sql',import.meta.url),'utf8'));
       const visibility=await db.query<{column_name:string}>(`SELECT column_name FROM information_schema.columns WHERE table_schema='civic_response' AND table_name='incidents' AND column_name IN ('public_consent','publication_status','public_title','public_summary','published_at') ORDER BY column_name`);
       expect(visibility.rows).toHaveLength(5);
       await db.query(`INSERT INTO civic_response.incidents(id,reference,tenant_id,reporter_id,request_key,title,description,category,urgency,location_state,source_mode)
