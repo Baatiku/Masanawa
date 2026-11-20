@@ -25,6 +25,8 @@ interface RelayOptions {
   report?:(event:{stage:'connection'|'recovery'|'provider';code:'unavailable';providerStatus?:string})=>void;
 }
 const endpoint='/agent/live/ngn/stream',maxFrame=1024*1024;
+const providerEndpoint='/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
 const rejected=()=>new NgnCallRelayError();
 /** Preserve all entropy while satisfying the durable journal's ID grammar. */
@@ -99,7 +101,7 @@ export function createNgnCallRelay(options:RelayOptions){
     let chain=Promise.resolve(),stopping=false,setup=false,connected=false;
     let closedTask:Promise<void>|undefined;
     const officialEvidence=ticket.readOfficialEvidence?createOfficialLiveEvidenceSession(ticket.readOfficialEvidence):undefined;
-    let setupSent=false;
+    let setupSent=false,resumedProvider=false;
     let setupFrame:string|undefined,waiting:string[]=[],waitingBytes=0,queuedBytes=0;
     let heartbeat:ReturnType<typeof setInterval>|undefined;
     let deadline:ReturnType<typeof setTimeout>|undefined;
@@ -115,7 +117,12 @@ export function createNgnCallRelay(options:RelayOptions){
       if(closedTask)return finish?closedTask.then(async()=>{await options.store.finish(ticket.actor,ticket.id)}):closedTask;
       if(stopping)return Promise.resolve();
       stopping=true;clearTimeout(setupDeadline);clearTimeout(deadline);clearInterval(heartbeat);
-      client.terminate();provider.terminate();
+      if (finish && confirmed && client.readyState === WebSocket.OPEN) {
+        client.close(4001, 'Call settled');
+      } else {
+        client.terminate();
+      }
+      provider.terminate();
       closedTask=chain.catch(()=>{}).then(async()=>{
         try{
           if(confirmed)await options.store.disconnect(ticket.actor,ticket.id,lease);
@@ -174,6 +181,8 @@ export function createNgnCallRelay(options:RelayOptions){
           if(input.sessionResumption){
             const saved=resumptions.get(ticket.id)?.handle;
             canonical.sessionResumption=saved?{handle:saved}:{};
+            canonical.contextWindowCompression={slidingWindow:{}};
+            resumedProvider=Boolean(saved);
           }
           setupFrame=JSON.stringify({setup:canonical});setup=true;
           flushSetup();
@@ -185,9 +194,9 @@ export function createNgnCallRelay(options:RelayOptions){
       });
     });
     provider.on('open',()=>enqueue(flushSetup));
-    provider.on('message',(raw:RawData,binary:boolean)=>{
+    provider.on('message',(raw:RawData)=>{
       const text=raw.toString();queuedBytes+=Buffer.byteLength(text);
-      if(binary||queuedBytes>maxFrame){void stop(false,false);return;}
+      if(queuedBytes>maxFrame){void stop(false,false);return;}
       enqueue(async()=>{
         queuedBytes-=Buffer.byteLength(text);
         if(connected&&fundedDeadlineAt!==undefined&&now().getTime()>=fundedDeadlineAt){void Promise.resolve().then(()=>stop(true,true));return;}
@@ -231,15 +240,20 @@ export function createNgnCallRelay(options:RelayOptions){
           if(!stopping)send(provider,JSON.stringify(result));
         }
         const resume=(message.sessionResumptionUpdate??message.session_resumption_update) as
-          {newHandle?:unknown;new_handle?:unknown}|undefined;
+          {resumable?:unknown;newHandle?:unknown;new_handle?:unknown}|undefined;
         const handle=resume?.newHandle??resume?.new_handle;
-        if(typeof handle==='string'&&handle.length<=4096)resumptions.set(ticket.id,{handle,expires:now().getTime()+30000});
+        if(resume?.resumable===true&&typeof handle==='string'&&handle.length>0&&handle.length<=4096)resumptions.set(ticket.id,{handle,expires:now().getTime()+30000});
         if(connected&&now().getTime()-lastProof>=beatMs)await checkpoint();
         if(connected){
           const allowed=['setupComplete','setup_complete','serverContent','server_content',
             'sessionResumptionUpdate','session_resumption_update','goAway','go_away','usageMetadata'];
           const visible=Object.fromEntries(Object.entries(message).filter(([key])=>allowed.includes(key)));
-          if(Object.keys(visible).length)send(client,JSON.stringify(visible));
+          if (Object.keys(visible).length) {
+            if (message.setupComplete || message.setup_complete) {
+              visible.resumed = resumedProvider;
+            }
+            send(client,JSON.stringify(visible));
+          }
         }
       });
     });
@@ -284,9 +298,11 @@ export function createNgnCallRelay(options:RelayOptions){
     async issue(actor:NgnCallActor,characterId:string,id:string,grant:ProviderVoiceGrant,validateOwner:()=>Promise<void>,readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>):Promise<NgnRelayGrant>{
       if(!ready||closed||typeof validateOwner!=='function')throw rejected();purge();
       const url=new URL(grant.websocketUrl);
-      if(url.protocol!=='wss:'||url.hostname!=='generativelanguage.googleapis.com'||url.username||url.password||url.port||
-         url.pathname!=='/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained')
-        throw rejected();
+      const expectedCredential = url.pathname === providerEndpoint ? 'key' :
+        url.pathname === providerEndpoint + 'Constrained' ? 'access_token' : undefined;
+      if (url.protocol !== 'wss:' || url.hostname !== 'generativelanguage.googleapis.com' ||
+         url.username || url.password || url.port || url.hash || !expectedCredential ||
+         [...url.searchParams.keys()].length !== 1 || !url.searchParams.get(expectedCredential)) throw rejected();
       const old=connections.get(id);
       if(old){
         if(old.actor.tenantId!==actor.tenantId||old.actor.userId!==actor.userId)throw rejected();

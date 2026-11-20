@@ -259,6 +259,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
         'sessionResumption': resumeHandle == null
             ? <String, String>{}
             : {'handle': resumeHandle},
+        'contextWindowCompression': {'slidingWindow': <String, String>{}},
         'outputAudioTranscription': {},
         if (captureInputTranscription) 'inputAudioTranscription': {},
         'systemInstruction': {
@@ -280,6 +281,11 @@ class LiveVoiceSession with WidgetsBindingObserver {
     // A WebSocket may call onError followed by onDone for one failure.
     // Never turn its second callback into a fatal error while resuming.
     if (_reconnectTask != null) return;
+    if (socket.closeCode == 4001 &&
+        _activeGrant.transport == AgentLiveVoiceTransport.gatewayRelay) {
+      unawaited(close());
+      return;
+    }
     if (!_ready.isCompleted ||
         _resumptionHandle == null ||
         (_activeGrant.expiresAt.isBefore(DateTime.now()) &&
@@ -317,7 +323,8 @@ class LiveVoiceSession with WidgetsBindingObserver {
     }
     await Future<void>.delayed(Duration(milliseconds: _resumeAttempts * 400));
     if (_closed) return;
-    if (!DateTime.now().isBefore(_activeGrant.expiresAt)) {
+    if (_activeGrant.transport == AgentLiveVoiceTransport.gatewayRelay ||
+        !DateTime.now().isBefore(_activeGrant.expiresAt)) {
       final renew = renewConnectionGrant;
       if (renew == null) {
         throw StateError('Call connection permission has expired.');
@@ -328,6 +335,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
       // The original admission, history and duration timer remain owned by
       // the calling screen and do not get replaced or re-billed.
       if (!DateTime.now().isBefore(fresh.expiresAt) ||
+          fresh.transport != grant.transport ||
           fresh.model != grant.model ||
           fresh.voiceName != grant.voiceName) {
         throw StateError('Refreshed permission does not match the ongoing call.');
@@ -409,7 +417,13 @@ class LiveVoiceSession with WidgetsBindingObserver {
       final decoded = jsonDecode(text);
       if (decoded is! Map) return;
       final message = decoded.cast<String, dynamic>();
-      if (message.containsKey('setupComplete')) {
+      if (message.containsKey('setupComplete') || message.containsKey('setup_complete')) {
+        if (_connectedReported && message['resumed'] == false &&
+            _activeGrant.transport == AgentLiveVoiceTransport.gatewayRelay) {
+          _fail('The original voice session could not be restored.');
+          unawaited(close());
+          return;
+        }
         if (_setupComplete) return;
         _setupTimer?.cancel();
         _setupComplete = true;
@@ -424,25 +438,16 @@ class LiveVoiceSession with WidgetsBindingObserver {
         await _beginMicrophone();
         if (_closed) return;
         if (sendGreeting && !_ready.isCompleted) {
-          pendingSocket.add(
-            jsonEncode({
-              'clientContent': {
-                'turns': [
-                  {
-                    'role': 'user',
-                    'parts': [
-                      {
-                        'text':
-                            'You have answered this call. Speak first with a brief, natural hello in your own character, using the saved conversation context. '
-                            'Do not repeat your introduction or ask for facts already supplied.',
-                      },
-                    ],
-                  },
-                ],
-                'turnComplete': true,
-              },
-            }),
-          );
+          const greeting =
+              'You have answered this call. Speak first with a brief, natural hello in your own character, using the saved conversation context. '
+              'Do not repeat your introduction or ask for facts already supplied.';
+          final gateway = _activeGrant.transport == AgentLiveVoiceTransport.gatewayRelay;
+          pendingSocket.add(jsonEncode(gateway
+              ? {'realtimeInput': {'text': greeting}}
+              : {'clientContent': {
+                  'turns': [{'role': 'user', 'parts': [{'text': greeting}]}],
+                  'turnComplete': true,
+                }}));
         }
         if (!_ready.isCompleted && !_closed) {
           final allowed = permittedConnectedCallDuration(

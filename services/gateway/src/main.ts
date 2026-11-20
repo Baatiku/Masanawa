@@ -592,6 +592,7 @@ export async function startGatewayService(
   let generateSpokenReply:ReturnType<typeof createGeminiRecordedLiveAudioRenderer>["generateReply"]|undefined;
   let liveVoiceTokens: LiveVoiceTokenService | undefined;
   let mbLiveVoiceTokens: LiveVoiceTokenService | undefined;
+  let ngnLiveVoiceTokens: LiveVoiceTokenService | undefined;
   let twinProduction: TwinProductionRuntime | undefined =
     options.appOptions?.twinProduction;
   let pushSender: MobilePushSender | undefined;
@@ -1173,14 +1174,16 @@ export async function startGatewayService(
         });
         // The MB relay mints only after a separately authorized admission.
         // Its provider grant is never returned directly to the phone.
-        mbLiveVoiceTokens = createGeminiLiveTokenService({
+        const relayProvider = {
           apiKey: liveApiKey,
           readCustomerMemory:async scope=>composedCustomerMemory?.forScope(scope,'')??[],
           authorizer: conversationAuthorizer,
           ...(database.mobileShell ? {mobileShell:database.mobileShell} : {}),
           ...(database.platformAgentProfiles ? {platformProfiles:database.platformAgentProfiles} : {}),
           model: liveModel,voiceName: liveVoice,
-        });
+        } satisfies Parameters<typeof createGeminiLiveTokenService>[0];
+        mbLiveVoiceTokens = createGeminiLiveTokenService(relayProvider);
+        ngnLiveVoiceTokens = createGeminiLiveTokenService({ ...relayProvider, serverRelayProvider: true });
       }
     }
   }
@@ -1920,12 +1923,12 @@ export async function startGatewayService(
   const ngnCallSecret=env.MASANAWA_GB_SEND_REVIEW_SECRET?.trim();
   if(ngnCallsEnabled(env) &&
      (!ngnCallJournal||!sessions||!featureTenant||!ngnCallSecret||
-      Buffer.byteLength(ngnCallSecret)<32||!mbLiveVoiceTokens||
+      Buffer.byteLength(ngnCallSecret)<32||!ngnLiveVoiceTokens||
       !conversationAuthorizer||!publicBaseUrl))
     throw new TypeError('NGN calls enabled without authorized journal, live provider, review key and public relay origin');
   const ngnCalls:NgnCallPorts|undefined=options.appOptions?.ngnCalls ??
     (ngnCallsEnabled(env) && ngnCallJournal && sessions && featureTenant &&
-     ngnCallSecret && Buffer.byteLength(ngnCallSecret)>=32 && mbLiveVoiceTokens &&
+     ngnCallSecret && Buffer.byteLength(ngnCallSecret)>=32 && ngnLiveVoiceTokens &&
      conversationAuthorizer && publicBaseUrl ? {
       authorize:resolveFeatureFan,approved:approvedNgnCallMasana,
       balance:createNgnSpending(featurePool!).balance,
@@ -1953,7 +1956,7 @@ export async function startGatewayService(
           if(!current.presentation.narrative?.publicOfficial)throw Error('official_evidence_unavailable');
           return current.presentation.narrative.publicOfficial;
         }:undefined;
-        const provider=await mbLiveVoiceTokens!.mint({authorizationHeader,
+        const provider=await ngnLiveVoiceTokens!.mint({authorizationHeader,
           characterId:admission.characterId});
         // One history identity per durable admission, including grant retries.
         const history=await featurePool!.query<{call_id:string}>(`INSERT INTO agents.masana_call_history
