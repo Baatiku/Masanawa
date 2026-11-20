@@ -26,7 +26,8 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       new URL('../../../../packages/commerce/migrations',import.meta.url))}]);
   });
   afterAll(async()=>{await pool?.end()});
-  async function fixture(seconds=5,{heartbeatMs=5000,manualPong=false,providerError=false,suppressPong=false}={}){
+  const sound={serverContent:{modelTurn:{parts:[{inlineData:{data:'ABAAAA==',mimeType:'audio/pcm;rate=24000'}}]}}};
+  async function fixture(seconds=5,{heartbeatMs=5000,manualPong=false,providerError=false,suppressPong=false,silent=false}={}){
     const budgetKobo=seconds*100;
     const actor={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user')};
     const characterId=createCanonicalId('character');
@@ -45,6 +46,7 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       if(manualPong)socket.on('ping',()=>{if(!ponged){ponged=true;socket.pong()}});
       socket.on('message',raw=>{
         const message=JSON.parse(raw.toString());received.push(message);
+        if(message.clientContent&&!silent)socket.send(JSON.stringify(sound));
         if(message.setup)socket.send(JSON.stringify(providerError?{error:{status:'INVALID_ARGUMENT',message:'private provider configuration token=provider-private-token'}}:{setupComplete:{}}));
       });
     });
@@ -66,12 +68,16 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     };
     const open=async(grant:NgnRelayGrant)=>{const client=socket(grant);await once(client,'open');return client;};
     const setup=async(client:WebSocket)=>{
-      const response=once(client,'message');
+      const frames:Record<string,unknown>[]=[];
+      const collect=(raw:Buffer)=>frames.push(JSON.parse(raw.toString()));
+      client.on('message',collect);
       client.send(JSON.stringify({setup:{model:'client-forged-model',
         generationConfig:{speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Forged'}}}},
         systemInstruction:{parts:[{text:'client-forged-persona'}]},sessionResumption:{handle:'forged-handle'},
       }}));
-      expect(JSON.parse((await response)[0].toString())).toHaveProperty('setupComplete');
+      await until(async()=>frames.some(frame=>Object.hasOwn(frame,'setupComplete')));
+      if(!frames[0]?.resumed)await until(async()=>frames.some(frame=>Object.hasOwn(frame,'serverContent')));
+      client.off('message',collect);
     };
     const cleanup=async()=>{
       await app.close();for(const client of upstream.clients)client.terminate();
@@ -170,6 +176,36 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       const closed=once(client,'close');client.close(1000);await closed;
       expect(await f.relay.finish(f.actor,f.id)).toMatchObject({admissionId:f.id,state:'completed',budgetKobo:500});
     }finally{await f.cleanup()}
+  });
+  it('requires playback confirmation before metering the web call',async()=>{
+    const f=await fixture();
+    try{
+      const client=await f.open(await f.issue());
+      const greeting=once(client,'message');
+      client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      expect(JSON.parse((await greeting)[0].toString())).toHaveProperty('openingAudio');
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
+      expect(f.received[0]?.setup).not.toHaveProperty('playbackAcknowledgement');
+      expect(JSON.stringify(f.received)).toContain('Say “Hello”');
+      const connected=once(client,'message');
+      client.send(JSON.stringify({greetingPlayback:true}));
+      expect(JSON.parse((await connected)[0].toString())).toMatchObject({setupComplete:{},greetedByRelay:true});
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
+    }finally{await f.cleanup();}
+  });
+  it('settles a provider setup and silent greeting at zero',async()=>{
+    const f=await fixture(5,{silent:true});
+    try{
+      const client=await f.open(await f.issue());
+      client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      await until(async()=>f.received.some(frame=>!!frame.clientContent));
+      client.send(JSON.stringify({greetingPlayback:true}));
+      f.provider()!.send(JSON.stringify({serverContent:{modelTurn:{parts:[
+        {inlineData:{data:'AAAAAA==',mimeType:'audio/pcm;rate=24000'}},
+      ]},turnComplete:true}}));
+      await until(async()=>(await f.store.read(f.actor,f.id))?.state==='failed');
+      expect(await f.relay.finish(f.actor,f.id)).toMatchObject({state:'failed',chargedKobo:0,verifiedConnectedMs:0});
+    }finally{await f.cleanup();}
   });
   it('expired one-use grants fail closed without a charge',async()=>{
     const f=await fixture();

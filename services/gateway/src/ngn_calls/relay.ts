@@ -1,3 +1,4 @@
+import {audibleGreetingFrame,callOpeningTurn,type CallGreeting} from './greeting.js';
 import {createOfficialLiveEvidenceSession,officialLiveTool,officialLiveToolInstruction} from '../official_live_evidence.js';
 import type {PublicOfficialPersona} from '@masanawa/agents';
 import {createHash,randomBytes} from 'node:crypto';
@@ -13,7 +14,7 @@ export type ProviderVoiceGrant=Awaited<ReturnType<LiveVoiceTokenService['mint']>
 export type NgnRelayGrant=ProviderVoiceGrant&{transport:'gateway_relay'};
 type Store=Pick<ReturnType<typeof createNgnCallAdmissions>,
   'read'|'claimConnection'|'connected'|'checkpoint'|'disconnect'|'abandonConnection'|'finish'|'recover'>;
-interface Ticket {readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>;actor:NgnCallActor;characterId:string;id:string;grant:ProviderVoiceGrant;expires:number;bytes:number;validateOwner:()=>Promise<void>}
+interface Ticket {greeting:CallGreeting;readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>;actor:NgnCallActor;characterId:string;id:string;grant:ProviderVoiceGrant;expires:number;bytes:number;validateOwner:()=>Promise<void>}
 interface Connection {actor:NgnCallActor;stop(confirmed:boolean,finish:boolean):Promise<void>}
 interface RelayOptions {
   store:Store;publicOrigin:string;
@@ -99,13 +100,19 @@ export function createNgnCallRelay(options:RelayOptions){
       client.terminate();void options.store.abandonConnection(ticket.actor,ticket.id,lease).catch(()=>{});return;
     }
     let chain=Promise.resolve(),stopping=false,setup=false,connected=false;
+    let providerReady=false,playbackRequired=false,greetingSent=false,previewBytes=0;
+    let resumeHandle:string|undefined;
     let closedTask:Promise<void>|undefined;
     const officialEvidence=ticket.readOfficialEvidence?createOfficialLiveEvidenceSession(ticket.readOfficialEvidence):undefined;
     let setupSent=false,resumedProvider=false;
     let setupFrame:string|undefined,waiting:string[]=[],waitingBytes=0,queuedBytes=0;
     let heartbeat:ReturnType<typeof setInterval>|undefined;
     let deadline:ReturnType<typeof setTimeout>|undefined;
-    const setupDeadline=setTimeout(()=>{void stop(false,false)},30000);
+    const setupDeadline=setTimeout(()=>{
+      options.report?.({stage:providerReady?'provider':'connection',code:'unavailable',
+        ...(providerReady?{providerStatus:greetingSent?'PLAYBACK_UNCONFIRMED':'GREETING_TIMEOUT'}:{})});
+      void stop(false,true);
+    },27000);
     let lastProof=now().getTime();
     let fundedDeadlineAt:number|undefined;
     const send=(socket:WebSocket,value:string)=>{
@@ -151,6 +158,26 @@ export function createNgnCallRelay(options:RelayOptions){
       await assertAccess(ticket);
       await options.store.checkpoint(ticket.actor,ticket.id,lease);lastProof=now().getTime();
     };
+    const activate=async()=>{
+      if(connected||stopping)return;
+      await assertAccess(ticket);
+      if(stopping)return;
+      fundedDeadlineAt=now().getTime()+row.budgetKobo*10-row.verifiedConnectedMs;
+      await options.store.connected(ticket.actor,ticket.id,lease);
+      if(stopping)return;
+      connected=true;
+      if(resumeHandle)resumptions.set(ticket.id,{handle:resumeHandle,expires:now().getTime()+30000});
+      clearTimeout(setupDeadline);
+      lastProof=now().getTime();
+      deadline=setTimeout(()=>{void stop(true,true)},Math.max(0,fundedDeadlineAt-now().getTime()));
+      heartbeat=setInterval(()=>{
+        if(now().getTime()-lastProof>=14000){void stop(false,false);return;}
+        if(provider.readyState===WebSocket.OPEN)provider.ping();
+      },beatMs);
+      send(client,JSON.stringify({setupComplete:{},resumed:resumedProvider,greetedByRelay:true}));
+      for(const frame of waiting)send(provider,frame);
+      waiting=[];waitingBytes=0;
+    };
     connections.set(ticket.id,{actor:ticket.actor,stop});
     client.on('message',(raw:RawData,binary:boolean)=>{
       const text=raw.toString();queuedBytes+=Buffer.byteLength(text);
@@ -163,7 +190,7 @@ export function createNgnCallRelay(options:RelayOptions){
         if(!setup){
           if(Object.keys(message).length!==1||!message.setup||typeof message.setup!=='object'||Array.isArray(message.setup))throw rejected();
           const input=message.setup as Record<string,unknown>;
-          const allowed=['model','generationConfig','systemInstruction','inputAudioTranscription',
+          const allowed=['model','generationConfig','systemInstruction','inputAudioTranscription','playbackAcknowledgement',
             'outputAudioTranscription','realtimeInputConfig','sessionResumption','contextWindowCompression'];
           if(Object.keys(input).some(key=>!allowed.includes(key)))throw rejected();
           const canonical:Record<string,unknown>={...input,
@@ -172,6 +199,8 @@ export function createNgnCallRelay(options:RelayOptions){
               voiceConfig:{prebuiltVoiceConfig:{voiceName:ticket.grant.voiceName}},
             }},
           };
+          playbackRequired=input.playbackAcknowledgement===true;
+          delete canonical.playbackAcknowledgement;
           if(ticket.grant.systemInstruction)canonical.systemInstruction={parts:[{text:ticket.grant.systemInstruction}]};
           else delete canonical.systemInstruction;
           if(officialEvidence){
@@ -188,7 +217,13 @@ export function createNgnCallRelay(options:RelayOptions){
           flushSetup();
           return;
         }
+        if(Object.keys(message).length===1&&message.greetingPlayback===true){
+          if(playbackRequired&&greetingSent&&!connected)await activate();
+          return;
+        }
         if(!Object.keys(message).length||Object.keys(message).some(key=>!['realtimeInput','clientContent'].includes(key)))throw rejected();
+        const legacyText=(message.realtimeInput as {text?:unknown}|undefined)?.text;
+        if(typeof legacyText==='string'&&legacyText.startsWith('You have answered this call.'))return;
         if(connected)send(provider,text);
         else{waitingBytes+=Buffer.byteLength(text);if(waitingBytes>maxFrame)throw rejected();waiting.push(text);}
       });
@@ -217,24 +252,16 @@ export function createNgnCallRelay(options:RelayOptions){
           const confirmation=message.setupComplete??message.setup_complete;
           if(!confirmation||typeof confirmation!=='object'||Array.isArray(confirmation))throw rejected();
           if(!setup)throw rejected();
-          if(!connected){
-            await assertAccess(ticket);
-            fundedDeadlineAt=now().getTime()+row.budgetKobo*10-row.verifiedConnectedMs;
-            await options.store.connected(ticket.actor,ticket.id,lease);connected=true;
-            clearTimeout(setupDeadline);lastProof=now().getTime();
-            const remaining=Math.max(0,fundedDeadlineAt-now().getTime());
-            if(remaining===0){void Promise.resolve().then(()=>stop(true,true));return;}
-            deadline=setTimeout(()=>{void stop(true,true)},remaining);
-            heartbeat=setInterval(()=>{
-              if(now().getTime()-lastProof>=14000){void stop(false,false);return;}
-              if(provider.readyState===WebSocket.OPEN)provider.ping();
-            },beatMs);
-            for(const frame of waiting)send(provider,frame);waiting=[];waitingBytes=0;
+          if(!providerReady){
+            providerReady=true;
+            if(resumedProvider)await activate();
+            else send(provider,JSON.stringify(callOpeningTurn(ticket.greeting)));
           }
+          return;
         }
         const toolCall=message.toolCall??message.tool_call;
         if(toolCall){
-          if(!connected||!officialEvidence)throw rejected();
+          if(!providerReady||!officialEvidence)throw rejected();
           await assertAccess(ticket);
           const result=await officialEvidence.respond(toolCall);
           if(!stopping)send(provider,JSON.stringify(result));
@@ -242,7 +269,29 @@ export function createNgnCallRelay(options:RelayOptions){
         const resume=(message.sessionResumptionUpdate??message.session_resumption_update) as
           {resumable?:unknown;newHandle?:unknown;new_handle?:unknown}|undefined;
         const handle=resume?.newHandle??resume?.new_handle;
-        if(resume?.resumable===true&&typeof handle==='string'&&handle.length>0&&handle.length<=4096)resumptions.set(ticket.id,{handle,expires:now().getTime()+30000});
+        if(resume?.resumable===true&&typeof handle==='string'&&handle.length>0&&handle.length<=4096){
+          resumeHandle=handle;
+          if(connected)resumptions.set(ticket.id,{handle,expires:now().getTime()+30000});
+        }
+        if(providerReady&&!connected){
+          const bytes=audibleGreetingFrame(message);
+          if(bytes>0){
+            greetingSent=true;
+            if(!playbackRequired) await activate();
+            else if(previewBytes+bytes<=192000){
+              previewBytes+=bytes;
+              send(client,JSON.stringify({openingAudio:message.serverContent??message.server_content}));
+            }
+          }
+          if(!greetingSent){
+            const content=(message.serverContent??message.server_content) as {turnComplete?:boolean}|undefined;
+            if(content?.turnComplete){
+              options.report?.({stage:'provider',code:'unavailable',providerStatus:'GREETING_NO_AUDIO'});
+              void Promise.resolve().then(()=>stop(false,true));
+            }
+          }
+          if(!connected)return;
+        }
         if(connected&&now().getTime()-lastProof>=beatMs)await checkpoint();
         if(connected){
           const allowed=['setupComplete','setup_complete','serverContent','server_content',
@@ -295,7 +344,7 @@ export function createNgnCallRelay(options:RelayOptions){
   return {
     ready:()=>ready&&!closed,
     async start(){if(closed)throw rejected();await recover();recovery??=setInterval(()=>{void recover()},recoveryMs);},
-    async issue(actor:NgnCallActor,characterId:string,id:string,grant:ProviderVoiceGrant,validateOwner:()=>Promise<void>,readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>):Promise<NgnRelayGrant>{
+    async issue(actor:NgnCallActor,characterId:string,id:string,grant:ProviderVoiceGrant,validateOwner:()=>Promise<void>,readOfficialEvidence?: (query:string)=>Promise<PublicOfficialPersona>,greeting:CallGreeting='Hello'):Promise<NgnRelayGrant>{
       if(!ready||closed||typeof validateOwner!=='function')throw rejected();purge();
       const url=new URL(grant.websocketUrl);
       const expectedCredential = url.pathname === providerEndpoint ? 'key' :
@@ -316,7 +365,7 @@ export function createNgnCallRelay(options:RelayOptions){
         ...(grant.systemInstruction?{systemInstruction:grant.systemInstruction}:{}),
       });
       const ticket:Ticket={actor:Object.freeze({tenantId:actor.tenantId,userId:actor.userId}),
-        characterId,id,grant:canonicalGrant,validateOwner,...(readOfficialEvidence?{readOfficialEvidence}:{}),bytes:Buffer.byteLength(JSON.stringify(canonicalGrant)),
+        characterId,id,grant:canonicalGrant,validateOwner,greeting,...(readOfficialEvidence?{readOfficialEvidence}:{}),bytes:Buffer.byteLength(JSON.stringify(canonicalGrant)),
         expires:Math.min(now().getTime()+60000,Date.parse(grant.expiresAt))};
       if(!Number.isFinite(ticket.expires)||ticket.expires<=now().getTime())throw rejected();
       const admission=await verifyAdmission(ticket);
