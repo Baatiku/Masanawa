@@ -14,7 +14,7 @@ function app(geminiKey?:string){
     appendReporterUpdate:vi.fn(async()=>({revision:2})),setPublicConsent:vi.fn(async()=>({publicConsent:false})),publicIncidents:vi.fn(async()=>[{reference:'MR-PUBLIC-1',title:'Reviewed water outage',summary:'A public water supply outage is under review.',locationState:'Oyo',category:'water_sanitation',status:'triage'}]),adminList:vi.fn(),adminIncident:vi.fn(),adminUpdate:vi.fn(),saveContact:vi.fn(),
   };
   const server=Fastify();registerCivicResponseRoutes(server,{repository:service as never,
-    authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;},geminiKey});
+    authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;},...(geminiKey?{geminiKey}:{})});
   return {server,service};
 }
 
