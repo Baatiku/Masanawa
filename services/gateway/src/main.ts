@@ -1,5 +1,6 @@
 import {callGreeting} from './ngn_calls/greeting.js';
 import {createNewsFeedPoller} from '@masanawa/postgres';
+import {createCivicResponseRepository} from '@masanawa/postgres';
 import {createBrowserPushService} from './browser_push.js';
 import {createCustomerMemoryService} from './customer_memory.js';
 import {createMessageControlService} from './message_controls.js';
@@ -2301,6 +2302,7 @@ export async function startGatewayService(
       ...(ngnWallet ? { ngnWallet } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
+      ...(featurePool&&sessions&&featureTenant?{civicResponse:{repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?.trim()?{geminiKey:(env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)!.trim()}: {})}}:{}),
       ...(sessions ? { mobileDiagnostics: {
         sessions,
         observe: (report) => { process.stdout.write(JSON.stringify(report) + "\n"); },

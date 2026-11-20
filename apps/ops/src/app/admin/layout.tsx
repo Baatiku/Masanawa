@@ -14,6 +14,8 @@ const groups: { title: string; items: { label: string; href: string; icon: strin
     { label: "AI runtime", href: "/admin/runtime", icon: "⌁", live: true },
   ] },
   { title: "MANAGEMENT", items: [
+    { label: "Incident response", href: "/admin/incidents", icon: "✚", live: true },
+    { label: "Response contacts", href: "/admin/response-contacts", icon: "☎", live: true },
     { label: "News & publishers", href: "/admin/news", icon: "▤", live: true },
     { label: "Wallet & payments", href: "/admin/wallet", icon: "▣", live: true },
     { label: "Buy Data", href: "/admin/data", icon: "▥", live: true },

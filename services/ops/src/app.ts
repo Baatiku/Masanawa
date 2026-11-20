@@ -1,4 +1,6 @@
 import {registerOwnerMailboxRoutes} from './owner_mailbox_routes.js';
+import {CivicResponseError} from '@masanawa/postgres';
+import type {CivicResponseAdmin} from './civic_response_admin.js';
 import { WhatsAppAdminError, type createWhatsAppAdmin } from './whatsapp_admin.js';
 import type {createOwnerMailbox} from './owner_mailbox.js';
 import type {createDataReconciliation} from './data_reconciliation.js';
@@ -30,6 +32,7 @@ export interface ReadinessCheck {
 }
 
 export interface OpsAppOptions {
+  readonly civicResponseAdmin?:CivicResponseAdmin;
   readonly whatsappAdmin?:ReturnType<typeof createWhatsAppAdmin>;
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
@@ -196,6 +199,40 @@ export function createOpsApp(options: OpsAppOptions = {}) {
   });
 
   app.addHook('onSend',async(request,reply,payload)=>{if(request.url.startsWith('/v1/admin/'))reply.header('Cache-Control','private, no-store');return payload;});
+
+  if(options.civicResponseAdmin){
+    const response=options.civicResponseAdmin;
+    const fail=async(reply:{code:(status:number)=>unknown},work:()=>Promise<unknown>)=>{
+      try{return await work()}catch(error){
+        const status=error instanceof OpsAdminAccessError?error.statusCode:error instanceof CivicResponseError?error.statusCode:503;
+        reply.code(status);return {error:error instanceof OpsAdminAccessError?error.message:error instanceof CivicResponseError?error.code:'response_admin_unavailable'};
+      }
+    };
+    const Id=Type.Object({id:Type.String({pattern:'^[0-9a-f-]{36}$'})},{additionalProperties:false});
+    app.get('/v1/admin/incidents',{schema:{querystring:Type.Object({status:Type.Optional(Type.String({maxLength:32})),category:Type.Optional(Type.String({maxLength:60})),limit:Type.Optional(Type.Integer({minimum:1,maximum:100})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000})),includeHidden:Type.Optional(Type.Boolean())},{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.queue(q.headers.authorization,q.query)));
+    app.get('/v1/admin/incidents/:id',{schema:{params:Id}},async(q,r)=>fail(r,()=>response.detail(q.headers.authorization,q.params.id)));
+    app.post('/v1/admin/incidents/:id/update',{schema:{params:Id,body:Type.Object({
+      expectedRevision:Type.Integer({minimum:1}),reason:Type.String({minLength:8,maxLength:1000}),
+      status:Type.Optional(Type.String({maxLength:32})),title:Type.Optional(Type.String({maxLength:180})),
+      description:Type.Optional(Type.String({maxLength:10000})),urgency:Type.Optional(Type.String({maxLength:20})),
+      category:Type.Optional(Type.String({maxLength:60})),assignedAgencyId:Type.Optional(Type.Union([Type.String({maxLength:80}),Type.Null()])),
+      privateStaffNotes:Type.Optional(Type.String({maxLength:5000})),reporterUpdate:Type.Optional(Type.String({maxLength:2000})),
+      externalReference:Type.Optional(Type.String({maxLength:200})),dispatchConfirmationSource:Type.Optional(Type.String({maxLength:1000})),
+      hide:Type.Optional(Type.Boolean()),
+    },{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.revise(q.headers.authorization,q.params.id,q.body)));
+    app.get('/v1/admin/response/contacts',async(q,r)=>fail(r,()=>response.contacts(q.headers.authorization)));
+    app.post('/v1/admin/response/contacts',{schema:{body:Type.Object({
+      id:Type.String({maxLength:80}),name:Type.String({maxLength:180}),acronym:Type.Optional(Type.String({maxLength:30})),
+      serviceType:Type.String({maxLength:80}),scope:Type.String({maxLength:20}),state:Type.Optional(Type.Union([Type.String({maxLength:80}),Type.Null()])),
+      lga:Type.Optional(Type.Union([Type.String({maxLength:100}),Type.Null()])),address:Type.Optional(Type.Union([Type.String({maxLength:300}),Type.Null()])),
+      phone:Type.Optional(Type.Union([Type.String({maxLength:35}),Type.Null()])),email:Type.Optional(Type.Union([Type.String({maxLength:150}),Type.Null()])),
+      website:Type.Optional(Type.Union([Type.String({maxLength:2000}),Type.Null()])),sourceUrl:Type.String({maxLength:2000}),
+      verifiedAt:Type.String({maxLength:10}),verificationStatus:Type.String({maxLength:30}),routingTags:Type.Optional(Type.Array(Type.String({maxLength:50}),{maxItems:20})),
+      publicNotes:Type.Optional(Type.String({maxLength:800})),latitude:Type.Optional(Type.Union([Type.Number(),Type.Null()])),
+      longitude:Type.Optional(Type.Union([Type.Number(),Type.Null()])),expectedRevision:Type.Integer({minimum:0}),
+      reason:Type.String({minLength:8,maxLength:500}),removed:Type.Optional(Type.Boolean()),
+    },{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.saveContact(q.headers.authorization,q.body)));
+  }
 
   if(options.whatsappAdmin){
     const wa=options.whatsappAdmin;

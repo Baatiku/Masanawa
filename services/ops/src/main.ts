@@ -24,6 +24,7 @@ import type { SkillRepository } from "@masanawa/skills";
 import { readRequiredEnv } from "@masanawa/contracts";
 import { createPostgresPlatformSessionRepository } from "@masanawa/postgres";
 import { createOpsAdminDashboardService, parseOpsAdminGrants } from "./admin_dashboard.js";
+import {createCivicResponseAdmin} from './civic_response_admin.js';
 import {
   createDrainState,
   readNodeServiceRuntimeConfig,
@@ -58,6 +59,7 @@ export interface ServiceProcess extends NodeSignalSource {
 }
 
 export interface ServiceDatabaseDependency {
+  readonly civicResponseAdmin?:ReturnType<typeof createCivicResponseAdmin>;
   readonly whatsappAdmin?:ReturnType<typeof createWhatsAppAdmin>;
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
@@ -139,6 +141,7 @@ function createDefaultDatabaseDependency(
   const flutterwave=env.FLUTTERWAVE_SECRET_KEY?.trim()?new FlutterwaveBillsClient({secretKey:env.FLUTTERWAVE_SECRET_KEY.trim(),country:'NG',transport:new FlutterwaveHttpTransport({timeoutMs:5000})}):undefined;
   const adminDashboard=createOpsAdminDashboardService({sessions:createPostgresPlatformSessionRepository(database.pool),pool:database.pool,grants:parseOpsAdminGrants(env.MASANAWA_OPS_ADMIN_GRANTS_JSON),dynamicCapabilities:async(tenantId,userId)=>{const caps=(await database.pool.query(`SELECT capabilities FROM security.ops_admin_roles WHERE tenant_id=$1 AND user_id=$2`,[tenantId,userId])).rows[0]?.capabilities;return Array.isArray(caps)?caps.filter((c:unknown):c is string=>typeof c==='string'&&/^[a-z]+(?:\.[a-z]+)+$/.test(c)):[];}});
   return Object.freeze({
+    civicResponseAdmin:createCivicResponseAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     whatsappAdmin:createWhatsAppAdmin({pool:database.pool,authorize:adminDashboard.authorize,env}),
     evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     walletAdmin:createWalletAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
@@ -227,6 +230,7 @@ export async function startOpsService(
       },
       ...(composedAgentAdmin ? { agentAdmin: composedAgentAdmin } : {}),
       ...(database.adminDashboard ? { adminDashboard: database.adminDashboard } : {}),
+      ...(database.civicResponseAdmin ? { civicResponseAdmin: database.civicResponseAdmin } : {}),
       readinessChecks: [
         ...(options.appOptions?.readinessChecks ?? []),
         database.readinessCheck,
