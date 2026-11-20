@@ -437,7 +437,7 @@ class LiveVoiceSession with WidgetsBindingObserver {
         if (pendingSocket == null || _closed) return;
         await _beginMicrophone();
         if (_closed) return;
-        if (sendGreeting && !_ready.isCompleted) {
+        if (sendGreeting && !_ready.isCompleted && message['greetedByRelay'] != true) {
           const greeting =
               'You have answered this call. Speak first with a brief, natural hello in your own character, using the saved conversation context. '
               'Do not repeat your introduction or ask for facts already supplied.';

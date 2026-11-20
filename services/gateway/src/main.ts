@@ -1,3 +1,4 @@
+import {callGreeting} from './ngn_calls/greeting.js';
 import {createNewsFeedPoller} from '@masanawa/postgres';
 import {createBrowserPushService} from './browser_push.js';
 import {createCustomerMemoryService} from './customer_memory.js';
@@ -1959,7 +1960,7 @@ export async function startGatewayService(
         const provider=await ngnLiveVoiceTokens!.mint({authorizationHeader,
           characterId:admission.characterId});
         // One history identity per durable admission, including grant retries.
-        const history=await featurePool!.query<{call_id:string}>(`INSERT INTO agents.masana_call_history
+        const history=await featurePool!.query<{call_id:string;greeting:string|null}>(`INSERT INTO agents.masana_call_history
           (tenant_id,user_id,call_id,character_id,display_name,expires_at,ngn_admission_id)
           SELECT p.tenant_id,$2,$3::uuid,p.character_id,a.display_name,$5,$6
           FROM agents.platform_agent_profiles p
@@ -1967,11 +1968,12 @@ export async function startGatewayService(
           WHERE p.tenant_id=$1 AND p.character_id=$4 AND a.visible_in_user_app
           ON CONFLICT (tenant_id,user_id,ngn_admission_id) WHERE ngn_admission_id IS NOT NULL
           DO UPDATE SET expires_at=EXCLUDED.expires_at
-          RETURNING call_id`,[actor.tenantId,actor.userId,
+          RETURNING call_id,
+            (SELECT greeting FROM agents.agent_presentations WHERE tenant_id=$1 AND character_id=$4) AS greeting`,[actor.tenantId,actor.userId,
             createCanonicalId('request').slice('request_'.length),admission.characterId,admission.expiresAt,id]);
         const callId=history.rows[0]?.call_id;
         if(!callId)throw new NgnCallReviewError('ngn.call.masana_unavailable',404);
-        return ngnRelay!.issue(actor,admission.characterId,id,{...provider,callId},validateOwner,readOfficialEvidence);
+        return ngnRelay!.issue(actor,admission.characterId,id,{...provider,callId},validateOwner,readOfficialEvidence,callGreeting(history.rows[0]?.greeting));
       },
       finish:(actor,id)=>ngnRelay!.finish(actor,id),
     }:undefined);
