@@ -122,14 +122,28 @@ export function createAgentConversationService(input: {
   }
 
   function evidenceAccess(admission:AgentConversationAdmission,authorizationHeader:string|undefined){
-    if(!admission.presentation.narrative?.publicOfficial)return {};
-    return {readPublicEvidence:async(query:string)=>{
+    const official=!!admission.presentation.narrative?.publicOfficial;
+    const civicId=admission.presentation.narrative?.civicAgency?.id;
+    if(!official&&!civicId)return {};
+    const reread=async(query:string)=>{
       const current=await input.authorizer.authorize({authorizationHeader,characterId:admission.scope.characterId,evidenceQuery:query.slice(0,500)});
       if(current.scope.tenantId!==admission.scope.tenantId||current.scope.userId!==admission.scope.userId||
-        current.scope.characterId!==admission.scope.characterId||current.characterVersionId!==admission.characterVersionId||
-        !current.presentation.narrative?.publicOfficial)throw Error('official_evidence_scope_changed');
-      return current.presentation.narrative.publicOfficial;
-    }};
+        current.scope.characterId!==admission.scope.characterId||current.characterVersionId!==admission.characterVersionId)
+        throw Error(official?'official_evidence_scope_changed':'civic_evidence_scope_changed');
+      return current.presentation.narrative;
+    };
+    return {
+      ...(official?{readPublicEvidence:async(query:string)=>{
+        const narrative=await reread(query);
+        if(!narrative?.publicOfficial)throw Error('official_evidence_scope_changed');
+        return narrative.publicOfficial;
+      }}:{}),
+      ...(civicId?{readCivicEvidence:async(query:string)=>{
+        const narrative=await reread(query);
+        if(narrative?.civicAgency?.id!==civicId)throw Error('civic_evidence_scope_changed');
+        return narrative.civicAgency;
+      }}:{}),
+    };
   }
 
   async function renderAudio(

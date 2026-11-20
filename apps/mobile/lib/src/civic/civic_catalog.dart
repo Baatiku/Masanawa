@@ -42,6 +42,18 @@ class CivicEntry {
   final List<CivicTenure> tenures;
   final bool deceased;
 
+  /// Exact reviewed Gateway civic ID, never a display-name guess for an AI
+  /// identity. Historic short agency IDs survive while new institution guides
+  /// use their stable org-* directory IDs.
+  String? get chatAgencyId {
+    if (kind != CivicKind.institution && kind != CivicKind.department) return null;
+    if (_legacyAgencyIds.contains(id)) return id;
+    for (final record in _institutionRows) {
+      if (record.$1 == name) return _orgCivicId(name);
+    }
+    return null;
+  }
+
   String get category => switch (kind) {
     CivicKind.person => 'People',
     CivicKind.department => 'Directorates',
@@ -292,12 +304,127 @@ final civicStates = List<CivicEntry>.unmodifiable([
     sourceUrl:'https://fcta.gov.ng/'),
 ]);
 
+const _legacyAgencyIds = <String>{
+  'inec','nimc','nafdac','ncdc','frsc','cac','cbn','efcc','icpc','ndlea','nis','nema','ncc','nitda','npa','faan',
+};
+
+String _orgCivicId(String name) => 'org-${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '')}';
+
+/// Same 71 institution names and canonical org-* IDs as the reviewed web
+/// directory. Supplemental entries never displace the original mobile IDs.
+const _institutionRows = <(String,String,String,String,String,String,String?)>[
+  ("The Presidency", "Institution", "Executive", "Federal executive leadership, cabinet coordination and national policy direction", "https://statehouse.gov.ng/", "Federal", null),
+  ("National Assembly", "Institution", "Legislature", "Lawmaking, representation, oversight and approval of federal appropriations", "https://nass.gov.ng/", "Federal", null),
+  ("Senate of Nigeria", "Institution", "Legislature", "Representation of the states, legislation, appointments review and oversight", "https://nass.gov.ng/", "Federal", null),
+  ("House of Representatives", "Institution", "Legislature", "Constituency representation, bills, public petitions and oversight", "https://nass.gov.ng/", "Federal", null),
+  ("Supreme Court of Nigeria", "Institution", "Judiciary", "Final appellate adjudication and constitutional interpretation within its jurisdiction", "https://supremecourt.gov.ng/", "Federal", null),
+  ("National Judicial Council", "Institution", "Judiciary", "Judicial appointments recommendations, discipline and administration", "https://njc.gov.ng/", "Federal", null),
+  ("Federal Judicial Service Commission", "Institution", "Judiciary", "Judicial service appointments and employment recommendations", "https://fjsconline.gov.ng/", "Federal", null),
+  ("Federal Capital Territory Administration", "Institution", "Executive", "Urban planning, public infrastructure and territory administration", "https://fcta.gov.ng/", "FCT", null),
+  ("Office of the Secretary to the Government of the Federation", "Institution", "Executive", "Cross-government policy tracking and administrative coordination", "https://osgf.gov.ng/", "Federal", null),
+  ("Office of the Head of the Civil Service of the Federation", "Institution", "Executive", "Federal civil-service policy, workforce systems and service reform", "https://ohcsf.gov.ng/", "Federal", null),
+  ("Federal Ministry of Finance", "Ministry", "Executive", "Federal revenues, fiscal management, treasury policy and budget financing", "https://finance.gov.ng/", "Federal", null),
+  ("Federal Ministry of Education", "Ministry", "Executive", "Federal education strategy, standards and tertiary-education coordination", "https://education.gov.ng/", "Federal", null),
+  ("Federal Ministry of Health and Social Welfare", "Ministry", "Executive", "Health-system policy, services coordination and public health", "https://health.gov.ng/", "Federal", null),
+  ("Federal Ministry of Agriculture and Food Security", "Ministry", "Executive", "Agriculture policy, food security and sector development", "https://agriculture.gov.ng/", "Federal", null),
+  ("Federal Ministry of Works", "Ministry", "Executive", "Federal roads, engineering standards and infrastructure construction", "https://fmw.gov.ng/", "Federal", null),
+  ("Federal Ministry of Power", "Ministry", "Executive", "Energy access, power-sector development and electricity policy", "https://power.gov.ng/", "Federal", null),
+  ("Federal Ministry of Interior", "Ministry", "Executive", "Internal security-related administration, citizenship and migration policy", "https://interior.gov.ng/", "Federal", null),
+  ("Federal Ministry of Justice", "Ministry", "Executive", "Federal legal representation, justice policy and legislative drafting", "https://justice.gov.ng/", "Federal", null),
+  ("Federal Ministry of Defence", "Ministry", "Executive", "Civilian defence policy and oversight of the armed forces", "https://defence.gov.ng/", "Federal", null),
+  ("Federal Ministry of Foreign Affairs", "Ministry", "Executive", "International relations, diplomacy and consular coordination", "https://foreignaffairs.gov.ng/", "Federal", null),
+  ("Federal Ministry of Communications, Innovation and Digital Economy", "Ministry", "Executive", "Telecommunications, digital infrastructure, innovation and technology policy", "https://fmcide.gov.ng/", "Federal", null),
+  ("Federal Ministry of Information and National Orientation", "Ministry", "Executive", "Federal information dissemination, media policy and civic orientation", "https://fmino.gov.ng/", "Federal", null),
+  ("Federal Ministry of Budget and Economic Planning", "Ministry", "Executive", "National development plans, budget coordination and economic planning", "https://nationalplanning.gov.ng/", "Federal", null),
+  ("Federal Ministry of Women Affairs", "Ministry", "Executive", "Women’s development and policies on gender-related social concerns", "https://womenaffairs.gov.ng/", "Federal", null),
+  ("Federal Ministry of Youth Development", "Ministry", "Executive", "Youth development, participation and empowerment policy", "https://fmyd.gov.ng/", "Federal", null),
+  ("Federal Ministry of Environment", "Ministry", "Executive", "Environmental protection, climate policy and conservation", "https://environment.gov.ng/", "Federal", null),
+  ("Federal Ministry of Water Resources and Sanitation", "Ministry", "Executive", "Water resource management, irrigation and sanitation policy", "https://waterresources.gov.ng/", "Federal", null),
+  ("Federal Ministry of Aviation and Aerospace Development", "Ministry", "Executive", "Civil aviation and aerospace policy coordination", "https://aviation.gov.ng/", "Federal", null),
+  ("Federal Ministry of Marine and Blue Economy", "Ministry", "Executive", "Marine economic development, ports and shipping policy", "https://fmmbe.gov.ng/", "Federal", null),
+  ("Federal Ministry of Solid Minerals Development", "Ministry", "Executive", "Mineral resource policy, mining-sector development and regulation", "https://msmd.gov.ng/", "Federal", null),
+  ("Federal Ministry of Industry, Trade and Investment", "Ministry", "Executive", "Industrial competitiveness, trade and investment policy", "https://fmiti.gov.ng/", "Federal", null),
+  ("Federal Ministry of Labour and Employment", "Ministry", "Executive", "Labour standards, industrial relations and employment policy", "https://labour.gov.ng/", "Federal", null),
+  ("Federal Ministry of Housing and Urban Development", "Ministry", "Executive", "Housing policy, urban development and settlement planning", "https://fmhud.gov.ng/", "Federal", null),
+  ("Federal Ministry of Transportation", "Ministry", "Executive", "Rail, road and intermodal transport-sector policy", "https://transportation.gov.ng/", "Federal", null),
+  ("Federal Ministry of Innovation, Science and Technology", "Ministry", "Executive", "National science, innovation and applied research policy", "https://scienceandtech.gov.ng/", "Federal", null),
+  ("Federal Ministry of Art, Culture, Tourism and the Creative Economy", "Ministry", "Executive", "Arts, heritage, tourism and creative-industry development", "https://fmacce.gov.ng/", "Federal", null),
+  ("Federal Ministry of Regional Development", "Ministry", "Executive", "Regional intervention and development programmes", "https://regionaldevelopment.gov.ng/", "Federal", null),
+  ("Federal Ministry of Steel Development", "Ministry", "Executive", "Steel industry and related industrial-policy development", "https://msd.gov.ng/", "Federal", null),
+  ("Federal Ministry of Livestock Development", "Ministry", "Executive", "Livestock development, animal production and related value chains", "https://fmld.gov.ng/", "Federal", null),
+  ("Federal Ministry of Humanitarian Affairs and Poverty Reduction", "Ministry", "Executive", "Humanitarian-response coordination and poverty reduction policy", "https://fmhds.gov.ng/", "Federal", null),
+  ("Federal Ministry of Special Duties and Inter-Governmental Affairs", "Ministry", "Executive", "Special projects and intergovernmental affairs", "https://specialduties.gov.ng/", "Federal", null),
+  ("Federal Ministry of Petroleum Resources", "Ministry", "Executive", "Policy and development oversight of petroleum and gas resources", "https://petroleumresources.gov.ng/", "Federal", null),
+  ("National Agency for Food and Drug Administration and Control", "Agency", "Executive", "Regulate and control food, drugs, cosmetics, medical devices and related products", "https://nafdac.gov.ng/", "Federal", "Federal Ministry of Health and Social Welfare"),
+  ("National Health Insurance Authority", "Agency", "Executive", "Health insurance and financial risk-protection coverage", "https://nhia.gov.ng/", "Federal", "Federal Ministry of Health and Social Welfare"),
+  ("National Primary Health Care Development Agency", "Agency", "Executive", "Support primary-healthcare systems and immunization coordination", "https://nphcda.gov.ng/", "Federal", "Federal Ministry of Health and Social Welfare"),
+  ("Federal Road Safety Corps", "Agency", "Executive", "Road-safety enforcement, education and crash prevention", "https://frsc.gov.ng/", "Federal", null),
+  ("Nigeria Immigration Service", "Agency", "Executive", "Immigration administration, border controls and passport services", "https://immigration.gov.ng/", "Federal", "Federal Ministry of Interior"),
+  ("Nigerian Correctional Service", "Agency", "Executive", "Custodial and non-custodial corrections administration", "https://corrections.gov.ng/", "Federal", "Federal Ministry of Interior"),
+  ("Nigerian Security and Civil Defence Corps", "Agency", "Executive", "Protection of critical assets and civil-defence duties", "https://nscdc.gov.ng/", "Federal", "Federal Ministry of Interior"),
+  ("Federal Fire Service", "Agency", "Executive", "Fire prevention, response and public safety information", "https://fedfire.gov.ng/", "Federal", "Federal Ministry of Interior"),
+  ("National Identity Management Commission", "Agency", "Executive", "National identity enrolment, NIN management and verification systems", "https://nimc.gov.ng/", "Federal", "Federal Ministry of Interior"),
+  ("Nigerian Communications Commission", "Agency", "Executive", "Regulate communications services, spectrum and consumer protection", "https://ncc.gov.ng/", "Federal", "Federal Ministry of Communications, Innovation and Digital Economy"),
+  ("National Information Technology Development Agency", "Agency", "Executive", "National IT development, standards and digital skills policy", "https://nitda.gov.ng/", "Federal", "Federal Ministry of Communications, Innovation and Digital Economy"),
+  ("National Broadcasting Commission", "Agency", "Executive", "Broadcast licensing and broadcast-sector oversight", "https://nbc.gov.ng/", "Federal", "Federal Ministry of Information and National Orientation"),
+  ("National Orientation Agency", "Agency", "Executive", "Public civic-awareness and national-orientation programmes", "https://noa.gov.ng/", "Federal", "Federal Ministry of Information and National Orientation"),
+  ("Nigerian Ports Authority", "Agency", "Executive", "Manage and develop designated seaports", "https://nigerianports.gov.ng/", "Federal", "Federal Ministry of Marine and Blue Economy"),
+  ("Nigerian Maritime Administration and Safety Agency", "Agency", "Executive", "Merchant-shipping safety, maritime administration and seafarer development", "https://nimasa.gov.ng/", "Federal", "Federal Ministry of Marine and Blue Economy"),
+  ("Federal Airports Authority of Nigeria", "Agency", "Executive", "Airport infrastructure and operational services", "https://faan.gov.ng/", "Federal", "Federal Ministry of Aviation and Aerospace Development"),
+  ("Nigerian Civil Aviation Authority", "Agency", "Executive", "Civil-aviation safety and economic regulation", "https://ncaa.gov.ng/", "Federal", "Federal Ministry of Aviation and Aerospace Development"),
+  ("National Emergency Management Agency", "Agency", "Executive", "Coordinate disaster preparedness and emergency response", "https://nema.gov.ng/", "Federal", null),
+  ("National Drug Law Enforcement Agency", "Agency", "Executive", "Enforce drug-control laws and support prevention and rehabilitation programmes", "https://ndlea.gov.ng/", "Federal", null),
+  ("Economic and Financial Crimes Commission", "Agency", "Executive", "Investigate and prosecute financial and economic crimes within its statutory authority", "https://efcc.gov.ng/", "Federal", null),
+  ("Independent Corrupt Practices and Other Related Offences Commission", "Agency", "Independent", "Investigate corruption offences and support prevention and education", "https://icpc.gov.ng/", "Federal", null),
+  ("Independent National Electoral Commission", "Agency", "Independent", "Organize and supervise federal and state elections within its mandate", "https://inecnigeria.org/", "Federal", null),
+  ("Central Bank of Nigeria", "Agency", "Independent", "Monetary policy, financial-system stability and currency management", "https://cbn.gov.ng/", "Federal", null),
+  ("National Bureau of Statistics", "Agency", "Executive", "Produce and disseminate official national statistics", "https://nigerianstat.gov.ng/", "Federal", "Federal Ministry of Budget and Economic Planning"),
+  ("Budget Office of the Federation", "Directorate", "Executive", "Prepare federal budget documentation and monitor budget implementation", "https://budgetoffice.gov.ng/", "Federal", "Federal Ministry of Budget and Economic Planning"),
+  ("Federal Government Press", "Directorate", "Executive", "Government printing, gazettes and public documents", "https://fmino.gov.ng/", "Federal", "Federal Ministry of Information and National Orientation"),
+  ("National Archives of Nigeria", "Directorate", "Executive", "Preserve public archival holdings and facilitate historical access", "https://fmino.gov.ng/", "Federal", "Federal Ministry of Information and National Orientation"),
+  ("Citizenship and Business Department", "Directorate", "Executive", "Administer prescribed citizenship and expatriate-related government processes", "https://interior.gov.ng/", "Federal", "Federal Ministry of Interior"),
+  ("Public Service Reforms Department", "Directorate", "Executive", "Coordinate public-service reform policies and implementation support", "https://ohcsf.gov.ng/", "Federal", "Office of the Head of the Civil Service of the Federation"),
+];
+
+final _existingCivicInstitutionNames = <String>{
+  for (final entry in civicGovernment) entry.name,
+  for (final entry in civicMinistries) entry.name,
+  for (final entry in civicDirectorates) entry.name,
+};
+
+String? _civicParentId(String? name) {
+  if (name == null) return null;
+  for (final entry in [...civicGovernment,...civicMinistries,...civicDirectorates]) {
+    if (entry.name == name) return entry.id;
+  }
+  return _institutionRows.any((row) => row.$1 == name) ? _orgCivicId(name) : null;
+}
+
+final civicAdditionalInstitutions = List<CivicEntry>.unmodifiable([
+  for (final row in _institutionRows)
+    if (!_existingCivicInstitutionNames.contains(row.$1))
+      CivicEntry(
+        id: _orgCivicId(row.$1), name: row.$1,
+        kind: row.$2 == 'Directorate' ? CivicKind.department : CivicKind.institution,
+        branch: switch (row.$3) {
+          'Legislature' => CivicBranch.legislature,
+          'Judiciary' => CivicBranch.judiciary,
+          'Independent' => CivicBranch.independent,
+          _ => CivicBranch.executive,
+        },
+        parentId: _civicParentId(row.$7),
+        summary: '${row.$4}.', responsibilities: [row.$4],
+        sourceUrl: row.$5, level: row.$6,
+      ),
+]);
+
 final civicCatalog = List<CivicEntry>.unmodifiable([
   ...civicHeadsOfGovernment,
   ...civicGovernment,
   ...civicMinistries,
   ...civicDirectorates,
   ...civicStates,
+  ...civicAdditionalInstitutions,
 ]);
 
 CivicEntry? civicById(String id) {

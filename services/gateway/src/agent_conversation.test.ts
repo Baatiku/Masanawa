@@ -396,6 +396,21 @@ it('official retrieval runs after the turn hold and cannot change the admitted u
  await expect(service.turn(request())).rejects.toThrow('official_evidence_scope_changed');expect(fail).toHaveBeenCalled();
 });
 
+it('agency source access is scoped to the admitted civic identity and rechecks ownership after the hold',async()=>{
+ const f=fixture(),session=sessionFor(f);let held=false,switched=false;
+ const agency={id:'nimc',name:'National Identity Management Commission',short:'NIMC',topic:'national identity',sourceUrl:'https://nimc.gov.ng/',evidence:[]};
+ const admission={...f.admission,presentation:{...f.admission.presentation,narrative:{biography:'',personality:[],languages:[],civicAgency:agency}}};
+ const service=createAgentConversationService({sessions:{read:async()=>session} as never,runs:{create:async()=>({}),finish:async()=>({})} as never,
+  authorizer:{authorize:async input=>{
+   if(input.evidenceQuery==='identity services'){expect(held).toBe(true);return switched?{...admission,presentation:{...admission.presentation,narrative:{...admission.presentation.narrative,civicAgency:{...agency,id:'cac'}}}}:admission;}
+   return admission;
+  }},strategy:{execute:async input=>{expect(await input.readCivicEvidence!('identity services')).toEqual(agency);return {reply:'Verified civic answer',parts:[]};}},
+  mobileShell:{claimTurn:async()=>{held=true;return {state:'created'};},appendEvent:async()=>{},completeTurn:async()=>{},failTurn:async()=>{},listHistory:async()=>[]} as never,sessionDurationMs:60000});
+ const request=()=>({authorizationHeader:'Bearer customer',characterId:f.scope.characterId,characterSessionId:session.characterSessionId,text:'Identity services?',requestId:createCanonicalId('request'),correlationId:createCanonicalId('correlation')});
+ expect((await service.turn(request())).reply).toBe('Verified civic answer');switched=true;
+ await expect(service.turn(request())).rejects.toThrow('civic_evidence_scope_changed');
+});
+
 it('requires a fresh official session after a published-version change before creating a turn hold',async()=>{
  const f=fixture(),session=sessionFor(f);let held=false;
  const admission={...f.admission,characterVersionId:createCanonicalId('character-version'),presentation:{...f.admission.presentation,

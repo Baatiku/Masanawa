@@ -8,7 +8,8 @@ describe('gendered synthetic contact voices',()=>{
   expect(APPROVED_MASANA_VOICES).toEqual(['Sulafat','Algenib','Algieba']);
   expect(Object.keys(MASANA_CONTACT_GENDERS)).toHaveLength(26);
   const contacts=[...PROFESSIONAL_MASANA_CATALOG,...OFFICIAL_ROSTER_MANIFEST,...CIVIC_AGENCY_CATALOG];
-  expect(contacts).toHaveLength(148);
+  expect(CIVIC_AGENCY_CATALOG).toHaveLength(73); // 16 legacy + 57 newly reviewed guides
+  expect(contacts).toHaveLength(PROFESSIONAL_MASANA_CATALOG.length+OFFICIAL_ROSTER_MANIFEST.length+CIVIC_AGENCY_CATALOG.length);
   for(const [i,c] of contacts.entries()){
    expect(['female','male']).toContain(c.gender);
    expect(c.gender==='female'?contactVoice(c.gender,i)==='Sulafat':['Algenib','Algieba'].includes(contactVoice(c.gender,i))).toBe(true);

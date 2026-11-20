@@ -8,11 +8,11 @@ export function renderOfficialAnswer(raw:string,official:PublicOfficialPersona,l
  const fallback=Object.hasOwn(unknown,language)?unknown[language]!:unknown.en!;
  try{
   const r=parse(raw);if(r.status==='insufficient')return fallback;
-  if(!['answered','conversation'].includes(r.status)||typeof r.answer!=='string'||!r.answer.trim()||r.answer.length>20000||
+  if(!['answered','partial','conversation'].includes(r.status)||typeof r.answer!=='string'||!r.answer.trim()||r.answer.length>20000||
    !Array.isArray(r.evidenceIds)||r.evidenceIds.length>6)return fallback;
   const sources=[...new Set<string>(r.evidenceIds)];
   const evidence=sources.map(id=>official.evidence.find(e=>e.id===id));
-  if(evidence.some(e=>!e)||r.status==='answered'&&!evidence.length)return fallback;
+  if(evidence.some(e=>!e)||(r.status==='answered'||r.status==='partial')&&!evidence.length)return fallback;
   if(r.status==='conversation'&&(!allowConversation||sources.length||r.answer.length>600))return fallback;
   const quotations=r.quotations??[];
   if(!Array.isArray(quotations)||quotations.length>10)return fallback;
@@ -27,14 +27,15 @@ export function renderOfficialAnswer(raw:string,official:PublicOfficialPersona,l
   for(const match of r.answer.matchAll(/https?:\/\/[^\s<>\]\)]+/g))if(!allowed.has(match[0].replace(/[.,;!?]+$/,'')))return fallback;
   const cited=evidence.map(e=>{const title=e!.title.replace(/[\[\]()*_`<>]/g,'');const uri=new URL(e!.sourceUrl);
    if(uri.protocol!=='https:'||uri.username||uri.password)throw Error('invalid_source');
-   return `[${title}](${uri.href.replace(/\(/g,'%28').replace(/\)/g,'%29')}) · ${e!.sourceDateKind==='retrieval'?'Retrieved ':''}${e!.sourceDate}`;
+   return `[${title}](${uri.href.replace(/\(/g,'%28').replace(/\)/g,'%29')}) · ${e!.sourceDateKind==='retrieval'?'Retrieved ':'Reviewed '}${e!.sourceDate}`;
   });
   return r.answer.trim()+(cited.length?'\n\n'+cited.join('\n'):'');
  }catch{return fallback;}
 }
 export const officialAnswerContract=[
- 'For this public-official persona, return JSON only: {"status":"answered|insufficient|conversation","answer":"citizen-facing reply","evidenceIds":["supplied evidence ID"],"quotations":[{"text":"exact quoted words","evidenceId":"supplied ID"}]}.',
- 'Public-record factual answers require supplied evidence IDs. If the evidence cannot support an answer use insufficient. Conversation is only for brief nonfactual greetings/empathy, never undocumented official positions or actions. Explain uncertainty and distinguish inference. Do not put URLs in answer; the server appends checked sources. Every single- or double-quoted phrase must be an exact supplied-source quotation declared in quotations. Never invent an ID or quotation.',
+ 'For this public-official persona, return JSON only: {"status":"answered|partial|insufficient|conversation","answer":"citizen-facing reply","evidenceIds":["supplied evidence ID"],"quotations":[{"text":"exact quoted words","evidenceId":"supplied ID"}]}.',
+ 'Public-record factual answers require supplied evidence IDs. If enough evidence supports only some aspects of a broad question, use partial: teach the documented background and identify the gaps without inventing the rest. Use insufficient only when there is no reliable evidence for the actual question. Conversation is only for brief nonfactual greetings/empathy, never undocumented official positions or actions.',
+ 'For sourced biographies explain the person’s documented life, education, public career, chronology and historical context in connected, engaging prose, distinguishing sourced achievements and positions from public claims. Vary detail to suit the learner and continue the ongoing conversation instead of resetting it. Do not put URLs in answer; the server appends checked sources. Every single- or double-quoted phrase must be an exact supplied-source quotation declared in quotations. Never invent an ID or quotation.',
 ];
 /** Runs inside strategy execution after the existing turn hold, not during auth.
  * Speech transcription/search translation is ephemeral and cannot write shared memory. */

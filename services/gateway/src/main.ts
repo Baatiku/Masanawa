@@ -41,6 +41,7 @@ import { createSignedNgnQuoteReader } from "./msn_wallet/ngn_asset_quote.js";
 import { assertMsnwNgnPolicyRate } from "@masanawa/commerce";
 import { createPublishedPersonaReader } from "./persona_narrative.js";
 import {createPublicRecordResearch} from './public_record_research.js';
+import {createCivicAgencyEvidenceReader} from './civic_agency_evidence.js';
 import { createGeminiRecordedLiveAudioRenderer } from "./recorded_live_audio.js";
 import { FeedService, EditorialReviewService, SavedLibraryService } from "@masanawa/feed";
 import {
@@ -850,7 +851,7 @@ export async function startGatewayService(
     }
 
     const customerAuthorizers = createPlatformCustomerAuthorizers({
-      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,createPublicRecordResearch()))} : {}),
+      ...(database.featurePool ? {personaReader: createPublishedPersonaReader(database.featurePool,createOfficialKnowledgeReader(database.featurePool,createPublicRecordResearch()),createCivicAgencyEvidenceReader())} : {}),
       sessions: customerSessions,
       presentations: database.agentPresentations,
       skillAssignments: database.characterSkillAssignments,
