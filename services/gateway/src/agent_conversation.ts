@@ -174,7 +174,7 @@ export function createAgentConversationService(input: {
           }} : {}),
         },
       );
-    }, signal);
+    }, signal, 55_000);
   }
 
   async function stagePairedAudio(scope:import("@masanawa/agents").CharacterSessionScope,
@@ -338,7 +338,7 @@ export function createAgentConversationService(input: {
               const audio=await optionalAudioReply(async signal=>{
                 const voice=await input.voiceForCharacter?.(admission.scope);
                 return input.generateSpokenReply!(message,system,signal,voice);
-              },request.signal,25_000);
+              },request.signal,35_000);
               request.signal?.throwIfAborted();
               return audio?.transcript?.trim()?{...audio,transcript:audio.transcript.trim()}:undefined;
             },
@@ -514,6 +514,7 @@ export function createAgentConversationService(input: {
           ),
         });
         if (claim.state === "existing") return replayTurn(claim.command);
+        await Promise.resolve().then(() => request.onAccepted?.()).catch(() => undefined);
         await input.mobileShell.appendEvent({
           scope: admission.scope,
           characterSessionId,
@@ -717,6 +718,7 @@ export function createAgentConversationService(input: {
           ),
         });
         if (claim.state === "existing") return replayTurn(claim.command);
+        await Promise.resolve().then(() => request.onAccepted?.()).catch(() => undefined);
         await input.mobileShell.appendEvent({
           scope: admission.scope,
           characterSessionId,

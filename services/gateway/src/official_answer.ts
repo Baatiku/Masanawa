@@ -1,3 +1,4 @@
+import { withoutOpeningIdentityNotice } from './persona_continuity.js';
 import type {AgentInferenceProvider,AgentStrategyRequest,PublicOfficialPersona} from '@masanawa/agents';
 const unknown:Record<string,string>={en:'I do not have enough reviewed evidence to answer that reliably.',ha:'Ba ni da isassun bayanan da aka tantance domin amsa wannan da tabbaci.',yo:'Mi ò ní ẹ̀rí tí a ti ṣàyẹ̀wò tó láti dáhùn ìbéèrè yìí dáadáa.',ig:'Enweghị m ihe akaebe a nyochara nke zuru ezu iji zaa nke a nke ọma.',pcm:'I no get enough verified information to answer this one well.'};
 const parse=(text:string):Record<string,any>=>{const value:unknown=JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g,''));if(!value||typeof value!=='object'||Array.isArray(value))throw Error('invalid_official_answer');return value as Record<string,any>;};
@@ -29,7 +30,8 @@ export function renderOfficialAnswer(raw:string,official:PublicOfficialPersona,l
    if(uri.protocol!=='https:'||uri.username||uri.password)throw Error('invalid_source');
    return `[${title}](${uri.href.replace(/\(/g,'%28').replace(/\)/g,'%29')}) · ${e!.sourceDateKind==='retrieval'?'Retrieved ':'Reviewed '}${e!.sourceDate}`;
   });
-  return r.answer.trim()+(cited.length?'\n\n'+cited.join('\n'):'');
+  const reply = r.status==='conversation' ? withoutOpeningIdentityNotice(r.answer) : r.answer.trim();
+  return (reply||fallback)+(cited.length?'\n\n'+cited.join('\n'):'');
  }catch{return fallback;}
 }
 export const officialAnswerContract=[

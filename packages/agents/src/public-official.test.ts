@@ -21,6 +21,7 @@ it('accepts only direct HTTPS Grokipedia article URLs without wrappers or altern
 
 it('describes a reviewed civic identity as an AI persona without fictional framing',()=>{
  const instructions=officialPersonaInstructions({officialName:'Ada Test',office:'Public office',countryCode:'NG',identitySourceUrl:'https://example.gov.ng/ada',reviewedAt:'2026-11-18',reviewExpiresAt:'2026-12-18',evidence:[]}).join('\n');
+ expect(instructions).toContain('Leave the standing identity notice to the app');
  expect(instructions).toContain('AI persona of "Ada Test"');
  expect(instructions).not.toMatch(/simulation/i);
  expect(instructions).toContain('not the actual person');

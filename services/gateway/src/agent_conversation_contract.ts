@@ -76,6 +76,7 @@ export interface AgentConversationService {
     readonly correlationId: CorrelationId;
     readonly surface?: AgentConversationSurface;
     readonly representation?: AgentConversationRepresentation;
+    readonly onAccepted?: () => void | Promise<void>;
     readonly onTextDelta?: (delta: string) => void | Promise<void>;
     readonly onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>;
     readonly onAudioTranscriptDelta?: (delta: string) => void | Promise<void>;
@@ -104,6 +105,7 @@ export interface AgentConversationService {
     readonly correlationId: CorrelationId;
     readonly surface?: AgentConversationSurface;
     readonly representation?: AgentConversationRepresentation;
+    readonly onAccepted?: () => void | Promise<void>;
     readonly onTextDelta?: (delta: string) => void | Promise<void>;
     readonly onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>;
     readonly onAudioTranscriptDelta?: (delta: string) => void | Promise<void>;

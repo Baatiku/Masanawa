@@ -1,3 +1,4 @@
+import { withoutOpeningIdentityNotice } from './persona_continuity.js';
 import type {AgentInferenceProvider,AgentStrategyRequest,AgentPersonaNarrative} from '@masanawa/agents';
 
 type Agency=NonNullable<AgentPersonaNarrative['civicAgency']>;
@@ -45,7 +46,8 @@ export function renderCivicAgencyAnswer(raw:string,agency:Agency,language='en',a
       if(uri.protocol!=='https:'||uri.username||uri.password||uri.port||uri.hash||uri.search)throw Error('civic_source_invalid');
       return `[${title}](${uri.href.replace(/\(/g,'%28').replace(/\)/g,'%29')}) · ${source.sourceDateKind==='retrieval'?'Retrieved ':'Reviewed '}${source.sourceDate}`;
     });
-    return answer.trim()+(citations.length?'\n\n'+citations.join('\n'):'');
+    const reply = status==='conversation' ? withoutOpeningIdentityNotice(answer) : answer.trim();
+  return (reply||fallback)+(citations.length?'\n\n'+citations.join('\n'):'');
   }catch{return fallback;}
 }
 
