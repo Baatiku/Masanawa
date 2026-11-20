@@ -193,6 +193,25 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
     }finally{await f.cleanup();}
   });
+  it('delivers a split greeting completion before playback acknowledgement without charging early',async()=>{
+    const f=await fixture(5,{silent:true});
+    try{
+      const client=await f.open(await f.issue());
+      const frames:Record<string,any>[]=[];
+      client.on('message',raw=>frames.push(JSON.parse(raw.toString())));
+      client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      await until(async()=>f.received.some(frame=>!!frame.clientContent));
+      f.provider()!.send(JSON.stringify(sound));
+      await until(async()=>frames.some(frame=>!!frame.openingAudio?.modelTurn));
+      f.provider()!.send(JSON.stringify({serverContent:{turnComplete:true}}));
+      await until(async()=>frames.some(frame=>frame.openingAudio?.turnComplete===true));
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
+      expect(frames.some(frame=>!!frame.setupComplete)).toBe(false);
+      client.send(JSON.stringify({greetingPlayback:true}));
+      await until(async()=>frames.some(frame=>!!frame.setupComplete));
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
+    }finally{await f.cleanup();}
+  });
   it('settles a provider setup and silent greeting at zero',async()=>{
     const f=await fixture(5,{silent:true});
     try{

@@ -283,12 +283,16 @@ export function createNgnCallRelay(options:RelayOptions){
               send(client,JSON.stringify({openingAudio:message.serverContent??message.server_content}));
             }
           }
-          if(!greetingSent){
-            const content=(message.serverContent??message.server_content) as {turnComplete?:boolean}|undefined;
-            if(content?.turnComplete){
-              options.report?.({stage:'provider',code:'unavailable',providerStatus:'GREETING_NO_AUDIO'});
-              void Promise.resolve().then(()=>stop(false,true));
-            }
+          const content=(message.serverContent??message.server_content) as {turnComplete?:boolean}|undefined;
+          // Gemini may finish its greeting in a separate, silent frame before the browser's
+          // audible-playback acknowledgement. Preserve that completion marker so the
+          // browser can safely release the microphone only after playback finishes.
+          if(playbackRequired&&greetingSent&&bytes===0&&content?.turnComplete){
+            send(client,JSON.stringify({openingAudio:{turnComplete:true}}));
+          }
+          if(!greetingSent&&content?.turnComplete){
+            options.report?.({stage:'provider',code:'unavailable',providerStatus:'GREETING_NO_AUDIO'});
+            void Promise.resolve().then(()=>stop(false,true));
           }
           if(!connected)return;
         }
