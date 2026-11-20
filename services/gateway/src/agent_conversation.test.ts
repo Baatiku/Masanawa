@@ -193,13 +193,11 @@ describe("Alpha conversation service", () => {
       characterSessionId: opened.characterSessionId,
       characterId: f.scope.characterId,
       text: "hello",
-      textOnly: true,
       onAccepted: () => { events.push("message:accepted"); },
       requestId: createCanonicalId("request"),
       correlationId: createCanonicalId("correlation"),
     });
-    expect(text.audioBase64).toBeUndefined();
-    expect(render).not.toHaveBeenCalled();
+    expect(text.audioBase64).toBe("AAAAAA==");
     expect(events.indexOf("message:accepted")).toBeLessThan(events.findIndex(event => event.startsWith("run:create")));
     expect(text.reply).toBe("Text: hello");
     expect(text.agentRunId).toMatch(/^agent-run_/u);
@@ -232,8 +230,9 @@ describe("Alpha conversation service", () => {
     expect(publicQueries).toEqual([undefined,"hello",undefined,"Compare these"]);
     expect(listHistory).toHaveBeenCalledTimes(3);
     for(const call of listHistory.mock.calls) expect(call[0]).toEqual({scope:f.scope,limit:16});
-    expect(render).toHaveBeenNthCalledWith(1,"I heard the voice note.",expect.any(AbortSignal),undefined,{voiceName:"Fora"});
-    expect(render).toHaveBeenNthCalledWith(2,"I reviewed both attachments.",expect.any(AbortSignal),undefined,{voiceName:"Fora"});
+    expect(render).toHaveBeenNthCalledWith(1,"Text: hello",expect.any(AbortSignal),undefined,{voiceName:"Fora"});
+    expect(render).toHaveBeenNthCalledWith(2,"I heard the voice note.",expect.any(AbortSignal),undefined,{voiceName:"Fora"});
+    expect(render).toHaveBeenNthCalledWith(3,"I reviewed both attachments.",expect.any(AbortSignal),undefined,{voiceName:"Fora"});
 
     await service.close({
       authorizationHeader: "Bearer alpha",

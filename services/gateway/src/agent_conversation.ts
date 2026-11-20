@@ -11,6 +11,7 @@ import {
 import type {
   AgentRunRepository,
   AgentStrategy,
+  AgentStrategyResult,
   CharacterSessionRepository,
   MobileShellRepository,
   MobileTurnCommand,
@@ -20,7 +21,7 @@ import type {
   AgentConversationAdmission,
   AgentConversationService,
 } from "./agent_conversation_contract.js";
-import type { NativeAudioRenderer } from "./native_audio.js";
+import type { NativeAudioRenderer, NativeAudioRenderResult } from "./native_audio.js";
 import type { AgentBillingAssistant } from "./agent_billing_assistant.js";
 import type { AgentTeachingAssistant } from "./agent_teaching_assistant.js";
 import type { AgentCryptoAssistant } from "./agent_crypto_assistant.js";
@@ -105,6 +106,7 @@ export function createAgentConversationService(input: {
   readonly strategy: AgentStrategy;
   /** New paid turns require current account/recovery authority before any hold. */
   readonly beforeTurn?: (authorizationHeader:string|undefined)=>Promise<void>;
+  readonly generateSpokenReply?: (text:string,system:string,signal?:AbortSignal,voice?:string)=>Promise<NativeAudioRenderResult>;
   readonly nativeAudio?: NativeAudioRenderer;
   readonly voiceForCharacter?: (scope: import("@masanawa/agents").CharacterSessionScope) => Promise<string | undefined>;
   readonly mobileShell?: MobileShellRepository;
@@ -299,7 +301,7 @@ export function createAgentConversationService(input: {
             });
         const direct = billingDirect ?? cryptoDirect;
         const inferenceText = teachingPreparation?.text ?? text;
-        const generated = direct ?? await input.strategy.execute({
+        const generated: AgentStrategyResult = direct ?? await input.strategy.execute({
           agentRunId,
           characterSessionId,
           characterVersionId: session.characterVersionId,
@@ -319,6 +321,16 @@ export function createAgentConversationService(input: {
               request.onTextDelta
             ? { onTextDelta: request.onTextDelta }
             : {}),
+          ...(!teachingPreparation&&!input.billingAssistant&&!input.cryptoAssistant&&input.generateSpokenReply?{
+            speakReply: async ({message,system}:{message:string;system:string})=>{
+              const audio=await optionalAudioReply(async signal=>{
+                const voice=await input.voiceForCharacter?.(admission.scope);
+                return input.generateSpokenReply!(message,system,signal,voice);
+              },request.signal,25_000);
+              request.signal?.throwIfAborted();
+              return audio?.transcript?.trim()?{...audio,transcript:audio.transcript.trim()}:undefined;
+            },
+          }:{}),
           input: Object.freeze({ kind: "text" as const, text: inferenceText }),
         });
         const cryptoResult = direct || teachingPreparation
@@ -383,7 +395,8 @@ export function createAgentConversationService(input: {
           referenceId: request.requestId,
         }).catch(() => undefined);
 
-        const audio = request.textOnly ? undefined : await renderAudio(
+        const audio = (!direct && !teachingPreparation && !cryptoResult && !input.billingAssistant
+          ? generated.spokenReply : undefined) ?? await renderAudio(
           reply,
           admission.scope,
           request.signal,
@@ -392,8 +405,7 @@ export function createAgentConversationService(input: {
           !!admission.presentation.narrative?.publicOfficial,
         );
         if(audio)await input.saveReplyAudio?.(admission.scope,request.requestId,audio).catch(()=>undefined);
-        const memory = input.customerMemory?.propose(admission.scope,text,request.requestId).catch(()=>undefined);
-        if (!request.textOnly) await memory;
+        await input.customerMemory?.propose(admission.scope,text,request.requestId).catch(()=>undefined);
         return Object.freeze({
           reply,
           agentRunId,

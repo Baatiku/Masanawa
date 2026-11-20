@@ -322,3 +322,18 @@ it.each([
   audioTurn(f.socket);
   expect((await result).transcript).toBe(expected);
 });
+
+it('generates one spoken reply and its native transcript from a typed question',async()=>{
+  const {socket,socketFactory,renderer}=fixture('Kore');
+  const result=renderer.generateReply('How are you?','You are Amina. Reply conversationally.');
+  socket.open();
+  expect(socketFactory.mock.calls).toHaveLength(1);
+  expect(socket.sent[0]?.setup.outputAudioTranscription).toEqual({});
+  expect(socket.sent[0]?.setup.systemInstruction.parts[0].text).toContain('You are Amina');
+  socket.receive({setupComplete:{}});
+  await vi.waitFor(()=>expect(socket.sent[1]?.clientContent.turns[0].parts[0].text).toBe('How are you?'));
+  audioTurn(socket);
+  socket.receive({serverContent:{outputTranscription:{text:'I’m doing well, thanks!',finished:true}}});
+  expect(await result).toMatchObject({transcript:'I’m doing well, thanks!',dataBase64:audio.toString('base64')});
+  expect(socket.sent).toHaveLength(2);
+});

@@ -71,3 +71,25 @@ describe("production strategy surface guidance", () => {
     expect(instructions).toContain("app-only tabs");
   });
 });
+
+it("uses the native Live transcript as the reply without running a second model",async()=>{
+  const generate=vi.fn(async()=>({text:"fallback"}));
+  const audio={transcript:"Thanks for asking.",dataBase64:"AAAAAA==",mimeType:"audio/l16;rate=24000",durationMs:1};
+  const speakReply=vi.fn(async()=>audio);
+  const strategy=createProductionAgentStrategy({inference:{generate},skills:{} as never,guides:{} as never});
+  const result=await strategy.execute({
+    agentRunId:createCanonicalId("agent-run"),
+    characterSessionId:createCanonicalId("character-session"),
+    characterVersionId:createCanonicalId("character-version"),
+    skillVersionIds:[],
+    presentation:{displayName:"Amina",roleLabel:"Research",about:""},
+    input:{kind:"text",text:"How are you?"},
+    speakReply,
+  });
+  expect(result).toEqual({reply:audio.transcript,parts:[],spokenReply:audio});
+  expect(speakReply).toHaveBeenCalledExactlyOnceWith({
+    message:JSON.stringify({priorMessages:[],currentMessage:"How are you?"}),
+    system:expect.stringContaining("Amina"),
+  });
+  expect(generate).not.toHaveBeenCalled();
+});
