@@ -16,7 +16,6 @@ import javax.net.ssl.HttpsURLConnection
  */
 internal object ShellWebUpdates {
     const val CHECK_INTERVAL_MS = 3 * 60_000L
-    const val RETRY_INTERVAL_MS = 30_000L
     private const val MAX_HTML_BYTES = 512 * 1024
     private val htmlTag = Regex("(?i)<!doctype\\s+html|<html(?:\\s|>)")
     private val revisionField = Regex("\"revision\"\\s*:\\s*\"([a-zA-Z0-9._:-]{8,100})\"")
@@ -32,14 +31,21 @@ internal object ShellWebUpdates {
             .joinToString("") { "%02x".format(it) }
     }
 
-    fun changed(previous: String?, current: String): Boolean =
-        !previous.isNullOrBlank() && previous != current
+    fun sameSource(previous: String, current: String): Boolean =
+        previous.startsWith("release:") == current.startsWith("release:")
 
-    /** A public, credential-free probe: never follow login or external redirects. */
-    fun fetchFingerprint(): String? =
-        fetchPublicFile("masanawa-web-release.json?t=${System.currentTimeMillis()}", "application/json", 4_096)
+    fun changed(previous: String?, current: String): Boolean =
+        !previous.isNullOrBlank() && sameSource(previous, current) && previous != current
+
+    /** Once the release marker is in use, a temporary marker fetch failure must not
+     * switch the fingerprint to HTML and cause an unnecessary WebView reload.
+     */
+    fun fetchFingerprint(preferReleaseMarker: Boolean = false): String? {
+        val marker = fetchPublicFile("masanawa-web-release.json?t=${System.currentTimeMillis()}", "application/json", 4_096)
             ?.let(::versionFingerprint)
-            ?: fetchPublicFile("", "text/html", MAX_HTML_BYTES)?.let(::fingerprint)
+        return marker ?: if (preferReleaseMarker) null
+            else fetchPublicFile("", "text/html", MAX_HTML_BYTES)?.let(::fingerprint)
+    }
 
     private fun fetchPublicFile(path: String, mime: String, byteLimit: Int): String? {
         val connection = (URL(WebOriginPolicy.HOME + path).openConnection() as HttpsURLConnection).apply {
