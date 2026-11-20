@@ -12,13 +12,14 @@ import {admitOfficialDossier} from './official_dossier_admission.js';
 import {createPublishedPersonaReader} from './persona_narrative.js';
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
 
-it('keeps stable separate person IDs for four presidential and 102 reported governorship subjects',()=>{
- expect(OFFICIAL_ROSTER_MANIFEST).toHaveLength(106);
- expect(new Set(OFFICIAL_ROSTER_MANIFEST.map(s=>s.characterId)).size).toBe(106);
- expect(new Set(OFFICIAL_ROSTER_MANIFEST.map(s=>s.characterVersionId)).size).toBe(106);
- expect(OFFICIAL_ROSTER_MANIFEST.filter(s=>s.state===null).map(s=>s.party).sort()).toEqual(['ADC','APC','NDC','PDP']);
- expect(new Set(OFFICIAL_ROSTER_MANIFEST.filter(s=>s.state!==null).map(s=>s.state)).size).toBe(28);
- expect(OFFICIAL_ROSTER_MANIFEST.every(s=>!s.biographyReady)).toBe(true);
+it('keeps 106 existing identities and nine additional verified national leadership identities',()=>{
+ expect(OFFICIAL_ROSTER_MANIFEST).toHaveLength(115);
+ expect(new Set(OFFICIAL_ROSTER_MANIFEST.map(s=>s.characterId)).size).toBe(115);
+ expect(new Set(OFFICIAL_ROSTER_MANIFEST.map(s=>s.characterVersionId)).size).toBe(115);
+ expect(OFFICIAL_ROSTER_MANIFEST.slice(0,106).filter(s=>s.state===null).map(s=>s.party).sort()).toEqual(['ADC','APC','NDC','PDP']);
+ expect(new Set(OFFICIAL_ROSTER_MANIFEST.slice(0,106).filter(s=>s.state!==null).map(s=>s.state)).size).toBe(28);
+ expect(OFFICIAL_ROSTER_MANIFEST.slice(0,106).every(s=>!s.biographyReady)).toBe(true);
+ expect(OFFICIAL_ROSTER_MANIFEST.slice(106).every(s=>s.biographyReady&&s.rosterCheckedAt==='2026-11-20')).toBe(true);
  expect(OFFICIAL_ROSTER_MANIFEST.slice(0,4).map(officialRosterVoice)).toEqual(['Algenib','Algieba','Algenib','Algieba']);
  expect(officialRosterVoice(OFFICIAL_ROSTER_MANIFEST[10]!,10)).toBe('Sulafat');
 });
