@@ -25,6 +25,10 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
       const operator=await actor(header,'incidents.write');
       return {incident:await repository.adminUpdate(principal(operator),id,changes)};
     },
+    async publication(header:string|undefined,id:string,changes:Parameters<Repository['reviewPublication']>[2]) {
+      const operator=await actor(header,'incidents.write');
+      return {incident:await repository.reviewPublication(principal(operator),id,changes)};
+    },
     async contacts(header:string|undefined) {
       await actor(header,'contacts.read');
       return {contacts:await repository.contacts({includeInactive:true})};

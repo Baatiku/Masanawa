@@ -19,6 +19,9 @@ describe('Masanawa Response durable migration',()=>{
       expect(complete.rows).toHaveLength(73);
       expect(complete.rows.find(row=>row.id==='ng-icpc-oyo')?.address).toContain('Ibadan');
       expect(complete.rows.find(row=>row.id==='ng-police-command-oyo')?.address).toBeNull();
+      await db.exec(await readFile(new URL('../../../../../packages/security/migrations/0135_civic_response_public_feed.sql',import.meta.url),'utf8'));
+      const visibility=await db.query<{column_name:string}>(`SELECT column_name FROM information_schema.columns WHERE table_schema='civic_response' AND table_name='incidents' AND column_name IN ('public_consent','publication_status','public_title','public_summary','published_at') ORDER BY column_name`);
+      expect(visibility.rows).toHaveLength(5);
       await db.query(`INSERT INTO civic_response.incidents(id,reference,tenant_id,reporter_id,request_key,title,description,category,urgency,location_state,source_mode)
         VALUES('ea46a4b0-4349-4106-bb32-ddb331ed901f','MR-20261120-EA46A4B0','tenant_one','user_one','request_abcdefgh12345678','Unsafe electrical wires','An exposed cable is lying in the street.','infrastructure','urgent','Oyo','typed')`);
       const cross=await db.query(`SELECT count(*)::int AS count FROM civic_response.incidents WHERE tenant_id='tenant_two'`);

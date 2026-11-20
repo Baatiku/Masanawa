@@ -220,6 +220,10 @@ export function createOpsApp(options: OpsAppOptions = {}) {
       externalReference:Type.Optional(Type.String({maxLength:200})),dispatchConfirmationSource:Type.Optional(Type.String({maxLength:1000})),
       hide:Type.Optional(Type.Boolean()),
     },{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.revise(q.headers.authorization,q.params.id,q.body)));
+    app.post('/v1/admin/incidents/:id/publication',{schema:{params:Id,body:Type.Object({
+      expectedRevision:Type.Integer({minimum:1}),reason:Type.String({minLength:8,maxLength:1000}),publish:Type.Boolean(),
+      publicTitle:Type.Optional(Type.String({maxLength:140})),publicSummary:Type.Optional(Type.String({maxLength:600})),
+    },{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.publication(q.headers.authorization,q.params.id,q.body)));
     app.get('/v1/admin/response/contacts',async(q,r)=>fail(r,()=>response.contacts(q.headers.authorization)));
     app.post('/v1/admin/response/contacts',{schema:{body:Type.Object({
       id:Type.String({maxLength:80}),name:Type.String({maxLength:180}),acronym:Type.Optional(Type.String({maxLength:30})),
