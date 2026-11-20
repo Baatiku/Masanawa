@@ -119,7 +119,7 @@ export function createCivicResponseRepository(pool: Pool) {
       if(!res.rows[0])throw new CivicResponseError(404,'incident_not_found');
       return res.rows[0];
     },
-    /** Strict public projection: no raw narrative, witness details, precise location or identifiers. */
+    /** Public projection: consented incident locations are visible; reporter identities, contact data and raw narrative stay private. */
     async publicIncidents(input:{category?:string;state?:string;limit?:number;offset?:number}={}) {
       const limit=Math.min(50,Math.max(1,input.limit??20)),offset=Math.min(10000,Math.max(0,input.offset??0));
       if(input.category&&!publicCategorySet.has(input.category))return [];
