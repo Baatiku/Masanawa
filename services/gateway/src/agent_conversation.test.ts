@@ -177,8 +177,10 @@ describe("Alpha conversation service", () => {
       runs,
       authorizer,
       strategy,
-      mobileShell:{listHistory,claimTurn:async()=>({state:"created"}),appendEvent:async()=>{},completeTurn:async()=>{},failTurn:async()=>{}} as never,
+      mobileShell:{listHistory,claimTurn:async()=>({state:"created"}),appendEvent:async()=>{},
+        completeTurn:async()=>{events.push("reply:complete");},failTurn:async()=>{}} as never,
       nativeAudio:{render},
+      stageReplyAudio:async()=>{events.push("reply:audio-staged");},
       voiceForCharacter:async(scope)=>{expect(scope).toEqual(f.scope);return "Fora";},
       sessionDurationMs: 60_000,
     });
@@ -242,6 +244,9 @@ describe("Alpha conversation service", () => {
 
     expect(events.filter((event) => event.startsWith("run:create"))).toHaveLength(3);
     expect(events.filter((event) => event === "run:finish:completed")).toHaveLength(3);
+    expect(events.filter(event=>event.startsWith("reply:"))).toEqual(
+      Array.from({length:3},()=>["reply:audio-staged","reply:complete"]).flat(),
+    );
     expect(events).toContain("session:close");
   });
 

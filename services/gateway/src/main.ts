@@ -1569,12 +1569,13 @@ export async function startGatewayService(
               if(custom.rows[0]?.voice_id)return custom.rows[0].voice_id as string;
             }
             const profile = await database.platformAgentProfiles?.readForCharacter(scope);
-            if (profile?.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
+            if (!profile) return undefined;
+            if (profile.voiceProvider.toLowerCase() === "gemini") return profile.voiceName;
             throw Object.assign(new Error('Persona voice configuration is unavailable'),{code:'agent.voice_unavailable'});
           },
           ...(database.mobileShell ? { mobileShell: database.mobileShell } : {}),
           ...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),
-          ...(composedPrivateChatMedia?{saveReplyAudio:composedPrivateChatMedia.saveReplyAudio}:{}),
+          ...(composedPrivateChatMedia&&database.mobileShell?{stageReplyAudio:composedPrivateChatMedia.stageReplyAudio}:{}),
           ...(composedTeachingAssistant ? { teachingAssistant: composedTeachingAssistant } : {}),
           sessionDurationMs: 24 * 60 * 60 * 1000,
         })
