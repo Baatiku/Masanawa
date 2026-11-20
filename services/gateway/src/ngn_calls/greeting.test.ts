@@ -6,6 +6,10 @@ describe("call greeting and playback evidence",()=>{
   expect(callGreeting("السلام عليكم ورحمة الله")).toBe("Assalamu alaikum");
   expect(callGreeting(null)).toBe("Hello");
   expect(callOpeningTurn("Hello").clientContent.turnComplete).toBe(true);
+  const opening=callOpeningTurn("Hello").clientContent.turns[0]!.parts[0]!.text;
+  expect(opening).toContain('Begin with “Hello”');
+  expect(opening).toContain('follow-up question');
+  expect(opening).not.toContain('Say only the greeting');
  });
  it("distinguishes PCM speech from silence, malformed data and setup frames",()=>{
   const frame=(data:string)=>({serverContent:{modelTurn:{parts:[{inlineData:{data,mimeType:"audio/pcm;rate=24000"}}]}}});
@@ -15,3 +19,4 @@ describe("call greeting and playback evidence",()=>{
   expect(audibleGreetingFrame({setupComplete:{}})).toBe(0);
  });
 });
+

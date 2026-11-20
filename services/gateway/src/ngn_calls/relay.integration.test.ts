@@ -186,10 +186,29 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect(JSON.parse((await greeting)[0].toString())).toHaveProperty('openingAudio');
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
       expect(f.received[0]?.setup).not.toHaveProperty('playbackAcknowledgement');
-      expect(JSON.stringify(f.received)).toContain('Say “Hello”');
+      expect(JSON.stringify(f.received)).toContain('follow-up question');
       const connected=once(client,'message');
       client.send(JSON.stringify({greetingPlayback:true}));
       expect(JSON.parse((await connected)[0].toString())).toMatchObject({setupComplete:{},greetedByRelay:true});
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
+    }finally{await f.cleanup();}
+  });
+  it('delivers a split greeting completion before playback acknowledgement without charging early',async()=>{
+    const f=await fixture(5,{silent:true});
+    try{
+      const client=await f.open(await f.issue());
+      const frames:Record<string,any>[]=[];
+      client.on('message',raw=>frames.push(JSON.parse(raw.toString())));
+      client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      await until(async()=>f.received.some(frame=>!!frame.clientContent));
+      f.provider()!.send(JSON.stringify(sound));
+      await until(async()=>frames.some(frame=>!!frame.openingAudio?.modelTurn));
+      f.provider()!.send(JSON.stringify({serverContent:{turnComplete:true}}));
+      await until(async()=>frames.some(frame=>frame.openingAudio?.turnComplete===true));
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
+      expect(frames.some(frame=>!!frame.setupComplete)).toBe(false);
+      client.send(JSON.stringify({greetingPlayback:true}));
+      await until(async()=>frames.some(frame=>!!frame.setupComplete));
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
     }finally{await f.cleanup();}
   });
