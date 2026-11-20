@@ -55,7 +55,7 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     expect(logs.filter(item=>item.actorRole==='operator')).toHaveLength(3);
     await expect(db.query(`DELETE FROM civic_response.incident_events WHERE incident_id=$1::uuid`,[id])).rejects.toThrow('civic_response_event_history_immutable');
   });
-  it('immediately lists safe opt-in metadata, then publishes reviewed details; revocation removes it',async()=>{
+  it('immediately lists reported locations and safe metadata while protecting reporter identity',async()=>{
     const repo=createCivicResponseRepository(pool);
     const reporter={tenantId:'tenant_response',userId:'citizen_public'};
     const fresh=await repo.create(reporter,{...draft,requestKey:'public_incident_request_2026',publicConsent:false});
@@ -68,15 +68,15 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     const pending=await repo.publicIncidents();
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({publicationStatus:'pending_review',title:'New community incident report',locationState:'Oyo'});
-    expect(JSON.stringify(pending)).not.toContain('western market entrance');
+    expect(JSON.stringify(pending)).not.toContain('citizen_public');
     const reviewed=await repo.reviewPublication(staff,id,{expectedRevision:2,reason:'Reviewed for privacy, no identifiable details',publish:true,
       publicTitle:'Power supply safety problem in Oyo',publicSummary:'A reported public electrical hazard has been logged for internal review. No official dispatch has been confirmed.'});
     expect(reviewed.publicationStatus).toBe('published');
     const publicResult=await repo.publicIncidents({state:'Oyo'});
     expect(publicResult).toHaveLength(1);
-    expect(Object.keys(publicResult[0]!).sort()).toEqual(['category','locationState','publicationStatus','publishedAt','reference','status','summary','title','updatedAt'].sort());
+    expect(Object.keys(publicResult[0]!).sort()).toEqual(['category','locationState','locationLga','locationDetails','publicationStatus','publishedAt','reference','status','summary','title','updatedAt'].sort());
     expect(publicResult[0]?.publicationStatus).toBe('published');
-    expect(JSON.stringify(publicResult)).not.toContain('western market entrance');
+    expect(JSON.stringify(publicResult)).toContain('western market entrance');
     expect(JSON.stringify(publicResult)).not.toContain('citizen_public');
     expect((await repo.publicIncidents({state:'Lagos'}))).toHaveLength(0);
     const other=await repo.create(reporter,{...draft,requestKey:'public_medical_req_2026',category:'medical',publicConsent:true});
