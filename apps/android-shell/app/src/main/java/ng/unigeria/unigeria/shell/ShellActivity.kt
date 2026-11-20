@@ -99,9 +99,6 @@ class ShellActivity : ComponentActivity() {
             webUpdateHandler.postDelayed(this, ShellWebUpdates.CHECK_INTERVAL_MS)
         }
     }
-    private val webUpdateRetry = object : Runnable {
-        override fun run() { maybeRefreshWeb() }
-    }
     private var pendingPushReply: JavaScriptReplyProxy? = null
     private val callControls = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -283,7 +280,6 @@ class ShellActivity : ComponentActivity() {
 
     override fun onPause() {
         webUpdateHandler.removeCallbacks(webUpdatePoll)
-        webUpdateHandler.removeCallbacks(webUpdateRetry)
         // Keep sensitive content out of the Android recent-apps thumbnail.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         // A customer-authorized foreground microphone session must not be
@@ -310,14 +306,8 @@ class ShellActivity : ComponentActivity() {
         super.onStop()
     }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && pendingWebRefresh) maybeRefreshWeb()
-    }
-
     override fun onDestroy() {
         webUpdateHandler.removeCallbacks(webUpdatePoll)
-        webUpdateHandler.removeCallbacks(webUpdateRetry)
         unregisterReceiver(callControls)
         stopCallService()
         pendingMediaRequest?.deny()
@@ -387,7 +377,6 @@ class ShellActivity : ComponentActivity() {
                 if (WebOriginPolicy.isTrusted(url)) {
                     syncKeyboardClass()
                     dispatchSharedText()
-                    if (pendingWebRefresh) maybeRefreshWeb()
                 }
             }
 
@@ -711,7 +700,9 @@ class ShellActivity : ComponentActivity() {
         lastWebCheckAt = now
         webCheckRunning = true
         Thread({
-            val fingerprint = ShellWebUpdates.fetchFingerprint()
+            val fingerprint = ShellWebUpdates.fetchFingerprint(
+                webUpdatePrefs.getString("document_fingerprint", null)?.startsWith("release:") == true
+            )
             runOnUiThread {
                 webCheckRunning = false
                 if (isFinishing || isDestroyed || fingerprint == null) return@runOnUiThread
@@ -720,8 +711,10 @@ class ShellActivity : ComponentActivity() {
                     pendingWebRefresh = true
                     webUpdatePrefs.edit().putString("document_fingerprint", fingerprint)
                         .putBoolean("pending_refresh", true).apply()
-                    maybeRefreshWeb()
-                } else if (previous == null) {
+                    // Never interrupt foreground reading, scrolling or navigation.
+                    // Refresh on the next activity resume instead.
+                } else if (previous == null || !ShellWebUpdates.sameSource(previous, fingerprint)) {
+                    // A marker migration or temporary HTML fallback is not a deployment.
                     webUpdatePrefs.edit().putString("document_fingerprint", fingerprint).apply()
                 }
             }
@@ -729,12 +722,10 @@ class ShellActivity : ComponentActivity() {
     }
 
     private fun maybeRefreshWeb() {
-        webUpdateHandler.removeCallbacks(webUpdateRetry)
         if (!pendingWebRefresh || isFinishing || isDestroyed || !::webView.isInitialized) return
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         if (callActive || fileCallback != null || pendingMediaRequest != null ||
             !WebOriginPolicy.isTrusted(webView.url) || !firstPageVisible || hasWindowFocus().not()) {
-            webUpdateHandler.postDelayed(webUpdateRetry, ShellWebUpdates.RETRY_INTERVAL_MS)
             return
         }
         // If a user is composing, recording, listening, or submitting a form,
@@ -742,7 +733,6 @@ class ShellActivity : ComponentActivity() {
         webView.evaluateJavascript(ShellWebUpdates.safeToReloadScript) { safe ->
             if (!pendingWebRefresh || isFinishing || isDestroyed) return@evaluateJavascript
             if (safe != "true" || callActive || fileCallback != null) {
-                webUpdateHandler.postDelayed(webUpdateRetry, ShellWebUpdates.RETRY_INTERVAL_MS)
                 return@evaluateJavascript
             }
             pendingWebRefresh = false
