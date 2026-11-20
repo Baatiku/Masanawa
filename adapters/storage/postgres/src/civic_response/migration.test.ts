@@ -8,6 +8,9 @@ describe('Masanawa Response durable migration',()=>{
     try{
       const sql=await readFile(new URL('../../../../../packages/security/migrations/0133_civic_response_centre.sql',import.meta.url),'utf8');
       await db.exec(sql);
+      // Legacy isolated fixtures remove the migration register/security schema
+      // but retain independent response records. A safe reset must not fail.
+      await db.exec(sql);
       const contacts=await db.query<{id:string;phone:string}>(`SELECT id,phone FROM civic_response.agency_contacts ORDER BY id`);
       expect(contacts.rows).toHaveLength(5);
       expect(contacts.rows.find(row=>row.id==='ng-emergency-112')?.phone).toBe('112');

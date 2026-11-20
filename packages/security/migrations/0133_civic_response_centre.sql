@@ -2,7 +2,7 @@
 -- Sensitive reports are private by default; a status change is not an agency dispatch.
 CREATE SCHEMA IF NOT EXISTS civic_response;
 
-CREATE TABLE civic_response.agency_contacts (
+CREATE TABLE IF NOT EXISTS civic_response.agency_contacts (
   id text PRIMARY KEY,
   name text NOT NULL,
   acronym text NOT NULL DEFAULT '',
@@ -28,9 +28,9 @@ CREATE TABLE civic_response.agency_contacts (
   CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
   CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180)
 );
-CREATE INDEX agency_contacts_lookup_idx ON civic_response.agency_contacts (service_type,state,lga) WHERE removed_at IS NULL;
+CREATE INDEX IF NOT EXISTS agency_contacts_lookup_idx ON civic_response.agency_contacts (service_type,state,lga) WHERE removed_at IS NULL;
 
-CREATE TABLE civic_response.agency_contact_events (
+CREATE TABLE IF NOT EXISTS civic_response.agency_contact_events (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   agency_id text NOT NULL REFERENCES civic_response.agency_contacts(id),
   actor_id text NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE civic_response.agency_contact_events (
   changed_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
-CREATE TABLE civic_response.incidents (
+CREATE TABLE IF NOT EXISTS civic_response.incidents (
   id uuid PRIMARY KEY,
   reference text NOT NULL UNIQUE,
   tenant_id text NOT NULL,
@@ -82,11 +82,11 @@ CREATE TABLE civic_response.incidents (
   CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
   CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180)
 );
-CREATE INDEX incidents_reporter_idx ON civic_response.incidents(tenant_id,reporter_id,created_at DESC);
-CREATE UNIQUE INDEX incidents_idempotency_idx ON civic_response.incidents(tenant_id,reporter_id,request_key);
-CREATE INDEX incidents_admin_queue_idx ON civic_response.incidents(tenant_id,status,created_at DESC) WHERE hidden_at IS NULL;
+CREATE INDEX IF NOT EXISTS incidents_reporter_idx ON civic_response.incidents(tenant_id,reporter_id,created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS incidents_idempotency_idx ON civic_response.incidents(tenant_id,reporter_id,request_key);
+CREATE INDEX IF NOT EXISTS incidents_admin_queue_idx ON civic_response.incidents(tenant_id,status,created_at DESC) WHERE hidden_at IS NULL;
 
-CREATE TABLE civic_response.incident_events (
+CREATE TABLE IF NOT EXISTS civic_response.incident_events (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   incident_id uuid NOT NULL REFERENCES civic_response.incidents(id),
   tenant_id text NOT NULL,
@@ -99,19 +99,25 @@ CREATE TABLE civic_response.incident_events (
   changes jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
-CREATE INDEX incident_events_lookup_idx ON civic_response.incident_events(incident_id,id);
+CREATE INDEX IF NOT EXISTS incident_events_lookup_idx ON civic_response.incident_events(incident_id,id);
 
 -- Append-only reviewer evidence: removal/hide is a reversible case state, not
 -- deletion of the audit trail. Operators cannot rewrite either event ledger.
-CREATE FUNCTION civic_response.reject_event_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION civic_response.reject_event_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'civic_response_event_history_immutable';
 END;
 $$;
-CREATE TRIGGER incident_events_immutable BEFORE UPDATE OR DELETE ON civic_response.incident_events
-FOR EACH ROW EXECUTE FUNCTION civic_response.reject_event_mutation();
-CREATE TRIGGER agency_contact_events_immutable BEFORE UPDATE OR DELETE ON civic_response.agency_contact_events
-FOR EACH ROW EXECUTE FUNCTION civic_response.reject_event_mutation();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='civic_response.incident_events'::regclass AND tgname='incident_events_immutable') THEN
+    CREATE TRIGGER incident_events_immutable BEFORE UPDATE OR DELETE ON civic_response.incident_events
+    FOR EACH ROW EXECUTE FUNCTION civic_response.reject_event_mutation();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='civic_response.agency_contact_events'::regclass AND tgname='agency_contact_events_immutable') THEN
+    CREATE TRIGGER agency_contact_events_immutable BEFORE UPDATE OR DELETE ON civic_response.agency_contact_events
+    FOR EACH ROW EXECUTE FUNCTION civic_response.reject_event_mutation();
+  END IF;
+END $$;
 
 -- Curated national contacts only. Local police stations and other branches
 -- must be imported through a source-reviewed and audited administrator flow.
