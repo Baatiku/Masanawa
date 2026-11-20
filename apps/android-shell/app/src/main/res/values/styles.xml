@@ -7,7 +7,9 @@
     </style>
     <style name="ShellSplashTheme" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#FFFFFF</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <!-- Android 12+ mandates a system startup window. Leave its artwork
+             empty; the WebView already presents the Masanawa loading mark. -->
+        <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
         <item name="postSplashScreenTheme">@style/ShellTheme</item>
     </style>
 </resources>
