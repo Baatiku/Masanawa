@@ -25,6 +25,8 @@ internal object ShellDeepLinks {
         val query = uri.rawQuery
         when (uri.host.lowercase()) {
             "home" -> if (parts.isEmpty() && query == null) tab("home") else null
+            "news" -> if (query == null && parts.size == 1 && ShellNotificationIdentity.isNewsPostId(parts[0]))
+                "${WebOriginPolicy.HOME}?tab=home&article=${parts[0]}" else null
             "chat", "masana" -> {
                 if (parts.size == 1 && character.matches(parts[0]) && query == null) profile(parts[0])
                 else if (parts.isEmpty() && query != null) {

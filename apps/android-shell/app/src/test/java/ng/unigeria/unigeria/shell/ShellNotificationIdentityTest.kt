@@ -24,6 +24,27 @@ class ShellNotificationIdentityTest {
             ShellNotificationIdentity.requestCode(route, false))
     }
 
+    @Test fun newsNotificationsAreDistinctAndIdempotentAcrossEvents() {
+        val articleOne = "news-123abc"
+        val articleTwo = "news-456def"
+        assertEquals(ShellNotificationIdentity.eventNotificationId(articleOne),
+            ShellNotificationIdentity.eventNotificationId(articleOne))
+        assertNotEquals(ShellNotificationIdentity.eventNotificationId(articleOne),
+            ShellNotificationIdentity.eventNotificationId(articleTwo))
+        assertEquals(null, ShellNotificationIdentity.eventNotificationId("../unsafe"))
+        assertEquals(null, ShellNotificationIdentity.eventNotificationId(""))
+    }
+
+    @Test fun onlyCanonicalArticlePostsAndBoundedPublicPreviewsAreShown() {
+        val uuid = "12345678-1234-1234-1234-123456789abc"
+        assertEquals(true, ShellNotificationIdentity.isNewsPostId(uuid))
+        assertEquals(false, ShellNotificationIdentity.isNewsPostId("../profile"))
+        assertEquals(false, ShellNotificationIdentity.isNewsPostId("1234"))
+        assertEquals("Channels Television", ShellNotificationIdentity.publicNewsText("Channels Television", 70))
+        assertEquals(null, ShellNotificationIdentity.publicNewsText("private\nsecret", 70))
+        assertEquals(null, ShellNotificationIdentity.publicNewsText("A".repeat(200), 180))
+    }
+
     @Test fun onlyValidatedCallInvitationsUseTheCallChannel() {
         val id = "12345678-1234-1234-1234-123456789abc"
         assertEquals(true, ShellNotificationIdentity.isIncomingCall("incoming_call", id))

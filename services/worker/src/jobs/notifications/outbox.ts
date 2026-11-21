@@ -86,6 +86,27 @@ export function createFinancialNotificationRuntime(input: {
           const copyForEvent = copy[event.category];
           if (!copyForEvent || (event.category === "status" && event.kind !== "news_update"))
             throw new Error("unsupported_notice_category");
+          // Read only the already published article's public title/publisher.
+          // Account data and private notification details never enter FCM.
+          let newsMeta: {postId:string;newsTitle:string;newsPublisher:string}|null=null;
+          if (event.category==="status"&&event.kind==="news_update") {
+            const publication=await input.pool.query<{post_id:string;headline:string;display_name:string}>(`
+              SELECT a.post_id::text AS post_id,a.headline,p.display_name
+              FROM feed.news_notification_events e
+              JOIN feed.news_articles a
+                ON a.tenant_id=e.tenant_id AND a.post_id::text=e.post_id
+              JOIN feed.news_publishers p
+                ON p.tenant_id=a.tenant_id AND p.publisher_id=a.publisher_id
+              WHERE e.tenant_id=$1 AND e.event_id=$2
+                AND p.state='approved'
+              LIMIT 1`,[event.tenant_id,event.event_id]);
+            const article=publication.rows[0];
+            if(article&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(article.post_id)&&
+                typeof article.headline==="string"&&typeof article.display_name==="string") {
+              newsMeta={postId:article.post_id,newsTitle:article.headline.replace(/\s+/g," ").trim().slice(0,180),
+                newsPublisher:article.display_name.replace(/\s+/g," ").trim().slice(0,70)};
+            }
+          }
           const sent = await input.sender.send({
             scope: {
               tenantId: parseCanonicalId("tenant", event.tenant_id),
@@ -96,7 +117,8 @@ export function createFinancialNotificationRuntime(input: {
             data: {
               type: event.kind,
               eventId: event.event_id,
-              deepLink: event.deep_link,
+              deepLink: newsMeta ? `masanawa://news/${newsMeta.postId}` : event.deep_link,
+              ...(newsMeta?{postId:newsMeta.postId,newsTitle:newsMeta.newsTitle,newsPublisher:newsMeta.newsPublisher}:{}),
             },
           });
           // Disabled categories, no device permission and quiet hours do not

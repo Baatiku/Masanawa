@@ -70,7 +70,7 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
   return channel === "masanawa_calls"
     ? { title: "Incoming call", body: "Open Calls to respond" }
     : channel === "masanawa_news"
-    ? { title: "New Masanawa news", body: "Open Home to read a new publisher article" }
+    ? { title: data?.newsPublisher ? `${data.newsPublisher} · New article` : "New Masanawa news", body: data?.newsTitle ?? "Open Home to read a new publisher article" }
     : { title: "Masanawa", body: "Open the app to view your update" };
 }
 
@@ -86,9 +86,21 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
     const value = data[key];
     if (typeof value === "string" && /^[A-Za-z0-9_:.-]{1,160}$/u.test(value)) safe[key] = value;
   }
+  // Public headlines are the only human-readable FCM data permitted. Never
+  // forward user chats, sender names, wallet balances or payment contents.
+  if (data.type === "news_update" || data.type === "news_article") {
+    const headline = data.newsTitle;
+    const publisher = data.newsPublisher;
+    if (typeof headline === "string" && headline.length >= 3 && headline.length <= 180 &&
+        !/[\x00-\x1f\x7f]/u.test(headline)) safe.newsTitle = headline.trim();
+    if (typeof publisher === "string" && publisher.length >= 2 && publisher.length <= 70 &&
+        !/[\x00-\x1f\x7f]/u.test(publisher)) safe.newsPublisher = publisher.trim();
+  }
   const rawLink = data.deepLink;
   if (typeof rawLink === "string" && rawLink.length <= 300 &&
       (rawLink === "masanawa://home" ||
+      ((data.type === "news_update" || data.type === "news_article") &&
+       /^masanawa:\/\/news\/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/u.test(rawLink)) ||
       /^masanawa:\/\/(?:(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}|wallet\/requests\/ngnreq_[A-Za-z0-9_-]{1,128}|wallet\/activity(?:\/(?:mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160}))?)$/u.test(rawLink))) {
     try {
       const link = new URL(rawLink);
@@ -257,10 +269,13 @@ export function createFcmPushSender(input: {
             body: JSON.stringify({
               message: {
                 token: registration.token,
-                notification: {
-                  title: safePreview.title,
-                  body: safePreview.body,
-                },
+                // Android news is data-only so our own notification builder
+                // can display a grouped per-story card and preserve its deep link
+                // even when the app is backgrounded. Other categories and iOS
+                // retain native FCM notification delivery.
+                ...(registration.platform === "android" && mobilePushAndroidChannel(safeData) === "masanawa_news" ? {} : {
+                  notification: { title: safePreview.title, body: safePreview.body },
+                }),
                 data: {
                   ...safeData,
                   masanawa: "1",
@@ -270,7 +285,7 @@ export function createFcmPushSender(input: {
                   ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
                     ? { ttl: "60s" }
                     : {}),
-                  notification: {
+                  ...(registration.platform === "android" && mobilePushAndroidChannel(safeData) === "masanawa_news" ? {} : {notification: {
                     channel_id: mobilePushAndroidChannel(safeData),
                     visibility: "PRIVATE",
                     ...(safeData.eventId
@@ -282,7 +297,7 @@ export function createFcmPushSender(input: {
                           tag: `masanawa-call-${safeData.callId}`,
                         }
                       : {}),
-                  },
+                  }}),
                 },
                 apns: {
                   payload: { aps: { sound: "default" } },

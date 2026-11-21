@@ -66,4 +66,22 @@ describe("mobile FCM call channels", () => {
     })).toBe("masanawa_work");
     expect(mobilePushAndroidChannel(undefined)).toBe("masanawa_work");
   });
+  it("permits only bounded public news metadata and a canonical publication deep link",()=>{
+    const uuid="12345678-1234-1234-1234-123456789abc";
+    const sent=mobilePushSafeData({
+      type:"news_update",eventId:"news-abc",postId:uuid,
+      newsTitle:"  Election report: verified results ",newsPublisher:"Channels Television",
+      deepLink:`masanawa://news/${uuid}`,
+      sender:"Private contact",walletBalance:"₦10,000",body:"Secret"
+    });
+    expect(sent).toEqual({
+      type:"news_update",eventId:"news-abc",postId:uuid,
+      newsTitle:"Election report: verified results",newsPublisher:"Channels Television",
+      deepLink:`masanawa://news/${uuid}`
+    });
+    expect(mobilePushSafePreview(sent)).toEqual({title:"Channels Television · New article",body:"Election report: verified results"});
+    expect(mobilePushSafeData({type:"wallet_notice",newsTitle:"Private",newsPublisher:"Alice",deepLink:`masanawa://news/${uuid}`})).toEqual({type:"wallet_notice"});
+    expect(mobilePushSafeData({type:"news_update",newsTitle:"Bad\nInjected",newsPublisher:"OK",deepLink:"masanawa://news/../../wallet"})).toEqual({type:"news_update",newsPublisher:"OK"});
+  });
+
 });
