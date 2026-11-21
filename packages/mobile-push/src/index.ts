@@ -58,19 +58,28 @@ export function mobilePushAndroidChannel(
     : "masanawa_work";
 }
 
-/** Locked screens must never disclose a sender, message, balance or order.
- * Until a verified per-account private-preview opt-in exists, send only
- * generic OS-visible copy. Full context stays in the authorized app.
+/** Private chats and finance remain redacted; editorial publisher news is public.
+ * Bound lengths and remove markup before displaying news on the OS surface.
  */
+function publicNewsText(value: unknown, limit: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const clean = value.replace(/<[^>]*>/gu, " ")
+    .replace(/[\u0000-\u001f\u007f]/gu, " ")
+    .replace(/\s+/gu, " ").trim().slice(0, limit);
+  return clean.length >= 3 ? clean : undefined;
+}
 export function mobilePushSafePreview(data: Readonly<Record<string, string>> | undefined): {
   readonly title: string;
   readonly body: string;
 } {
   const channel = mobilePushAndroidChannel(data);
+  if (channel === "masanawa_news") {
+    const safe = mobilePushSafeData(data);
+    return { title: safe.headline ?? "Masanawa News",
+      body: safe.summary ?? safe.headline ?? "New publisher article" };
+  }
   return channel === "masanawa_calls"
     ? { title: "Incoming call", body: "Open Calls to respond" }
-    : channel === "masanawa_news"
-    ? { title: "New Masanawa news", body: "Open Home to read a new publisher article" }
     : { title: "Masanawa", body: "Open the app to view your update" };
 }
 
@@ -97,6 +106,12 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
         safe.deepLink = rawLink;
       }
     } catch { /* An invalid hint cannot be sent to a device. */ }
+  }
+  if (data.type === "news_update" || data.type === "news_article") {
+    const headline = publicNewsText(data.headline, 180);
+    const summary = publicNewsText(data.summary, 300);
+    if (headline) safe.headline = headline;
+    if (summary) safe.summary = summary;
   }
   return Object.freeze(safe);
 }
@@ -272,7 +287,8 @@ export function createFcmPushSender(input: {
                     : {}),
                   notification: {
                     channel_id: mobilePushAndroidChannel(safeData),
-                    visibility: "PRIVATE",
+                    visibility: mobilePushAndroidChannel(safeData) === "masanawa_news"
+                      ? "PUBLIC" : "PRIVATE",
                     ...(safeData.eventId
                       ? { tag: safeData.eventId.slice(0, 80) } : {}),
                     ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
