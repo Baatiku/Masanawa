@@ -81,7 +81,7 @@ describe("mobile FCM call channels", () => {
     });
     expect(mobilePushSafePreview(sent)).toEqual({title:"Channels Television · New article",body:"Election report: verified results"});
     expect(mobilePushSafeData({type:"wallet_notice",newsTitle:"Private",newsPublisher:"Alice",deepLink:`masanawa://news/${uuid}`})).toEqual({type:"wallet_notice"});
-    expect(mobilePushSafeData({type:"news_update",newsTitle:"Bad\\nInjected",newsPublisher:"OK",deepLink:"masanawa://news/../../wallet"})).toEqual({type:"news_update",newsPublisher:"OK"});
+    expect(mobilePushSafeData({type:"news_update",newsTitle:"Bad\nInjected",newsPublisher:"OK",deepLink:"masanawa://news/../../wallet"})).toEqual({type:"news_update",newsPublisher:"OK"});
   });
 
 });
