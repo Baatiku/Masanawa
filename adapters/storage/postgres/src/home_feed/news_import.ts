@@ -123,6 +123,15 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
      if(!eligible.rows.length)return;
      const existing=await client.query(`SELECT post_id,content_hash FROM feed.news_articles
        WHERE tenant_id=$1 AND source_url=$2`,[row.tenant_id,story.url]);
+     const queueNewsEvent = async (postId: string, eventKind: 'published'|'revised') => {
+       const eventId = 'news-' + createHash('sha256')
+         .update(row.tenant_id+'|'+postId+'|'+hash).digest('hex').slice(0,48);
+       await client.query(`INSERT INTO feed.news_notification_events
+         (tenant_id,event_id,post_id,content_hash,event_kind)
+         VALUES($1,$2,$3,$4,$5)
+         ON CONFLICT(tenant_id,post_id,content_hash) DO NOTHING`,
+         [row.tenant_id,eventId,postId,hash,eventKind]);
+     };
      if(existing.rows.length){
       if(existing.rows[0].content_hash===hash)return;
       await client.query(`UPDATE feed.news_articles SET headline=$3,summary=$4,content_hash=$5,
@@ -131,6 +140,9 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
           locality.states,locality.nationwide,locality.locations,interest.category,interest.priority]);
       await client.query(`UPDATE feed.posts SET body=$3 WHERE tenant_id=$1 AND id=$2`,
        [row.tenant_id,existing.rows[0].post_id,story.title+'\n\n'+story.summary]);
+      // Publication and notification intent share one committed transaction.
+      // Do not push for unapproved, uncommitted or duplicate articles.
+      await queueNewsEvent(String(existing.rows[0].post_id),'revised');
       imported++;return;
      }
      const linked=await client.query(`SELECT 1 FROM feed.news_article_sources
@@ -164,6 +176,7 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
      await client.query(`INSERT INTO feed.news_article_sources
        (tenant_id,source_url,publisher_id,post_id,headline) VALUES($1,$2,$3,$4,$5)`,
       [row.tenant_id,story.url,row.publisher_id,post.rows[0].id,story.title]);
+     await queueNewsEvent(String(post.rows[0].id),'published');
      imported++;
     });
    }
