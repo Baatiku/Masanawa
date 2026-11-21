@@ -103,8 +103,8 @@ export function createFinancialNotificationRuntime(input: {
             const article=publication.rows[0];
             if(article&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(article.post_id)&&
                 typeof article.headline==="string"&&typeof article.display_name==="string") {
-              newsMeta={postId:article.post_id,newsTitle:article.headline.replace(/\\s+/g," ").trim().slice(0,180),
-                newsPublisher:article.display_name.replace(/\\s+/g," ").trim().slice(0,70)};
+              newsMeta={postId:article.post_id,newsTitle:article.headline.replace(/\s+/g," ").trim().slice(0,180),
+                newsPublisher:article.display_name.replace(/\s+/g," ").trim().slice(0,70)};
             }
           }
           const sent = await input.sender.send({
