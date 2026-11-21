@@ -123,7 +123,7 @@ jobs:
           SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 13 }}
         run: |
           set -euo pipefail
-          gradle --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease :app:testReleaseUnitTest
+          gradle --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease :app:testDebugUnitTest
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
           jarsigner -verify -strict app/build/outputs/bundle/release/app-release.aab
       - name: Upload signed Masanawa APK
