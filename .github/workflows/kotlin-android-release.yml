@@ -53,8 +53,32 @@ jobs:
             test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$EXPECTED_SHA256"
           # Release must supersede the last Kotlin debug candidate (code 12).
           test "$SHELL_RELEASE_VERSION_CODE" -gt 12
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/masanawa-shell-upload.jks"
-          chmod 600 "$RUNNER_TEMP/masanawa-shell-upload.jks"
+          # Accept either the raw Base64 value or a copied .env assignment.
+          # Never print signing material; keep invalid inputs failed closed.
+          python3 - <<'PY'
+          import base64
+          import binascii
+          import os
+          from pathlib import Path
+          import sys
+
+          value = os.environ["KEYSTORE_B64"].strip()
+          prefix = "SHELL_RELEASE_KEYSTORE_BASE64="
+          if value.startswith(prefix):
+              value = value[len(prefix):].strip()
+          if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+              value = value[1:-1]
+          value = "".join(value.split())
+          try:
+              keystore = base64.b64decode(value, validate=True)
+          except (binascii.Error, ValueError):
+              sys.exit("Invalid keystore Base64. Re-enter SHELL_RELEASE_KEYSTORE_BASE64 using its value from github-secrets.env, without the NAME= prefix.")
+          if not keystore:
+              sys.exit("Signing keystore decoded to an empty file.")
+          path = Path(os.environ["RUNNER_TEMP"]) / "masanawa-shell-upload.jks"
+          path.write_bytes(keystore)
+          path.chmod(0o600)
+          PY
           actual="$(keytool -list -v -keystore "$RUNNER_TEMP/masanawa-shell-upload.jks" \
             -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sed -n 's/^\s*SHA256: //p' | head -1)"
           test -n "$actual"
