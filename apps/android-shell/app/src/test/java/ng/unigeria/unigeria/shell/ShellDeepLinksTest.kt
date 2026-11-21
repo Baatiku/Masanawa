@@ -21,4 +21,13 @@ class ShellDeepLinksTest {
             assertNull(url, ShellDeepLinks.route(url))
         }
     }
+    @Test fun publisherNewsPostOpensItsOwnCanonicalCardSafely() {
+        val id = "12345678-1234-1234-1234-123456789abc"
+        assertEquals("https://app.masanawa.com/?tab=home&article=$id",
+            ShellDeepLinks.route("masanawa://news/$id"))
+        assertEquals(null, ShellDeepLinks.route("masanawa://news/../../private"))
+        assertEquals(null, ShellDeepLinks.route("masanawa://news/$id?private=1"))
+        assertEquals(null, ShellDeepLinks.route("masanawa://news/not-a-post"))
+    }
+
 }
