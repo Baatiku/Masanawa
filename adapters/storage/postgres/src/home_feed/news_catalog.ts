@@ -13,6 +13,13 @@ export const newsCatalog = [
  {id:'guardian',name:'The Guardian',feed:'https://www.theguardian.com/world/rss',hosts:['theguardian.com']},
  {id:'africanews',name:'Africanews',feed:'https://www.africanews.com/feed/',hosts:['africanews.com']},
  {id:'globalvoices',name:'Global Voices',feed:'https://globalvoices.org/feed/',hosts:['globalvoices.org']},
+ {id:'bbc-hausa',name:'BBC Hausa',feed:'https://raw.githubusercontent.com/bbc/world-service-rss/main/hausa.md',hosts:['bbc.com','bbc.co.uk']},
+ {id:'voa-hausa',name:'VOA Hausa',feed:'https://www.voahausa.com/api/zggkml-vomx-tpe-m-p',hosts:['voahausa.com']},
+ {id:'daily-trust',name:'Daily Trust',feed:'https://dailytrust.com/feed/',hosts:['dailytrust.com']},
+ {id:'nigerian-tribune',name:'Nigerian Tribune',feed:'https://tribuneonlineng.com/feed/',hosts:['tribuneonlineng.com']},
+ {id:'vanguard',name:'Vanguard',feed:'https://www.vanguardngr.com/feed/',hosts:['vanguardngr.com']},
+ {id:'daily-post',name:'Daily Post',feed:'https://dailypost.ng/feed/',hosts:['dailypost.ng']},
+ {id:'blueprint',name:'Blueprint',feed:'https://blueprint.ng/feed/',hosts:['blueprint.ng']},
 ] as const;
 export type NewsCatalogEntry = typeof newsCatalog[number];
 export function safeNewsArticleUrl(entry:NewsCatalogEntry,raw:string):string|null{

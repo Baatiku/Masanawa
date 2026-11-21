@@ -19,6 +19,7 @@ import {
 import { createPostgresServiceDependency, createPostgresMobilePushRepository, createPostgresAccountDeletionAccessRevoker, platformProductMigrationRoots, type Pool } from "@masanawa/postgres";
 import {createFcmPushSender} from "@masanawa/mobile-push";
 import { createFinancialNotificationRuntime } from "./jobs/notifications/outbox.js";
+import {createNewsNotificationFanout} from './jobs/notifications/news_fanout.js';
 import { createP2pExpiryRuntime } from "./jobs/msnw/p2p_expiry.js";
 import { createP2pCustodyReconciliation } from "./jobs/msnw/p2p_reconciliation.js";
 import { createJobScheduler } from "./jobs/scheduler.js";
@@ -126,6 +127,7 @@ export async function startWorkerService(
   let feedPublisher: ReturnType<typeof createJobScheduler> | undefined;
   let newsImporter: ReturnType<typeof createJobScheduler> | undefined;
   let financialNotices: ReturnType<typeof createJobScheduler> | undefined;
+  let newsNotices: ReturnType<typeof createJobScheduler> | undefined;
   let p2pExpiry: ReturnType<typeof createJobScheduler> | undefined;
   let p2pAudit: ReturnType<typeof createJobScheduler> | undefined;
   let msnwObligationRecovery: ReturnType<typeof createJobScheduler> | undefined;
@@ -293,6 +295,20 @@ export async function startWorkerService(
           event: "notifications.financial.retry", reason: "batch_failed",
         }) + "\n"),
       });
+      const fanout = createNewsNotificationFanout(database.pool);
+      newsNotices = createJobScheduler({
+        runOnce: async()=>{
+          const result = await fanout.runOnce();
+          if(result.events)process.stdout.write(JSON.stringify({
+            event:'notifications.news_fanout',...result,
+          })+'\n');
+        },
+        enabled: () => !drain.isDraining() && newsEnabled,
+        intervalMs: 15000,
+        onError: () => process.stderr.write(JSON.stringify({
+          event: "notifications.news_fanout.retry", reason: "database_unavailable",
+        }) + "\n"),
+      });
     }
     // No separate escrow scheduler authority: the canonical PG function
     // takes bounded SKIP LOCKED order claims and performs refund+event
@@ -388,6 +404,7 @@ export async function startWorkerService(
         await msnwObligationRecovery?.stop();
         await msnwMerchantSettlements?.stop();
         await msnwFinality?.stop();
+        await newsNotices?.stop();
         await financialNotices?.stop();
         await p2pExpiry?.stop();
         await p2pAudit?.stop();
@@ -408,6 +425,7 @@ export async function startWorkerService(
     msnwObligationRecovery?.start();
     msnwMerchantSettlements?.start();
     msnwFinality?.start();
+    newsNotices?.start();
     financialNotices?.start();
     p2pExpiry?.start();
     p2pAudit?.start();
@@ -422,7 +440,8 @@ export async function startWorkerService(
     await msnwObligationRecovery?.stop();
     await msnwMerchantSettlements?.stop();
     await msnwFinality?.stop();
-        await financialNotices?.stop();
+    await newsNotices?.stop();
+    await financialNotices?.stop();
     await p2pExpiry?.stop();
     await p2pAudit?.stop();
         await privacyDeletion?.stop();

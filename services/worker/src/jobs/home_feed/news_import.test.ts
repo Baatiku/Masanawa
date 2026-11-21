@@ -32,6 +32,26 @@ describe('news RSS original-source ingestion',()=>{
   expect(records[0]?.title).toBe('Osun flood warning');
   expect(records[0]?.summary).toBe('Officials in Osogbo issue an urgent flood preparation notice');
  });
+ it('admits first-party dated BBC Hausa civic updates but never off-publisher URLs',()=>{
+  const wat=new Date(Date.now()+3600000-2*60000);
+  const months=['Janairu','Faburairu','Maris','Afrilu','Mayu','Yuni','Yuli','Agusta','Satumba','Oktoba','Nuwamba','Disamba'];
+  const hour24=wat.getUTCHours();
+  const meridian=hour24>=12?'YM':'SF';
+  const hour=String(hour24%12||12);
+  const label=`${wat.getUTCDate()} ${months[wat.getUTCMonth()]}, ${wat.getUTCFullYear()} da ${hour}:${String(wat.getUTCMinutes()).padStart(2,'0')}:${String(wat.getUTCSeconds()).padStart(2,'0')} ${meridian}`;
+  const text=(link:string)=>`# BBC News Hausa
+
+## [Gargadin ambaliya a jihar Kano](${link})
+
+_An wallafa ${label}_
+
+Hukumar kula da muhalli a Kano ta yi gargadin ambaliya ga mazauna yankunan jihar a yau.
+`;
+  const good=parseNewsFeed(text('https://www.bbc.com/hausa/articles/cn1234ok'),'bbc-hausa');
+  expect(good).toHaveLength(1);
+  expect(good[0]?.url).toBe('https://www.bbc.com/hausa/articles/cn1234ok');
+  expect(parseNewsFeed(text('https://bbc.com.evil.test/articles/fake'),'bbc-hausa')).toEqual([]);
+ });
  it('never admits stories older than seven days, celebrity gossip or international chatter',()=>{
   const url='https://www.bbc.com/news/articles/abc';
   expect(parseNewsFeed(rss(item(url,undefined,undefined,new Date(Date.now()-8*86400000).toUTCString())),'bbc')).toEqual([]);

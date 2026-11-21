@@ -24,10 +24,49 @@ function xmlElement(xml:string,tag:string):string{
  const pattern=new RegExp('<'+tag+'(?:\\s[^>]*)?>([\\s\\S]*?)<\\/'+tag+'>','i');
  return pattern.exec(xml)?.[1]??'';
 }
+/** The BBC publishes Hausa headlines as a dated first-party Markdown index.
+ * Do not treat this as RSS XML or import undated items into public news. */
+function parseBbcHausaIndex(raw:string):ParsedNews[]{
+ if(raw.length>2_000_000)throw Error('hausa_index_too_large');
+ const source=newsCatalog.find(item=>item.id==='bbc-hausa');
+ if(!source)return [];
+ const months:Record<string,number>={
+  janairu:0,faburairu:1,maris:2,afrilu:3,mayu:4,yuni:5,yuli:6,
+  agusta:7,satumba:8,oktoba:9,nuwamba:10,disamba:11,
+ };
+ const records:ParsedNews[]=[],seen=new Set<string>();
+ for(const block of raw.replace(/\r\n?|\u2028/g,'\n').split(/^##\s+/m).slice(1,75)){
+  const heading=block.match(/^\[([^\]\n]{1,500})\]\((https:\/\/[^\s)]+)\)/);
+  const date=block.match(/_\s*[^_\n]*?\b(\d{1,2})\s+([\p{L}]+),\s*(\d{4})\s+da\s+(\d{1,2}):(\d{2}):(\d{2})\s+(SF|YM)\s*_/iu);
+  if(!heading||!date)continue;
+  const month=months[date[2]!.toLowerCase()];
+  if(month===undefined)continue;
+  let hour=Number(date[4])%12;
+  if(date[7]!.toUpperCase()==='YM')hour+=12;
+  const timestamp=Date.UTC(Number(date[3]),month,Number(date[1]),hour-1,Number(date[5]),Number(date[6]));
+  if(!Number.isFinite(timestamp))continue;
+  const publishedAt=new Date(timestamp).toISOString();
+  if(!recentNewsTimestamp(publishedAt))continue;
+  const title=plain(heading[1]!).slice(0,280);
+  const link=safeNewsArticleUrl(source,heading[2]!.replace(/&amp;/g,'&'));
+  const tail=block.slice(block.indexOf(date[0])+date[0].length)
+   .replace(/^[_\s]+/,'').replace(/!\[[^\]]*\]\(https:\/\/[^)]+\)/g,' ')
+   .replace(/\[([^\]]+)\]\(https:\/\/[^)]+\)/g,'$1');
+  const summary=plain(tail).slice(0,520);
+  if(!link||seen.has(link)||title.length<3||summary.length<15)continue;
+  if(!classifyNigeriaNews(title,summary).confident||
+     !classifyPublicInterest(title,summary).relevant)continue;
+  records.push({url:link,title,summary,publishedAt});seen.add(link);
+  if(records.length>=30)break;
+ }
+ return records;
+}
+
 /** RSS 2/Atom discovery metadata only. Reject stale and non-Nigerian events
  * before any database enrichment or AI editorial work.
  */
 export function parseNewsFeed(xml:string,publisherId:string):ParsedNews[]{
+ if(publisherId==='bbc-hausa')return parseBbcHausaIndex(xml);
  if(xml.length>600000||/<!DOCTYPE|<!ENTITY/i.test(xml))throw Error('invalid_news_xml');
  const entry=newsCatalog.find(n=>n.id===publisherId);
  if(!entry)throw Error('unsupported_publisher');
@@ -56,16 +95,17 @@ export function parseNewsFeed(xml:string,publisherId:string):ParsedNews[]{
 }
 async function boundedFeedFetch(url:string,fetchImpl:typeof fetch):Promise<string>{
  const controller=new AbortController();
+ const maxBytes=url.includes('bbc/world-service-rss/main/hausa.md')?2_000_000:600000;
  const timer=setTimeout(()=>controller.abort(),8000);
  try{
   const res=await fetchImpl(url,{redirect:'error',signal:controller.signal,
    headers:{Accept:'application/rss+xml, application/atom+xml, application/xml','User-Agent':'MasanawaNews/1.0 (authorized RSS aggregator)'}});
-  if(!res.ok||res.headers.get('content-length')&&Number(res.headers.get('content-length'))>600000)
+  if(!res.ok||res.headers.get('content-length')&&Number(res.headers.get('content-length'))>maxBytes)
    throw Error('news_provider_unavailable');
   const reader=res.body?.getReader();if(!reader)throw Error('news_empty_feed');
   const pieces:Uint8Array[]=[];let size=0;
   while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;
-   if(size>600000){await reader.cancel();throw Error('news_feed_too_large');}pieces.push(part.value);}
+   if(size>maxBytes){await reader.cancel();throw Error('news_feed_too_large');}pieces.push(part.value);}
   return Buffer.concat(pieces).toString('utf8');
  }finally{clearTimeout(timer);}
 }
@@ -123,6 +163,15 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
      if(!eligible.rows.length)return;
      const existing=await client.query(`SELECT post_id,content_hash FROM feed.news_articles
        WHERE tenant_id=$1 AND source_url=$2`,[row.tenant_id,story.url]);
+     const queueNewsEvent = async (postId: string, eventKind: 'published'|'revised') => {
+       const eventId = 'news-' + createHash('sha256')
+         .update(row.tenant_id+'|'+postId+'|'+hash).digest('hex').slice(0,48);
+       await client.query(`INSERT INTO feed.news_notification_events
+         (tenant_id,event_id,post_id,content_hash,event_kind)
+         VALUES($1,$2,$3,$4,$5)
+         ON CONFLICT(tenant_id,post_id,content_hash) DO NOTHING`,
+         [row.tenant_id,eventId,postId,hash,eventKind]);
+     };
      if(existing.rows.length){
       if(existing.rows[0].content_hash===hash)return;
       await client.query(`UPDATE feed.news_articles SET headline=$3,summary=$4,content_hash=$5,
@@ -131,6 +180,9 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
           locality.states,locality.nationwide,locality.locations,interest.category,interest.priority]);
       await client.query(`UPDATE feed.posts SET body=$3 WHERE tenant_id=$1 AND id=$2`,
        [row.tenant_id,existing.rows[0].post_id,story.title+'\n\n'+story.summary]);
+      // Publication and notification intent share one committed transaction.
+      // Do not push for unapproved, uncommitted or duplicate articles.
+      await queueNewsEvent(String(existing.rows[0].post_id),'revised');
       imported++;return;
      }
      const linked=await client.query(`SELECT 1 FROM feed.news_article_sources
@@ -164,6 +216,7 @@ export function createNewsFeedPoller(pool:Pool,fetchImpl:typeof fetch=fetch,plat
      await client.query(`INSERT INTO feed.news_article_sources
        (tenant_id,source_url,publisher_id,post_id,headline) VALUES($1,$2,$3,$4,$5)`,
       [row.tenant_id,story.url,row.publisher_id,post.rows[0].id,story.title]);
+     await queueNewsEvent(String(post.rows[0].id),'published');
      imported++;
     });
    }
