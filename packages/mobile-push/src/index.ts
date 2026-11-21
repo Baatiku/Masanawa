@@ -92,9 +92,9 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
     const headline = data.newsTitle;
     const publisher = data.newsPublisher;
     if (typeof headline === "string" && headline.length >= 3 && headline.length <= 180 &&
-        !/[\\u0000-\\u001f\\u007f]/u.test(headline)) safe.newsTitle = headline.trim();
+        !/[\x00-\x1f\x7f]/u.test(headline)) safe.newsTitle = headline.trim();
     if (typeof publisher === "string" && publisher.length >= 2 && publisher.length <= 70 &&
-        !/[\\u0000-\\u001f\\u007f]/u.test(publisher)) safe.newsPublisher = publisher.trim();
+        !/[\x00-\x1f\x7f]/u.test(publisher)) safe.newsPublisher = publisher.trim();
   }
   const rawLink = data.deepLink;
   if (typeof rawLink === "string" && rawLink.length <= 300 &&
