@@ -123,13 +123,22 @@ it('persists published civic identities after staff edits and suppresses retired
  const id=ids[1]!,civicId='nimc';
  await db.query(`UPDATE identity.character_versions SET constitution=$3::jsonb WHERE tenant_id=$1 AND character_version_id=(SELECT active_character_version_id FROM identity.characters WHERE tenant_id=$1 AND character_id=$2)`,
   [tenant,id,JSON.stringify({disclosurePolicy:{representation:'independent_civic_ai_guide',civicAgencyId:civicId}})]);
- await db.query(`UPDATE masana.character_revisions SET profile=jsonb_set(profile,'{civicAgencyId}',$3::jsonb),approved_by='staff' WHERE tenant_id=$1 AND character_id=$2 AND revision=1`,
-  [tenant,id,JSON.stringify(civicId)]);
+ // Approved revisions are immutable. A genuine staff edit first retires the
+ // prior approval and publishes a new complete revision with verified artwork.
+ await db.query(`UPDATE masana.character_revisions SET state='retired' WHERE tenant_id=$1 AND character_id=$2 AND revision=1`,[tenant,id]);
+ const published={
+  handle:'gwana',displayName:'Staff edited independent agency guide',profession:'Published civic information',
+  portraitMediaId:'masana_portrait_gwana',bannerMediaId:'masana_banner_gwana',
+  civicAgencyId:civicId,
+ };
+ await db.query(`INSERT INTO masana.character_revisions
+  (tenant_id,character_id,revision,state,profile,approved_by,approved_at)
+  VALUES($1,$2,3,'approved',$3::jsonb,'staff',now())`,[tenant,id,JSON.stringify(published)]);
  const still=await identities.read({tenantId:tenant,userId:user,characterIds:[id]});
  expect(still.get(id)?.civicAgencyId).toBe(civicId);
  // Keep a draft revision distinct from the last published approval.
  expect(still.get(id)?.portraitKey).toBe('gwana');
- await db.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at) VALUES($1,$2,3,'retired',$3::jsonb,'staff',now())`,
- [tenant,id,JSON.stringify({handle:'retired-guide',displayName:'Retired civic guide'})]);
+ await db.query(`UPDATE masana.character_revisions SET state='retired'
+  WHERE tenant_id=$1 AND character_id=$2 AND revision=3`,[tenant,id]);
  expect((await identities.read({tenantId:tenant,userId:user,characterIds:[id]})).has(id)).toBe(false);
 });
