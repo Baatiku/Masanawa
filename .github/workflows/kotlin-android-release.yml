@@ -83,7 +83,29 @@ jobs:
           actual="$(keytool -list -v -keystore "$RUNNER_TEMP/masanawa-shell-upload.jks" \
             -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sed -n 's/^\s*SHA256: //p' | head -1)"
           test -n "$actual"
-          test "${actual//:/}" = "${EXPECTED_SHA256//:/}"
+          # Accept copied NAME=value, quotation marks, spaces and colons.
+          # A different certificate still fails the strict 64-hex comparison.
+          expected="$(python3 - <<'PY'
+          import os
+          import re
+
+          value = os.environ["EXPECTED_SHA256"].strip().strip(chr(39) + chr(34))
+          prefix = "SHELL_EXPECTED_UPLOAD_SHA256="
+          if value.startswith(prefix):
+              value = value[len(prefix):].strip().strip(chr(39) + chr(34))
+          if value.upper().startswith("SHA256:"):
+              value = value[7:].strip()
+          value = "".join(value.split()).replace(":", "").upper()
+          if not re.fullmatch(r"[0-9A-F]{64}", value):
+              raise SystemExit("Invalid certificate fingerprint format in SHELL_EXPECTED_UPLOAD_SHA256.")
+          print(value)
+          PY
+          )"
+          actual="${actual//:/}"
+          if [ "${actual^^}" != "$expected" ]; then
+            echo "::error::The stored fingerprint does not match the signing keystore. Recheck SHELL_EXPECTED_UPLOAD_SHA256."
+            exit 1
+          fi
           echo "SHELL_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/masanawa-shell-upload.jks" >> "$GITHUB_ENV"
       - name: Verify no native logo and correct Masanawa launcher
         working-directory: apps/android-shell
