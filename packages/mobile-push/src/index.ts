@@ -50,7 +50,8 @@ function serviceAccount(raw: string): ServiceAccount {
  * ordinary work channels or letting Firebase deliver stale call alerts. */
 export function mobilePushAndroidChannel(
   data: Readonly<Record<string, string>> | undefined,
-): "masanawa_calls" | "masanawa_work" {
+): "masanawa_calls" | "masanawa_work" | "masanawa_news" {
+  if (data?.type === "news_update" || data?.type === "news_article") return "masanawa_news";
   return data?.type === "incoming_call" && typeof data.callId === "string" &&
       /^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/u.test(data.callId)
     ? "masanawa_calls"
@@ -65,8 +66,11 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
   readonly title: string;
   readonly body: string;
 } {
-  return mobilePushAndroidChannel(data) === "masanawa_calls"
+  const channel = mobilePushAndroidChannel(data);
+  return channel === "masanawa_calls"
     ? { title: "Incoming call", body: "Open Calls to respond" }
+    : channel === "masanawa_news"
+    ? { title: "New Masanawa news", body: "Open Home to read a new publisher article" }
     : { title: "Masanawa", body: "Open the app to view your update" };
 }
 
@@ -84,7 +88,8 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
   }
   const rawLink = data.deepLink;
   if (typeof rawLink === "string" && rawLink.length <= 300 &&
-      /^masanawa:\/\/(?:(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}|wallet\/requests\/ngnreq_[A-Za-z0-9_-]{1,128}|wallet\/activity(?:\/(?:mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160}))?)$/u.test(rawLink)) {
+      (rawLink === "masanawa://home" ||
+      /^masanawa:\/\/(?:(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}|wallet\/requests\/ngnreq_[A-Za-z0-9_-]{1,128}|wallet\/activity(?:\/(?:mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160}))?)$/u.test(rawLink))) {
     try {
       const link = new URL(rawLink);
       if (link.protocol === "masanawa:" && link.hostname && !link.username &&
@@ -107,6 +112,7 @@ export function pushCategory(data: Readonly<Record<string, string>> | undefined)
   if (type.startsWith("wallet_") || type.startsWith("funding_") ||
       type.startsWith("transfer_") || type.startsWith("withdrawal_") ||
       type.startsWith("settlement_")) return "wallet";
+  if (type === "news_update" || type === "news_article") return "status";
   if (type.startsWith("room_")) return "rooms";
   if (type.startsWith("status_") || type.startsWith("post_")) return "status";
   return "messages";
@@ -260,7 +266,7 @@ export function createFcmPushSender(input: {
                   masanawa: "1",
                 },
                 android: {
-                  priority: "high",
+                  priority: mobilePushAndroidChannel(safeData) === "masanawa_news" ? "normal" : "high",
                   ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
                     ? { ttl: "60s" }
                     : {}),
