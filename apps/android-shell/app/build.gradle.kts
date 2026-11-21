@@ -61,7 +61,11 @@ android {
     val brandIconSource = file("../../mobile/android/app/src/main/res")
     val generatedBrandIcons = layout.buildDirectory.dir("generated/masanawa-brand-icons")
     val copyBrandIcons = tasks.register<Copy>("copyMasanawaBrandIcons") {
-        from(brandIconSource) { include("mipmap-*/ic_launcher.png") }
+        from(brandIconSource) {
+            include("mipmap-*/ic_launcher.png")
+            // Genuine Masanawa transparent notification emblem across densities.
+            include("drawable-*/ic_stat_masanawa.png")
+        }
         into(generatedBrandIcons)
     }
     // AGP 9 rejects Provider values in SourceSet.srcDir; preBuild supplies the
