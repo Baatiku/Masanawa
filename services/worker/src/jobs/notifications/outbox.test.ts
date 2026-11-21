@@ -63,4 +63,25 @@ describe("notification outbox delivery", () => {
     });
     expect((query.mock.calls[2]?.[1] as unknown[])[4]).toBe(true);
   });
+  it("sends a public publisher/headline with an exact canonical post route without exposing account data",async()=>{
+    const postId="12345678-1234-1234-1234-123456789abc";
+    const news={...event,event_id:"news-123abc",category:"status",kind:"news_update",deep_link:"masanawa://home"};
+    const query=vi.fn(async(sql:string)=>{
+      if(sql.includes("FROM feed.news_notification_events e"))return {rows:[{post_id:postId,headline:"  Katsina funds public hospitals  ",display_name:"Channels Television"}]};
+      return {rows:[news]};
+    });
+    const send=vi.fn(async()=>({attempted:1,delivered:1}));
+    const service=createFinancialNotificationRuntime({
+      pool:{query} as never,sender:{send}
+    });
+    expect(await service.runOnce()).toMatchObject({claimed:1,delivered:1,retried:0});
+    expect(send).toHaveBeenCalledWith({
+      scope:{tenantId:news.tenant_id,userId:news.user_id},
+      title:"New Masanawa news",body:"Open Home to read a publisher article",
+      data:{type:"news_update",eventId:"news-123abc",deepLink:`masanawa://news/${postId}`,
+        postId,newsTitle:"Katsina funds public hospitals",newsPublisher:"Channels Television"}
+    });
+    expect(query.mock.calls.some(([sql])=>sql.includes("p.state='approved'"))).toBe(true);
+  });
+
 });
