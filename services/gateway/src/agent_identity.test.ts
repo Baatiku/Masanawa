@@ -9,7 +9,9 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
      expect(sql).toContain("revision.state='approved'");
      expect(sql).toContain("owner.kind='platform'");
      expect(sql).toContain("following.fan_user_id=$3");
-     expect(sql).toContain("revision.character_id=ANY($2::text[])");
+     expect(sql).toContain("character.character_id=ANY($2::text[])");
+     expect(sql).toContain("JOIN LATERAL");
+     expect(sql).toContain("active_version.constitution");
      expect(params).toEqual([tenant,[character],user]);
      return {rows:[{character_id:character,portrait_media_id:"masana_portrait_amina",following:true}]};
    });
@@ -37,6 +39,21 @@ describe("approved canonical Masana portrait and followed metadata",()=>{
    const input={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user'),characterIds:[character]};
    expect((await reader('masanawa-civic-seed-v1').read(input)).get(character)?.civicAgencyId).toBe('nimc');
    expect((await reader('staff').read(input)).get(character)?.civicAgencyId).toBeUndefined();
+ });
+ it('keeps staff-updated civic guides bound only to their immutable active constitution',async()=>{
+   const character=createCanonicalId('character');
+   const input={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user'),characterIds:[character]};
+   const reader=(civic_agency_id:string|null,constitutional_civic_id:string,civic_representation:string)=>
+    createPgAgentMasanaIdentityReader({query:async()=>({rows:[{
+      character_id:character,portrait_media_id:null,following:false,
+      civic_agency_id,profile_approved_by:'staff',constitutional_civic_id,civic_representation,
+    }]})} as never);
+   expect((await reader('nimc','nimc','independent_civic_ai_guide').read(input)).get(character)?.civicAgencyId).toBe('nimc');
+   // Staff-owned edits that omit the original civic ID must not disable the same guide.
+   expect((await reader(null,'nimc','independent_civic_ai_guide').read(input)).get(character)?.civicAgencyId).toBe('nimc');
+   // A mutable profile trying to point a guide at another authority loses the binding.
+   expect((await reader('inec','nimc','independent_civic_ai_guide').read(input)).get(character)?.civicAgencyId).toBeUndefined();
+   expect((await reader('nimc','nimc','other_representation').read(input)).get(character)?.civicAgencyId).toBeUndefined();
  });
  it("retains a portrait when a Masana's approved display handle changes",async()=>{
    const character=createCanonicalId("character");

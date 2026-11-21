@@ -32,6 +32,10 @@ export function createPgAgentMasanaIdentityReader(
   return Object.freeze({
     async read({tenantId,userId,characterIds}:Parameters<AgentMasanaIdentityReader["read"]>[0]) {
       if(characterIds.length===0) return new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
+      // Always project the latest published state (not a draft or a superseded
+      // approved revision). Retiring a civic persona must not resurrect an old
+      // approved record. The signed character constitution, rather than the
+      // mutable profile's 'approved_by', owns the agency/character association.
       const found=await db.query(`
         SELECT revision.character_id, media.media_id AS portrait_media_id,
           revision.profile->>'portraitMediaId' AS requested_portrait,
@@ -40,28 +44,39 @@ export function createPgAgentMasanaIdentityReader(
           revision.profile->>'lifeStory' AS public_biography,
           revision.profile->>'civicAgencyId' AS civic_agency_id,
           revision.approved_by AS profile_approved_by,
+          active_version.constitution->'disclosurePolicy'->>'representation' AS civic_representation,
+          active_version.constitution->'disclosurePolicy'->>'civicAgencyId' AS constitutional_civic_id,
           EXISTS(SELECT 1 FROM masana.follows following
             WHERE following.tenant_id=revision.tenant_id
               AND following.character_id=revision.character_id
               AND following.fan_user_id=$3) AS following
-        FROM masana.character_revisions revision
+        FROM identity.characters character
+        JOIN identity.character_ownership owner ON owner.tenant_id=character.tenant_id
+          AND owner.character_id=character.character_id AND owner.kind='platform'
+        JOIN identity.character_versions active_version ON active_version.tenant_id=character.tenant_id
+          AND active_version.character_version_id=character.active_character_version_id
+        JOIN LATERAL (
+          SELECT *
+          FROM masana.character_revisions published
+          WHERE published.tenant_id=character.tenant_id
+            AND published.character_id=character.character_id
+            AND published.state IN ('approved','retired')
+          ORDER BY published.revision DESC
+          LIMIT 1
+        ) revision ON revision.state='approved'
         LEFT JOIN masana.character_media media
           ON media.tenant_id=revision.tenant_id
           AND media.character_id=revision.character_id
           AND media.media_id=revision.profile->>'portraitMediaId'
           AND media.kind='portrait'
           AND media.approved_by='masanawa-platform-catalog-v1'
-        JOIN identity.characters character ON character.tenant_id=revision.tenant_id
-          AND character.character_id=revision.character_id AND character.state='active'
-        JOIN identity.character_ownership owner ON owner.tenant_id=revision.tenant_id
-          AND owner.character_id=revision.character_id AND owner.kind='platform'
-        WHERE revision.tenant_id=$1 AND revision.character_id=ANY($2::text[])
-          AND revision.state='approved'`,[tenantId,characterIds,userId]);
+        WHERE character.tenant_id=$1 AND character.character_id=ANY($2::text[])
+          AND character.state='active'`,[tenantId,characterIds,userId]);
       const publicRecords=await officials?.directory(tenantId,characterIds);
       const simulations=await officials?.simulations(tenantId,characterIds);
       const result=new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       for(const raw of found.rows) {
-        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown;requested_portrait?:unknown;civic_agency_id?:unknown;profile_approved_by?:unknown};
+        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown;requested_portrait?:unknown;civic_agency_id?:unknown;profile_approved_by?:unknown;civic_representation?:unknown;constitutional_civic_id?:unknown};
         if(typeof row.character_id!=="string" ||
            !characterIds.includes(row.character_id as CharacterId)) {
           throw new Error("invalid_masana_identity_projection");
@@ -77,8 +92,17 @@ export function createPgAgentMasanaIdentityReader(
         const subject=reviewed?OFFICIAL_ROSTER_MANIFEST.find(p=>p.characterId===row.character_id&&p.officialName===reviewed.officialName):undefined;
         const portrait=photo?{url:publicOfficialMediaUrl(photo.assetKey),sourceUrl:photo.sourceUrl,credit:photo.credit,licenseLabel:photo.licenseLabel,...(photo.licenseUrl?{licenseUrl:photo.licenseUrl}:{})}:undefined;
         const party=subject?{code:subject.party,name:OFFICIAL_PARTIES[subject.party].name,emblemUrl:partyEmblemUrl(subject.party),sourceUrl:subject.rosterSourceUrl,checkedAt:subject.rosterCheckedAt}:undefined;
-        const civicAgencyId=row.profile_approved_by==='masanawa-civic-seed-v1'
+        const constitutionalId=row.civic_representation==='independent_civic_ai_guide'
+          ? approvedCivicAgencyId(row.constitutional_civic_id) : null;
+        const previouslySeededId=row.profile_approved_by==='masanawa-civic-seed-v1'
           ? approvedCivicAgencyId(row.civic_agency_id) : null;
+        // Do not let later administrator edits erase a legitimate civic guide,
+        // but fail closed if a modified profile attempts to rebind it to another
+        // institution. Display names, handles and editable biographies are
+        // never sufficient to confer this identity.
+        const conflictingProfileId=constitutionalId&&typeof row.civic_agency_id==='string'
+          &&row.civic_agency_id!==constitutionalId;
+        const civicAgencyId=conflictingProfileId?null:(constitutionalId??previouslySeededId);
         result.set(row.character_id as CharacterId,
           Object.freeze({...(civicAgencyId?{civicAgencyId}:{}),...(portrait?{avatarUrl:portrait.url}:{}),...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(portrait?{portrait}:{}),...(party?{party}:{}),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
             socialChannels:validateMasanaSocialChannels(row.social_channels)}));

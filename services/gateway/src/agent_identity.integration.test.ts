@@ -18,7 +18,8 @@ const presentations=createPostgresAgentPresentationRepository(pool);
 const identities=createPgAgentMasanaIdentityReader({query});
 beforeAll(async()=>{
  await db.exec(`CREATE SCHEMA identity;
- CREATE TABLE identity.characters(tenant_id text,character_id text,state text,PRIMARY KEY(tenant_id,character_id));
+ CREATE TABLE identity.characters(tenant_id text,character_id text,state text,active_character_version_id text,PRIMARY KEY(tenant_id,character_id));
+ CREATE TABLE identity.character_versions(tenant_id text,character_version_id text,constitution jsonb,PRIMARY KEY(tenant_id,character_version_id));
  CREATE TABLE identity.character_ownership(tenant_id text,character_id text,kind text);
  CREATE TABLE identity.users(tenant_id text,user_id text,state text DEFAULT 'active',PRIMARY KEY(tenant_id,user_id));
  CREATE SCHEMA agents;
@@ -29,7 +30,9 @@ beforeAll(async()=>{
  await db.query("INSERT INTO identity.users(tenant_id,user_id) VALUES($1,$2),($1,$3)",[tenant,user,otherUser]);
  for(const [index,seed] of PROFESSIONAL_MASANA_CATALOG.entries()){
   const id=ids[index]!;
-  await db.query("INSERT INTO identity.characters VALUES($1,$2,'active')",[tenant,id]);
+  const version=createCanonicalId("character-version");
+  await db.query("INSERT INTO identity.characters VALUES($1,$2,'active',$3)",[tenant,id,version]);
+  await db.query("INSERT INTO identity.character_versions VALUES($1,$2,'{}'::jsonb)",[tenant,version]);
   await db.query("INSERT INTO identity.character_ownership VALUES($1,$2,'platform')",[tenant,id]);
   for(const kind of ["portrait","banner"]){
    await db.query(`INSERT INTO masana.character_media(tenant_id,media_id,character_id,kind,object_key,rights_note,approved_by)
@@ -43,7 +46,7 @@ beforeAll(async()=>{
    VALUES($1,$2,1,'approved',$3::jsonb,'staff',now()),($1,$2,2,'draft',$4::jsonb,NULL,NULL)`,
    [tenant,id,JSON.stringify(profile),JSON.stringify({...profile,portraitMediaId:"masana_portrait_mei"})]);
   await presentations.put({expectedRevision:null,presentation:{schemaVersion:1,tenantId:tenant,characterId:id,
-   characterVersionId:createCanonicalId("character-version"),displayName:profile.displayName,
+   characterVersionId:version,displayName:profile.displayName,
    roleLabel:seed.roleLabel,about:"Fictional educator",greeting:null,visibleInUserApp:true,
    sortOrder:index,revision:1,countryCode:seed.countryCode,countryName:seed.countryName}});
  }
@@ -114,4 +117,28 @@ it('projects optional approved biography facts through SQL and the actual HTTP s
   // The same approved revision cannot grant public-official facts without a current dossier.
   expect((await identities.read({tenantId:tenant,userId:user,characterIds:[id]})).get(id)?.publicOfficial).toBeUndefined();
  }finally{await app.close();}
+});
+
+it('persists published civic identities after staff edits and suppresses retired revisions',async()=>{
+ const id=ids[1]!,civicId='nimc';
+ await db.query(`UPDATE identity.character_versions SET constitution=$3::jsonb WHERE tenant_id=$1 AND character_version_id=(SELECT active_character_version_id FROM identity.characters WHERE tenant_id=$1 AND character_id=$2)`,
+  [tenant,id,JSON.stringify({disclosurePolicy:{representation:'independent_civic_ai_guide',civicAgencyId:civicId}})]);
+ // Approved revisions are immutable. A genuine staff edit first retires the
+ // prior approval and publishes a new complete revision with verified artwork.
+ await db.query(`UPDATE masana.character_revisions SET state='retired' WHERE tenant_id=$1 AND character_id=$2 AND revision=1`,[tenant,id]);
+ const published={
+  handle:'gwana',displayName:'Staff edited independent agency guide',profession:'Published civic information',
+  portraitMediaId:'masana_portrait_gwana',bannerMediaId:'masana_banner_gwana',
+  civicAgencyId:civicId,
+ };
+ await db.query(`INSERT INTO masana.character_revisions
+  (tenant_id,character_id,revision,state,profile,approved_by,approved_at)
+  VALUES($1,$2,3,'approved',$3::jsonb,'staff',now())`,[tenant,id,JSON.stringify(published)]);
+ const still=await identities.read({tenantId:tenant,userId:user,characterIds:[id]});
+ expect(still.get(id)?.civicAgencyId).toBe(civicId);
+ // Keep a draft revision distinct from the last published approval.
+ expect(still.get(id)?.portraitKey).toBe('gwana');
+ await db.query(`UPDATE masana.character_revisions SET state='retired'
+  WHERE tenant_id=$1 AND character_id=$2 AND revision=3`,[tenant,id]);
+ expect((await identities.read({tenantId:tenant,userId:user,characterIds:[id]})).has(id)).toBe(false);
 });
