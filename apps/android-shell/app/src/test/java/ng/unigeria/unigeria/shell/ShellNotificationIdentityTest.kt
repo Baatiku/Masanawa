@@ -5,6 +5,12 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class ShellNotificationIdentityTest {
+    @Test fun publicNewsHeadlineIsReadableAndBounded() {
+        assertEquals("Verified public story", ShellNotificationIdentity.publicNewsText("  Verified  public <b>story</b>", 180))
+        assertEquals(null, ShellNotificationIdentity.publicNewsText("", 180))
+        assertEquals("ABC", ShellNotificationIdentity.publicNewsText("ABCDEFG", 3))
+    }
+
     @Test fun stableForRepeatedNotificationsToTheSameChat() {
         val route = "https://app.masanawa.com/?tab=chats&profile=character_12345678-1234-1234-1234-123456789abc"
         assertEquals(ShellNotificationIdentity.requestCode(route, false),
