@@ -60,17 +60,17 @@ export function recentNewsTimestamp(raw:string,now=Date.now()):boolean {
 export const NEWS_CATEGORIES=['security','governance','public-services','health','education','infrastructure','economy','environment','elections','agriculture','community'] as const;
 export type NewsCategory=typeof NEWS_CATEGORIES[number];
 const publicTopics:readonly [NewsCategory,RegExp,number][]=[
- ['security',/\b(?:police|security|bandits?|kidnap|abduct|attack|violence|armed|terror|military|soldiers?|crime|accident|road crash|fire outbreak|rescue|emergency|missing persons?|civil defence|insurgency)\b/,95],
- ['health',/\b(?:hospitals?|clinics?|disease|outbreak|cholera|malaria|vaccin|medical|healthcare|health|doctors?|nurses?|ambulance|primary care|maternal|water contamination)\w*\b/,90],
- ['environment',/\b(?:flood|erosion|drought|disaster|weather warning|heavy rain|climate|pollution|waste disposal|landslide|environmental|water shortage|wildfire)\w*\b/,90],
- ['public-services',/\b(?:electricity|power outage|blackout|water supply|public notice|official notice|passport|national id|nin registration|service disruption|service restoration|transport fare|fuel scarcity|public holiday|consumer protection|social welfare)\w*\b/,87],
- ['infrastructure',/\b(?:roads?|bridges?|railway|rail line|construction|repair works?|road closure|traffic diversion|electric grid|power station|drainage|infrastructure|housing|transportation|airport|dam|roadblock)\b/,85],
- ['elections',/\b(?:inec|electoral|elections?|voters?|polling units?|ballot|gubernatorial|poll results?|vote buying|by-election)\b/,85],
- ['education',/\b(?:schools?|students?|teachers?|education|universit|college|polytechnic|examination|waec|neco|jamb|scholarship|tuition|academic|classrooms?)\w*\b/,80],
- ['economy',/\b(?:inflation|food prices?|market prices?|minimum wage|salaries?|pension|employment|unemployment|jobs?|recruitment|business|trade|taxation|taxes|tariff|customs|naira|economic|investments?|subsidy|budget|banking)\b/,78],
- ['agriculture',/\b(?:farmers?|harvest|agriculture|crops?|food security|fertili[sz]er|livestock|irrigation|fishery|farm produce|grain)\b/,78],
- ['governance',/\b(?:governor|president|minister|ministry|senate|assembly|lawmakers?|lawmakers|council|local government|legislation|policy|court|judges?|judgment|ruling|federal government|state government|public funds|corruption|appropriation|executive order|commissioner|judiciary|nass|ncdc|nema|frsc|efcc|icpc|ndlea)\b/,76],
- ['community',/\b(?:residents?|communities|communal|market closure|displaced|evacuation|protest|demonstration|town hall|civic meeting|local council|water project|public consultation|relief materials|skills training)\b/,68],
+ ['security',/\b(?:police|security|bandits?|kidnap|abduct|attack|violence|armed|terror|military|soldiers?|crime|accident|road crash|fire outbreak|rescue|emergency|missing persons?|civil defence|insurgency|tsaro|yan bindiga|satar mutane|ta.addanci|harin|farmaki)\b/,95],
+ ['health',/\b(?:hospitals?|clinics?|disease|outbreak|cholera|malaria|vaccin|medical|healthcare|health|doctors?|nurses?|ambulance|primary care|maternal|water contamination|asibiti|cuta|lafiya|rigakafi|likitoci)\w*\b/,90],
+ ['environment',/\b(?:flood|erosion|drought|disaster|weather warning|heavy rain|climate|pollution|waste disposal|landslide|environmental|water shortage|ambaliya|gobarar|fari|dumamar yanayi|wildfire)\w*\b/,90],
+ ['public-services',/\b(?:electricity|power outage|blackout|water supply|public notice|official notice|passport|national id|nin registration|service disruption|service restoration|transport fare|fuel scarcity|public holiday|consumer protection|social welfare|karancin ruwa|rashin wuta|lantarki)\w*\b/,87],
+ ['infrastructure',/\b(?:roads?|bridges?|railway|rail line|construction|repair works?|road closure|traffic diversion|electric grid|power station|drainage|infrastructure|housing|transportation|airport|dam|roadblock|gyaran titi|gadar|hanyoyi|titin)\b/,85],
+ ['elections',/\b(?:inec|electoral|elections?|voters?|polling units?|ballot|gubernatorial|poll results?|vote buying|by-election|zabe|zaben|masu kada kuri.a)\b/,85],
+ ['education',/\b(?:schools?|students?|teachers?|education|universit|college|polytechnic|examination|waec|neco|jamb|scholarship|tuition|academic|classrooms?|makaranta|ilimi|dalibai|jami.a)\w*\b/,80],
+ ['economy',/\b(?:inflation|food prices?|market prices?|minimum wage|salaries?|pension|employment|unemployment|jobs?|recruitment|business|trade|taxation|taxes|tariff|customs|naira|economic|investments?|subsidy|budget|kasafin kudi|farashi|tattalin arziki|haraji|banking)\b/,78],
+ ['agriculture',/\b(?:farmers?|harvest|agriculture|crops?|food security|fertili[sz]er|livestock|irrigation|fishery|farm produce|grain|manoma|noma|amfanin gona)\b/,78],
+ ['governance',/\b(?:governor|president|minister|ministry|senate|assembly|lawmakers?|lawmakers|council|local government|legislation|policy|court|judges?|judgment|ruling|federal government|state government|public funds|corruption|appropriation|executive order|commissioner|judiciary|nass|ncdc|nema|frsc|efcc|icpc|ndlea|gwamna|minista|shugaban kasa|majalisar dokoki|shugabanci)\b/,76],
+ ['community',/\b(?:residents?|communities|communal|market closure|displaced|evacuation|protest|demonstration|town hall|civic meeting|local council|water project|public consultation|relief materials|skills training|mazauna|al.ummomi|tarukan al.umma)\b/,68],
 ];
 /** Reject entertainment-driven chatter before any costly enrichment. A story
  * must still match one of the practical civic categories above.
