@@ -11,6 +11,7 @@ class ShellDeepLinksTest {
         assertEquals("https://app.masanawa.com/?tab=wallet", ShellDeepLinks.route("masanawa://wallet/activity"))
         assertEquals("https://app.masanawa.com/?tab=calls", ShellDeepLinks.route("masanawa://calls/history"))
         assertEquals("https://app.masanawa.com/?tab=profile", ShellDeepLinks.route("masanawa://notifications"))
+        assertEquals("https://app.masanawa.com/?tab=home", ShellDeepLinks.route("masanawa://home"))
     }
 
     @Test fun rejectUnknownAndPrivilegeBearingRoutes() {
