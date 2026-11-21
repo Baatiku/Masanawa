@@ -13,6 +13,8 @@ import android.net.Uri
 import android.provider.MediaStore
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.content.Context
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -51,6 +53,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import androidx.webkit.JavaScriptReplyProxy
@@ -86,6 +89,19 @@ class ShellActivity : ComponentActivity() {
     private var pendingCameraPicker: Intent? = null
     private var protectScreen = false
     private var callActive = false
+    private val webUpdateHandler = Handler(Looper.getMainLooper())
+    private var lastWebCheckAt = 0L
+    private var webCheckRunning = false
+    private var pendingWebRefresh = false
+    private val webUpdatePrefs by lazy {
+        getSharedPreferences("masanawa_web_updates", Context.MODE_PRIVATE)
+    }
+    private val webUpdatePoll = object : Runnable {
+        override fun run() {
+            checkWebDeployment()
+            webUpdateHandler.postDelayed(this, ShellWebUpdates.CHECK_INTERVAL_MS)
+        }
+    }
     private var pendingPushReply: JavaScriptReplyProxy? = null
     private val callControls = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -162,8 +178,7 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val launchStarted = SystemClock.elapsedRealtime()
-        val splash = installSplashScreen()
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         // The WebView must cover the entire window. It forwards the system-bar
         // safe areas to CSS; padding its parent creates the floating white
@@ -171,9 +186,7 @@ class ShellActivity : ComponentActivity() {
         enableEdgeToEdge()
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = true
-        splash.setKeepOnScreenCondition {
-            !firstPageVisible && SystemClock.elapsedRealtime() - launchStarted < 1_800
-        }
+        // The web app owns its loading screen; no redundant native hold.
 
         container = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
         ViewCompat.setOnApplyWindowInsetsListener(container) { _, insets ->
@@ -213,6 +226,7 @@ class ShellActivity : ComponentActivity() {
             it.name.startsWith("masanawa-capture-") && System.currentTimeMillis() - it.lastModified() > 3_600_000
         }?.forEach { it.delete() }
         webView = newWebView()
+        pendingWebRefresh = webUpdatePrefs.getBoolean("pending_refresh", false)
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
         articleReader = ShellArticleReader(this, container)
         setupLoadingBar()
@@ -269,6 +283,7 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        webUpdateHandler.removeCallbacks(webUpdatePoll)
         // Keep sensitive content out of the Android recent-apps thumbnail.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         // A customer-authorized foreground microphone session must not be
@@ -285,6 +300,9 @@ class ShellActivity : ComponentActivity() {
         articleReader.onResume()
         if (WebOriginPolicy.isTrusted(webView.url))
             webView.evaluateJavascript("window.dispatchEvent(new Event('masanawa-native-resume'))", null)
+        webUpdateHandler.removeCallbacks(webUpdatePoll)
+        webUpdateHandler.post(webUpdatePoll)
+        if (pendingWebRefresh) webUpdateHandler.postDelayed({ maybeRefreshWeb() }, 500L)
     }
 
     override fun onStop() {
@@ -293,6 +311,7 @@ class ShellActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        webUpdateHandler.removeCallbacks(webUpdatePoll)
         unregisterReceiver(callControls)
         stopCallService()
         pendingMediaRequest?.deny()
@@ -352,6 +371,7 @@ class ShellActivity : ComponentActivity() {
 
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 if (WebOriginPolicy.isTrusted(url)) {
+                    firstPageVisible = false
                     lastTrustedUrl = url
                     failureView.visibility = View.GONE
                 }
@@ -692,6 +712,51 @@ class ShellActivity : ComponentActivity() {
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = manager.activeNetwork ?: return false
         return manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }
+
+
+    private fun checkWebDeployment() {
+        val now = SystemClock.elapsedRealtime()
+        if (webCheckRunning || (lastWebCheckAt != 0L && now - lastWebCheckAt < 30_000L) ||
+            !hasInternetNetwork()) return
+        lastWebCheckAt = now
+        webCheckRunning = true
+        Thread({
+            val fingerprint = ShellWebUpdates.fetchFingerprint(
+                webUpdatePrefs.getString("document_fingerprint", null)?.startsWith("release:") == true
+            )
+            runOnUiThread {
+                webCheckRunning = false
+                if (isFinishing || isDestroyed || fingerprint == null) return@runOnUiThread
+                val previous = webUpdatePrefs.getString("document_fingerprint", null)
+                if (ShellWebUpdates.changed(previous, fingerprint)) {
+                    pendingWebRefresh = true
+                    webUpdatePrefs.edit().putString("document_fingerprint", fingerprint)
+                        .putBoolean("pending_refresh", true).apply()
+                    // Do not interrupt article reading or a foreground draft/call.
+                    // Apply the deployment on a safe later resume.
+                } else if (previous == null || !ShellWebUpdates.sameSource(previous, fingerprint)) {
+                    webUpdatePrefs.edit().putString("document_fingerprint", fingerprint).apply()
+                }
+            }
+        }, "masanawa-web-deployment-check").apply { isDaemon = true }.start()
+    }
+
+    private fun maybeRefreshWeb() {
+        if (!pendingWebRefresh || isFinishing || isDestroyed || !::webView.isInitialized) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (articleReader.isOpen() || callActive || fileCallback != null || pendingMediaRequest != null ||
+            !WebOriginPolicy.isTrusted(webView.url) || !firstPageVisible || !hasWindowFocus()) return
+        webView.evaluateJavascript(ShellWebUpdates.safeToReloadScript) { safe ->
+            if (!pendingWebRefresh || isFinishing || isDestroyed) return@evaluateJavascript
+            if (safe != "true" || articleReader.isOpen() || callActive ||
+                fileCallback != null || pendingMediaRequest != null || !hasWindowFocus()) return@evaluateJavascript
+            pendingWebRefresh = false
+            webUpdatePrefs.edit().putBoolean("pending_refresh", false).apply()
+            // Preserve session cookies and authenticated storage.
+            webView.clearCache(false)
+            webView.evaluateJavascript(ShellWebUpdates.reloadScript, null)
+        }
     }
 
     private fun syncKeyboardClass() {

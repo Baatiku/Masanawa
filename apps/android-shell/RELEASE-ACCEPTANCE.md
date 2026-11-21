@@ -1,8 +1,33 @@
-# Android shell release candidate: owner handoff
+# Masanawa Android: Kotlin shell release and owner handoff
 
-This is a signed *candidate* workflow, not permission to replace the Flutter
-application or a claim of production provider/payment readiness. Android
-target SDK is 36.
+**Owner decision, 20 November 2026:** The Kotlin WebView shell is now the
+primary Masanawa Android application, superseding Flutter for new releases.
+Both debug and release launcher names are **Masanawa**. The launch window is
+neutral (no extra splash emblem or artificial delay); the hosted website owns
+the branded loading state. Android 12 and later still enforce a brief system
+startup screen, which cannot be removed entirely.
+
+**Automatic web updates:** The shell checks the public
+`/masanawa-web-release.json` marker at launch, on resume, and every three
+minutes while foregrounded. Each web build writes a fresh revision to this
+file. The shell reloads the current route without clearing cookies or account
+storage once no call, upload, draft, recording, or media playback is active.
+If the marker is not yet deployed, the shell uses the public homepage as a
+temporary fallback. Network failure never signs the user out. Native Kotlin
+changes, Firebase configuration and Android permissions still require a
+new APK installation; web updates do not rewrite native code.
+
+The Flutter source remains preserved for rollback/history, but it is no longer
+the Android product's release target. `com.masanawa.app` is still distinct from
+the Flutter package, so this cannot replace the old app *in place*. Previously
+installed Kotlin APKs signed with a different debug key must be uninstalled
+before a differently signed build can be installed. An owner-signed release
+keystore should be reused across all subsequent release APKs.
+
+The signed-release workflow builds both an installable APK and AAB using the
+owner's protected signing credentials, when those credentials are configured.
+Android target SDK is 36. Delivery of an APK alone does not establish that
+every live payment, telecom or device-specific integration is verified.
 
 ## Firebase Android identity (owner-supplied configuration)
 
@@ -60,10 +85,11 @@ correct logged-in account; locked-screen text reveals no contact or balance.
   no old `FIREBASE_*` overrides are accepted. The backend FCM service account
   is a **separate** managed secret.
 
-From GitHub Actions run **Kotlin Android shell signed release candidate** with a
-new `version_code` above the current Play version. Its AAB is an artifact for
-private review only. The new package identity is not an upgrade of the
-original Flutter package.
+From GitHub Actions run **Masanawa Android signed release** with a
+`version_code` above the previous Kotlin release. It produces a signed APK
+for direct installation and an AAB for later store submission. Neither is
+automatically submitted to Google Play. The package is not an in-place
+upgrade to the former Flutter application.
 
 ## Digital Asset Links
 
@@ -100,9 +126,9 @@ Android-supplied CSS inset fallbacks for older WebViews. Do **not** restore
 native `container.setPadding(...)` or consume the FrameLayout window insets:
 that recreates the detached/floating bottom tabs and double keyboard offsets.
 
-The test APK from the **Kotlin Android Shell** workflow installs alongside
-Flutter under the new `com.masanawa.app` identity and is the build to use for
-these checks. These are
+The debug-signed APK from the **Kotlin Android Shell** workflow installs
+alongside Flutter under the new `com.masanawa.app` identity. Install the
+owner-signed release APK for ongoing use when available. These are
 **physical-device verification tasks**, not claims of completed lab testing:
 
 | Device/state | Acceptance condition |
@@ -115,7 +141,7 @@ these checks. These are
 | Chat keyboard opened | Composer stays visible above IME, bottom tab rail hides, and no double-height empty space appears. |
 | Keyboard dismissed | The rail returns to its original edge position, with draft and scroll position retained. |
 | Android Back/edge swipe | First close menu, comments, message selection, details, or chat; then switch to Home; from Home exit the shell. |
-| Startup/cold launch | Branded Android splash transitions to the app, not a raw browser error page; no persistent blank screen. |
+| Startup/cold launch | Neutral Android system window transitions directly to the web app's branded loading screen; no redundant icon or persistent blank screen. |
 | Slow/offline network | Thin progress bar is visible during load; an offline/error screen offers an explicit retry without exposing account data. |
 | Dark system theme | System bar icons remain legible against Masanawa's light UI; no flash of dark WebView chrome. |
 | Buttons/chat links | Navigation taps have subtle Android haptics where the device allows; touch targets remain accessible. |
@@ -131,11 +157,12 @@ merged. Device differences above remain **awaiting owner device verification**.
 
 The native APK and the Cloudflare-hosted web code must both contain the
 complementary safe-area and Back-handler changes. Publishing only one side
-leaves older WebViews with the browser-history fallback. Keep the previous
-signed Flutter application untouched until an authorized in-place upgrade is
-proven on a device; never publish a debug APK to the Play Store.
+leaves older WebViews with the browser-history fallback. The separate old
+Flutter package may be removed by its owner after the Kotlin app is installed
+and account access is verified; it cannot be silently overwritten in place.
+Never publish a debug APK to the Play Store.
 
-1. Keep Flutter installed, test debug shell side by side. Test clean install,
+1. Verify the new primary Kotlin app on device. Test clean install,
    returning account, explicit logout, offline recovery, uploads/downloads,
    news share, notification permission, and five-root navigation.
 2. With valid Firebase/Gateway settings, verify token opt-in/revoke and a real
@@ -157,3 +184,19 @@ proven on a device; never publish a debug APK to the Play Store.
    testing. Promotion needs separate approval.
 
 No biometric lock implementation is planned in this release.
+
+## Reader and branding correction — 21 November 2026
+
+- Kotlin Android launcher name stays **Masanawa** for both internal and release
+  variants; version 1.3.1 integrates the reader and notification changes on
+  current main instead of reverting to a pre-reader shell.
+- The reader has a visible Masanawa header, publisher hostname, accessible
+  navigation, a direct external-browser fallback, and default ad/tracker
+  filtering limited to selected third-party reader subresources. An **Ads off**
+  control can be toggled if a publisher page breaks. First-party publisher
+  documents, media and main Masanawa authenticated WebView are not filtered.
+- The bundled filter is best effort, not a full browser extension, does not
+  bypass publishers' paywalls and is not available in an arbitrary external
+  browser. Test representative Hausa/English publishers on a handset.
+- Native features require an updated APK; web hot updates alone cannot add
+  WebView interception or change the installed app label.

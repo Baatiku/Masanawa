@@ -20,7 +20,8 @@ internal object ShellArticlePrivacy {
         "media.net", "adskeeper.com", "adskeeper.co.uk", "exoclick.com"
     )
 
-    fun shouldBlock(resourceUrl: String?, publisherUrl: String?): Boolean = try {
+    fun shouldBlock(resourceUrl: String?, publisherUrl: String?): Boolean {
+        return try {
         val uri = URI(resourceUrl ?: "")
         if (uri.scheme !in listOf("http", "https")) return false
         val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return false
@@ -28,7 +29,8 @@ internal object ShellArticlePrivacy {
         // Avoid breaking publisher-hosted content and navigation.
         if (publisher != null && (host == publisher || host.endsWith(".$publisher"))) return false
         adAndTrackerHosts.any { host == it || host.endsWith(".$it") }
-    } catch (_: Exception) { false }
+        } catch (_: Exception) { false }
+    }
 
     // Only target recognizable ad placeholders. Never hide article bodies,
     // paywalls, consent dialogs, publisher controls or editorial images.
