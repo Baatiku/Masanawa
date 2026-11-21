@@ -2,6 +2,11 @@ package ng.unigeria.unigeria.shell
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.net.Uri
+import android.widget.Toast
+import android.webkit.WebResourceError
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -63,10 +68,20 @@ internal class ShellArticleReader(private val activity: ComponentActivity,privat
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         val reload = button("↻") { browser?.reload() }
+        val external = button("↗") {
+            val destination = browser?.url?.takeIf { safeArticleUrl(it) } ?: url
+            try {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(destination))
+                    .addCategory(Intent.CATEGORY_BROWSABLE))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(activity, "No browser is available for this article.", Toast.LENGTH_LONG).show()
+            }
+        }
         val closeButton = button("×") { close() }
         toolbar.addView(backButton)
         toolbar.addView(label, LinearLayout.LayoutParams(0, 52.dp(), 1f))
         toolbar.addView(reload)
+        toolbar.addView(external)
         toolbar.addView(closeButton)
         page.addView(toolbar)
         val web = WebView(activity).apply {
@@ -86,6 +101,11 @@ internal class ShellArticleReader(private val activity: ComponentActivity,privat
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                     request.isForMainFrame && !safeArticleUrl(request.url.toString())
+
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                    if (request.isForMainFrame) Toast.makeText(activity,
+                        "This publisher could not load. Try Reload or Open in browser (↗).", Toast.LENGTH_LONG).show()
+                }
             }
         }
         page.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -120,7 +140,7 @@ internal class ShellArticleReader(private val activity: ComponentActivity,privat
         textSize = 28f
         gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(44.dp(), 52.dp())
-        contentDescription = when (text) { "‹" -> "Back"; "↻" -> "Reload"; else -> "Close article" }
+        contentDescription = when (text) { "‹" -> "Back"; "↻" -> "Reload"; "↗" -> "Open article in browser"; else -> "Close article" }
         isClickable = true
         isFocusable = true
         setOnClickListener { action() }
