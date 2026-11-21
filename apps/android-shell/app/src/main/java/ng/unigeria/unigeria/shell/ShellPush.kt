@@ -143,13 +143,14 @@ internal object ShellPush {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             return
-        val id = ShellNotificationIdentity.eventNotificationId(eventId) ?: return
+        val safeEvent = eventId?.takeIf { ShellNotificationIdentity.eventNotificationId(it) != null } ?: return
+        val id = ShellNotificationIdentity.eventNotificationId(safeEvent) ?: return
         ensureChannels(context)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val prefs = context.getSharedPreferences("masanawa-shell-news", Context.MODE_PRIVATE)
         val existing = prefs.getString("newsEvents", "")?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
-        if (eventId in existing) return
-        val current = (existing + eventId).takeLast(newsLimit)
+        if (safeEvent in existing) return
+        val current = (existing + safeEvent).takeLast(newsLimit)
         (existing - current.toSet()).forEach { old ->
             ShellNotificationIdentity.eventNotificationId(old)?.let(manager::cancel)
         }
