@@ -23,6 +23,9 @@ internal object ShellPush {
     private const val callsChannel = "masanawa_calls"
     private const val newsChannel = "masanawa_news"
     private const val newsNotificationId = 0x4e5753
+    private const val newsSummaryId = 0x4e5760
+    private const val newsGroup = "masanawa.news.articles"
+    private const val newsLimit = 8
 
     fun initialize(context: Context): Boolean {
         if (FirebaseApp.getApps(context).isNotEmpty()) return true
@@ -86,8 +89,19 @@ internal object ShellPush {
         val prefs = context.getSharedPreferences("masanawa-shell-news", Context.MODE_PRIVATE)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (count == 0) {
-            prefs.edit().putInt("unread", 0).apply()
+            prefs.getString("newsEvents", "")?.split("|")?.filter { it.isNotBlank() }
+                ?.forEach { event ->
+                    ShellNotificationIdentity.eventNotificationId(event)?.let(manager::cancel)
+                }
+            prefs.edit().putInt("unread", 0).remove("newsEvents").apply()
             manager.cancel(newsNotificationId)
+            manager.cancel(newsSummaryId)
+            return
+        }
+        if (!prefs.getString("newsEvents", "").isNullOrEmpty()) {
+            // The grouped per-story cards already supply the system launcher dot.
+            manager.cancel(newsNotificationId)
+            prefs.edit().putInt("unread", count).apply()
             return
         }
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -120,7 +134,81 @@ internal object ShellPush {
         manager.notify(newsNotificationId, notice)
     }
 
-    fun showNotification(context: Context, route: String, incomingCall: Boolean = false, news: Boolean = false) {
+    /** Each public article gets a stable notification and its own safe tap
+     * destination. A bounded group behaves like a modern conversation stack;
+     * the aggregate is quiet, while the newly published article can alert.
+     * No account content or FCM-provided arbitrary URLs are displayed. */
+    fun showNewsArticle(context: Context, eventId: String?, postId: String?,
+                        title: String?, publisher: String?) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            return
+        val id = ShellNotificationIdentity.eventNotificationId(eventId) ?: return
+        ensureChannels(context)
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val prefs = context.getSharedPreferences("masanawa-shell-news", Context.MODE_PRIVATE)
+        val existing = prefs.getString("newsEvents", "")?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+        if (eventId in existing) return
+        val current = (existing + eventId).takeLast(newsLimit)
+        (existing - current.toSet()).forEach { old ->
+            ShellNotificationIdentity.eventNotificationId(old)?.let(manager::cancel)
+        }
+        prefs.edit().putString("newsEvents", current.joinToString("|")).apply()
+        manager.cancel(newsNotificationId)
+
+        val articleId = postId?.takeIf(ShellNotificationIdentity::isNewsPostId)
+        val route = articleId?.let { "https://app.masanawa.com/?tab=home&article=$it" }
+            ?: "https://app.masanawa.com/?tab=home"
+        val intent = Intent(context, ShellActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = android.net.Uri.parse(route)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pending = PendingIntent.getActivity(context, id, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val safeTitle = ShellNotificationIdentity.publicNewsText(title, 180)
+            ?: "A new publisher article is available"
+        val safePublisher = ShellNotificationIdentity.publicNewsText(publisher, 70)
+        val entry = NotificationCompat.Builder(context, newsChannel)
+            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
+            .setContentTitle(safePublisher ?: "Masanawa news")
+            .setContentText(safeTitle)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(safeTitle))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setGroup(newsGroup)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setColor(ContextCompat.getColor(context, ng.unigeria.unigeria.R.color.masanawa_notification_color))
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        manager.notify(id, entry)
+        val groupIntent = Intent(context, ShellActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = android.net.Uri.parse("https://app.masanawa.com/?tab=home")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val groupPending = PendingIntent.getActivity(context, newsSummaryId, groupIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val group = NotificationCompat.Builder(context, newsChannel)
+            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
+            .setContentTitle("Masanawa news")
+            .setContentText(if(current.size == 1) "1 recent article" else "${current.size} recent articles")
+            .setGroup(newsGroup)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(groupPending)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        manager.notify(newsSummaryId, group)
+    }
+
+    fun showNotification(context: Context, route: String, incomingCall: Boolean = false, news: Boolean = false,
+                         eventId: String? = null) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             return
@@ -147,7 +235,8 @@ internal object ShellPush {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-        manager.notify(if (news) newsNotificationId else (System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+        manager.notify(if (news) newsNotificationId else ShellNotificationIdentity.eventNotificationId(eventId)
+            ?: (System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
     }
 }
 
@@ -165,7 +254,8 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val type = message.data["type"] ?: return
         if (type == "news_article" || type == "news_update") {
-            ShellPush.showNotification(this, "https://app.masanawa.com/?tab=home", news = true)
+            ShellPush.showNewsArticle(this, message.data["eventId"], message.data["postId"],
+                message.data["newsTitle"], message.data["newsPublisher"])
             return
         }
         if (!Regex("^[a-z][a-z0-9_]{0,63}$").matches(type) || type.startsWith("human_") ||
@@ -174,6 +264,7 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
             ?: message.data["characterId"]?.let { ShellDeepLinks.route("masanawa://chat/$it") }
             ?: WebOriginPolicy.HOME
         ShellPush.showNotification(this, route,
-            incomingCall = ShellNotificationIdentity.isIncomingCall(type, message.data["callId"]))
+            incomingCall = ShellNotificationIdentity.isIncomingCall(type, message.data["callId"]),
+            eventId = message.data["eventId"])
     }
 }
