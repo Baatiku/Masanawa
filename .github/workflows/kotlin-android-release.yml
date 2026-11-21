@@ -9,12 +9,18 @@ on:
         description: "Masanawa Kotlin release version code (must exceed previous Kotlin release)"
         required: true
         type: number
+  # Owner-approved signed release; regular changes cannot trigger signing.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kotlin-android-release.yml'
 
 permissions:
   contents: read
 
 jobs:
   candidate:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, 'Release Masanawa Android'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -40,12 +46,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
           EXPECTED_SHA256: ${{ secrets.SHELL_EXPECTED_UPLOAD_SHA256 }}
-          SHELL_RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 13 }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64" && test -n "$STORE_PASSWORD" &&
             test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$EXPECTED_SHA256"
-          test "$SHELL_RELEASE_VERSION_CODE" -gt 0
+          # Release must supersede the last Kotlin debug candidate (code 12).
+          test "$SHELL_RELEASE_VERSION_CODE" -gt 12
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/masanawa-shell-upload.jks"
           chmod 600 "$RUNNER_TEMP/masanawa-shell-upload.jks"
           actual="$(keytool -list -v -keystore "$RUNNER_TEMP/masanawa-shell-upload.jks" \
@@ -53,13 +60,20 @@ jobs:
           test -n "$actual"
           test "${actual//:/}" = "${EXPECTED_SHA256//:/}"
           echo "SHELL_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/masanawa-shell-upload.jks" >> "$GITHUB_ENV"
+      - name: Verify no native logo and correct Masanawa launcher
+        working-directory: apps/android-shell
+        run: |
+          set -euo pipefail
+          grep -Fq 'windowSplashScreenAnimatedIcon">@android:color/transparent' app/src/main/res/values/styles.xml
+          ! grep -Fq 'Masanawa Test' app/build.gradle.kts
+          grep -Fq 'resValue("string", "masanawa_app_label", "Masanawa")' app/build.gradle.kts
       - name: Build and verify signed APK and app bundle
         working-directory: apps/android-shell
         env:
           SHELL_RELEASE_STORE_PASSWORD: ${{ secrets.SHELL_RELEASE_STORE_PASSWORD }}
           SHELL_RELEASE_KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           SHELL_RELEASE_KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
-          SHELL_RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 13 }}
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease :app:testReleaseUnitTest
