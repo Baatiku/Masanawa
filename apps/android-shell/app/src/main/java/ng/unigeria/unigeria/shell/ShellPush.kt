@@ -21,6 +21,8 @@ import java.util.UUID
 internal object ShellPush {
     private const val updatesChannel = "masanawa_work"
     private const val callsChannel = "masanawa_calls"
+    private const val newsChannel = "masanawa_news"
+    private const val newsNotificationId = 0x4e5753
 
     fun initialize(context: Context): Boolean {
         if (FirebaseApp.getApps(context).isNotEmpty()) return true
@@ -68,9 +70,57 @@ internal object ShellPush {
             description = "Incoming Masanawa call invitations"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
         })
+        manager.createNotificationChannel(NotificationChannel(
+            newsChannel, "News updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "Unread and newly published Masanawa news articles"
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+            setShowBadge(true)
+        })
     }
 
-    fun showNotification(context: Context, route: String, incomingCall: Boolean = false) {
+    /** Android launcher dots are derived from active notifications, not a
+     * mutable red icon bitmap. Use one quiet aggregate notification; prevent
+     * repeated foreground polls from creating a notification flood. */
+    fun updateNewsBadge(context: Context, count: Int) {
+        if (count !in 0..999) return
+        val prefs = context.getSharedPreferences("masanawa-shell-news", Context.MODE_PRIVATE)
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (count == 0) {
+            prefs.edit().putInt("unread", 0).apply()
+            manager.cancel(newsNotificationId)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            return
+        if (prefs.getInt("unread", -1) == count &&
+            Build.VERSION.SDK_INT >= 23 && manager.activeNotifications.any { it.id == newsNotificationId }) return
+        ensureChannels(context)
+        prefs.edit().putInt("unread", count).apply()
+        val route = "https://app.masanawa.com/?tab=home"
+        val intent = Intent(context, ShellActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = android.net.Uri.parse(route)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pending = PendingIntent.getActivity(context, newsNotificationId, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notice = NotificationCompat.Builder(context, newsChannel)
+            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
+            .setContentTitle(if (count == 1) "1 unread news article" else "$count unread news articles")
+            .setContentText("Open Home to read your latest news updates")
+            .setContentIntent(pending)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setNumber(count)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        manager.notify(newsNotificationId, notice)
+    }
+
+    fun showNotification(context: Context, route: String, incomingCall: Boolean = false, news: Boolean = false) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             return
@@ -86,10 +136,10 @@ internal object ShellPush {
         val requestCode = ShellNotificationIdentity.requestCode(route, incomingCall)
         val pending = PendingIntent.getActivity(context, requestCode, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = NotificationCompat.Builder(context, if (incomingCall) callsChannel else updatesChannel)
+        val notification = NotificationCompat.Builder(context, if (incomingCall) callsChannel else if (news) newsChannel else updatesChannel)
             .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
-            .setContentTitle(if (incomingCall) "Incoming call" else "Masanawa")
-            .setContentText(if (incomingCall) "Open Calls to respond" else "Open the app to view your update")
+            .setContentTitle(if (incomingCall) "Incoming call" else if (news) "New Masanawa news" else "Masanawa")
+            .setContentText(if (incomingCall) "Open Calls to respond" else if (news) "Open Home to read the latest article" else "Open the app to view your update")
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setColor(ContextCompat.getColor(context, ng.unigeria.unigeria.R.color.masanawa_notification_color))
@@ -97,7 +147,7 @@ internal object ShellPush {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-        manager.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+        manager.notify(if (news) newsNotificationId else (System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
     }
 }
 
@@ -114,6 +164,10 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val type = message.data["type"] ?: return
+        if (type == "news_article" || type == "news_update") {
+            ShellPush.showNotification(this, "https://app.masanawa.com/?tab=home", news = true)
+            return
+        }
         if (!Regex("^[a-z][a-z0-9_]{0,63}$").matches(type) || type.startsWith("human_") ||
             type.startsWith("room_") || type.startsWith("p2p_")) return
         val route = ShellDeepLinks.route(message.data["deepLink"])
