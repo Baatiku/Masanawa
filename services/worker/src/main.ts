@@ -405,8 +405,7 @@ export async function startWorkerService(
         await msnwMerchantSettlements?.stop();
         await msnwFinality?.stop();
         await newsNotices?.stop();
-        await newsNotices?.stop();
-    await financialNotices?.stop();
+        await financialNotices?.stop();
         await p2pExpiry?.stop();
         await p2pAudit?.stop();
         await privacyDeletion?.stop();
@@ -441,7 +440,8 @@ export async function startWorkerService(
     await msnwObligationRecovery?.stop();
     await msnwMerchantSettlements?.stop();
     await msnwFinality?.stop();
-        await financialNotices?.stop();
+    await newsNotices?.stop();
+    await financialNotices?.stop();
     await p2pExpiry?.stop();
     await p2pAudit?.stop();
         await privacyDeletion?.stop();
