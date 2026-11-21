@@ -24,6 +24,7 @@ internal object ShellDeepLinks {
         val parts = uri.path.orEmpty().trim('/').takeUnless { it.isEmpty() }?.split('/') ?: emptyList()
         val query = uri.rawQuery
         when (uri.host.lowercase()) {
+            "home" -> if (parts.isEmpty() && query == null) tab("home") else null
             "chat", "masana" -> {
                 if (parts.size == 1 && character.matches(parts[0]) && query == null) profile(parts[0])
                 else if (parts.isEmpty() && query != null) {
