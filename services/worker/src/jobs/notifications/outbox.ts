@@ -26,6 +26,10 @@ const copy: Readonly<Record<string, { title: string; body: string }>> = {
     title: "P2P deadline",
     body: "Open Wallet to review your order",
   },
+  status: {
+    title: "New Masanawa news",
+    body: "Open Home to read a publisher article",
+  },
 };
 
 /** Durable, fenced worker. A notification must never re-run a financial
@@ -80,7 +84,8 @@ export function createFinancialNotificationRuntime(input: {
         let success = false;
         try {
           const copyForEvent = copy[event.category];
-          if (!copyForEvent) throw new Error("unsupported_notice_category");
+          if (!copyForEvent || (event.category === "status" && event.kind !== "news_update"))
+            throw new Error("unsupported_notice_category");
           const sent = await input.sender.send({
             scope: {
               tenantId: parseCanonicalId("tenant", event.tenant_id),
