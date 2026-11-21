@@ -500,7 +500,22 @@ class ShellActivity : ComponentActivity() {
 
     private fun handleNativeMessage(payload: JSONObject, reply: JavaScriptReplyProxy) {
         when (payload.optString("type")) {
-            "open-article" -> articleReader.open(payload.optString("url"))
+            "open-article" -> {
+                val requestId = payload.optString("requestId")
+                val opened = articleReader.open(payload.optString("url"))
+                // The web side must not treat message delivery as proof that
+                // this installed native shell opened its private reader.
+                if (Regex("^[a-fA-F0-9-]{36}$").matches(requestId)) {
+                    reply.postMessage(JSONObject().put("type", "open-article-result")
+                        .put("requestId", requestId).put("opened", opened).toString())
+                }
+            }
+            "news-unread-count" -> {
+                // Trusted main-frame origin only, and no article content or
+                // account identifiers are ever sent to Android's launcher.
+                val count = payload.optInt("count", -1)
+                if (count in 0..999) ShellPush.updateNewsBadge(this, count)
+            }
             "privacy" -> {
                 protectScreen = payload.optBoolean("enabled", false)
                 if (protectScreen) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
