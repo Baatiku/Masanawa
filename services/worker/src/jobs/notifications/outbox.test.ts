@@ -64,3 +64,24 @@ describe("notification outbox delivery", () => {
     expect((query.mock.calls[2]?.[1] as unknown[])[4]).toBe(true);
   });
 });
+
+describe("public publisher news preview delivery", () => {
+  it("reads canonical published content without exposing account details", async () => {
+    const news = {...event,event_id:"news-abc",category:"status",kind:"news_update",deep_link:"masanawa://home"};
+    const query = vi.fn(async (sql:string) => {
+      if (sql.includes("UPDATE agents.mobile_notification_outbox o")) return {rows:[news]};
+      if (sql.includes("FROM feed.news_notification_events e"))
+        return {rows:[{headline:"Verified public headline",summary:"A clear excerpt from the published story."}]};
+      return {rows:[]};
+    });
+    const send = vi.fn(async () => ({attempted:1,delivered:1}));
+    const service = createFinancialNotificationRuntime({pool:{query} as never,sender:{send}});
+    expect(await service.runOnce()).toMatchObject({claimed:1,delivered:1});
+    expect(send).toHaveBeenCalledWith({
+      scope:{tenantId:news.tenant_id,userId:news.user_id},
+      title:"Verified public headline",body:"A clear excerpt from the published story.",
+      data:{type:"news_update",eventId:"news-abc",deepLink:"masanawa://home",
+        headline:"Verified public headline",summary:"A clear excerpt from the published story."},
+    });
+  });
+});

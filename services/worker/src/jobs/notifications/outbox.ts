@@ -86,17 +86,30 @@ export function createFinancialNotificationRuntime(input: {
           const copyForEvent = copy[event.category];
           if (!copyForEvent || (event.category === "status" && event.kind !== "news_update"))
             throw new Error("unsupported_notice_category");
+          // Only canonical publisher news is public; personal alerts stay redacted.
+          const article = event.category === "status" && event.kind === "news_update"
+            ? (await input.pool.query<{headline:string;summary:string}>(`
+                SELECT a.headline,a.summary
+                FROM feed.news_notification_events e
+                JOIN feed.news_articles a
+                  ON a.tenant_id=e.tenant_id AND a.post_id=e.post_id
+                WHERE e.tenant_id=$1 AND e.event_id=$2
+                ORDER BY a.original_published_at DESC LIMIT 1`,
+                [event.tenant_id,event.event_id])).rows[0]
+            : undefined;
+          if (event.kind === "news_update" && !article) throw new Error("news_article_not_found");
           const sent = await input.sender.send({
             scope: {
               tenantId: parseCanonicalId("tenant", event.tenant_id),
               userId: parseCanonicalId("user", event.user_id),
             },
-            title: copyForEvent.title,
-            body: copyForEvent.body,
+            title: article?.headline ?? copyForEvent.title,
+            body: article?.summary ?? copyForEvent.body,
             data: {
               type: event.kind,
               eventId: event.event_id,
               deepLink: event.deep_link,
+              ...(article ? {headline:article.headline,summary:article.summary} : {}),
             },
           });
           // Disabled categories, no device permission and quiet hours do not

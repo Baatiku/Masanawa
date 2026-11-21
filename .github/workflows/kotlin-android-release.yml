@@ -1,5 +1,6 @@
 name: Masanawa Android signed release
 
+# Release Masanawa Android: public news previews and official notification icon.
 # Produces a signed, installable APK and a Play-ready bundle without publishing
 # either to the store. The new package identity is distinct from Flutter.
 on:

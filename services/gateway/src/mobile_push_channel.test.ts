@@ -23,6 +23,17 @@ describe("mobile FCM call channels", () => {
       .toEqual({ title: "Incoming call", body: "Open Calls to respond" });
   });
 
+  it("previews bounded public news without leaking private notifications", () => {
+    const safe = mobilePushSafeData({type:"news_update",headline:"  Important  public  announcement ",
+      summary:"Latest public update <script>ignored</script> from publisher",body:"PRIVATE",amount:"1000"});
+    expect(safe).toEqual({type:"news_update",headline:"Important public announcement",
+      summary:"Latest public update ignored from publisher"});
+    expect(mobilePushSafePreview(safe)).toEqual({
+      title:"Important public announcement",body:"Latest public update ignored from publisher"});
+    expect(mobilePushSafeData({type:"wallet_transfer",headline:"Sensitive title",summary:"Private details"}))
+      .toEqual({type:"wallet_transfer"});
+  });
+
   it("sends only bounded navigation hints as FCM data", () => {
     const safe = mobilePushSafeData({
       type: "wallet_transfer", eventId: "wallet-event-1",

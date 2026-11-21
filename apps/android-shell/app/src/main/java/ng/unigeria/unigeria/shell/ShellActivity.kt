@@ -531,10 +531,9 @@ class ShellActivity : ComponentActivity() {
                 }
             }
             "news-unread-count" -> {
-                // Trusted main-frame origin only, and no article content or
-                // account identifiers are ever sent to Android's launcher.
+                // Trusted main-frame origin; public headline, never account data.
                 val count = payload.optInt("count", -1)
-                if (count in 0..999) ShellPush.updateNewsBadge(this, count)
+                if (count in 0..999) ShellPush.updateNewsBadge(this, count, payload.optString("headline"))
             }
             "privacy" -> {
                 protectScreen = payload.optBoolean("enabled", false)

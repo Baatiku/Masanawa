@@ -24,7 +24,7 @@
         android:theme="@style/ShellSplashTheme">
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_masanawa_notification" />
+            android:resource="@drawable/ic_stat_masanawa" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/masanawa_notification_color" />
