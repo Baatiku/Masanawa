@@ -56,10 +56,8 @@ describe('durable news publication notifications',()=>{
   const data={type:'news_update',eventId:'news-123abc',deepLink:'masanawa://home',headline:'Public'};
   expect(pushCategory(data)).toBe('status');
   expect(mobilePushAndroidChannel(data)).toBe('masanawa_news');
-  expect(mobilePushSafeData(data)).toEqual({type:'news_update',eventId:'news-123abc',deepLink:'masanawa://home'});
-  expect(mobilePushSafePreview(data)).toEqual({
-   title:'New Masanawa news',body:'Open Home to read a new publisher article',
-  });
+  expect(mobilePushSafeData(data)).toEqual({type:'news_update',eventId:'news-123abc',deepLink:'masanawa://home',headline:'Public'});
+  expect(mobilePushSafePreview(data)).toEqual({title:'Public',body:'Public'});
   const pref={messages:true,calls:true,rooms:true,status:true,wallet:true,p2p:false,
    quietStart:1200,quietEnd:420,utcOffsetMinutes:0};
   expect(pushAllowed({...pref,status:false},'status',new Date('2026-11-21T12:00:00Z'),data)).toBe(false);
