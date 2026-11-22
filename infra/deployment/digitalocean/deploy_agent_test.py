@@ -97,6 +97,58 @@ class DeploymentAgentTests(unittest.TestCase):
             self.assertEqual(path.read_text().count('MASANAWA_OPS_MONITOR_TOKEN='), 1)
             self.assertIn('MASANAWA_OPS_MONITOR_TOKEN=' + credential, path.read_text())
 
+    def test_persona_call_release_requires_existing_provider_key_before_shutdown(self):
+        source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
+        marker = 'python3 - "$runtime_file" <<' + chr(39) + 'PY' + chr(39) + chr(10)
+        script = source.split(marker, 1)[1].split(chr(10) + 'PY' + chr(10), 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'runtime.env'
+            path.write_text('MASANAWA_NGN_CALLS_ENABLED=false' + chr(10))
+            missing = subprocess.run(['python3', '-c', script, str(path)], capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn('existing real Gemini API key', missing.stderr)
+            self.assertNotIn('AIza', missing.stderr)
+            path.write_text('MASANAWA_GEMINI_API_KEY=' + 'AIza' + 'q' * 35 + chr(10))
+            valid = subprocess.run(['python3', '-c', script, str(path)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(valid.returncode, 0)
+
+    def test_persona_call_release_privately_enables_route_and_retains_review_credential(self):
+        source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
+        marker = 'python3 - "$runtime_file" "$release_sha" "$calls_option" <<' + chr(39) + 'PY' + chr(39) + chr(10)
+        script = source.split(marker, 1)[1].split(chr(10) + 'PY' + chr(10), 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'runtime.env'
+            path.write_text('MASANAWA_GEMINI_API_KEY=' + 'AIza' + 'q' * 35 + chr(10) +
+                            'MASANAWA_NGN_CALLS_ENABLED=false' + chr(10))
+            command = ['python3', '-c', script, str(path), SHA, 'keep']
+            first = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10)
+            self.assertNotIn('MASANAWA_GB_SEND_REVIEW_SECRET', first.stdout + first.stderr)
+            rows = path.read_text().splitlines()
+            review = next(row.split('=', 1)[1] for row in rows if row.startswith('MASANAWA_GB_SEND_REVIEW_SECRET='))
+            self.assertGreaterEqual(len(review), 32)
+            self.assertEqual(path.read_text().count('MASANAWA_NGN_CALLS_ENABLED=true'), 1)
+            subprocess.run(command, check=True, capture_output=True, timeout=10)
+            final = path.read_text()
+            self.assertEqual(final.count('MASANAWA_GB_SEND_REVIEW_SECRET='), 1)
+            self.assertIn('MASANAWA_GB_SEND_REVIEW_SECRET=' + review, final)
+            self.assertEqual(final.count('MASANAWA_NGN_CALLS_ENABLED=true'), 1)
+            self.assertNotIn('MASANAWA_NGN_CALLS_ENABLED=false', final)
+
+    def test_existing_whatsapp_gemini_key_is_privately_reused_by_gateway(self):
+        source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
+        marker = 'python3 - "$runtime_file" "$release_sha" "$calls_option" <<' + chr(39) + 'PY' + chr(39) + chr(10)
+        script = source.split(marker, 1)[1].split(chr(10) + 'PY' + chr(10), 1)[0]
+        alias = 'AIza' + 'z' * 35
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'runtime.env'
+            path.write_text('GEMINI_API_KEY=' + alias + chr(10))
+            result = subprocess.run(['python3', '-c', script, str(path), SHA, 'keep'],
+                                    check=True, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.stdout, '')
+            self.assertNotIn(alias, result.stderr)
+            self.assertIn('MASANAWA_GEMINI_API_KEY=' + alias, path.read_text())
+            self.assertEqual(path.read_text().count('MASANAWA_GEMINI_API_KEY='), 1)
+
     def test_worker_memory_override_has_only_the_worker_and_keeps_higher_limits(self):
         source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
         function = source[source.index('write_worker_override(){'):source.index('\nold_worker_memory=')]
