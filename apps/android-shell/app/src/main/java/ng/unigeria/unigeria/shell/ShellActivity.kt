@@ -228,7 +228,23 @@ class ShellActivity : ComponentActivity() {
         webView = newWebView()
         pendingWebRefresh = webUpdatePrefs.getBoolean("pending_refresh", false)
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
-        articleReader = ShellArticleReader(this, container)
+        articleReader = ShellArticleReader(this, container) { destination ->
+            // Native tabs operate on the existing trusted Masanawa web navigation.
+            // Publisher WebViews cannot call this bridge or access the authenticated app.
+            if (WebOriginPolicy.isTrusted(webView.url)) {
+                val selector = when (destination) {
+                    "home", "chats", "wallet", "calls" -> ".wa-rail [data-tab=\"$destination\"]"
+                    "people" -> ".wa-rail-utility"
+                    else -> null
+                }
+                if (selector != null) {
+                    val script = "(function(){const tab=document.querySelector(" +
+                        JSONObject.quote(selector) +
+                        ");if(tab){tab.click();return true}return false})()"
+                    webView.evaluateJavascript(script, null)
+                }
+            }
+        }
         setupLoadingBar()
         setupFailureView()
         setContentView(container)
