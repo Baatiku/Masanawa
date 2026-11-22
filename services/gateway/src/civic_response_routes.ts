@@ -56,7 +56,7 @@ async function geminiJson(key:string,parts:object[],instruction:string,maxTokens
   const model=process.env.MASANAWA_RESPONSE_TEXT_MODEL?.trim()||'gemini-3.6-flash';
    if(!/^[a-zA-Z0-9._-]{1,100}$/.test(model))throw new Error('invalid_response_model');
    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
-    method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},signal:AbortSignal.timeout(15000),
+    method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},signal:AbortSignal.timeout(parts.some(part=>'inlineData' in part)?45_000:15_000),
     body:JSON.stringify({systemInstruction:{parts:[{text:instruction}]},contents:[{role:'user',parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2,maxOutputTokens:maxTokens}}),
   });
   if(!response.ok)throw new Error('provider_unavailable');
