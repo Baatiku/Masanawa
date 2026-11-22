@@ -78,17 +78,32 @@ internal object ShellArticlePrivacy {
             style.textContent = css + '{display:none!important;min-height:0!important;height:0!important;visibility:hidden!important}';
             (document.head || document.documentElement).appendChild(style);
           };
-          install();
-          if (window.__masanawaReaderAdObserver) return;
-          const observer = new MutationObserver(() => {
-            if (!document.getElementById(id)) install();
-          });
-          observer.observe(document.documentElement, {childList:true,subtree:true});
-          window.__masanawaReaderAdObserver = observer;
-          window.addEventListener('pagehide', () => {
-            observer.disconnect();
-            delete window.__masanawaReaderAdObserver;
-          }, {once:true});
+          const activate = () => {
+            if (!document.documentElement) return;
+            install();
+            if (window.__masanawaReaderAdObserver) return;
+            const observer = new MutationObserver(() => {
+              if (!document.getElementById(id)) install();
+            });
+            observer.observe(document.documentElement, {childList:true,subtree:true});
+            window.__masanawaReaderAdObserver = observer;
+            window.addEventListener('pagehide', () => {
+              observer.disconnect();
+              delete window.__masanawaReaderAdObserver;
+            }, {once:true});
+          };
+          if (document.documentElement) activate();
+          else {
+            // DOCUMENT_START_SCRIPT runs before the DOM exists. Attach at the
+            // first document-element mutation, rather than waiting for load.
+            const boot = new MutationObserver(() => {
+              if (document.documentElement) { boot.disconnect(); activate(); }
+            });
+            boot.observe(document, {childList:true,subtree:true});
+            document.addEventListener('DOMContentLoaded', () => {
+              boot.disconnect(); activate();
+            }, {once:true});
+          }
         })();
     """.trimIndent()
 }
