@@ -16,7 +16,7 @@ export async function ngnSqlFixture(){
   CREATE TABLE talks.public_profiles(tenant_id text,user_id text,handle text,display_name text,PRIMARY KEY(tenant_id,user_id));
   CREATE TABLE talks.safety_preferences(tenant_id text,viewer_user_id text,subject_user_id text,blocked boolean);
   CREATE TABLE talks.safety_enforcement(tenant_id text,target_kind text,target_id text,visibility text);`);
- for(const name of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql','0221_admin_usage_billing.sql'])await db.exec(await sql('packages/commerce/migrations/'+name));
+ for(const name of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql','0221_admin_usage_billing.sql','0222_free_usage_billing_default.sql'])await db.exec(await sql('packages/commerce/migrations/'+name));
  await db.exec((await sql('packages/agents/migrations/0014_mobile_notification_policy.sql')).split('CREATE OR REPLACE FUNCTION agents.queue_missed_call_notice')[0]!);
  await db.exec((await sql('packages/commerce/migrations/0209_current_wallet_notices.sql')).split('CREATE FUNCTION gb_wallet.queue_movement_notice')[0]!);
  await db.exec(await sql('packages/commerce/migrations/0214_ngn_requests.sql'));
