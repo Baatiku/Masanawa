@@ -6,7 +6,7 @@ const reporter={tenantId:'tenant_verified',userId:'user_verified'};
 const report={requestKey:'request_response_test_001',title:'Unsafe electrical cable',description:'An exposed live power cable has fallen near the local market.',
   category:'infrastructure',subcategory:'Exposed electrical wires',urgency:'urgent',locationState:'Oyo',sourceMode:'typed'};
 
-function app(geminiKey?:string,audioRenderer?:{render:()=>Promise<{dataBase64:string;mimeType:string;durationMs:number}>}){
+function app(geminiKey?:string,audioRenderer?:{render:(text:string)=>Promise<{dataBase64:string;mimeType:string;durationMs:number}>}){
   const service={
     categories:vi.fn(()=>[{id:'infrastructure',label:'Infrastructure'}]),contacts:vi.fn(async()=>[{id:'ng-emergency-112',phone:'112',verificationStatus:'verified'}]),
     create:vi.fn(async()=>({created:true,incident:{id:'ea46a4b0-4349-4106-bb32-ddb331ed901f',reference:'MR-20261120-EA46A4B0'}})),
@@ -59,7 +59,7 @@ describe('Masanawa Response route boundary',()=>{
     await server.close();
   });
   it('renders a public WAV bulletin from reviewed fields, never the reporter recording',async()=>{
-    const render=vi.fn(async()=>({mimeType:'audio/l16;rate=24000',
+    const render=vi.fn(async(_text:string)=>({mimeType:'audio/l16;rate=24000',
       dataBase64:Buffer.from([0,0,255,127]).toString('base64'),durationMs:1}));
     const {server,service}=app(undefined,{render});
     const url='/v1/response/public-incidents/MR-20261120-EA46A4B0/audio';
@@ -79,7 +79,7 @@ describe('Masanawa Response route boundary',()=>{
     await server.close();
   });
   it('does not narrate unreviewed citizen allegations as verified facts',async()=>{
-    const render=vi.fn(async()=>({mimeType:'audio/l16;rate=24000',
+    const render=vi.fn(async(_text:string)=>({mimeType:'audio/l16;rate=24000',
       dataBase64:Buffer.from([0,0,0,0]).toString('base64'),durationMs:1}));
     const {server,service}=app(undefined,{render});
     service.publicAudioSource.mockResolvedValueOnce({
