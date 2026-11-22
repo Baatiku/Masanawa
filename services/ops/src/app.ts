@@ -54,6 +54,7 @@ export interface OpsAppOptions {
   readonly serviceHealthChecks?: readonly ReadinessCheck[];
   /** Read only service revision headers; null if unreachable or untrusted. */
   readonly runtimeReleaseChecks?: { gateway(): Promise<string | null>; worker(): Promise<string | null> };
+  readonly workerJobsReader?: () => Promise<readonly WorkerJobsHealth[]>;
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
   readonly agentAdmin?: AgentAdminService;
@@ -171,6 +172,16 @@ const ReadinessResponseSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+interface WorkerJobsHealth {
+  readonly name: string;
+  readonly enabled?: boolean;
+  readonly runningSeconds?: number;
+  readonly lastSuccessAgeSeconds?: number | null;
+  readonly stuck: number;
+  readonly consecutiveFailures?: number;
+  readonly oldestPendingSeconds?: number;
+}
 
 export function createOpsApp(options: OpsAppOptions = {}) {
   const app = Fastify({
@@ -458,6 +469,21 @@ export function createOpsApp(options: OpsAppOptions = {}) {
           },
           limitations: "Endpoint reachability and runtime configuration do not verify an authenticated AI turn or two-way call.",
         };
+      }));
+    app.get("/v1/admin/worker-jobs", async (request, reply) =>
+      handle(reply, async () => {
+        await admin.authorize({ authorizationHeader: request.headers.authorization, capability: "runtime.read" });
+        if (!options.workerJobsReader) {
+          reply.code(503);
+          return { error: "worker_job_monitoring_unconfigured" };
+        }
+        try {
+          const jobs = await options.workerJobsReader();
+          return { jobs: jobs.slice(0, 40) };
+        } catch {
+          reply.code(503);
+          return { error: "worker_job_monitoring_unavailable" };
+        }
       }));
     app.get("/v1/admin/summary", async (request, reply) =>
       handle(reply, () => admin.summary({ authorizationHeader: request.headers.authorization })));
