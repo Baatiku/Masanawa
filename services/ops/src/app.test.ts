@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { toInstant } from "@masanawa/contracts";
+import { readFileSync } from "node:fs";
+import type { createUsageBillingAdmin } from "./usage_billing_admin.js";
 import { createOpsApp } from "./app.js";
 
 const apps: Array<ReturnType<typeof createOpsApp>> = [];
@@ -9,6 +11,34 @@ afterEach(async () => {
 });
 
 describe("ops service bootstrap", () => {
+  it("exposes secured billing configuration routes when wired from the Ops bootstrap", async () => {
+    const policy = {billingEnabled:true,replyKobo:200,callKoboPerStartedSecond:100,revision:1};
+    const billing = {
+      read: async (authorization:string|undefined) => {
+        if (!authorization) throw new Error("Missing admin authorization");
+        return policy;
+      },
+      write: async (_authorization:string|undefined, body:{
+        expectedRevision:number;billingEnabled:boolean;replyKobo:number;callKoboPerStartedSecond:number
+      }) => ({...body,revision:body.expectedRevision+1}),
+    } as ReturnType<typeof createUsageBillingAdmin>;
+    const app=createOpsApp({usageBillingAdmin:billing});
+    apps.push(app);
+
+    const read=await app.inject({method:"GET",url:"/v1/admin/billing",headers:{authorization:"Bearer acceptance-token"}});
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toEqual(policy);
+    const write=await app.inject({method:"PUT",url:"/v1/admin/billing",headers:{authorization:"Bearer acceptance-token"},
+      payload:{expectedRevision:1,billingEnabled:false,replyKobo:200,callKoboPerStartedSecond:100}});
+    expect(write.statusCode).toBe(200);
+    expect(write.json()).toMatchObject({billingEnabled:false,revision:2});
+  });
+
+  it("forwards the billing dependency in the deployed Ops service composition", () => {
+    const source=readFileSync(new URL("./main.ts",import.meta.url),"utf8");
+    expect(source).toMatch(/\.\.\.\(database\.usageBillingAdmin\s*\?\s*\{usageBillingAdmin:database\.usageBillingAdmin\}\s*:\s*\{\}\)/);
+  });
+
   it("reports health without implying dependency readiness", async () => {
     const app = createOpsApp({
       now: () => toInstant("2026-10-01T16:00:00Z"),
