@@ -106,23 +106,25 @@ export function createNgnCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
       const row=await readRow(actor,originalId(actor,key));return row?project(row):null;
     },
     async read(actor:NgnCallActor,id:string){const r=await readRow(actor,id);return r?project(r):null;},
-    async admit(actor:NgnCallActor,input:{characterId:string;budgetKobo:number;rateKoboPerStartedSecond:number;maxConnectedSeconds:number;idempotencyKey:string}){
+    async admit(actor:NgnCallActor,input:{characterId:string;budgetKobo:number;rateKoboPerStartedSecond?:number;maxConnectedSeconds?:number;idempotencyKey:string}){
       actorKey(actor);
+      const rateKoboPerStartedSecond=input.rateKoboPerStartedSecond??100;
+      const maxConnectedSeconds=input.maxConnectedSeconds??input.budgetKobo/100;
       if(!valid(input.characterId)||!Number.isSafeInteger(input.budgetKobo)||
-         !Number.isSafeInteger(input.rateKoboPerStartedSecond)||input.rateKoboPerStartedSecond<0||
-         input.rateKoboPerStartedSecond>100000||!Number.isSafeInteger(input.maxConnectedSeconds)||
-         input.maxConnectedSeconds<1||input.maxConnectedSeconds>3600||
-         input.budgetKobo!==input.maxConnectedSeconds*input.rateKoboPerStartedSecond||
+         !Number.isSafeInteger(rateKoboPerStartedSecond)||rateKoboPerStartedSecond<0||
+         rateKoboPerStartedSecond>100000||!Number.isSafeInteger(maxConnectedSeconds)||
+         maxConnectedSeconds<1||maxConnectedSeconds>3600||
+         input.budgetKobo!==maxConnectedSeconds*rateKoboPerStartedSecond||
          !/^[A-Za-z0-9_-]{8,128}$/.test(input.idempotencyKey))fail('invalid_admission',422);
       const id=originalId(actor,input.idempotencyKey);
       const hash=createHash('sha256').update(JSON.stringify([
-        input.characterId,input.budgetKobo,input.rateKoboPerStartedSecond,input.maxConnectedSeconds])).digest('hex');
+        input.characterId,input.budgetKobo,rateKoboPerStartedSecond,maxConnectedSeconds])).digest('hex');
       await pool.query(`INSERT INTO gb_wallet.ngn_call_admissions
         (tenant_id,user_id,admission_id,character_id,request_sha256,budget_kobo,
           rate_kobo_per_started_second,max_connected_seconds,state,expires_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9) ON CONFLICT DO NOTHING`,
         [actor.tenantId,actor.userId,id,input.characterId,hash,input.budgetKobo,
-         input.rateKoboPerStartedSecond,input.maxConnectedSeconds,new Date(now().getTime()+60000)]);
+         rateKoboPerStartedSecond,maxConnectedSeconds,new Date(now().getTime()+60000)]);
       const row=await requireRow(actor,id);
       if(row.request_sha256!==hash)fail('idempotency_conflict');
       if(row.state==='failed')return settle(actor,id);
