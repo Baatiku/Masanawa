@@ -68,11 +68,13 @@ internal object ShellPush {
             updatesChannel, "Masanawa updates", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Messages, account notices and call alerts"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+            setShowBadge(true)
         })
         manager.createNotificationChannel(NotificationChannel(
             callsChannel, "Masanawa incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Incoming Masanawa call invitations"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+            setShowBadge(true)
         })
         manager.createNotificationChannel(NotificationChannel(
             newsChannel, "News updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -104,7 +106,7 @@ internal object ShellPush {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun publishNewsGroup(context: Context, count: Int, items: List<ShellNewsPreview>) {
+    private fun publishNewsGroup(context: Context, count: Int, items: List<ShellNewsPreview>, quiet: Boolean = false) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         ensureChannels(context)
@@ -115,6 +117,7 @@ internal object ShellPush {
             val id = newsChildId(item.id)
             val child = NotificationCompat.Builder(context, newsChannel)
                 .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_stat_masanawa)
+                .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
                 .setContentTitle(item.publisher)
                 .setContentText(item.title)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(ShellNewsDigest.detail(item))
@@ -138,6 +141,8 @@ internal object ShellPush {
         if (count > items.size && items.isNotEmpty()) inbox.addLine("+${count - items.size} more unread updates in Home")
         val summary = NotificationCompat.Builder(context, newsChannel)
             .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_stat_masanawa)
+            .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
+            .setSilent(quiet)
             .setContentTitle(title)
             .setContentText(items.firstOrNull()?.let { "${it.publisher}: ${it.title}" } ?: title)
             .setStyle(inbox)
@@ -155,6 +160,20 @@ internal object ShellPush {
         manager.notify(newsNotificationId, summary)
     }
 
+    /** Restore a quiet aggregate after process recreation, retaining unread
+     * state until the trusted web client reports it read. Do not reset launcher
+     * or channel preferences chosen in Android Settings. */
+    fun restoreUnreadNewsBadge(context: Context) {
+        val count = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+            .getInt("unread", 0)
+        val previews = storedNews(context)
+        if (count !in 1..999 || previews.isEmpty()) return
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= 23 &&
+            manager.activeNotifications.any { it.id == newsNotificationId && it.tag == null }) return
+        publishNewsGroup(context, count, previews, quiet = true)
+    }
+
     private fun storeNews(context: Context, count: Int, rows: List<ShellNewsPreview>) {
         context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
             .edit().putInt("unread", count).putString(newsEntriesKey, ShellNewsDigest.encode(rows)).apply()
@@ -168,6 +187,14 @@ internal object ShellPush {
         val prior = storedNews(context)
         if (count == 0) {
             prior.forEach { manager.cancel(newsChildId(it.id)) }
+            // System-rendered background FCM news uses a tagged notification,
+            // not our native child ID. Clear it only after the web app confirms
+            // there are no unread news items left.
+            if (Build.VERSION.SDK_INT >= 26) {
+                manager.activeNotifications
+                    .filter { it.notification.channelId == newsChannel }
+                    .forEach { manager.cancel(it.tag, it.id) }
+            }
             manager.cancel(newsNotificationId)
             prefs.edit().putInt("unread", 0).remove(newsEntriesKey).remove("lastHeadline").apply()
             return
@@ -200,6 +227,11 @@ internal object ShellPush {
             .getInt("unread", 0)
         val count = if (previous.any { it.id == item.id }) maxOf(current, merged.size)
             else maxOf(current + 1, merged.size).coerceAtMost(999)
+        val retained = merged.map { it.id }.toSet()
+        previous.filter { it.id !in retained }.forEach {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(newsChildId(it.id))
+        }
         storeNews(context, count, merged)
         publishNewsGroup(context, count, merged)
     }
@@ -227,6 +259,8 @@ internal object ShellPush {
         val newsBody = ShellNotificationIdentity.publicNewsText(summary, 300)
         val notification = NotificationCompat.Builder(context, if (incomingCall) callsChannel else if (news) newsChannel else updatesChannel)
             .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_stat_masanawa)
+            .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
+            .setNumber(1)
             .setContentTitle(if (incomingCall) "Incoming call" else if (news) newsTitle ?: "Masanawa News" else "Masanawa")
             .setContentText(if (incomingCall) "Open Calls to respond" else if (news) newsBody ?: newsTitle ?: "New publisher article" else "Open the app to view your update")
             .setStyle(if (news) NotificationCompat.BigTextStyle().bigText(newsBody ?: newsTitle ?: "New publisher article") else NotificationCompat.BigTextStyle())
