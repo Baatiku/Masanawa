@@ -286,6 +286,31 @@ for candidate,active in zip(sys.argv[1::2],sys.argv[2::2],strict=True):
     os.chmod(name,0o600);os.replace(name,active)
 PY
 
+
+# The host monitor is installed outside Docker. Refresh that installed copy
+# from the *exact* vetted release rather than leaving an obsolete probe after
+# new Gateway/Ops/Worker images have been deployed. Preserve its old copy for
+# the same rollback checkpoint as the application services.
+stage='refresh private host monitoring'
+monitor_target=/etc/masanawa/operations/monitor.py
+if [ -f "$monitor_target" ] && [ ! -L "$monitor_target" ]; then
+  curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/monitor.py" \
+    >"$backup/monitor.next.py"
+  python3 -m py_compile "$backup/monitor.next.py"
+  cp -p "$monitor_target" "$backup/monitor.before.py"
+  python3 - "$backup/monitor.next.py" "$monitor_target" <<'PY'
+import os,sys,tempfile
+from pathlib import Path
+source,target=Path(sys.argv[1]),Path(sys.argv[2])
+with tempfile.NamedTemporaryFile(dir=target.parent,delete=False) as f:
+    f.write(source.read_bytes());f.flush();os.fsync(f.fileno());name=f.name
+os.chmod(name,0o700);os.replace(name,target)
+PY
+  echo 'Installed exact-release private host monitoring.'
+else
+  echo 'Private monitoring timer not installed; operator activation remains outstanding.'
+fi
+
 trap - ERR INT TERM
 echo 'WHATSAPP VOICE CHECKPOINT AND DEPLOYMENT COMPLETE'
 echo "Source release: $release_sha"
