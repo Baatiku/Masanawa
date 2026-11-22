@@ -8,6 +8,17 @@ import unittest
 
 
 class OwnerBillingGrantTest(unittest.TestCase):
+    def test_release_grants_owner_after_migration_before_ops_start(self):
+        script = Path(__file__).with_name("deploy-whatsapp-live.sh").read_text(encoding="utf-8")
+        migrate = script.index("stage='apply migrations'")
+        grant = script.index("stage='grant owner billing capabilities'")
+        ops = script.index("stage='start Gateway and Ops'")
+        self.assertLess(migrate, grant)
+        self.assertLess(grant, ops)
+        self.assertIn('/$release_sha/infra/deployment/digitalocean/grant-owner-admin.py', script)
+        self.assertIn('python3 "$backup/grant-owner-admin.py" >"$backup/owner-grant.log" 2>&1', script)
+        self.assertIn("trap 'rollback", script)
+
     def test_owner_grant_provisions_billing_read_and_write(self):
         path = Path(__file__).with_name("grant-owner-admin.py")
         module = ast.parse(path.read_text(encoding="utf-8"))
