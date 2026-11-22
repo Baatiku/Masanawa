@@ -89,9 +89,16 @@ internal class ShellArticleReader(
             insets
         }
         brand.addView(actionButton("←", "Back to previous page", 26f) { back() })
+        brand.addView(ImageView(activity).apply {
+            setImageResource(R.drawable.reader_header_brand)
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(34.dp(), 34.dp()).apply {
+            setMargins(0, 0, 6.dp(), 0)
+        })
         brand.addView(TextView(activity).apply {
             text = "Masanawa"
-            textSize = 22f
+            textSize = 21f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.rgb(17, 27, 33))
             gravity = Gravity.CENTER_VERTICAL
