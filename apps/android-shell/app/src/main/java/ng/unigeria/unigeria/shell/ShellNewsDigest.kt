@@ -59,6 +59,11 @@ internal object ShellNewsDigest {
     fun merge(incoming: List<ShellNewsPreview>, previous: List<ShellNewsPreview>): List<ShellNewsPreview> =
         (incoming + previous).distinctBy { it.id }.take(maxItems)
 
+    /** Count unread stories, not repeated foreground/background delivery attempts.
+     * The visible notification digest is bounded separately from the badge total. */
+    fun nextUnreadCount(current: Int, alreadyStored: Boolean, visibleCount: Int): Int =
+        maxOf(current.coerceIn(0, 999) + if (alreadyStored) 0 else 1, visibleCount).coerceAtMost(999)
+
     fun line(item: ShellNewsPreview): String =
         "${item.publisher}: ${item.title}" +
             if (item.summary.isNotBlank() && !item.title.contains(item.summary, ignoreCase = true))

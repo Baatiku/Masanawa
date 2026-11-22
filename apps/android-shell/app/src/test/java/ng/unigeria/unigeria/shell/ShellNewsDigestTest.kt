@@ -42,6 +42,14 @@ class ShellNewsDigestTest {
         assertFalse(ShellNewsDigest.line(sanitized).contains("<"))
     }
 
+    @Test fun launcherUnreadCountSurvivesDuplicatesAndCapsAt999() {
+        assertEquals(1, ShellNewsDigest.nextUnreadCount(0, false, 1))
+        assertEquals(12, ShellNewsDigest.nextUnreadCount(12, true, 7))
+        assertEquals(13, ShellNewsDigest.nextUnreadCount(12, false, 7))
+        assertEquals(999, ShellNewsDigest.nextUnreadCount(999, false, 7))
+        assertEquals(7, ShellNewsDigest.nextUnreadCount(0, true, 7))
+    }
+
     @Test fun longIdDoesNotOverflowTheDigestAndUnreadRowsAreBounded() {
         val story = ShellNewsDigest.normalized(
             "x".repeat(900), "RFI Hausa", "New health services published", null)

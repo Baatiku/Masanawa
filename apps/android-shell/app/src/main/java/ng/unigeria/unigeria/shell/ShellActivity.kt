@@ -220,6 +220,7 @@ class ShellActivity : ComponentActivity() {
             })
         }, { message -> Toast.makeText(this, message, Toast.LENGTH_LONG).show() })
         ShellPush.ensureChannels(this)
+        ShellPush.restoreUnreadNewsBadge(this)
         ContextCompat.registerReceiver(this, callControls,
             IntentFilter(ShellCallService.REMOTE_CONTROL), ContextCompat.RECEIVER_NOT_EXPORTED)
         File(cacheDir, "capture").listFiles()?.filter {
