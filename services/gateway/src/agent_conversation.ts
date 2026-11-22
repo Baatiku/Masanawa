@@ -1,4 +1,5 @@
 import { optionalAudioReply } from "./optional_audio_reply.js";
+import { GeminiProviderError } from "./gemini_failure.js";
 import {recordMasanaQuality} from "./masana_quality_signals.js";
 import { observeSessionOpen } from "./agent_session_diagnostics.js";
 import { compileConversationHistory } from "./conversation_history.js";
@@ -25,6 +26,19 @@ import type { NativeAudioRenderer, NativeAudioRenderResult } from "./native_audi
 import type { AgentBillingAssistant } from "./agent_billing_assistant.js";
 import type { AgentTeachingAssistant } from "./agent_teaching_assistant.js";
 import type { AgentCryptoAssistant } from "./agent_crypto_assistant.js";
+
+/** Closed, non-sensitive failure categories for operational diagnostics. */
+export function agentFailureCode(error: unknown, fallback: string): string {
+  if (!(error instanceof GeminiProviderError)) return fallback;
+  if (error.providerReason === "QUOTA_EXCEEDED") return "agent.provider_quota_exceeded";
+  if (error.providerReason === "RATE_LIMIT_EXCEEDED") return "agent.provider_rate_limited";
+  if ([
+    "API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED",
+    "API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED",
+    "UNAUTHENTICATED", "PERMISSION_DENIED",
+  ].includes(error.providerReason)) return "agent.provider_auth_failed";
+  return "agent.provider_unavailable";
+}
 
 function hashTurnPayload(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -434,7 +448,8 @@ export function createAgentConversationService(input: {
             : {}),
         });
       } catch (error) {
-        console.warn(JSON.stringify({event:"agent.text_turn_failed",stage,
+        const failureCode = agentFailureCode(error, "alpha.strategy_failed");
+        console.warn(JSON.stringify({event:"agent.text_turn_failed",stage,failureCode,
           reason:request.signal?.aborted?"client_disconnected":"processing_failed"}));
         await input.runs
           .finish({
@@ -443,7 +458,7 @@ export function createAgentConversationService(input: {
             agentRunId,
             outcome: {
               state: "failed",
-              failureCode: "alpha.strategy_failed",
+              failureCode,
             },
           })
           .catch(() => undefined);
@@ -453,7 +468,7 @@ export function createAgentConversationService(input: {
               scope: admission.scope,
               requestId: request.requestId,
               agentRunId,
-              failureCode: "alpha.strategy_failed",
+              failureCode,
             })
             .catch(() => undefined);
           await input.mobileShell
@@ -464,7 +479,7 @@ export function createAgentConversationService(input: {
               payload: {
                 requestId: request.requestId,
                 agentRunId,
-                failureCode: "alpha.strategy_failed",
+                failureCode,
               },
             })
             .catch(() => undefined);
@@ -627,6 +642,8 @@ export function createAgentConversationService(input: {
             : {}),
         });
       } catch (error) {
+        const failureCode = agentFailureCode(error, "alpha.media_strategy_failed");
+        console.warn(JSON.stringify({event:"agent.media_turn_failed",failureCode}));
         await input.runs
           .finish({
             authority: admission.authority,
@@ -634,7 +651,7 @@ export function createAgentConversationService(input: {
             agentRunId,
             outcome: {
               state: "failed",
-              failureCode: "alpha.media_strategy_failed",
+              failureCode,
             },
           })
           .catch(() => undefined);
@@ -644,7 +661,7 @@ export function createAgentConversationService(input: {
               scope: admission.scope,
               requestId: request.requestId,
               agentRunId,
-              failureCode: "alpha.media_strategy_failed",
+              failureCode,
             })
             .catch(() => undefined);
         }

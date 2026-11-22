@@ -37,6 +37,16 @@ export function createRelayLeaseId(entropy:Uint8Array):string {
 }
 
 
+/** Call duration is a signed, persisted admission limit independent of billing.
+ * Zero-priced calls have no wallet hold but still have a finite time budget. */
+export function admissionHasTimeRemaining(admission: Pick<NgnCallAdmission, "verifiedConnectedMs" | "maxConnectedSeconds">): boolean {
+  return Number.isSafeInteger(admission.maxConnectedSeconds) &&
+    admission.maxConnectedSeconds >= 1 &&
+    Number.isSafeInteger(admission.verifiedConnectedMs) &&
+    admission.verifiedConnectedMs >= 0 &&
+    admission.verifiedConnectedMs < admission.maxConnectedSeconds * 1000;
+}
+
 /** Capability and provider tokens exist only in this process's bounded memory.
  * Admission/usage/recovery are durable. A lost grant fails closed and is retried
  * against the original admission; it never becomes a second wallet hold.
@@ -91,7 +101,7 @@ export function createNgnCallRelay(options:RelayOptions){
     await assertAccess(ticket);
     const row=await options.store.read(ticket.actor,ticket.id);
     if(!row||row.characterId!==ticket.characterId||row.state!=='reserved'||
-       (!Number.isFinite(Date.parse(row.expiresAt))||Date.parse(row.expiresAt)<=now().getTime())||row.verifiedConnectedMs>=row.budgetKobo*10)throw rejected();
+       (!Number.isFinite(Date.parse(row.expiresAt))||Date.parse(row.expiresAt)<=now().getTime())||!admissionHasTimeRemaining(row))throw rejected();
     return row;
   };
   const attach=(client:WebSocket,ticket:Ticket,lease:string,row:NgnCallAdmission)=>{

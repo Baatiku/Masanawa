@@ -50,6 +50,8 @@ export interface OpsAppOptions {
   readonly dataAdmin?: ReturnType<typeof createDataAdmin>;
   readonly runtimeMetadata?:{providers:readonly {name:string;configured:boolean;verification:string}[];flags:readonly {name:string;enabled:boolean}[]};
   readonly readinessChecks?: readonly ReadinessCheck[];
+  /** Read-only, bounded operational checks. Never invoke billable AI turns or financial mutations. */
+  readonly serviceHealthChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
   readonly agentAdmin?: AgentAdminService;
@@ -394,6 +396,48 @@ export function createOpsApp(options: OpsAppOptions = {}) {
       handle(reply, () => admin.seedTestWallet({ authorizationHeader: request.headers.authorization })));
     app.post("/v1/admin/test-wallet/debit", {schema:{body:Type.Object({requestId:Type.String({minLength:16,maxLength:80,pattern:"^[a-zA-Z0-9_-]+$"}),kind:Type.Union([Type.Literal("reply"),Type.Literal("call"),Type.Literal("data"),Type.Literal("send")]),amountKobo:Type.Integer({minimum:1,maximum:500000})},{additionalProperties:false})}}, async(request,reply)=>
       handle(reply,()=>admin.debitTestWallet({authorizationHeader:request.headers.authorization,...request.body})));
+    app.get("/v1/admin/health", async (request, reply) =>
+      handle(reply, async () => {
+        await admin.authorize({ authorizationHeader: request.headers.authorization, capability: "runtime.read" });
+        const allChecks = [...checks, ...(options.serviceHealthChecks ?? [])];
+        const checksResult = await Promise.all(allChecks.map(async (check) => {
+          const started = Date.now();
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const outcome = await Promise.race([
+              check.check(),
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error("health_probe_timeout")), 3000);
+              }),
+            ]);
+            return {
+              name: check.name,
+              ready: outcome.ready,
+              latencyMs: Date.now() - started,
+              // Never surface a raw provider, DB, or transport exception.
+              detail: outcome.ready ? "Check passed" : "Check reported unavailable",
+            };
+          } catch {
+            return { name: check.name, ready: false, latencyMs: Date.now() - started, detail: "Timed out or unavailable" };
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
+        }));
+        const active = !options.isDraining?.();
+        const observed = [
+          { name: "Ops lifecycle", ready: active, latencyMs: 0, detail: active ? "Serving requests" : "Shutting down" },
+          ...checksResult,
+        ];
+        return {
+          checkedAt: now(),
+          status: observed.every(item => item.ready) ? "ready" : "degraded",
+          checks: observed,
+          // These values are configuration evidence only, not proof a provider accepts requests.
+          providers: options.runtimeMetadata?.providers ?? [],
+          flags: options.runtimeMetadata?.flags ?? [],
+          limitations: "Endpoint reachability and runtime configuration do not verify an authenticated AI turn or two-way call.",
+        };
+      }));
     app.get("/v1/admin/summary", async (request, reply) =>
       handle(reply, () => admin.summary({ authorizationHeader: request.headers.authorization })));
     app.get("/v1/admin/users", { schema: { querystring: Filtered } }, async (request, reply) =>
