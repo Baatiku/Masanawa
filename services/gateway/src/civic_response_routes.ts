@@ -80,7 +80,10 @@ function failure(error:unknown,reply:{code:(code:number)=>unknown}) {
 export function registerCivicResponseRoutes(app:FastifyInstance,options:Options) {
   const repo=options.repository;
   const admitInterview=providerBudget(20,120),admitTranscription=providerBudget(4,20),admitLive=providerBudget(2,12);
-  const incidentAudio=createIncidentAudioService({apiKey:options.geminiKey,renderer:options.audioRenderer});
+  const incidentAudio=createIncidentAudioService({
+    ...(options.geminiKey?{apiKey:options.geminiKey}:{}),
+    ...(options.audioRenderer?{renderer:options.audioRenderer}:{}),
+  });
   app.get('/v1/response/categories',async()=>({categories:repo.categories()}));
   app.get('/v1/response/contacts',{schema:{querystring:Type.Object({state:Type.Optional(small),serviceType:Type.Optional(small)},{additionalProperties:false})}},async(req,reply)=>{
     try{return {contacts:await repo.contacts(req.query as {state?:string;serviceType?:string})}}catch(error){return failure(error,reply)}
