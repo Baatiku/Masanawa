@@ -8,8 +8,8 @@ function fixture(){
   const actor={tenantId:'tenant',userId:'owner'},characterId=createCanonicalId('character');
   let time=Date.parse('2026-10-25T12:00:00Z'),version='v1',ready=true;
   let original:NgnCallAdmission|null=null;
-  const admit=vi.fn(async(_actor:unknown,input:{characterId:string;budgetKobo:number})=>
-    original={currency:'NGN',admissionId:'call-one',characterId:input.characterId,budgetKobo:input.budgetKobo,
+  const admit=vi.fn(async(_actor:unknown,input:{characterId:string;budgetKobo:number;rateKoboPerStartedSecond:number;maxConnectedSeconds:number;idempotencyKey:string})=>
+    original={currency:'NGN',admissionId:'call-one',characterId:input.characterId,budgetKobo:input.budgetKobo,rateKoboPerStartedSecond:input.rateKoboPerStartedSecond,maxConnectedSeconds:input.maxConnectedSeconds,
       state:'reserved' as const,expiresAt:new Date(time+60000).toISOString(),verifiedConnectedMs:0,chargedKobo:null});
   const ports:NgnCallPorts={
     authorize:async()=>actor,approved:async()=>({version}),
@@ -32,6 +32,28 @@ describe('protected direct NGN call review',()=>{
     expect(await f.service.confirm(f.actor,{reviewToken:review.reviewToken,accepted:true}))
       .toMatchObject({budgetKobo:45000,state:'reserved'});
     expect(f.admit).toHaveBeenCalledTimes(1);
+  });
+  it('allows authenticated users with an empty wallet to start a zero-charge voice call when billing is disabled',async()=>{
+    const f=fixture();
+    f.ports.pricing=async()=>({billingEnabled:false,replyKobo:275,callKoboPerStartedSecond:125,revision:3});
+    f.ports.balance=async()=>({balanceKobo:0,heldKobo:0,availableKobo:0,debtKobo:0,frozen:false});
+    const review=await f.service.review(f.actor,f.args);
+    expect(review).toMatchObject({budgetKobo:0,maxConnectedSeconds:600,rateKoboPerStartedSecond:0});
+    const result=await f.service.confirm(f.actor,{reviewToken:review.reviewToken,accepted:true});
+    expect(result).toMatchObject({budgetKobo:0,rateKoboPerStartedSecond:0,maxConnectedSeconds:600});
+    expect(f.admit).toHaveBeenCalledWith(f.actor,expect.objectContaining({
+      budgetKobo:0,rateKoboPerStartedSecond:0,maxConnectedSeconds:600,
+    }));
+  });
+  it('freezes a non-default paid tariff on the signed call quote',async()=>{
+    const f=fixture();
+    f.ports.pricing=async()=>({billingEnabled:true,replyKobo:350,callKoboPerStartedSecond:125,revision:2});
+    const review=await f.service.review(f.actor,f.args);
+    expect(review).toMatchObject({rateKoboPerStartedSecond:125,budgetKobo:45000,maxConnectedSeconds:360});
+    await f.service.confirm(f.actor,{reviewToken:review.reviewToken,accepted:true});
+    expect(f.admit).toHaveBeenCalledWith(f.actor,expect.objectContaining({
+      rateKoboPerStartedSecond:125,maxConnectedSeconds:360,budgetKobo:45000,
+    }));
   });
   it('rejects tampering, a valid same-key cross-domain MAC and another owner',async()=>{
     const f=fixture(),{reviewToken}=await f.service.review(f.actor,f.args);
