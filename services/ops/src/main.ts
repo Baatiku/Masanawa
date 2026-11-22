@@ -228,6 +228,33 @@ export async function startOpsService(
       ...(database.ownerMailbox?{ownerMailbox:database.ownerMailbox}:{}),
       ...(database.dataReconciliation?{dataReconciliation:database.dataReconciliation}:{}),
       ...(database.dataAdmin ? {dataAdmin:database.dataAdmin}:{}),
+      serviceHealthChecks: [
+        {
+          name: "Gateway readiness",
+          check: async () => {
+            try {
+              // The Docker Compose service name is fixed, not user-controlled.
+              const response = await fetch("http://gateway:3000/readyz", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              const report = await response.json() as { status?: unknown; checks?: { ready?: unknown }[] };
+              return { ready: response.ok && report.status === "ready" &&
+                (!Array.isArray(report.checks) || report.checks.every(item => item.ready === true)) };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
+          name: "Gateway authentication endpoint",
+          check: async () => {
+            try {
+              const response = await fetch("http://gateway:3000/auth/capabilities", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              return { ready: response.ok };
+            } catch { return { ready: false }; }
+          },
+        },
+      ],
       runtimeMetadata:{
         providers:[['Gemini',['MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY','MASANAWA_ALPHA_GEMINI_API_KEY']],['Billstack',['MASANAWA_BILLSTACK_SECRET_KEY','BILLSTACK_SECRET_KEY']],['Flutterwave',['FLUTTERWAVE_SECRET_KEY','MASANAWA_FLUTTERWAVE_SECRET_KEY']],['Resend',['RESEND_API_KEY','MASANAWA_RESEND_API_KEY']]].map(([name,keys])=>({name:String(name),configured:(keys as string[]).some(k=>Boolean(env[k]?.trim())),verification:'not_checked'})),
         flags:['MASANAWA_NGN_CALLS_ENABLED','MASANAWA_NGN_DATA_CATALOG_ENABLED','MASANAWA_NGN_DATA_PURCHASE_ENABLED','MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED'].map(name=>({name,enabled:env[name]==='true'})),
