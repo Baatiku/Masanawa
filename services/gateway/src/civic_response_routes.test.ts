@@ -57,6 +57,36 @@ describe('Masanawa Response route boundary',()=>{
     expect(audio.statusCode).toBe(503);expect(audio.json().error).toBe('voice_transcription_not_configured');
     await server.close();
   });
+  it('understands a voice report semantically without exposing a verbatim transcript',async()=>{
+    const {server}=app('test-only-secret');
+    const fetchBefore=globalThis.fetch;
+    const calls:{url:string;init:RequestInit}[]=[];
+    globalThis.fetch=vi.fn(async(url:string,init:RequestInit)=>{
+      calls.push({url,init});
+      return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({
+        question:'Which LGA or nearest landmark in Oyo?',
+        readyToReview:false,
+        facts:{title:'Damaged bridge near the market',description:'The citizen reports a damaged bridge close to the market.',
+          category:'infrastructure',urgency:'priority',locationState:'Oyo',locationLga:'',dangerOngoing:null},
+      })}]}}]});
+    }) as typeof fetch;
+    try{
+      const payload={mimeType:'audio/webm',dataBase64:Buffer.alloc(250,1).toString('base64'),
+        prompt:'What happened?',context:{locationState:'Oyo'}};
+      const r=await server.inject({method:'POST',url:'/v1/response/understand-audio',
+        headers:{authorization:'Bearer valid'},payload});
+      expect(r.statusCode).toBe(200);
+      expect(r.json()).toMatchObject({mode:'ai_audio',readyToReview:false,
+        question:'Which LGA or nearest landmark in Oyo?',
+        facts:{locationState:'Oyo',category:'infrastructure'},recordingStored:false});
+      expect(r.json()).not.toHaveProperty('transcript');
+      const content=JSON.parse(String(calls[0]?.init.body));
+      expect(calls[0]?.url).toContain('gemini-3.6-flash:generateContent');
+      expect(content.contents[0].parts[1].inlineData.data).toBe(payload.dataBase64);
+      expect(content.systemInstruction.parts[0].text).toContain('Never return a transcript');
+      expect((await server.inject({method:'POST',url:'/v1/response/understand-audio',payload})).statusCode).toBe(401);
+    }finally{globalThis.fetch=fetchBefore;await server.close();}
+  });
   it('issues one-use native live credentials only to authenticated reporters, with bounded usage',async()=>{
     const {server}=app('test-only-secret');
     const fetchBefore=globalThis.fetch;
