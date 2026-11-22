@@ -1,6 +1,7 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
 import type {NgnCallActor,NgnCallAdmission,NgnSpendBalance} from '@masanawa/postgres';
 import {parseCanonicalId} from '@masanawa/contracts';
+import type {UsageBillingPolicy} from '@masanawa/postgres';
 
 
 export class NgnCallReviewError extends Error {
@@ -10,8 +11,9 @@ export interface NgnCallPorts {
   authorize(header:string|undefined):Promise<NgnCallActor>;
   approved(actor:NgnCallActor,characterId:string):Promise<{version:string}|null>;
   balance(actor:NgnCallActor):Promise<NgnSpendBalance|null>;
+  pricing?(actor:NgnCallActor):Promise<UsageBillingPolicy>;
   journal:{
-    admit(actor:NgnCallActor,input:{characterId:string;budgetKobo:number;idempotencyKey:string}):Promise<NgnCallAdmission>;
+    admit(actor:NgnCallActor,input:{characterId:string;budgetKobo:number;rateKoboPerStartedSecond:number;maxConnectedSeconds:number;idempotencyKey:string}):Promise<NgnCallAdmission>;
     read(actor:NgnCallActor,id:string):Promise<NgnCallAdmission|null>;
     readOriginal(actor:NgnCallActor,key:string):Promise<NgnCallAdmission|null>;
   };
@@ -28,7 +30,7 @@ export interface NgnCallPorts {
 }
 interface Review {
   purpose:'masana-call-ngn-v1';tenantId:string;userId:string;characterId:string;
-  version:string;budgetKobo:number;idempotencyKey:string;expiresAt:number;
+  version:string;budgetKobo:number;rateKoboPerStartedSecond:number;maxConnectedSeconds:number;idempotencyKey:string;expiresAt:number;
 }
 const purpose='masana-call-ngn-v1';
 function fail(code:string,status=409):never {throw new NgnCallReviewError('ngn.call.'+code,status)}
@@ -55,7 +57,10 @@ export function createNgnCallReviewService(ports:NgnCallPorts){
     catch{fail('invalid_review',422);}
     if(!row||row.purpose!==purpose||row.tenantId!==actor.tenantId||row.userId!==actor.userId)
       fail('review_owner_mismatch',403);
-    if(!key(row.idempotencyKey)||!Number.isSafeInteger(row.budgetKobo)||row.budgetKobo<100||row.budgetKobo>360000||row.budgetKobo%100!==0||
+    if(!key(row.idempotencyKey)||!Number.isSafeInteger(row.budgetKobo)||!Number.isSafeInteger(row.rateKoboPerStartedSecond)||row.rateKoboPerStartedSecond<0||
+       row.rateKoboPerStartedSecond>100000||!Number.isSafeInteger(row.maxConnectedSeconds)||
+       row.maxConnectedSeconds<1||row.maxConnectedSeconds>3600||
+       row.budgetKobo!==row.maxConnectedSeconds*row.rateKoboPerStartedSecond||
        !Number.isSafeInteger(row.expiresAt)||typeof row.version!=='string'||!row.version||row.version.length>160)
       fail('invalid_review',422);
     try{parseCanonicalId('character',row.characterId);}catch{fail('invalid_review',422);}
@@ -69,16 +74,22 @@ export function createNgnCallReviewService(ports:NgnCallPorts){
          input.expectedSeconds<1||input.expectedSeconds>3600)fail('invalid_budget',422);
       const approved=await ports.approved(actor,input.characterId);
       if(!approved||!approved.version||approved.version.length>160)fail('masana_unavailable',404);
-      const balance=await ports.balance(actor);
-      if(!balance)fail('balance_unavailable',503);
-      if(balance.frozen)fail('account_restricted',403);
-      const budgetKobo=Math.min(input.expectedSeconds,Math.floor(balance.availableKobo/100))*100;
-      if(budgetKobo<100)fail('insufficient_balance');
+      const billing=await ports.pricing?.(actor)??{billingEnabled:true,replyKobo:200,callKoboPerStartedSecond:100,revision:0};
+      const rateKoboPerStartedSecond=billing.billingEnabled?billing.callKoboPerStartedSecond:0;
+      let maxConnectedSeconds=input.expectedSeconds;
+      if(rateKoboPerStartedSecond>0){
+        const balance=await ports.balance(actor);
+        if(!balance)fail('balance_unavailable',503);
+        if(balance.frozen)fail('account_restricted',403);
+        maxConnectedSeconds=Math.min(input.expectedSeconds,Math.floor(balance.availableKobo/rateKoboPerStartedSecond));
+        if(maxConnectedSeconds<1)fail('insufficient_balance');
+      }
+      const budgetKobo=maxConnectedSeconds*rateKoboPerStartedSecond;
       const review:Review={purpose,tenantId:actor.tenantId,userId:actor.userId,
-        characterId:input.characterId,version:approved.version,budgetKobo,
+        characterId:input.characterId,version:approved.version,budgetKobo,rateKoboPerStartedSecond,maxConnectedSeconds,
         idempotencyKey:input.idempotencyKey,expiresAt:now().getTime()+120000};
-      return {currency:'NGN' as const,characterId:input.characterId,budgetKobo,maxConnectedSeconds:budgetKobo/100,
-        rateKoboPerStartedSecond:100 as const,ringingCostKobo:0 as const,
+      return {currency:'NGN' as const,characterId:input.characterId,budgetKobo,maxConnectedSeconds,
+        rateKoboPerStartedSecond,ringingCostKobo:0 as const,
         expiresAt:new Date(review.expiresAt).toISOString(),reviewToken:encode(review)};
     },
     async confirm(actor:NgnCallActor,input:{reviewToken:string;accepted:boolean}){
@@ -95,7 +106,8 @@ export function createNgnCallReviewService(ports:NgnCallPorts){
       const approved=await ports.approved(actor,review.characterId);
       if(!approved||approved.version!==review.version)fail('stale_masana');
       return ports.journal.admit(actor,{characterId:review.characterId,
-        budgetKobo:review.budgetKobo,idempotencyKey:review.idempotencyKey});
+        budgetKobo:review.budgetKobo,rateKoboPerStartedSecond:review.rateKoboPerStartedSecond,
+        maxConnectedSeconds:review.maxConnectedSeconds,idempotencyKey:review.idempotencyKey});
     },
     async read(actor:NgnCallActor,id:string){
       const row=await ports.journal.read(actor,id);
