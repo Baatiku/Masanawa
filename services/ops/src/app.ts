@@ -52,6 +52,8 @@ export interface OpsAppOptions {
   readonly readinessChecks?: readonly ReadinessCheck[];
   /** Read-only, bounded operational checks. Never invoke billable AI turns or financial mutations. */
   readonly serviceHealthChecks?: readonly ReadinessCheck[];
+  /** Read only service revision headers; null if unreachable or untrusted. */
+  readonly runtimeReleaseChecks?: { gateway(): Promise<string | null>; worker(): Promise<string | null> };
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
   readonly agentAdmin?: AgentAdminService;
@@ -423,6 +425,18 @@ export function createOpsApp(options: OpsAppOptions = {}) {
             if (timer) clearTimeout(timer);
           }
         }));
+        const readRevision = async (check?: () => Promise<string | null>): Promise<string | null> => {
+          try {
+            const value = await check?.();
+            return typeof value === "string" && /^[0-9a-f]{40}$/.test(value) ? value : null;
+          } catch { return null; }
+        };
+        const [gatewaySha, workerSha] = await Promise.all([
+          readRevision(options.runtimeReleaseChecks?.gateway),
+          readRevision(options.runtimeReleaseChecks?.worker),
+        ]);
+        const opsSha = /^[0-9a-f]{40}$/.test(options.runtimeMetadata?.releaseSha ?? "")
+          ? options.runtimeMetadata?.releaseSha ?? null : null;
         const active = !options.isDraining?.();
         const observed = [
           { name: "Ops lifecycle", ready: active, latencyMs: 0, detail: active ? "Serving requests" : "Shutting down" },
@@ -437,8 +451,11 @@ export function createOpsApp(options: OpsAppOptions = {}) {
           flags: options.runtimeMetadata?.flags ?? [],
           // The Ops container reports its own revision only. Do not infer that
           // Gateway, Worker or the browser call relay use the same image.
-          release: { opsSha: /^[0-9a-f]{40}$/.test(options.runtimeMetadata?.releaseSha ?? "")
-            ? options.runtimeMetadata?.releaseSha : null },
+          release: {
+            opsSha, gatewaySha, workerSha,
+            matching: Boolean(opsSha && gatewaySha && workerSha &&
+              opsSha === gatewaySha && opsSha === workerSha),
+          },
           limitations: "Endpoint reachability and runtime configuration do not verify an authenticated AI turn or two-way call.",
         };
       }));
