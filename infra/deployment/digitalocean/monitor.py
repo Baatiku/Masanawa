@@ -41,11 +41,14 @@ def check_release_images(release):
  if release.get('status')!='deployed':return []
  failures=[]
  for service in ('gateway','ops','worker'):
-  result=subprocess.run(['docker','inspect','--format','{{.Config.Image}}','masanawa-'+service+'-1'],
-                        capture_output=True,text=True,timeout=5)
   expected='ghcr.io/baatiku/masanawa-do-pilot-'+service+':'+release['releaseSha']
-  if result.returncode or result.stdout.strip()!=expected:
-   failures.append('Release image mismatch: '+service)
+  try:
+   result=subprocess.run(['docker','inspect','--format','{{.Config.Image}}','masanawa-'+service+'-1'],
+                         capture_output=True,text=True,timeout=5)
+   if result.returncode or result.stdout.strip()!=expected:
+    failures.append('Release image mismatch: '+service)
+  except (OSError,subprocess.TimeoutExpired):
+   failures.append('Release image unavailable: '+service)
  return failures
 
 def inspect():
