@@ -227,6 +227,14 @@ with tempfile.NamedTemporaryFile(dir=path.parent,delete=False) as f:
     f.write(contents);f.flush();os.fsync(f.fileno());name=f.name
 os.chmod(name,0o600);os.replace(name,path)
 PY
+# The owner grant is kept in the private runtime file rather than source. Apply
+# the exact reviewed helper while services are stopped so Ops has billing.read
+# and billing.write on first boot after migration 0222. The earlier checkpoint
+# and rollback trap also cover this private config mutation.
+stage='grant owner billing capabilities'
+curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/grant-owner-admin.py" \
+  >"$backup/grant-owner-admin.py"
+python3 "$backup/grant-owner-admin.py" >"$backup/owner-grant.log" 2>&1
 echo 'Upgrading application services; QR identity and wallet records are preserved...'
 stage='start Gateway and Ops'
 "${dc[@]}" up -d --no-build --no-deps --force-recreate \
