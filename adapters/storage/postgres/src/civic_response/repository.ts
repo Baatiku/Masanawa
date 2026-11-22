@@ -143,6 +143,26 @@ export function createCivicResponseRepository(pool: Pool) {
         ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT $4 OFFSET $5`,[PUBLIC_REPORT_CATEGORIES,input.category??null,input.state??null,limit,offset]);
       return result.rows;
     },
+    /** Public-audio eligibility is re-evaluated on every playback, including cached audio.
+     * Projection deliberately excludes the reporter, private description and raw media.
+     */
+    async publicAudioSource(reference:string) {
+      const res=await pool.query(`SELECT reference,
+        CASE WHEN publication_status='published' THEN public_title ELSE '' END AS "title",
+        CASE WHEN publication_status='published' THEN public_summary ELSE '' END AS "summary",
+        category,location_state AS "locationState",location_lga AS "locationLga",status,
+        publication_status AS "publicationStatus"
+        FROM civic_response.incidents
+        WHERE reference=$1 AND publication_status IN ('pending_review','published')
+          AND public_consent=true AND hidden_at IS NULL AND category=ANY($2::text[]) LIMIT 1`,
+        [reference,PUBLIC_REPORT_CATEGORIES]);
+      if(!res.rows[0])throw new CivicResponseError(404,'public_incident_not_found');
+      return res.rows[0] as {
+        reference:string;title:string;summary:string;category:string;
+        locationState:string;locationLga:string|null;status:string;
+        publicationStatus:'pending_review'|'published';
+      };
+    },
     async setPublicConsent(actor:ResponseActor,id:string,input:{consent:boolean;expectedRevision:number}) {
       requireRevision(input.expectedRevision);
       if(typeof input.consent!=='boolean')throw new CivicResponseError(400,'invalid_public_consent');
