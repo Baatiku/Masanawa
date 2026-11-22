@@ -255,6 +255,49 @@ export async function startOpsService(
           },
         },
         {
+          name: "Emergency category route",
+          check: async () => {
+            try {
+              // This proves the public, non-mutating emergency catalogue is mounted,
+              // NOT that incident interviews, location or AI audio work.
+              const response = await fetch("http://gateway:3000/v1/response/categories", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              await response.body?.cancel();
+              return { ready: response.status === 200 };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
+          name: "NGN call admission route",
+          check: async () => {
+            try {
+              // Safe anonymous read with a nonexistent synthetic key: 401 means
+              // the mounted route enforces authentication. 404 means absent/disabled.
+              // No reservation, provider call, money or customer data is accessed.
+              const response = await fetch("http://gateway:3000/v1/ngn/calls/admissions/original/healthcheck_route_probe", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              await response.body?.cancel();
+              return { ready: response.status === 401 };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
+          name: "Browser push registration route",
+          check: async () => {
+            try {
+              // Only check that an anonymous read is refused. This neither
+              // registers a device nor claims real FCM/browser push delivery.
+              const response = await fetch("http://gateway:3000/v1/account/browser-push", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              await response.body?.cancel();
+              return { ready: response.status === 401 };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
           name: "Worker readiness",
           check: async () => {
             try {
