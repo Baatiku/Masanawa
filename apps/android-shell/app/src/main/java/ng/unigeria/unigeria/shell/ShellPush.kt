@@ -225,8 +225,8 @@ internal object ShellPush {
         val merged = ShellNewsDigest.merge(listOf(item), previous)
         val current = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
             .getInt("unread", 0)
-        val count = if (previous.any { it.id == item.id }) maxOf(current, merged.size)
-            else maxOf(current + 1, merged.size).coerceAtMost(999)
+        val count = ShellNewsDigest.nextUnreadCount(current,
+            alreadyStored = previous.any { it.id == item.id }, visibleCount = merged.size)
         val retained = merged.map { it.id }.toSet()
         previous.filter { it.id !in retained }.forEach {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
