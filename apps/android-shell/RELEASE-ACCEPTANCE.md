@@ -200,3 +200,10 @@ No biometric lock implementation is planned in this release.
   browser. Test representative Hausa/English publishers on a handset.
 - Native features require an updated APK; web hot updates alone cannot add
   WebView interception or change the installed app label.
+
+
+## Expandable news notifications — 22 November 2026
+
+Version 1.3.2 (Android version code 14) displays an expandable public-news notification group: a compact unread counter with up to seven individually expandable article children, source names, actual headlines and short descriptions. The trusted Masanawa website bridge sends a capped set of unread article previews; FCM news events join the same bounded local group. Duplicates are keyed by article/event identity, and clearing the unread count removes the group and its children. New article children remain quiet rather than generating repeated sounds, and only public news content appears on the notification shade. Opening a notification takes the user to Masanawa Home. The OS controls exact expansion gestures and layout by Android version and manufacturer. User consent for notifications is still required.
+
+This changes native notification behavior and therefore requires this new APK; the web's in-app news toast has been removed independently. The signed-release GitHub Actions workflow requires the owner's existing keystore and certificate fingerprint secrets. A debug-signed APK is not interchangeable with the owner-signed release without first uninstalling the other certificate's installation. Handset acceptance should check grouped expansion and badge clearing on at least Android 12 and Android 14, including multiple distinct FCM events, foreground badge sync, duplicate events and cancellation.
