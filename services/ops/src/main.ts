@@ -323,7 +323,11 @@ export async function startOpsService(
         if (!response.ok) throw new Error("worker_monitor_unavailable");
         const payload = await response.json() as { jobs?: unknown };
         if (!Array.isArray(payload.jobs)) throw new Error("worker_monitor_invalid_response");
-        return payload.jobs.slice(0, 40).flatMap(item => {
+        return payload.jobs.slice(0, 40).flatMap<{
+          name: string; stuck: number; enabled?: boolean;
+          runningSeconds?: number; lastSuccessAgeSeconds?: number | null;
+          consecutiveFailures?: number; oldestPendingSeconds?: number;
+        }>(item => {
           if (!item || typeof item !== "object" || Array.isArray(item)) return [];
           const source = item as Record<string, unknown>;
           if (typeof source.name !== "string" || !/^[a-z0-9_-]{1,80}$/i.test(source.name) ||
