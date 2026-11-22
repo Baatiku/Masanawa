@@ -23,6 +23,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.widget.ProgressBar
 import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -108,10 +110,12 @@ internal class ShellArticleReader(
         more.setOnClickListener {
             PopupMenu(activity, more).apply {
                 menu.add("Reload article")
+                menu.add("Share article")
                 menu.add("Open original in browser")
                 setOnMenuItemClickListener { item ->
                     when (item.title.toString()) {
                         "Reload article" -> browser?.reload()
+                        "Share article" -> shareArticle(browser?.url?.takeIf(::safeArticleUrl) ?: url)
                         "Open original in browser" -> openExternal(browser?.url?.takeIf(::safeArticleUrl) ?: url)
                     }
                     true
@@ -121,6 +125,14 @@ internal class ShellArticleReader(
         brand.addView(more)
         brand.addView(actionButton("×", "Close article and return to Masanawa", 29f) { close() })
         page.addView(brand)
+        // A 2dp Masanawa-green progress line provides feedback without a second toolbar.
+        val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            this.progress = 5
+            progressTintList = ColorStateList.valueOf(Color.rgb(29, 169, 104))
+            progressBackgroundTintList = ColorStateList.valueOf(Color.WHITE)
+        }
+        page.addView(progress, LinearLayout.LayoutParams(-1, 2.dp()))
 
         val web = WebView(activity).apply {
             setBackgroundColor(Color.WHITE)
@@ -133,6 +145,11 @@ internal class ShellArticleReader(
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
+            settings.mediaPlaybackRequiresUserGesture = true
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
                 settings.safeBrowsingEnabled = true
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
@@ -142,6 +159,12 @@ internal class ShellArticleReader(
                 WebViewCompat.addDocumentStartJavaScript(
                     this, ShellArticlePrivacy.cosmeticCleanupScript, setOf("*")
                 )
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    progress.progress = newProgress
+                    progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
+                }
             }
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
@@ -166,12 +189,15 @@ internal class ShellArticleReader(
                 }
 
                 override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                    progress.progress = 5
+                    progress.visibility = View.VISIBLE
                     if (safeArticleUrl(url)) {
                         currentPublisherUrl = url
                     }
                 }
 
                 override fun onPageFinished(view: WebView, url: String) {
+                    progress.visibility = View.GONE
                     if (safeArticleUrl(url) && browser === view)
                         view.evaluateJavascript(ShellArticlePrivacy.cosmeticCleanupScript, null)
                 }
@@ -264,6 +290,18 @@ internal class ShellArticleReader(
         currentPublisherUrl = ""
         if (view != null) host.removeView(view)
         web?.apply { stopLoading(); loadUrl("about:blank"); removeAllViews(); destroy() }
+    }
+
+    private fun shareArticle(destination: String) {
+        if (!safeArticleUrl(destination)) return
+        try {
+            activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, destination)
+            }, "Share article"))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(activity, "No compatible sharing app is available.", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun openExternal(destination: String) {
