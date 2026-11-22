@@ -3,6 +3,7 @@ package ng.unigeria.unigeria.shell
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -10,6 +11,8 @@ import android.net.Uri
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.PopupMenu
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -33,10 +36,10 @@ import java.net.URI
 internal class ShellArticleReader(
     private val activity: ComponentActivity,
     private val host: FrameLayout,
+    private val onNavigate: (String) -> Unit,
 ) {
     private var surface: LinearLayout? = null
     private var browser: WebView? = null
-    @Volatile private var blockingAds = true
     @Volatile private var currentPublisherUrl = ""
 
     companion object {
@@ -61,7 +64,6 @@ internal class ShellArticleReader(
     fun open(url: String): Boolean {
         if (!safeArticleUrl(url)) return false
         close()
-        blockingAds = true
         currentPublisherUrl = url
 
         val page = LinearLayout(activity).apply {
@@ -69,10 +71,12 @@ internal class ShellArticleReader(
             setBackgroundColor(Color.WHITE)
             elevation = 24f
         }
+        // Use the Masanawa home header's single-row white branding.
+        // Article controls live in an overflow menu, not a second toolbar.
         val brand = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.rgb(37, 211, 102))
+            setBackgroundColor(Color.WHITE)
         }
         ViewCompat.setOnApplyWindowInsetsListener(brand) { view, insets ->
             val bars = insets.getInsets(
@@ -82,77 +86,31 @@ internal class ShellArticleReader(
             insets
         }
         brand.addView(actionButton("←", "Back to previous page", 26f) { back() })
-        val titleGroup = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        titleGroup.addView(TextView(activity).apply {
+        brand.addView(TextView(activity).apply {
             text = "Masanawa"
-            textSize = 20f
+            textSize = 22f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.rgb(8, 51, 32))
-            maxLines = 1
-        })
-        titleGroup.addView(TextView(activity).apply {
-            text = "In-app article reader"
-            textSize = 12f
-            setTextColor(Color.rgb(8, 66, 40))
-        })
-        brand.addView(titleGroup, LinearLayout.LayoutParams(0, 52.dp(), 1f))
-        brand.addView(actionButton("×", "Close article and return to Masanawa", 30f) { close() })
-        page.addView(brand)
-
-        val tools = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
+            setTextColor(Color.rgb(17, 27, 33))
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(12.dp(), 2.dp(), 8.dp(), 2.dp())
-            setBackgroundColor(Color.rgb(241, 248, 243))
-        }
-        val publisher = TextView(activity).apply {
-            text = publisherName(url)
-            textSize = 13f
             maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            setTextColor(Color.rgb(27, 58, 42))
-        }
-        tools.addView(publisher, LinearLayout.LayoutParams(0, 48.dp(), 1f))
-        val protection = TextView(activity).apply {
-            gravity = Gravity.CENTER
-            text = "Ads off"
-            textSize = 13f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.rgb(8, 75, 43))
-            contentDescription = "Ad blocking enabled. Tap to allow ads for this article."
-            isClickable = true
-            isFocusable = true
-            minHeight = 48.dp()
-            minWidth = 70.dp()
-            setPadding(4.dp(), 0, 4.dp(), 0)
-            setOnClickListener {
-                blockingAds = !blockingAds
-                text = if (blockingAds) "Ads off" else "Ads on"
-                contentDescription = if (blockingAds) {
-                    "Ad blocking enabled. Tap to allow ads for this article."
-                } else {
-                    "Ad blocking disabled. Tap to block ads for this article."
+        }, LinearLayout.LayoutParams(0, 52.dp(), 1f))
+        val more = actionButton("⋮", "Article options", 28f) {} as TextView
+        more.setOnClickListener {
+            PopupMenu(activity, more).apply {
+                menu.add("Reload article")
+                menu.add("Open original in browser")
+                setOnMenuItemClickListener { item ->
+                    when (item.title.toString()) {
+                        "Reload article" -> browser?.reload()
+                        "Open original in browser" -> openExternal(browser?.url?.takeIf(::safeArticleUrl) ?: url)
+                    }
+                    true
                 }
-                browser?.reload()
-            }
+            }.show()
         }
-        tools.addView(protection)
-        tools.addView(actionButton("↻", "Reload article", 27f) { browser?.reload() })
-        tools.addView(actionButton("↗", "Open original article in external browser", 26f) {
-            val destination = browser?.url?.takeIf(::safeArticleUrl) ?: url
-            try {
-                activity.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(destination))
-                        .addCategory(Intent.CATEGORY_BROWSABLE)
-                )
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(activity, "No external browser is available.", Toast.LENGTH_LONG).show()
-            }
-        })
-        page.addView(tools)
+        brand.addView(more)
+        brand.addView(actionButton("×", "Close article and return to Masanawa", 29f) { close() })
+        page.addView(brand)
 
         val web = WebView(activity).apply {
             setBackgroundColor(Color.WHITE)
@@ -170,14 +128,17 @@ internal class ShellArticleReader(
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                    request.isForMainFrame && !safeArticleUrl(request.url.toString())
+                    request.isForMainFrame && (
+                        !safeArticleUrl(request.url.toString()) ||
+                        ShellArticlePrivacy.shouldBlock(request.url.toString(), currentPublisherUrl)
+                    )
 
                 override fun shouldInterceptRequest(
                     view: WebView, request: WebResourceRequest
                 ): WebResourceResponse? {
-                    // Only block known third-party advertising/tracking subresources.
-                    // Never intercept the publisher document or the authenticated app.
-                    if (!blockingAds || request.isForMainFrame ||
+                    // Only block recognizable ads/trackers inside this isolated reader.
+                    // Never intercept the publisher document or authenticated app.
+                    if (request.isForMainFrame ||
                         !ShellArticlePrivacy.shouldBlock(
                             request.url.toString(), currentPublisherUrl
                         )
@@ -190,12 +151,11 @@ internal class ShellArticleReader(
                 override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                     if (safeArticleUrl(url)) {
                         currentPublisherUrl = url
-                        publisher.text = publisherName(url)
                     }
                 }
 
                 override fun onPageFinished(view: WebView, url: String) {
-                    if (blockingAds && safeArticleUrl(url) && browser === view)
+                    if (safeArticleUrl(url) && browser === view)
                         view.evaluateJavascript(ShellArticlePrivacy.cosmeticCleanupScript, null)
                 }
 
@@ -204,13 +164,57 @@ internal class ShellArticleReader(
                 ) {
                     if (request.isForMainFrame) Toast.makeText(
                         activity,
-                        "This publisher could not load. Try Reload or Open in browser (↗).",
+                        "Publisher could not load. Use the ⋮ menu to reload or open in a browser.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
             }
         }
         page.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
+        // Keep the exact five bottom destinations offered by the main web app.
+        val divider = View(activity).apply { setBackgroundColor(Color.rgb(231, 234, 236)) }
+        page.addView(divider, LinearLayout.LayoutParams(-1, 1.dp()))
+        val bottom = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.WHITE)
+        }
+        val items = listOf(
+            Triple("Home", "home", R.drawable.reader_nav_home),
+            Triple("Chats", "chats", R.drawable.reader_nav_chats),
+            Triple("Wallet", "wallet", R.drawable.reader_nav_wallet),
+            Triple("Calls", "calls", R.drawable.reader_nav_calls),
+            Triple("Contacts", "people", R.drawable.reader_nav_contacts)
+        )
+        items.forEach { (label, route, drawable) ->
+            val selected = route == "home"
+            val color = if (selected) Color.rgb(20, 157, 85) else Color.rgb(103, 119, 129)
+            val tab = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(1.dp(), 3.dp(), 1.dp(), 2.dp())
+                contentDescription = label
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { close(); onNavigate(route) }
+            }
+            tab.addView(ImageView(activity).apply {
+                setImageResource(drawable)
+                imageTintList = ColorStateList.valueOf(color)
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(23.dp(), 23.dp()))
+            tab.addView(TextView(activity).apply {
+                text = label
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+                setTextColor(color)
+                setPadding(0, 3.dp(), 0, 0)
+            })
+            bottom.addView(tab, LinearLayout.LayoutParams(0, 64.dp(), 1f))
+        }
+        page.addView(bottom)
         ViewCompat.setOnApplyWindowInsetsListener(page) { view, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.displayCutout()
@@ -245,9 +249,17 @@ internal class ShellArticleReader(
         web?.apply { stopLoading(); loadUrl("about:blank"); removeAllViews(); destroy() }
     }
 
-    private fun publisherName(value: String): String =
-        try { URI(value).host?.removePrefix("www.") ?: "Publisher website" }
-        catch (_: Exception) { "Publisher website" }
+    private fun openExternal(destination: String) {
+        if (!safeArticleUrl(destination)) return
+        try {
+            activity.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(destination))
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+            )
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(activity, "No external browser is available.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     private fun actionButton(
         glyph: String, hint: String, fontSize: Float, action: () -> Unit
