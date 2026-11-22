@@ -336,7 +336,7 @@ export async function startOpsService(
         },
       },
       runtimeMetadata:{
-        releaseSha: /^[0-9a-f]{40}$/.test(env.MASANAWA_RELEASE_SHA ?? "") ? env.MASANAWA_RELEASE_SHA : undefined,
+        ...(/^[0-9a-f]{40}$/.test(env.MASANAWA_RELEASE_SHA ?? "") ? { releaseSha: env.MASANAWA_RELEASE_SHA! } : {}),
         providers:[['Gemini',['MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY','MASANAWA_ALPHA_GEMINI_API_KEY']],['Billstack',['MASANAWA_BILLSTACK_SECRET_KEY','BILLSTACK_SECRET_KEY']],['Flutterwave',['FLUTTERWAVE_SECRET_KEY','MASANAWA_FLUTTERWAVE_SECRET_KEY']],['Resend',['RESEND_API_KEY','MASANAWA_RESEND_API_KEY']]].map(([name,keys])=>({name:String(name),configured:(keys as string[]).some(k=>Boolean(env[k]?.trim())),verification:'not_checked'})),
         flags:['MASANAWA_NGN_CALLS_ENABLED','MASANAWA_NGN_DATA_CATALOG_ENABLED','MASANAWA_NGN_DATA_PURCHASE_ENABLED','MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED'].map(name=>({name,enabled:env[name]==='true'})),
       },
