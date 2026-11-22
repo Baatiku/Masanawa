@@ -35,6 +35,30 @@ describe('NGN call accounting on production SQL',()=>{
   expect(await f.repo.finish(f.actor,row.admissionId)).toMatchObject({currency:'NGN',verifiedConnectedMs:1001,chargedKobo:200,state:'completed'});
   expect(await f.repo.finish(f.actor,row.admissionId)).toMatchObject({chargedKobo:200});expect(await f.balance()).toEqual({balance:9800,held:0});
  });
+ it('completes a free call without wallet reservations, respecting authorized duration',async()=>{
+   const f=await fixture();
+   const row=await f.repo.admit(f.actor,{...f.args,budgetKobo:0,rateKoboPerStartedSecond:0,maxConnectedSeconds:30,
+     idempotencyKey:'original_ngn_free_call'});
+   expect(row).toMatchObject({budgetKobo:0,rateKoboPerStartedSecond:0,maxConnectedSeconds:30,state:'reserved'});
+   expect(await f.balance()).toEqual({balance:10000,held:0});
+   await f.repo.claimConnection(f.actor,row.admissionId,f.args.characterId,'free_lease');
+   await f.repo.connected(f.actor,row.admissionId,'free_lease');f.advance(1501);
+   await f.repo.disconnect(f.actor,row.admissionId,'free_lease');
+   expect(await f.repo.finish(f.actor,row.admissionId)).toMatchObject({
+     verifiedConnectedMs:1501,chargedKobo:0,state:'completed'});
+   expect(await f.balance()).toEqual({balance:10000,held:0});
+ });
+ it('settles variable per-second tariffs by provider-confirmed connected time only',async()=>{
+   const f=await fixture();
+   const row=await f.repo.admit(f.actor,{...f.args,budgetKobo:2500,rateKoboPerStartedSecond:125,
+     maxConnectedSeconds:20,idempotencyKey:'original_ngn_rate_call'});
+   expect(await f.balance()).toEqual({balance:10000,held:2500});
+   await f.repo.claimConnection(f.actor,row.admissionId,f.args.characterId,'priced_lease');
+   await f.repo.connected(f.actor,row.admissionId,'priced_lease');f.advance(1001);
+   await f.repo.disconnect(f.actor,row.admissionId,'priced_lease');
+   expect(await f.repo.finish(f.actor,row.admissionId)).toMatchObject({chargedKobo:250,state:'completed'});
+   expect(await f.balance()).toEqual({balance:9750,held:0});
+ });
  it('ringing and failed setup release the entire hold with zero charge',async()=>{
   const f=await fixture(),row=await f.repo.admit(f.actor,f.args);await f.repo.claimConnection(f.actor,row.admissionId,f.args.characterId,'lease_two');f.advance(8000);await f.repo.disconnect(f.actor,row.admissionId,'lease_two');
   expect(await f.repo.finish(f.actor,row.admissionId)).toMatchObject({chargedKobo:0,state:'failed'});expect(await f.balance()).toEqual({balance:10000,held:0});
