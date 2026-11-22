@@ -1,11 +1,27 @@
 import {describe,expect,it,vi} from 'vitest';
-import {createNgnCallRelay,createRelayLeaseId} from './relay.js';
+import {createNgnCallRelay,createRelayLeaseId,admissionHasTimeRemaining} from './relay.js';
 import {createGatewayApp} from '../app.js';
 import {NgnCallRelayError} from './errors.js';
 import {createCanonicalId} from '@masanawa/contracts';
 
 type Store=Parameters<typeof createNgnCallRelay>[0]['store'];
 describe('relay readiness and origin boundary',()=>{
+  it("admission time, not Naira cost, controls free and variable-price calls",()=>{
+    const withPrice=(budgetKobo:number,elapsed:number,maxConnectedSeconds=3)=>({
+      budgetKobo, verifiedConnectedMs:elapsed, maxConnectedSeconds,
+    });
+    // Both zero-priced and non-default paid tariffs must get the same signed duration.
+    expect(admissionHasTimeRemaining(withPrice(0,0))).toBe(true);
+    expect(admissionHasTimeRemaining(withPrice(0,2999))).toBe(true);
+    expect(admissionHasTimeRemaining(withPrice(0,3000))).toBe(false);
+    expect(admissionHasTimeRemaining(withPrice(750,2999))).toBe(true);
+    expect(admissionHasTimeRemaining(withPrice(750,3000))).toBe(false);
+    expect(admissionHasTimeRemaining(withPrice(150,2999))).toBe(true);
+    expect(admissionHasTimeRemaining(withPrice(150,3000))).toBe(false);
+    expect(admissionHasTimeRemaining(withPrice(0,-1))).toBe(false);
+    expect(admissionHasTimeRemaining(withPrice(0,0,0))).toBe(false);
+  });
+
   it.each([0,248,255])('opaque entropy %s always yields an admissible durable lease',byte=>{
     const id=createRelayLeaseId(new Uint8Array(24).fill(byte));
     expect(id).toMatch(/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/);
