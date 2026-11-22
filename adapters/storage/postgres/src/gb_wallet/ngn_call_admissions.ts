@@ -7,6 +7,7 @@ export interface NgnCallActor {tenantId:string;userId:string}
 export interface NgnCallAdmission {
   currency:'NGN';admissionId:string;characterId:string;budgetKobo:number;
   state:'pending'|'reserved'|'connecting'|'connected'|'settling'|'completed'|'failed';
+  rateKoboPerStartedSecond:number;maxConnectedSeconds:number;
   expiresAt:string;verifiedConnectedMs:number;chargedKobo:number|null;
 }
 export class NgnCallAdmissionError extends Error {
@@ -16,7 +17,7 @@ type Row = {
   admission_id:string;character_id:string;request_sha256:string;budget_kobo:number;
   state:NgnCallAdmission['state'];expires_at:Date;lease_id:string|null;
   connected_at:Date|null;connection_base_ms:string;verified_connected_ms:string;
-  charged_kobo:number|null;
+  charged_kobo:number|null;rate_kobo_per_started_second:number;max_connected_seconds:number;
 };
 const valid=(s:string)=>typeof s==='string'&&/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/.test(s);
 const fail=(code:string,status=409):never=>{throw new NgnCallAdmissionError('ngn.call.'+code,status)};
@@ -25,7 +26,7 @@ const actorKey=(a:NgnCallActor)=>{
 };
 const project=(r:Row):NgnCallAdmission=>({
   currency:'NGN',admissionId:r.admission_id,characterId:r.character_id,budgetKobo:r.budget_kobo,
-  state:r.state,expiresAt:r.expires_at.toISOString(),
+  state:r.state,rateKoboPerStartedSecond:r.rate_kobo_per_started_second,maxConnectedSeconds:r.max_connected_seconds,expiresAt:r.expires_at.toISOString(),
   verifiedConnectedMs:Number(r.verified_connected_ms),chargedKobo:r.charged_kobo,
 });
 
@@ -67,7 +68,7 @@ export function createNgnCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
   const observeTime=(r:Row,at:Date)=>{
     if(r.state!=='connected'||!r.connected_at) return;
     const observed=Number(r.connection_base_ms)+Math.max(0,at.getTime()-r.connected_at.getTime());
-    r.verified_connected_ms=String(Math.min(r.budget_kobo*10,
+    r.verified_connected_ms=String(Math.min(r.max_connected_seconds*1000,
       Math.max(Number(r.verified_connected_ms),observed)));
   };
   const requireLease=(r:Row,lease:string,at:Date)=>{
@@ -90,7 +91,7 @@ export function createNgnCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
       return project(row);
     }
     if(row.state!=='settling')fail('not_settling');
-    const chargedKobo=Math.ceil(Number(row.verified_connected_ms)/1000)*100;
+    const chargedKobo=Math.ceil(Number(row.verified_connected_ms)/1000)*row.rate_kobo_per_started_second;
     if(chargedKobo===0)await releaseHeld(actor,id);
     else await wallet.capture({...actor,operationId:id},chargedKobo);
     return project(await mutate(actor,id,r=>{
@@ -105,25 +106,29 @@ export function createNgnCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
       const row=await readRow(actor,originalId(actor,key));return row?project(row):null;
     },
     async read(actor:NgnCallActor,id:string){const r=await readRow(actor,id);return r?project(r):null;},
-    async admit(actor:NgnCallActor,input:{characterId:string;budgetKobo:number;idempotencyKey:string}){
+    async admit(actor:NgnCallActor,input:{characterId:string;budgetKobo:number;rateKoboPerStartedSecond:number;maxConnectedSeconds:number;idempotencyKey:string}){
       actorKey(actor);
       if(!valid(input.characterId)||!Number.isSafeInteger(input.budgetKobo)||
-         input.budgetKobo<100||input.budgetKobo%100!==0||input.budgetKobo>360000||
+         !Number.isSafeInteger(input.rateKoboPerStartedSecond)||input.rateKoboPerStartedSecond<0||
+         input.rateKoboPerStartedSecond>100000||!Number.isSafeInteger(input.maxConnectedSeconds)||
+         input.maxConnectedSeconds<1||input.maxConnectedSeconds>3600||
+         input.budgetKobo!==input.maxConnectedSeconds*input.rateKoboPerStartedSecond||
          !/^[A-Za-z0-9_-]{8,128}$/.test(input.idempotencyKey))fail('invalid_admission',422);
       const id=originalId(actor,input.idempotencyKey);
       const hash=createHash('sha256').update(JSON.stringify([
-        input.characterId,input.budgetKobo])).digest('hex');
+        input.characterId,input.budgetKobo,input.rateKoboPerStartedSecond,input.maxConnectedSeconds])).digest('hex');
       await pool.query(`INSERT INTO gb_wallet.ngn_call_admissions
-        (tenant_id,user_id,admission_id,character_id,request_sha256,budget_kobo,state,expires_at)
-        VALUES($1,$2,$3,$4,$5,$6,'pending',$7) ON CONFLICT DO NOTHING`,
+        (tenant_id,user_id,admission_id,character_id,request_sha256,budget_kobo,
+          rate_kobo_per_started_second,max_connected_seconds,state,expires_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9) ON CONFLICT DO NOTHING`,
         [actor.tenantId,actor.userId,id,input.characterId,hash,input.budgetKobo,
-         new Date(now().getTime()+60000)]);
+         input.rateKoboPerStartedSecond,input.maxConnectedSeconds,new Date(now().getTime()+60000)]);
       const row=await requireRow(actor,id);
       if(row.request_sha256!==hash)fail('idempotency_conflict');
       if(row.state==='failed')return settle(actor,id);
       if(row.state!=='pending')return project(row);
       if(row.expires_at.getTime()<=now().getTime())fail('expired');
-      await wallet.reserve({...actor,operationId:id,idempotencyKey:id,
+      if(input.budgetKobo>0)await wallet.reserve({...actor,operationId:id,idempotencyKey:id,
         purpose:'connected_call',amountKobo:input.budgetKobo});
       const reserved=await mutate(actor,id,(r,at)=>{
         if(r.state==='pending'&&r.expires_at.getTime()>at.getTime())r.state='reserved';
@@ -137,7 +142,7 @@ export function createNgnCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
       return project(await mutate(actor,id,(r,at)=>{
         if(r.character_id!==characterId)fail('character_mismatch',403);
         if(r.state!=='reserved'||r.expires_at.getTime()<=at.getTime()||
-           Number(r.verified_connected_ms)>=r.budget_kobo*10)fail('not_connectable');
+           Number(r.verified_connected_ms)>=r.max_connected_seconds*1000)fail('not_connectable');
         r.state='connecting';r.lease_id=leaseId;
         r.expires_at=new Date(at.getTime()+30000);
       }));
