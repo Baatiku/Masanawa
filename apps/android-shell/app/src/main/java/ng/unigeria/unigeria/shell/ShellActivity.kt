@@ -241,7 +241,13 @@ class ShellActivity : ComponentActivity() {
                     val script = "(function(){const tab=document.querySelector(" +
                         JSONObject.quote(selector) +
                         ");if(tab){tab.click();return true}return false})()"
-                    webView.evaluateJavascript(script, null)
+                    webView.evaluateJavascript(script) { result ->
+                        // If a future web release changes the DOM selector,
+                        // do not leave the tab looking clickable but inert.
+                        if (result != "true" && WebOriginPolicy.isTrusted(webView.url)) {
+                            webView.loadUrl("https://app.masanawa.com/?tab=$destination")
+                        }
+                    }
                 }
             }
         }
