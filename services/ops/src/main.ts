@@ -313,6 +313,40 @@ export async function startOpsService(
           },
         },
       ],
+      workerJobsReader: async () => {
+        const token = env.MASANAWA_OPS_MONITOR_TOKEN?.trim();
+        if (!token || token.length < 32) throw new Error("worker_monitor_not_configured");
+        const response = await fetch("http://worker:3001/v1/ops/jobs/health", {
+          headers: { authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+        });
+        if (!response.ok) throw new Error("worker_monitor_unavailable");
+        const payload = await response.json() as { jobs?: unknown };
+        if (!Array.isArray(payload.jobs)) throw new Error("worker_monitor_invalid_response");
+        return payload.jobs.slice(0, 40).flatMap(item => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+          const source = item as Record<string, unknown>;
+          if (typeof source.name !== "string" || !/^[a-z0-9_-]{1,80}$/i.test(source.name) ||
+              !Number.isSafeInteger(source.stuck) || Number(source.stuck) < 0) return [];
+          const ready = (n: unknown): n is number =>
+            typeof n === "number" && Number.isFinite(n) && n >= 0;
+          if (typeof source.enabled === "boolean" && ready(source.runningSeconds) &&
+              (source.lastSuccessAgeSeconds === null || ready(source.lastSuccessAgeSeconds)) &&
+              Number.isSafeInteger(source.consecutiveFailures) && Number(source.consecutiveFailures) >= 0) {
+            return [{
+              name: source.name, enabled: source.enabled, runningSeconds: source.runningSeconds,
+              lastSuccessAgeSeconds: source.lastSuccessAgeSeconds as number | null,
+              stuck: source.stuck as number,
+              consecutiveFailures: source.consecutiveFailures as number,
+            }];
+          }
+          if (ready(source.oldestPendingSeconds)) {
+            return [{ name: source.name, stuck: source.stuck as number,
+              oldestPendingSeconds: source.oldestPendingSeconds }];
+          }
+          return [];
+        });
+      },
       runtimeReleaseChecks: {
         gateway: async () => {
           try {
