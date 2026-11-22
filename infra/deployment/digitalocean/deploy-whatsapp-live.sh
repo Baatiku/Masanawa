@@ -215,9 +215,15 @@ for row in rows:
     name,_,value=row.partition('=')
     if name in values: raise SystemExit('Duplicate private runtime setting requires inspection: '+name)
     values[name]=value
-key=values.get('MASANAWA_GEMINI_API_KEY','').strip()
-if len(key)<24 or any(marker in key.lower() for marker in ('change_me','placeholder','not-configured','example')):
-    raise SystemExit('Persona calls require an existing real MASANAWA_GEMINI_API_KEY in the private DigitalOcean runtime file')
+def genuine_key(value):
+    value=value.strip()
+    return len(value)>=24 and not any(marker in value.lower() for marker in
+        ('change_me','placeholder','not-configured','example'))
+key=next((values.get(name,'').strip() for name in
+    ('MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY')
+    if genuine_key(values.get(name,''))), '')
+if not key:
+    raise SystemExit('Persona calls require an existing real Gemini API key in the private DigitalOcean runtime file')
 review=values.get('MASANAWA_GB_SEND_REVIEW_SECRET')
 if review is not None and len(review.encode())<32:
     raise SystemExit('Existing private call review secret is too short; review it before activation')
@@ -239,6 +245,19 @@ from pathlib import Path
 path=Path(sys.argv[1])
 settings={'MASANAWA_RELEASE_SHA':sys.argv[2],'MASANAWA_WHATSAPP_BROWSER_ENABLED':'true',
           'MASANAWA_NGN_CALLS_ENABLED':'true'}
+# Reuse a real key already installed for the WhatsApp provider if the canonical
+# Gateway variable is absent. The value stays solely in the 0600 runtime file.
+private_values={}
+for entry in path.read_text().splitlines():
+    if '=' in entry and not entry.lstrip().startswith('#'):
+        name,_,value=entry.partition('=')
+        if name in private_values: raise SystemExit('Duplicate private runtime setting: '+name)
+        private_values[name]=value
+if not private_values.get('MASANAWA_GEMINI_API_KEY','').strip():
+    alias=private_values.get('GEMINI_API_KEY','').strip()
+    if len(alias)>=24 and not any(mark in alias.lower() for mark in
+        ('change_me','placeholder','not-configured','example')):
+        settings['MASANAWA_GEMINI_API_KEY']=alias
 if sys.argv[3]!='keep': settings['MASANAWA_WHATSAPP_CALLS_ENABLED']=sys.argv[3]
 # The same private runtime file is mounted in Ops and Worker. Mint a strong
 # monitoring secret only once; do not rotate a working token on redeployment.
