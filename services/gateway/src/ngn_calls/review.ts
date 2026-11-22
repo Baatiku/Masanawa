@@ -97,7 +97,9 @@ export function createNgnCallReviewService(ports:NgnCallPorts){
       const review=verify(actor,input.reviewToken);
       const old=await ports.journal.readOriginal(actor,review.idempotencyKey);
       if(old){
-        if(old.characterId!==review.characterId||old.budgetKobo!==review.budgetKobo)fail('idempotency_conflict');
+        if(old.characterId!==review.characterId||old.budgetKobo!==review.budgetKobo||
+        old.rateKoboPerStartedSecond!==review.rateKoboPerStartedSecond||
+        old.maxConnectedSeconds!==review.maxConnectedSeconds)fail('idempotency_conflict');
         // A timeout/expired review recovers the original receipt, never another hold.
         if(old.state!=='pending'||review.expiresAt<=now().getTime())return old;
       }
