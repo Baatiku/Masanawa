@@ -3,6 +3,7 @@ import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
 import {ngnSqlFixture} from '../gb_wallet/ngn_test_support.js';
 import {createNgnSpending} from '../gb_wallet/ngn_spending.js';
+import {createUsageBillingRepository} from '../gb_wallet/usage_billing.js';
 import {createGbUsageReservations} from '../gb_wallet/reservations.js';
 import {createPostgresMobileShellRepository,recoverExpiredMbReplies} from './mobile-shell.js';
 
@@ -30,6 +31,30 @@ describe('durable direct NGN reply settlement and historical MB recovery',()=>{
   const f=await fixture();await f.repo.claimTurn(f.request);
   const finish={...f.finish,parts:[{type:'text',text:'A durable answer'},{type:'audio',mimeType:'audio/wav',url:'https://media.example/voice.wav'}]};
   await f.repo.completeTurn(finish);await f.repo.completeTurn(finish);expect(await f.balance()).toMatchObject({balanceKobo:800,heldKobo:0});
+ });
+ it('gives zero-wallet citizens real free text and voice replies when admin billing is disabled',async()=>{
+   const f=await fixture(0);
+   const billing=createUsageBillingRepository(pool);
+   await billing.write({tenantId:f.scope.tenantId,actorId:'admin_owner',expectedRevision:0,
+     billingEnabled:false,replyKobo:350,callKoboPerStartedSecond:125});
+   const request={...f.request,kind:'media' as const};
+   expect((await f.repo.claimTurn(request)).state).toBe('created');
+   expect(await f.balance()).toMatchObject({balanceKobo:0,heldKobo:0,availableKobo:0});
+   await f.repo.completeTurn(f.finish);
+   expect(await f.balance()).toMatchObject({balanceKobo:0,heldKobo:0});
+   const count=await pool.query('SELECT count(*)::int AS n FROM gb_wallet.ngn_spends WHERE tenant_id=$1',[f.scope.tenantId]);
+   expect(count.rows[0].n).toBe(0);
+ });
+ it('holds the current custom reply price and settles its ORIGINAL tariff after a policy change',async()=>{
+   const f=await fixture(1000),billing=createUsageBillingRepository(pool);
+   await billing.write({tenantId:f.scope.tenantId,actorId:'admin_owner',expectedRevision:0,
+     billingEnabled:true,replyKobo:350,callKoboPerStartedSecond:125});
+   await f.repo.claimTurn(f.request);
+   expect(await f.balance()).toMatchObject({balanceKobo:1000,heldKobo:350,availableKobo:650});
+   await billing.write({tenantId:f.scope.tenantId,actorId:'admin_owner',expectedRevision:1,
+     billingEnabled:false,replyKobo:150,callKoboPerStartedSecond:200});
+   await f.repo.completeTurn(f.finish);
+   expect(await f.balance()).toMatchObject({balanceKobo:650,heldKobo:0});
  });
  it('rolls back insufficient or frozen admission before a command becomes pending',async()=>{
   for(const frozen of [false,true]){
