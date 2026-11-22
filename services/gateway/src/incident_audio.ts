@@ -17,7 +17,7 @@ const statuses:Record<string,string>={
   routed:'under internal routing review',acknowledged:'agency receipt recorded',
   in_progress:'being tracked',resolved:'marked resolved',closed:'closed',dismissed:'dismissed',
 };
-const squash=(value:string,max:number)=>value.replace(/[\\r\\n\\t]+/g,' ').replace(/\\s+/g,' ').trim().slice(0,max);
+const squash=(value:string,max:number)=>value.replace(/[\r\n\t]+/g,' ').replace(/\\s+/g,' ').trim().slice(0,max);
 
 /** Narration is sourced ONLY from fields authorized for public display.
  * Never pass the private description, original voice note, reporter identity,
