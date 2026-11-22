@@ -132,13 +132,13 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
       const history=body.history;
       const text=history.filter(row=>row.role==='citizen').map(row=>row.text).join(' ').toLowerCase();
       const danger=/\b(?:fire|dying|kidnap|shoot|bleed|knife|gun|emergency|danger|unconscious|collapse|robbery)\b/u.test(text);
-      if(!options.geminiKey)return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:history.length>=6,facts:{},emergencyHint:danger};
+      if(!options.geminiKey)return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:false,facts:{},emergencyHint:danger};
       try{
         const result=await geminiJson(options.geminiKey,[{text:JSON.stringify({language:body.language||'English',history})}],SYSTEM_INSTRUCTION);
         if(typeof result.question!=='string'||!result.question.trim())throw new Error('invalid_ai_question');
         const facts=result.facts&&typeof result.facts==='object'&&!Array.isArray(result.facts)?result.facts:{};
         return {mode:'ai',question:result.question.slice(0,500),readyToReview:result.readyToReview===true,facts,emergencyHint:danger};
-      }catch{return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:history.length>=6,facts:{},emergencyHint:danger,providerUnavailable:true};}
+      }catch{return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:false,facts:{},emergencyHint:danger,providerUnavailable:true};}
     }catch(error){return failure(error,reply)}
   });
   // Multimodal voice intake operates on semantic meaning, not a separate transcript.
