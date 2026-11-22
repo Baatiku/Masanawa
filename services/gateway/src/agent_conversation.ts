@@ -28,7 +28,7 @@ import type { AgentTeachingAssistant } from "./agent_teaching_assistant.js";
 import type { AgentCryptoAssistant } from "./agent_crypto_assistant.js";
 
 /** Closed, non-sensitive failure categories for operational diagnostics. */
-function agentFailureCode(error: unknown, fallback: string): string {
+export function agentFailureCode(error: unknown, fallback: string): string {
   if (!(error instanceof GeminiProviderError)) return fallback;
   if (error.providerReason === "QUOTA_EXCEEDED") return "agent.provider_quota_exceeded";
   if (error.providerReason === "RATE_LIMIT_EXCEEDED") return "agent.provider_rate_limited";
