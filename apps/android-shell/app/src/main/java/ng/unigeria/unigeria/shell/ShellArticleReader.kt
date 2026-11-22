@@ -26,6 +26,8 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 import java.net.URI
 
@@ -126,6 +128,13 @@ internal class ShellArticleReader(
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
                 settings.safeBrowsingEnabled = true
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+            // Prefer document-start cosmetic filtering to avoid visible ad flashes.
+            // Unsupported Android System WebViews retain onPageFinished fallback.
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                WebViewCompat.addDocumentStartJavaScript(
+                    this, ShellArticlePrivacy.cosmeticCleanupScript, setOf("*")
+                )
+            }
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                     request.isForMainFrame && (
