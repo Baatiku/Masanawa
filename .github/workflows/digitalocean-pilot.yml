@@ -115,7 +115,7 @@ jobs:
           trap '"${compose[@]}" down --volumes; rm -rf "$smoke_dir"' EXIT
           "${compose[@]}" up -d --no-build --wait --wait-timeout 120 ops
           "${compose[@]}" exec -T ops node --input-type=module -e '
-            for (const path of ["/healthz", "/readyz", "/v1/admin/me", "/v1/admin/summary"]) {
+            for (const path of ["/healthz", "/readyz", "/v1/admin/me", "/v1/admin/summary", "/v1/admin/billing"]) {
               const response = await fetch("http://127.0.0.1:3002" + path);
               const expected = path.startsWith("/v1/") ? 401 : 200;
               if (response.status !== expected) throw new Error(path + ": " + response.status);
