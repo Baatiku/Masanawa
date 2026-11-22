@@ -218,6 +218,7 @@ export async function startOpsService(
       ...(database.voiceAdmin ? {voiceAdmin:database.voiceAdmin}:{}),
       ...(database.evidenceAdmin ? {evidenceAdmin:database.evidenceAdmin}:{}),
       ...(database.walletAdmin ? {walletAdmin:database.walletAdmin}:{}),
+      ...(database.usageBillingAdmin ? {usageBillingAdmin:database.usageBillingAdmin}:{}),
       ...(database.billstackPaymentAdmin ? {billstackPaymentAdmin:database.billstackPaymentAdmin}:{}),
       ...(database.personaAdmin ? {personaAdmin:database.personaAdmin}:{}),
       ...(database.portraitAdmin ? {portraitAdmin:database.portraitAdmin}:{}),
