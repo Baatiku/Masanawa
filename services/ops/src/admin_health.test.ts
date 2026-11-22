@@ -37,7 +37,6 @@ describe("administrator service health", () => {
       ],
       runtimeMetadata: {
         providers: [{ name: "Gemini", configured: true, verification: "not_checked" }],
-      release: { opsSha: "a".repeat(40) },
         flags: [{ name: "MASANAWA_NGN_CALLS_ENABLED", enabled: false }],
         releaseSha: "a".repeat(40),
       },
