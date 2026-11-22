@@ -30,6 +30,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 import java.net.URI
+import ng.unigeria.unigeria.R
 
 /**
  * Unprivileged publisher reader. Publisher content receives no MasanawaNative
@@ -188,7 +189,7 @@ internal class ShellArticleReader(
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.WHITE)
         }
-        val items = listOf(
+        val items: List<Triple<String, String, Int>> = listOf(
             Triple("Home", "home", R.drawable.reader_nav_home),
             Triple("Chats", "chats", R.drawable.reader_nav_chats),
             Triple("Wallet", "wallet", R.drawable.reader_nav_wallet),
