@@ -48,7 +48,7 @@ export interface OpsAppOptions {
   readonly ownerMailbox?:ReturnType<typeof createOwnerMailbox>;
   readonly dataReconciliation?:ReturnType<typeof createDataReconciliation>;
   readonly dataAdmin?: ReturnType<typeof createDataAdmin>;
-  readonly runtimeMetadata?:{providers:readonly {name:string;configured:boolean;verification:string}[];flags:readonly {name:string;enabled:boolean}[]};
+  readonly runtimeMetadata?:{providers:readonly {name:string;configured:boolean;verification:string}[];flags:readonly {name:string;enabled:boolean}[];releaseSha?:string};
   readonly readinessChecks?: readonly ReadinessCheck[];
   /** Read-only, bounded operational checks. Never invoke billable AI turns or financial mutations. */
   readonly serviceHealthChecks?: readonly ReadinessCheck[];
@@ -435,6 +435,10 @@ export function createOpsApp(options: OpsAppOptions = {}) {
           // These values are configuration evidence only, not proof a provider accepts requests.
           providers: options.runtimeMetadata?.providers ?? [],
           flags: options.runtimeMetadata?.flags ?? [],
+          // The Ops container reports its own revision only. Do not infer that
+          // Gateway, Worker or the browser call relay use the same image.
+          release: { opsSha: /^[0-9a-f]{40}$/.test(options.runtimeMetadata?.releaseSha ?? "")
+            ? options.runtimeMetadata?.releaseSha : null },
           limitations: "Endpoint reachability and runtime configuration do not verify an authenticated AI turn or two-way call.",
         };
       }));
