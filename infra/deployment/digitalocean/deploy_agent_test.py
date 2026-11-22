@@ -82,11 +82,11 @@ class DeploymentAgentTests(unittest.TestCase):
     def test_worker_monitoring_credential_is_private_and_stable_across_releases(self):
         source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
         # Work with exactly the embedded private-runtime update, no Docker or network.
-        marker = 'python3 - "$runtime_file" "$release_sha" "$calls_option" <<' + chr(39) + 'PY' + chr(39) + '\\n'
-        script = source.split(marker, 1)[1].split('\\nPY\\n', 1)[0]
+        marker = 'python3 - "$runtime_file" "$release_sha" "$calls_option" <<' + chr(39) + 'PY' + chr(39) + chr(10)
+        script = source.split(marker, 1)[1].split(chr(10) + 'PY' + chr(10), 1)[0]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'runtime.env'
-            path.write_text('MASANAWA_GEMINI_API_KEY=demo-not-used\\n')
+            path.write_text('MASANAWA_GEMINI_API_KEY=demo-not-used' + chr(10))
             command = ['python3', '-c', script, str(path), SHA, 'keep']
             first = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10)
             self.assertNotIn('MASANAWA_OPS_MONITOR_TOKEN', first.stdout + first.stderr)
