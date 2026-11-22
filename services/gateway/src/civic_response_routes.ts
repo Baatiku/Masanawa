@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
+import {createIncidentAudioService} from './incident_audio.js';
+import type {NativeAudioRenderer} from './native_audio.js';
 import Type from 'typebox';
 import { CivicResponseError, RESPONSE_CATEGORIES, type NewIncident, type ResponseActor, createCivicResponseRepository } from '@masanawa/postgres';
 
 type Repository=ReturnType<typeof createCivicResponseRepository>;
-type Options={repository:Repository;authorize:(authorization:string|undefined)=>Promise<ResponseActor>;geminiKey?:string};
+type Options={repository:Repository;authorize:(authorization:string|undefined)=>Promise<ResponseActor>;geminiKey?:string;audioRenderer?:NativeAudioRenderer};
 const uuid='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const small=Type.String({maxLength:100});
 const boolOrNull=Type.Optional(Type.Union([Type.Boolean(),Type.Null()]));
@@ -78,12 +80,143 @@ function failure(error:unknown,reply:{code:(code:number)=>unknown}) {
 export function registerCivicResponseRoutes(app:FastifyInstance,options:Options) {
   const repo=options.repository;
   const admitInterview=providerBudget(20,120),admitTranscription=providerBudget(4,20),admitLive=providerBudget(2,12);
+  const incidentAudio=createIncidentAudioService({apiKey:options.geminiKey,renderer:options.audioRenderer});
   app.get('/v1/response/categories',async()=>({categories:repo.categories()}));
   app.get('/v1/response/contacts',{schema:{querystring:Type.Object({state:Type.Optional(small),serviceType:Type.Optional(small)},{additionalProperties:false})}},async(req,reply)=>{
     try{return {contacts:await repo.contacts(req.query as {state?:string;serviceType?:string})}}catch(error){return failure(error,reply)}
   });
   app.get('/v1/response/public-incidents',{schema:{querystring:Type.Object({category:Type.Optional(Type.String({maxLength:60,pattern:'^[a-z_]+$'})),state:Type.Optional(Type.String({maxLength:80})),limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
     try{return {incidents:await repo.publicIncidents(req.query as {category?:string;state?:string;limit?:number;offset?:number})}}catch(error){return failure(error,reply)}
+  });
+  app.get('/v1/response/public-incidents/:reference/audio',{
+    schema:{params:Type.Object({reference:Type.String({pattern:'^MR-[0-9]{8}-[0-9A-F]{8}Type.Object({limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);const q=req.query as {limit?:number;offset?:number};return {incidents:await repo.myIncidents(actor,q.limit??30,q.offset??0)}}catch(error){return failure(error,reply)}
+  });
+  app.post('/v1/response/incidents',{schema:{body:IncidentBody}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);const result=await repo.create(actor,req.body as NewIncident);reply.code(result.created?201:200);return {...result,agencyForwarded:false,emergencyDispatch:false}}catch(error){return failure(error,reply)}
+  });
+  const ID=Type.Object({id:Type.String({pattern:uuid})},{additionalProperties:false});
+  app.get('/v1/response/incidents/:id',{schema:{params:ID}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);return {incident:await repo.myIncident(actor,(req.params as {id:string}).id)}}catch(error){return failure(error,reply)}
+  });
+  app.get('/v1/response/incidents/:id/events',{schema:{params:ID}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);return {events:await repo.events(actor,(req.params as {id:string}).id)}}catch(error){return failure(error,reply)}
+  });
+  app.post('/v1/response/incidents/:id/update',{schema:{params:ID,body:Type.Object({message:Type.String({minLength:3,maxLength:4000}),expectedRevision:Type.Integer({minimum:1})},{additionalProperties:false})}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);return {incident:await repo.appendReporterUpdate(actor,(req.params as {id:string}).id,req.body as {message:string;expectedRevision:number})}}catch(error){return failure(error,reply)}
+  });
+  app.post('/v1/response/incidents/:id/public-consent',{schema:{params:ID,body:Type.Object({consent:Type.Boolean(),expectedRevision:Type.Integer({minimum:1})},{additionalProperties:false})}},async(req,reply)=>{
+    try{const actor=await options.authorize(req.headers.authorization);return {incident:await repo.setPublicConsent(actor,(req.params as {id:string}).id,req.body as {consent:boolean;expectedRevision:number})}}catch(error){return failure(error,reply)}
+  });
+  // One-use, short-lived credential: the permanent key and raw audio stay off the client/gateway respectively.
+  app.post('/v1/response/live-token',{schema:{body:Type.Object({},{additionalProperties:false})}},async(req,reply)=>{
+    try{
+      const actor=await options.authorize(req.headers.authorization);
+      if(!options.geminiKey){reply.code(503);return {error:'live_reporting_not_configured'};}
+      admitLive(actor);
+      const now=Date.now(),expiresAt=new Date(now+15*60_000).toISOString();
+      const provider=await fetch('https://generativelanguage.googleapis.com/v1beta/auth_tokens',{
+        method:'POST',signal:AbortSignal.timeout(20_000),
+        headers:{'content-type':'application/json','x-goog-api-key':options.geminiKey},
+        body:JSON.stringify({uses:1,expireTime:expiresAt,newSessionExpireTime:new Date(now+60_000).toISOString(),
+          fieldMask:'model,generationConfig',bidiGenerateContentSetup:{model:'models/gemini-3.8-live',generationConfig:{responseModalities:['AUDIO']}}}),
+      });
+      if(!provider.ok){reply.code(503);return {error:'live_reporting_unavailable'};}
+      const payload=await provider.json() as {name?:unknown};
+      if(typeof payload.name!=='string'||payload.name.length<16){reply.code(503);return {error:'live_reporting_unavailable'};}
+      reply.header('Cache-Control','no-store');
+      return {websocketUrl:'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token='+encodeURIComponent(payload.name),
+        model:'gemini-3.8-live',expiresAt};
+    }catch(error){return failure(error,reply)}
+  });
+  app.post('/v1/response/interview',{schema:{body:Type.Object({history:Type.Array(Type.Object({role:Type.Union([Type.Literal('citizen'),Type.Literal('assistant')]),text:Type.String({minLength:1,maxLength:2000})},{additionalProperties:false}),{minItems:1,maxItems:18}),language:Type.Optional(Type.String({maxLength:15}))},{additionalProperties:false})}},async(req,reply)=>{
+    try{
+      admitInterview(await options.authorize(req.headers.authorization));
+      const body=req.body as {history:{role:'citizen'|'assistant';text:string}[];language?:string};
+      const history=body.history;
+      const text=history.filter(row=>row.role==='citizen').map(row=>row.text).join(' ').toLowerCase();
+      const danger=/\b(?:fire|dying|kidnap|shoot|bleed|knife|gun|emergency|danger|unconscious|collapse|robbery)\b/u.test(text);
+      if(!options.geminiKey)return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:false,facts:{},emergencyHint:danger};
+      try{
+        const result=await geminiJson(options.geminiKey,[{text:JSON.stringify({language:body.language||'English',history})}],SYSTEM_INSTRUCTION);
+        if(typeof result.question!=='string'||!result.question.trim())throw new Error('invalid_ai_question');
+        const facts=result.facts&&typeof result.facts==='object'&&!Array.isArray(result.facts)?result.facts:{};
+        return {mode:'ai',question:result.question.slice(0,500),readyToReview:result.readyToReview===true,facts,emergencyHint:danger};
+      }catch{return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:false,facts:{},emergencyHint:danger,providerUnavailable:true};}
+    }catch(error){return failure(error,reply)}
+  });
+  // Multimodal voice intake operates on semantic meaning, not a separate transcript.
+  // Raw audio is sent directly to the configured provider for this one request and is not stored here.
+  app.post('/v1/response/understand-audio',{bodyLimit:2_000_000,schema:{body:Type.Object({
+    mimeType:Type.Union([Type.Literal('audio/webm'),Type.Literal('audio/ogg'),Type.Literal('audio/mp4')]),
+    dataBase64:Type.String({minLength:64,maxLength:1750000}),
+    prompt:Type.Optional(Type.String({maxLength:500})),
+    context:Type.Optional(Type.Record(Type.String({maxLength:35}),Type.String({maxLength:3000}))),
+    language:Type.Optional(Type.String({maxLength:15})),
+  },{additionalProperties:false})}},async(req,reply)=>{
+    try{
+      admitTranscription(await options.authorize(req.headers.authorization));
+      if(!options.geminiKey){reply.code(503);return {error:'voice_understanding_not_configured'};}
+      const body=req.body as {mimeType:string;dataBase64:string;prompt?:string;context?:Record<string,string>;language?:string};
+      const bytes=Buffer.from(body.dataBase64,'base64');
+      if(bytes.length<100||bytes.length>1_250_000||bytes.toString('base64')!==body.dataBase64){
+        reply.code(413);return {error:'audio_format_or_size_invalid'};
+      }
+      const result=await geminiJson(options.geminiKey,[
+        {text:JSON.stringify({language:body.language||'the spoken language',previousReportFacts:body.context??{},
+          mostRecentQuestion:body.prompt||'What happened? Please explain what you know.'})},
+        {inlineData:{mimeType:body.mimeType,data:body.dataBase64}},
+        {text:'Listen to the entire recording and infer only the facts the speaker conveys. Do not generate a transcript. Update the structured report and ask the single most useful missing-information question.'},
+      ],SYSTEM_INSTRUCTION,1700);
+      const record=result.facts&&typeof result.facts==='object'&&!Array.isArray(result.facts)
+        ?result.facts as Record<string,unknown>:{};
+      const allowed=['title','description','category','subcategory','urgency','locationState','locationLga',
+        'locationDetails','incidentAt','peopleAtRisk','injuriesReported','dangerOngoing','reporterSafe'];
+      const facts=Object.fromEntries(Object.entries(record).filter(([key,value])=>
+        allowed.includes(key)&&(typeof value==='string'||typeof value==='boolean'||typeof value==='number'||value===null)));
+      if(typeof facts.category==='string'&&!RESPONSE_CATEGORIES.some(item=>item.id===facts.category))delete facts.category;
+      if(typeof facts.urgency==='string'&&!['routine','priority','urgent','immediate'].includes(facts.urgency))delete facts.urgency;
+      const readyToReview=result.readyToReview===true&&typeof facts.title==='string'&&facts.title.trim().length>=6&&
+        typeof facts.description==='string'&&facts.description.trim().length>=15&&typeof facts.category==='string'&&
+        typeof facts.locationState==='string'&&facts.locationState.trim().length>=2;
+      const question=typeof result.question==='string'&&result.question.trim()?result.question.trim().slice(0,500):
+        readyToReview?'Please review the drafted report and correct any details.':'Which state and LGA did this happen in?';
+      return {mode:'ai_audio',question,readyToReview,facts,
+        emergencyHint:facts.dangerOngoing===true||facts.urgency==='immediate',recordingStored:false};
+    }catch(error){return failure(error,reply)}
+  });
+  app.post('/v1/response/transcribe',{bodyLimit:2_000_000,schema:{body:Type.Object({mimeType:Type.Union([Type.Literal('audio/webm'),Type.Literal('audio/ogg'),Type.Literal('audio/mp4')]),dataBase64:Type.String({minLength:64,maxLength:1750000}),language:Type.Optional(Type.String({maxLength:15}))},{additionalProperties:false})}},async(req,reply)=>{
+    try{
+      admitTranscription(await options.authorize(req.headers.authorization));
+      if(!options.geminiKey){reply.code(503);return {error:'voice_transcription_not_configured'};}
+      const body=req.body as {mimeType:string;dataBase64:string;language?:string};
+      const bytes=Buffer.from(body.dataBase64,'base64');
+      if(bytes.length<100||bytes.length>1_250_000||bytes.toString('base64')!==body.dataBase64){reply.code(413);return {error:'audio_format_or_size_invalid'};}
+      const result=await geminiJson(options.geminiKey,[{inlineData:{mimeType:body.mimeType,data:body.dataBase64}},{text:`Transcribe the spoken audio faithfully in ${body.language||'the spoken language'}. Return JSON {"transcript":"..."}. Never add content.`}],
+        'You are a transcription-only engine. Never fill gaps, interpret, or append unsupported details. Return only the transcript JSON.',3000);
+      const transcript=typeof result.transcript==='string'?result.transcript.slice(0,10000).trim():'';
+      if(!transcript){reply.code(422);return {error:'no_clear_speech_detected'};}
+      return {transcript,recordingStored:false};
+    }catch(error){return failure(error,reply)}
+  });
+}
+})},{additionalProperties:false})}
+  },async(req,reply)=>{
+    try{
+      const source=await repo.publicAudioSource((req.params as {reference:string}).reference);
+      const wav=await incidentAudio.render(source,req.ip||'unavailable');
+      reply.header('Cache-Control','no-store');
+      reply.header('X-Content-Type-Options','nosniff');
+      reply.header('Content-Disposition','inline; filename="masanawa-incident-bulletin.wav"');
+      reply.type('audio/wav');
+      return reply.send(wav);
+    }catch(error){
+      const code=error instanceof CivicResponseError?error.statusCode:
+        error instanceof Error&&error.message==='incident_audio_rate_limited'?429:503;
+      reply.code(code);
+      return {error:error instanceof CivicResponseError?error.code:
+        code===429?'audio_request_limit_reached':'incident_audio_unavailable'};
+    }
   });
   app.get('/v1/response/incidents',{schema:{querystring:Type.Object({limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
     try{const actor=await options.authorize(req.headers.authorization);const q=req.query as {limit?:number;offset?:number};return {incidents:await repo.myIncidents(actor,q.limit??30,q.offset??0)}}catch(error){return failure(error,reply)}
