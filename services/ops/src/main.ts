@@ -254,8 +254,127 @@ export async function startOpsService(
             } catch { return { ready: false }; }
           },
         },
+        {
+          name: "Emergency category route",
+          check: async () => {
+            try {
+              // This proves the public, non-mutating emergency catalogue is mounted,
+              // NOT that incident interviews, location or AI audio work.
+              const response = await fetch("http://gateway:3000/v1/response/categories", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              await response.body?.cancel();
+              return { ready: response.status === 200 };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
+          name: "NGN call admission route",
+          check: async () => {
+            try {
+              // Safe anonymous read with a nonexistent synthetic key: 401 means
+              // the mounted route enforces authentication. 404 means absent/disabled.
+              // No reservation, provider call, money or customer data is accessed.
+              const response = await fetch("http://gateway:3000/v1/ngn/calls/admissions/original/healthcheck_route_probe", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              await response.body?.cancel();
+              return { ready: response.status === 401 };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
+          name: "Browser push registration route",
+          check: async () => {
+            try {
+              // Only check that an anonymous read is refused. This neither
+              // registers a device nor claims real FCM/browser push delivery.
+              const response = await fetch("http://gateway:3000/v1/account/browser-push", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              await response.body?.cancel();
+              return { ready: response.status === 401 };
+            } catch { return { ready: false }; }
+          },
+        },
+        {
+          name: "Worker readiness",
+          check: async () => {
+            try {
+              // Private Compose DNS; an intentionally stopped Worker is not
+              // evidence that background jobs or notifications are operating.
+              const response = await fetch("http://worker:3001/readyz", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              const report = await response.json() as { status?: unknown; checks?: { ready?: unknown }[] };
+              return { ready: response.ok && report.status === "ready" &&
+                (!Array.isArray(report.checks) || report.checks.every(item => item.ready === true)) };
+            } catch { return { ready: false }; }
+          },
+        },
       ],
+      workerJobsReader: async () => {
+        const token = env.MASANAWA_OPS_MONITOR_TOKEN?.trim();
+        if (!token || token.length < 32) throw new Error("worker_monitor_not_configured");
+        const response = await fetch("http://worker:3001/v1/ops/jobs/health", {
+          headers: { authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+        });
+        if (!response.ok) throw new Error("worker_monitor_unavailable");
+        const payload = await response.json() as { jobs?: unknown };
+        if (!Array.isArray(payload.jobs)) throw new Error("worker_monitor_invalid_response");
+        return payload.jobs.slice(0, 40).flatMap<{
+          name: string; stuck: number; enabled?: boolean;
+          runningSeconds?: number; lastSuccessAgeSeconds?: number | null;
+          consecutiveFailures?: number; oldestPendingSeconds?: number;
+        }>(item => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+          const source = item as Record<string, unknown>;
+          if (typeof source.name !== "string" || !/^[a-z0-9_-]{1,80}$/i.test(source.name) ||
+              !Number.isSafeInteger(source.stuck) || Number(source.stuck) < 0) return [];
+          const ready = (n: unknown): n is number =>
+            typeof n === "number" && Number.isFinite(n) && n >= 0;
+          if (typeof source.enabled === "boolean" && ready(source.runningSeconds) &&
+              (source.lastSuccessAgeSeconds === null || ready(source.lastSuccessAgeSeconds)) &&
+              Number.isSafeInteger(source.consecutiveFailures) && Number(source.consecutiveFailures) >= 0) {
+            return [{
+              name: source.name, enabled: source.enabled, runningSeconds: source.runningSeconds,
+              lastSuccessAgeSeconds: source.lastSuccessAgeSeconds as number | null,
+              stuck: source.stuck as number,
+              consecutiveFailures: source.consecutiveFailures as number,
+            }];
+          }
+          if (ready(source.oldestPendingSeconds)) {
+            return [{ name: source.name, stuck: source.stuck as number,
+              oldestPendingSeconds: source.oldestPendingSeconds }];
+          }
+          return [];
+        });
+      },
+      runtimeReleaseChecks: {
+        gateway: async () => {
+          try {
+            const response = await fetch("http://gateway:3000/readyz", {
+              signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+            });
+            const header = response.headers.get("x-masanawa-release");
+            await response.body?.cancel();
+            return header;
+          } catch { return null; }
+        },
+        worker: async () => {
+          try {
+            const response = await fetch("http://worker:3001/readyz", {
+              signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+            });
+            const header = response.headers.get("x-masanawa-release");
+            await response.body?.cancel();
+            return header;
+          } catch { return null; }
+        },
+      },
       runtimeMetadata:{
+        ...(/^[0-9a-f]{40}$/.test(env.MASANAWA_RELEASE_SHA ?? "") ? { releaseSha: env.MASANAWA_RELEASE_SHA! } : {}),
         providers:[['Gemini',['MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY','MASANAWA_ALPHA_GEMINI_API_KEY']],['Billstack',['MASANAWA_BILLSTACK_SECRET_KEY','BILLSTACK_SECRET_KEY']],['Flutterwave',['FLUTTERWAVE_SECRET_KEY','MASANAWA_FLUTTERWAVE_SECRET_KEY']],['Resend',['RESEND_API_KEY','MASANAWA_RESEND_API_KEY']]].map(([name,keys])=>({name:String(name),configured:(keys as string[]).some(k=>Boolean(env[k]?.trim())),verification:'not_checked'})),
         flags:['MASANAWA_NGN_CALLS_ENABLED','MASANAWA_NGN_DATA_CATALOG_ENABLED','MASANAWA_NGN_DATA_PURCHASE_ENABLED','MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED'].map(name=>({name,enabled:env[name]==='true'})),
       },

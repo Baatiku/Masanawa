@@ -79,6 +79,24 @@ class DeploymentAgentTests(unittest.TestCase):
             self.assertEqual(removals.read_text(),
                              'ghcr.io/baatiku/masanawa-do-pilot-worker:' + 'd' * 40 + '\n')
 
+    def test_worker_monitoring_credential_is_private_and_stable_across_releases(self):
+        source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
+        # Work with exactly the embedded private-runtime update, no Docker or network.
+        marker = 'python3 - "$runtime_file" "$release_sha" "$calls_option" <<' + chr(39) + 'PY' + chr(39) + chr(10)
+        script = source.split(marker, 1)[1].split(chr(10) + 'PY' + chr(10), 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'runtime.env'
+            path.write_text('MASANAWA_GEMINI_API_KEY=demo-not-used' + chr(10))
+            command = ['python3', '-c', script, str(path), SHA, 'keep']
+            first = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10)
+            self.assertNotIn('MASANAWA_OPS_MONITOR_TOKEN', first.stdout + first.stderr)
+            rows = path.read_text().splitlines()
+            credential = next(row.split('=', 1)[1] for row in rows if row.startswith('MASANAWA_OPS_MONITOR_TOKEN='))
+            self.assertGreaterEqual(len(credential), 32)
+            subprocess.run(command, check=True, capture_output=True, timeout=10)
+            self.assertEqual(path.read_text().count('MASANAWA_OPS_MONITOR_TOKEN='), 1)
+            self.assertIn('MASANAWA_OPS_MONITOR_TOKEN=' + credential, path.read_text())
+
     def test_worker_memory_override_has_only_the_worker_and_keeps_higher_limits(self):
         source = (ROOT / 'deploy-whatsapp-live.sh').read_text()
         function = source[source.index('write_worker_override(){'):source.index('\nold_worker_memory=')]

@@ -34,6 +34,7 @@ export interface WorkerAppOptions {
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
   readonly opsMonitorToken?: string;
+  readonly releaseSha?: string;
   readonly jobsHealth?: () => readonly JobHealthSnapshot[];
   readonly databaseJobs?: () => Promise<readonly DurableJobSnapshot[]>;
 }
@@ -180,6 +181,9 @@ export function createWorkerApp(options: WorkerAppOptions = {}) {
       ];
 
       const ready = results.every((result) => result.ready);
+      if (options.releaseSha && /^[0-9a-f]{40}$/.test(options.releaseSha)) {
+        reply.header("x-masanawa-release", options.releaseSha).header("cache-control", "no-store");
+      }
       if (!ready) {
         reply.code(503);
       }

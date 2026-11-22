@@ -213,11 +213,19 @@ stage='apply migrations'
   >"$backup/migrations.log" 2>&1
 stage='prepare release settings'
 python3 - "$runtime_file" "$release_sha" "$calls_option" <<'PY'
-import os,sys,tempfile
+import os,secrets,sys,tempfile
 from pathlib import Path
 path=Path(sys.argv[1])
 settings={'MASANAWA_RELEASE_SHA':sys.argv[2],'MASANAWA_WHATSAPP_BROWSER_ENABLED':'true'}
 if sys.argv[3]!='keep': settings['MASANAWA_WHATSAPP_CALLS_ENABLED']=sys.argv[3]
+# The same private runtime file is mounted in Ops and Worker. Mint a strong
+# monitoring secret only once; do not rotate a working token on redeployment.
+existing=[row.partition('=')[2] for row in path.read_text().splitlines()
+          if row.startswith('MASANAWA_OPS_MONITOR_TOKEN=')]
+if not existing:
+    settings['MASANAWA_OPS_MONITOR_TOKEN']=secrets.token_urlsafe(48)
+elif len(existing)!=1 or len(existing[0])<32 or '\\n' in existing[0]:
+    raise SystemExit('Existing private Worker monitor token requires inspection')
 lines=[line for line in path.read_bytes().splitlines(keepends=True)
        if not any(line.lstrip().startswith((key+'=').encode()) for key in settings)]
 contents=b''.join(lines)
@@ -285,6 +293,31 @@ for candidate,active in zip(sys.argv[1::2],sys.argv[2::2],strict=True):
         f.write(candidate.read_bytes());f.flush();os.fsync(f.fileno());name=f.name
     os.chmod(name,0o600);os.replace(name,active)
 PY
+
+
+# The host monitor is installed outside Docker. Refresh that installed copy
+# from the *exact* vetted release rather than leaving an obsolete probe after
+# new Gateway/Ops/Worker images have been deployed. Preserve its old copy for
+# the same rollback checkpoint as the application services.
+stage='refresh private host monitoring'
+monitor_target=/etc/masanawa/operations/monitor.py
+if [ -f "$monitor_target" ] && [ ! -L "$monitor_target" ]; then
+  curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/monitor.py" \
+    >"$backup/monitor.next.py"
+  python3 -m py_compile "$backup/monitor.next.py"
+  cp -p "$monitor_target" "$backup/monitor.before.py"
+  python3 - "$backup/monitor.next.py" "$monitor_target" <<'PY'
+import os,sys,tempfile
+from pathlib import Path
+source,target=Path(sys.argv[1]),Path(sys.argv[2])
+with tempfile.NamedTemporaryFile(dir=target.parent,delete=False) as f:
+    f.write(source.read_bytes());f.flush();os.fsync(f.fileno());name=f.name
+os.chmod(name,0o700);os.replace(name,target)
+PY
+  echo 'Installed exact-release private host monitoring.'
+else
+  echo 'Private monitoring timer not installed; operator activation remains outstanding.'
+fi
 
 trap - ERR INT TERM
 echo 'WHATSAPP VOICE CHECKPOINT AND DEPLOYMENT COMPLETE'

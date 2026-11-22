@@ -128,3 +128,17 @@ describe("worker service bootstrap", () => {
   });
 
 });
+
+describe("worker production revision attestation", () => {
+  it("returns a validated revision header only for an exact SHA", async () => {
+    const good = createWorkerApp({ releaseSha: "a".repeat(40) });
+    const goodResponse = await good.inject({ method: "GET", url: "/readyz" });
+    expect(goodResponse.headers["x-masanawa-release"]).toBe("a".repeat(40));
+    await good.close();
+    const bad = createWorkerApp({ releaseSha: "untrusted-secret-data" });
+    const badResponse = await bad.inject({ method: "GET", url: "/readyz" });
+    expect(badResponse.headers["x-masanawa-release"]).toBeUndefined();
+    expect(badResponse.body).not.toContain("untrusted-secret-data");
+    await bad.close();
+  });
+});

@@ -357,6 +357,7 @@ export async function startWorkerService(
     });
     app = appFactory({
       ...(options.appOptions ?? {}),
+      ...(env.MASANAWA_RELEASE_SHA ? { releaseSha: env.MASANAWA_RELEASE_SHA } : {}),
       ...(env.MASANAWA_OPS_MONITOR_TOKEN?.trim()
         ? { opsMonitorToken: env.MASANAWA_OPS_MONITOR_TOKEN.trim() }
         : {}),

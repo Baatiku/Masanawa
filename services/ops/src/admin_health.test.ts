@@ -38,6 +38,7 @@ describe("administrator service health", () => {
       runtimeMetadata: {
         providers: [{ name: "Gemini", configured: true, verification: "not_checked" }],
         flags: [{ name: "MASANAWA_NGN_CALLS_ENABLED", enabled: false }],
+        releaseSha: "a".repeat(40),
       },
     });
     apps.push(app);
@@ -57,5 +58,88 @@ describe("administrator service health", () => {
     });
     expect(response.headers["cache-control"]).toContain("private, no-store");
     expect(response.body).not.toContain("private-secret-from-provider");
+  });
+});
+
+describe("safe release evidence", () => {
+  it("never exposes arbitrary runtime metadata as a release SHA", async () => {
+    const app = createOpsApp({
+      adminDashboard: operator(),
+      runtimeMetadata: { providers: [], flags: [], releaseSha: "secret-or-untrusted-value" },
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET", url: "/v1/admin/health",
+      headers: { authorization: "Bearer valid-admin" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().release).toEqual({ opsSha: null, gatewaySha: null, workerSha: null, matching: false });
+    expect(response.body).not.toContain("secret-or-untrusted-value");
+  });
+});
+
+describe("cross-container release parity", () => {
+  it("requires three valid identical revisions before reporting parity", async () => {
+    const sha = "b".repeat(40);
+    const app = createOpsApp({
+      adminDashboard: operator(),
+      runtimeMetadata: { providers: [], flags: [], releaseSha: sha },
+      runtimeReleaseChecks: { gateway: async () => sha, worker: async () => sha },
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET", url: "/v1/admin/health",
+      headers: { authorization: "Bearer valid-admin" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().release).toEqual({ opsSha: sha, gatewaySha: sha, workerSha: sha, matching: true });
+  });
+
+  it("does not invent healthy parity when the Worker is stale or unreachable", async () => {
+    const sha = "b".repeat(40), old = "c".repeat(40);
+    const app = createOpsApp({
+      adminDashboard: operator(),
+      runtimeMetadata: { providers: [], flags: [], releaseSha: sha },
+      runtimeReleaseChecks: { gateway: async () => sha, worker: async () => old },
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET", url: "/v1/admin/health",
+      headers: { authorization: "Bearer valid-admin" },
+    });
+    expect(response.json().release).toEqual({ opsSha: sha, gatewaySha: sha, workerSha: old, matching: false });
+  });
+});
+
+describe("private Worker job monitoring", () => {
+  it("does not query job metrics before administrator authorization", async () => {
+    let probed = false;
+    const app = createOpsApp({ adminDashboard: operator(),
+      workerJobsReader: async () => { probed = true; return []; } });
+    apps.push(app);
+    const rejected = await app.inject({ method: "GET", url: "/v1/admin/worker-jobs" });
+    expect(rejected.statusCode).toBe(401);
+    expect(probed).toBe(false);
+  });
+
+  it("returns bounded sanitized job metrics and avoids leaking worker exceptions", async () => {
+    const sample = Array.from({ length: 55 }, (_, i) => ({
+      name: `queue_${i}`, stuck: i, oldestPendingSeconds: i * 3,
+    }));
+    const app = createOpsApp({ adminDashboard: operator(),
+      workerJobsReader: async () => sample });
+    apps.push(app);
+    const accepted = await app.inject({ method: "GET", url: "/v1/admin/worker-jobs",
+      headers: { authorization: "Bearer valid-admin" } });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().jobs).toHaveLength(40);
+    const failing = createOpsApp({ adminDashboard: operator(),
+      workerJobsReader: async () => { throw new Error("private-token-should-not-leak"); } });
+    apps.push(failing);
+    const failure = await failing.inject({ method: "GET", url: "/v1/admin/worker-jobs",
+      headers: { authorization: "Bearer valid-admin" } });
+    expect(failure.statusCode).toBe(503);
+    expect(failure.body).toContain("worker_job_monitoring_unavailable");
+    expect(failure.body).not.toContain("private-token-should-not-leak");
   });
 });
