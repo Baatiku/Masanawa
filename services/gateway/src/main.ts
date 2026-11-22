@@ -1021,7 +1021,7 @@ export async function startGatewayService(
       const fallbackModel =
         env.MASANAWA_GEMINI_MODEL?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_MODEL?.trim() ||
-        "gemini-3.8-flash";
+        "gemini-3.6-flash";
       const credentialsJson =
         env.MASANAWA_GEMINI_CREDENTIALS_JSON?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_IMPORTED_CREDENTIALS_JSON?.trim();
