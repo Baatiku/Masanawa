@@ -555,7 +555,7 @@ class ShellActivity : ComponentActivity() {
             "news-unread-count" -> {
                 // Trusted main-frame origin; public headline, never account data.
                 val count = payload.optInt("count", -1)
-                if (count in 0..999) ShellPush.updateNewsBadge(this, count, payload.optString("headline"))
+                if (count in 0..999) ShellPush.updateNewsBadge(this, count, payload.optString("headline"), payload.optJSONArray("articles"))
             }
             "privacy" -> {
                 protectScreen = payload.optBoolean("enabled", false)
