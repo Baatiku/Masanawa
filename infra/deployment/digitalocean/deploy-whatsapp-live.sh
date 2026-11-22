@@ -213,11 +213,19 @@ stage='apply migrations'
   >"$backup/migrations.log" 2>&1
 stage='prepare release settings'
 python3 - "$runtime_file" "$release_sha" "$calls_option" <<'PY'
-import os,sys,tempfile
+import os,secrets,sys,tempfile
 from pathlib import Path
 path=Path(sys.argv[1])
 settings={'MASANAWA_RELEASE_SHA':sys.argv[2],'MASANAWA_WHATSAPP_BROWSER_ENABLED':'true'}
 if sys.argv[3]!='keep': settings['MASANAWA_WHATSAPP_CALLS_ENABLED']=sys.argv[3]
+# The same private runtime file is mounted in Ops and Worker. Mint a strong
+# monitoring secret only once; do not rotate a working token on redeployment.
+existing=[row.partition('=')[2] for row in path.read_text().splitlines()
+          if row.startswith('MASANAWA_OPS_MONITOR_TOKEN=')]
+if not existing:
+    settings['MASANAWA_OPS_MONITOR_TOKEN']=secrets.token_urlsafe(48)
+elif len(existing)!=1 or len(existing[0])<32 or '\\n' in existing[0]:
+    raise SystemExit('Existing private Worker monitor token requires inspection')
 lines=[line for line in path.read_bytes().splitlines(keepends=True)
        if not any(line.lstrip().startswith((key+'=').encode()) for key in settings)]
 contents=b''.join(lines)
