@@ -14,6 +14,7 @@ function fixture(){
   const ports:NgnCallPorts={
     authorize:async()=>actor,approved:async()=>({version}),
     balance:async()=>({balanceKobo:55000,heldKobo:10000,availableKobo:45000,debtKobo:0,frozen:false}),
+    pricing:async()=>({billingEnabled:true,replyKobo:200,callKoboPerStartedSecond:100,revision:0}),
     ready:()=>ready,reviewSecret:'test-only-private-call-review-key-32-bytes',now:()=>new Date(time),
     journal:{admit,read:async()=>original,readOriginal:async()=>original},
   };
@@ -22,6 +23,15 @@ function fixture(){
     advance:(ms:number)=>{time+=ms},version:(v:string)=>{version=v},ready:(v:boolean)=>{ready=v}};
 }
 describe('protected direct NGN call review',()=>{
+  it('fails safe to a free, zero-wallet call if the pricing adapter is not attached',async()=>{
+    const f=fixture();
+    delete f.ports.pricing;
+    f.ports.balance=async()=>({balanceKobo:0,heldKobo:0,availableKobo:0,debtKobo:0,frozen:false});
+    const review=await f.service.review(f.actor,f.args);
+    expect(review).toMatchObject({budgetKobo:0,maxConnectedSeconds:600,rateKoboPerStartedSecond:0});
+    expect(await f.service.confirm(f.actor,{reviewToken:review.reviewToken,accepted:true}))
+      .toMatchObject({budgetKobo:0,rateKoboPerStartedSecond:0});
+  });
   it('quotes the exact spendable budget and creates no hold until explicit acceptance',async()=>{
     const f=fixture(),review=await f.service.review(f.actor,f.args);
     expect(review).toMatchObject({budgetKobo:45000,maxConnectedSeconds:450,rateKoboPerStartedSecond:100,ringingCostKobo:0});

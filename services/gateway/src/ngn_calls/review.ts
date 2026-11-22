@@ -74,7 +74,7 @@ export function createNgnCallReviewService(ports:NgnCallPorts){
          input.expectedSeconds<1||input.expectedSeconds>3600)fail('invalid_budget',422);
       const approved=await ports.approved(actor,input.characterId);
       if(!approved||!approved.version||approved.version.length>160)fail('masana_unavailable',404);
-      const billing=await ports.pricing?.(actor)??{billingEnabled:true,replyKobo:200,callKoboPerStartedSecond:100,revision:0};
+      const billing=await ports.pricing?.(actor)??{billingEnabled:false,replyKobo:200,callKoboPerStartedSecond:100,revision:0};
       const rateKoboPerStartedSecond=billing.billingEnabled?billing.callKoboPerStartedSecond:0;
       let maxConnectedSeconds=input.expectedSeconds;
       if(rateKoboPerStartedSecond>0){

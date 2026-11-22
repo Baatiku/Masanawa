@@ -11,9 +11,10 @@ describe('durable direct NGN reply settlement and historical MB recovery',()=>{
  let pool:Pool,close:()=>Promise<unknown>;
  beforeAll(async()=>{({pool,close}=await ngnSqlFixture());},120000);
  afterAll(async()=>{await close?.();});
- const fixture=async(cash=1000)=>{
+ const fixture=async(cash=1000,billed=true)=>{
   const scope={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user'),characterId:createCanonicalId('character'),relationshipId:createCanonicalId('relationship')};
   await pool.query('INSERT INTO gb_wallet.ngn_accounts(tenant_id,account_id,balance_kobo) VALUES($1,$2,$3)',[scope.tenantId,scope.userId,cash]);
+  if(billed)await createUsageBillingRepository(pool).write({tenantId:scope.tenantId,actorId:'test_pricing_setup',expectedRevision:0,billingEnabled:true,replyKobo:200,callKoboPerStartedSecond:100});
   const request={scope,characterSessionId:createCanonicalId('character-session'),requestId:createCanonicalId('request'),kind:'text' as const,userText:'hello',payloadHash:'a'.repeat(64)};
   const repo=createPostgresMobileShellRepository(pool,{billReplies:true});
   const finish={scope,requestId:request.requestId,agentRunId:createCanonicalId('agent-run'),reply:'A durable answer',parts:[]};
@@ -33,10 +34,11 @@ describe('durable direct NGN reply settlement and historical MB recovery',()=>{
   await f.repo.completeTurn(finish);await f.repo.completeTurn(finish);expect(await f.balance()).toMatchObject({balanceKobo:800,heldKobo:0});
  });
  it('gives zero-wallet citizens real free text and voice replies when admin billing is disabled',async()=>{
-   const f=await fixture(0);
+   const f=await fixture(0,false);
    const billing=createUsageBillingRepository(pool);
-   await billing.write({tenantId:f.scope.tenantId,actorId:'admin_owner',expectedRevision:0,
-     billingEnabled:false,replyKobo:350,callKoboPerStartedSecond:125});
+   expect(await billing.read(f.scope.tenantId)).toMatchObject({
+     billingEnabled:false,replyKobo:200,callKoboPerStartedSecond:100,revision:0
+   });
    const request={...f.request,kind:'media' as const};
    expect((await f.repo.claimTurn(request)).state).toBe('created');
    expect(await f.balance()).toMatchObject({balanceKobo:0,heldKobo:0,availableKobo:0});
@@ -46,7 +48,7 @@ describe('durable direct NGN reply settlement and historical MB recovery',()=>{
    expect(count.rows[0].n).toBe(0);
  });
  it('holds the current custom reply price and settles its ORIGINAL tariff after a policy change',async()=>{
-   const f=await fixture(1000),billing=createUsageBillingRepository(pool);
+   const f=await fixture(1000,false),billing=createUsageBillingRepository(pool);
    await billing.write({tenantId:f.scope.tenantId,actorId:'admin_owner',expectedRevision:0,
      billingEnabled:true,replyKobo:350,callKoboPerStartedSecond:125});
    await f.repo.claimTurn(f.request);

@@ -12,7 +12,7 @@ describe('direct NGN cutover',()=>{
  });
  it('projects only authoritative NGN balance and rates without exchange',async()=>{
   const app=createGatewayApp({directNgnWallet:{authorize:async()=>({tenantId:'tenant',userId:'alice'}),balance:async()=>({balanceKobo:1000,heldKobo:200,availableKobo:800,debtKobo:0,frozen:false}),holds:async()=>[]}});
-  try{const r=await app.inject({url:'/v1/ngn/wallet/summary'});expect(r.statusCode).toBe(200);expect(r.json()).toMatchObject({balance:{currency:'NGN',unit:'kobo',totalKobo:1000,availableKobo:800,reservedKobo:200},rates:{replyKobo:200,callKoboPerStartedSecond:100}});}finally{await app.close();}
+  try{const r=await app.inject({url:'/v1/ngn/wallet/summary'});expect(r.statusCode).toBe(200);expect(r.json()).toMatchObject({balance:{currency:'NGN',unit:'kobo',totalKobo:1000,availableKobo:800,reservedKobo:200},rates:{billingEnabled:false,replyKobo:0,callKoboPerStartedSecond:0}});}finally{await app.close();}
  });
  it('guards NGN mutations and strictly permits receipt/request push hints',()=>{
   for(const path of ['/v1/ngn/wallet/send/confirm','/v1/ngn/wallet/requests','/v1/ngn/data/buy','/v1/ngn/calls/admissions'])expect(requiresFinancialCustomerState('POST',path)).toBe(true);
