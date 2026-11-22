@@ -27,14 +27,14 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
   });
   afterAll(async()=>{await pool?.end()});
   const sound={serverContent:{modelTurn:{parts:[{inlineData:{data:'ABAAAA==',mimeType:'audio/pcm;rate=24000'}}]}}};
-  async function fixture(seconds=5,{heartbeatMs=5000,manualPong=false,providerError=false,suppressPong=false,silent=false}={}){
-    const budgetKobo=seconds*100;
+  async function fixture(seconds=5,{heartbeatMs=5000,manualPong=false,providerError=false,suppressPong=false,silent=false,rateKoboPerSecond=100}={}){
+    const budgetKobo=seconds*rateKoboPerSecond;
     const actor={tenantId:createCanonicalId('tenant'),userId:createCanonicalId('user')};
     const characterId=createCanonicalId('character');
     await pool.query(`INSERT INTO gb_wallet.ngn_accounts(tenant_id,account_id,balance_kobo)
       VALUES($1,$2,5000)`,[actor.tenantId,actor.userId]);
     const store=createNgnCallAdmissions(pool);
-    const {admissionId:id}=await store.admit(actor,{characterId,budgetKobo,idempotencyKey:'relay-original-call'});
+    const {admissionId:id}=await store.admit(actor,{characterId,budgetKobo,rateKoboPerStartedSecond:rateKoboPerSecond,maxConnectedSeconds:seconds,idempotencyKey:'relay-original-call'});
     const upstream=new WebSocketServer({host:'127.0.0.1',port:0,autoPong:!manualPong&&!suppressPong});
     await once(upstream,'listening');
     const address=upstream.address();if(!address||typeof address==='string')throw Error('Invalid test address');
@@ -88,6 +88,20 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     return {actor,characterId,id,store,relay,validate,validateOwner,report,issue,socket,open,setup,cleanup,origin,
       received,provider:()=>provider,grant:providerGrant,advanceClock:(ms:number)=>{clockOffset+=ms;}};
   }
+  it('connects a free call with zero wallet hold and settles zero cost after real audio',async()=>{
+    const f=await fixture(3,{rateKoboPerSecond:0});
+    try{
+      const admission=await f.store.read(f.actor,f.id);
+      expect(admission).toMatchObject({state:'reserved',budgetKobo:0,rateKoboPerStartedSecond:0,maxConnectedSeconds:3});
+      const client=await f.open(await f.issue());
+      await f.setup(client);
+      await new Promise(resolve=>setTimeout(resolve,20));
+      const closed=once(client,'close');client.close(1000);await closed;
+      const receipt=await f.relay.finish(f.actor,f.id);
+      expect(receipt).toMatchObject({state:'completed',budgetKobo:0,chargedKobo:0,rateKoboPerStartedSecond:0});
+      expect(receipt.verifiedConnectedMs).toBeGreaterThan(0);
+    }finally{await f.cleanup()}
+  });
   it('serves only server-owned public evidence tools inside the authenticated call',async()=>{
     const f=await fixture();const evidence={officialName:'Example Official',office:'Governor',countryCode:'NG' as const,identitySourceUrl:'https://example.gov.ng',reviewedAt:'2026-10-01',reviewExpiresAt:'2099-01-01',evidence:[]};
     const lookup=vi.fn(async()=>evidence);
