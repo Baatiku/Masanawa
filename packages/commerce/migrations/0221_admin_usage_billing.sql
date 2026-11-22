@@ -37,7 +37,8 @@ ALTER TABLE gb_wallet.ngn_call_admissions
  (rate_kobo_per_started_second>0 AND budget_kobo=max_connected_seconds*rate_kobo_per_started_second));
 ALTER TABLE gb_wallet.ngn_call_admissions
  DROP CONSTRAINT IF EXISTS ngn_call_admissions_budget_kobo_check,
- DROP CONSTRAINT IF EXISTS ngn_call_admissions_verified_connected_ms_check;
+ DROP CONSTRAINT IF EXISTS ngn_call_admissions_verified_connected_ms_check,
+ DROP CONSTRAINT IF EXISTS ngn_call_admissions_check1;
 ALTER TABLE gb_wallet.ngn_call_admissions
  ADD CONSTRAINT ngn_call_new_budget CHECK(budget_kobo BETWEEN 0 AND 360000000),
  ADD CONSTRAINT ngn_call_new_verified_ms
