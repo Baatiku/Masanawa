@@ -175,7 +175,7 @@ internal object ShellPush {
         val incoming = ShellNewsDigest.read(previews)
         val fallback = if (incoming.isEmpty() && prior.isEmpty())
             ShellNewsDigest.normalized("news-last", "Masanawa News", latestHeadline, null)
-                ?.let(::listOf) ?: emptyList() else emptyList()
+                ?.let { listOf(it) } ?: emptyList() else emptyList()
         val items = ShellNewsDigest.merge(incoming + fallback, prior)
         val encoded = ShellNewsDigest.encode(items)
         val unchanged = prefs.getInt("unread", -1) == count &&
