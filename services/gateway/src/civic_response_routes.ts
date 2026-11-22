@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
+import {createIncidentAudioService} from './incident_audio.js';
+import type {NativeAudioRenderer} from './native_audio.js';
 import Type from 'typebox';
 import { CivicResponseError, RESPONSE_CATEGORIES, type NewIncident, type ResponseActor, createCivicResponseRepository } from '@masanawa/postgres';
 
 type Repository=ReturnType<typeof createCivicResponseRepository>;
-type Options={repository:Repository;authorize:(authorization:string|undefined)=>Promise<ResponseActor>;geminiKey?:string};
+type Options={repository:Repository;authorize:(authorization:string|undefined)=>Promise<ResponseActor>;geminiKey?:string;audioRenderer?:NativeAudioRenderer};
 const uuid='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const small=Type.String({maxLength:100});
 const boolOrNull=Type.Optional(Type.Union([Type.Boolean(),Type.Null()]));
@@ -78,12 +80,35 @@ function failure(error:unknown,reply:{code:(code:number)=>unknown}) {
 export function registerCivicResponseRoutes(app:FastifyInstance,options:Options) {
   const repo=options.repository;
   const admitInterview=providerBudget(20,120),admitTranscription=providerBudget(4,20),admitLive=providerBudget(2,12);
+  const incidentAudio=createIncidentAudioService({
+    ...(options.geminiKey?{apiKey:options.geminiKey}:{}),
+    ...(options.audioRenderer?{renderer:options.audioRenderer}:{}),
+  });
   app.get('/v1/response/categories',async()=>({categories:repo.categories()}));
   app.get('/v1/response/contacts',{schema:{querystring:Type.Object({state:Type.Optional(small),serviceType:Type.Optional(small)},{additionalProperties:false})}},async(req,reply)=>{
     try{return {contacts:await repo.contacts(req.query as {state?:string;serviceType?:string})}}catch(error){return failure(error,reply)}
   });
   app.get('/v1/response/public-incidents',{schema:{querystring:Type.Object({category:Type.Optional(Type.String({maxLength:60,pattern:'^[a-z_]+$'})),state:Type.Optional(Type.String({maxLength:80})),limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
     try{return {incidents:await repo.publicIncidents(req.query as {category?:string;state?:string;limit?:number;offset?:number})}}catch(error){return failure(error,reply)}
+  });
+  app.get('/v1/response/public-incidents/:reference/audio',{
+    schema:{params:Type.Object({reference:Type.String({pattern:'^MR-[0-9]{8}-[0-9A-F]{8}$'})},{additionalProperties:false})}
+  },async(req,reply)=>{
+    try{
+      const source=await repo.publicAudioSource((req.params as {reference:string}).reference);
+      const wav=await incidentAudio.render(source,req.ip||'unavailable');
+      reply.header('Cache-Control','no-store');
+      reply.header('X-Content-Type-Options','nosniff');
+      reply.header('Content-Disposition','inline; filename="masanawa-incident-bulletin.wav"');
+      reply.type('audio/wav');
+      return reply.send(wav);
+    }catch(error){
+      const code=error instanceof CivicResponseError?error.statusCode:
+        error instanceof Error&&error.message==='incident_audio_rate_limited'?429:503;
+      reply.code(code);
+      return {error:error instanceof CivicResponseError?error.code:
+        code===429?'audio_request_limit_reached':'incident_audio_unavailable'};
+    }
   });
   app.get('/v1/response/incidents',{schema:{querystring:Type.Object({limit:Type.Optional(Type.Integer({minimum:1,maximum:50})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000}))},{additionalProperties:false})}},async(req,reply)=>{
     try{const actor=await options.authorize(req.headers.authorization);const q=req.query as {limit?:number;offset?:number};return {incidents:await repo.myIncidents(actor,q.limit??30,q.offset??0)}}catch(error){return failure(error,reply)}

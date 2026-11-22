@@ -6,15 +6,16 @@ const reporter={tenantId:'tenant_verified',userId:'user_verified'};
 const report={requestKey:'request_response_test_001',title:'Unsafe electrical cable',description:'An exposed live power cable has fallen near the local market.',
   category:'infrastructure',subcategory:'Exposed electrical wires',urgency:'urgent',locationState:'Oyo',sourceMode:'typed'};
 
-function app(geminiKey?:string){
+function app(geminiKey?:string,audioRenderer?:{render:(text:string)=>Promise<{dataBase64:string;mimeType:string;durationMs:number}>}){
   const service={
     categories:vi.fn(()=>[{id:'infrastructure',label:'Infrastructure'}]),contacts:vi.fn(async()=>[{id:'ng-emergency-112',phone:'112',verificationStatus:'verified'}]),
     create:vi.fn(async()=>({created:true,incident:{id:'ea46a4b0-4349-4106-bb32-ddb331ed901f',reference:'MR-20261120-EA46A4B0'}})),
     myIncidents:vi.fn(async()=>[]),myIncident:vi.fn(async()=>({title:'Private report'})),events:vi.fn(async()=>[]),
-    appendReporterUpdate:vi.fn(async()=>({revision:2})),setPublicConsent:vi.fn(async()=>({publicConsent:false})),publicIncidents:vi.fn(async()=>[{reference:'MR-PUBLIC-1',title:'Reviewed water outage',summary:'A public water supply outage is under review.',locationState:'Oyo',category:'water_sanitation',status:'triage'}]),adminList:vi.fn(),adminIncident:vi.fn(),adminUpdate:vi.fn(),saveContact:vi.fn(),
+    appendReporterUpdate:vi.fn(async()=>({revision:2})),setPublicConsent:vi.fn(async()=>({publicConsent:false})),
+    publicAudioSource:vi.fn(async()=>({reference:'MR-20261120-EA46A4B0',title:'Reviewed water outage',summary:'Some residents report interrupted water supplies.',category:'water_sanitation',locationState:'Oyo',locationLga:'Ibadan North',status:'triage',publicationStatus:'published'})),publicIncidents:vi.fn(async()=>[{reference:'MR-PUBLIC-1',title:'Reviewed water outage',summary:'A public water supply outage is under review.',locationState:'Oyo',category:'water_sanitation',status:'triage'}]),adminList:vi.fn(),adminIncident:vi.fn(),adminUpdate:vi.fn(),saveContact:vi.fn(),
   };
   const server=Fastify();registerCivicResponseRoutes(server,{repository:service as never,
-    authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;},...(geminiKey?{geminiKey}:{})});
+    authorize:async(header)=>{if(header!=='Bearer valid')throw new Error('UNAUTHORIZED');return reporter;},...(geminiKey?{geminiKey}:{}),...(audioRenderer?{audioRenderer:audioRenderer as never}:{})});
   return {server,service};
 }
 
@@ -46,6 +47,50 @@ describe('Masanawa Response route boundary',()=>{
     expect((await server.inject({method:'POST',url:path,payload:{consent:true,expectedRevision:1}})).statusCode).toBe(401);
     expect((await server.inject({method:'POST',url:path,headers:{authorization:'Bearer valid'},payload:{consent:false,expectedRevision:2}})).statusCode).toBe(200);
     expect(service.setPublicConsent).toHaveBeenCalledWith(reporter,expect.any(String),{consent:false,expectedRevision:2});
+    await server.close();
+  });
+  it('returns no synthesized audio without a configured provider or a public case',async()=>{
+    const {server,service}=app();
+    const url='/v1/response/public-incidents/MR-20261120-EA46A4B0/audio';
+    expect((await server.inject({url})).statusCode).toBe(503);
+    expect((await server.inject({url:'/v1/response/public-incidents/private-case/audio'})).statusCode).toBe(400);
+    service.publicAudioSource.mockRejectedValueOnce(new Error('private'));
+    expect((await server.inject({url})).statusCode).toBe(503);
+    await server.close();
+  });
+  it('renders a public WAV bulletin from reviewed fields, never the reporter recording',async()=>{
+    const render=vi.fn(async(_text:string)=>({mimeType:'audio/l16;rate=24000',
+      dataBase64:Buffer.from([0,0,255,127]).toString('base64'),durationMs:1}));
+    const {server,service}=app(undefined,{render});
+    const url='/v1/response/public-incidents/MR-20261120-EA46A4B0/audio';
+    const first=await server.inject({url});
+    expect(first.statusCode).toBe(200);
+    expect(first.headers['content-type']).toContain('audio/wav');
+    expect(first.headers['cache-control']).toBe('no-store');
+    expect(first.rawPayload.toString('ascii',0,4)).toBe('RIFF');
+    expect(first.rawPayload.toString('ascii',8,12)).toBe('WAVE');
+    expect(render).toHaveBeenCalledOnce();
+    const script=render.mock.calls[0]?.[0];
+    expect(script).toContain('reviewed for public safety');
+    expect(script).not.toContain('Private report');
+    expect((await server.inject({url})).statusCode).toBe(200);
+    expect(render).toHaveBeenCalledOnce();
+    expect(service.publicAudioSource).toHaveBeenCalledTimes(2); // revocation is re-checked even on a cache hit
+    await server.close();
+  });
+  it('does not narrate unreviewed citizen allegations as verified facts',async()=>{
+    const render=vi.fn(async(_text:string)=>({mimeType:'audio/l16;rate=24000',
+      dataBase64:Buffer.from([0,0,0,0]).toString('base64'),durationMs:1}));
+    const {server,service}=app(undefined,{render});
+    service.publicAudioSource.mockResolvedValueOnce({
+      reference:'MR-20261120-EA46A4B0',title:'A private identifying allegation',
+      summary:'Private identifying allegation not yet reviewed',category:'infrastructure',
+      locationState:'Oyo',locationLga:'Ibadan North',status:'submitted',publicationStatus:'pending_review'});
+    const r=await server.inject({url:'/v1/response/public-incidents/MR-20261120-EA46A4B0/audio'});
+    expect(r.statusCode).toBe(200);
+    const script=render.mock.calls[0]?.[0];
+    expect(script).toContain('remain unverified');
+    expect(script).not.toContain('private identifying allegation');
     await server.close();
   });
   it('guides dangerous situations toward 112 without inventing AI availability',async()=>{

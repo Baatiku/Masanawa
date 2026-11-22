@@ -67,8 +67,10 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     expect(consented.publicationStatus).toBe('pending_review');
     const pending=await repo.publicIncidents();
     expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({publicationStatus:'pending_review',title:'New community incident report',locationState:'Oyo',locationLga:'Ibadan North',locationDetails:'western market entrance'});
+    expect(pending[0]).toMatchObject({publicationStatus:'pending_review',title:'Reported infrastructure issue in Oyo',locationState:'Oyo',locationLga:'Ibadan North',locationDetails:'western market entrance'});
     expect(JSON.stringify(pending)).not.toContain('citizen_public');
+    const pendingAudio=await repo.publicAudioSource(fresh.incident.reference);
+    expect(pendingAudio).toMatchObject({publicationStatus:'pending_review',title:'',summary:'',locationState:'Oyo'});
     const reviewed=await repo.reviewPublication(staff,id,{expectedRevision:2,reason:'Reviewed for privacy, no identifiable details',publish:true,
       publicTitle:'Power supply safety problem in Oyo',publicSummary:'A reported public electrical hazard has been logged for internal review. No official dispatch has been confirmed.'});
     expect(reviewed.publicationStatus).toBe('published');
@@ -76,6 +78,9 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     expect(publicResult).toHaveLength(1);
     expect(Object.keys(publicResult[0]!).sort()).toEqual(['category','locationState','locationLga','locationDetails','publicationStatus','publishedAt','reference','status','summary','title','updatedAt'].sort());
     expect(publicResult[0]?.publicationStatus).toBe('published');
+    const reviewedAudio=await repo.publicAudioSource(fresh.incident.reference);
+    expect(reviewedAudio).toMatchObject({publicationStatus:'published',title:'Power supply safety problem in Oyo'});
+    expect(reviewedAudio.summary).toContain('No official dispatch');
     expect(JSON.stringify(publicResult)).toContain('western market entrance');
     expect(JSON.stringify(publicResult)).not.toContain('citizen_public');
     expect((await repo.publicIncidents({state:'Lagos'}))).toHaveLength(0);
@@ -85,9 +90,10 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     const revoked=await repo.setPublicConsent(reporter,id,{consent:false,expectedRevision:3});
     expect(revoked.publicationStatus).toBe('private');
     expect(await repo.publicIncidents()).toEqual([]);
+    await expect(repo.publicAudioSource(fresh.incident.reference)).rejects.toMatchObject({code:'public_incident_not_found'});
     expect((await repo.events(staff,id,true)).map(x=>x.action)).toEqual(expect.arrayContaining(['publication_requested','publication_approved','publication_consent_withdrawn']));
   });
-  it('shows an opted-in citizen-reviewed synopsis immediately while stripping contact numbers',async()=>{
+  it('keeps private citizen-approved synopsis out of the pending public feed while stripping contact numbers',async()=>{
     const repo=createCivicResponseRepository(pool);
     const result=await repo.create({tenantId:'tenant_response',userId:'citizen_live'},{
       ...draft,requestKey:'request_live_public_20261120',publicConsent:true,
@@ -98,9 +104,12 @@ describe('Response Centre SQL authorization, review and audit',()=>{
     const publicRows=await repo.publicIncidents({state:'Oyo'});
     const row=publicRows.find(item=>item.reference===result.incident.reference);
     expect(row).toMatchObject({publicationStatus:'pending_review',locationLga:'Ibadan North',locationDetails:'Main market junction, Ibadan',
-      title:'Exposed power cables near the community market'});
-    expect(row.summary).toContain('Exposed electricity cables');
-    expect(row.summary).not.toContain('08012345678');
+      title:'Reported infrastructure issue in Oyo'});
+    expect(row.summary).toContain('have not been independently verified');
+    expect(row.summary).not.toContain('Exposed electricity cables');
+    const stored=await repo.myIncident({tenantId:'tenant_response',userId:'citizen_live'},result.incident.id);
+    expect(stored.publicSummary).toContain('Exposed electricity cables');
+    expect(stored.publicSummary).not.toContain('08012345678');
     expect(JSON.stringify(row)).not.toContain('citizen_live');
   });
 });
