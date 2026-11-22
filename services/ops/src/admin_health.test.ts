@@ -37,7 +37,9 @@ describe("administrator service health", () => {
       ],
       runtimeMetadata: {
         providers: [{ name: "Gemini", configured: true, verification: "not_checked" }],
+      release: { opsSha: "a".repeat(40) },
         flags: [{ name: "MASANAWA_NGN_CALLS_ENABLED", enabled: false }],
+        releaseSha: "a".repeat(40),
       },
     });
     apps.push(app);
@@ -57,5 +59,22 @@ describe("administrator service health", () => {
     });
     expect(response.headers["cache-control"]).toContain("private, no-store");
     expect(response.body).not.toContain("private-secret-from-provider");
+  });
+});
+
+describe("safe release evidence", () => {
+  it("never exposes arbitrary runtime metadata as a release SHA", async () => {
+    const app = createOpsApp({
+      adminDashboard: operator(),
+      runtimeMetadata: { providers: [], flags: [], releaseSha: "secret-or-untrusted-value" },
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET", url: "/v1/admin/health",
+      headers: { authorization: "Bearer valid-admin" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().release).toEqual({ opsSha: null });
+    expect(response.body).not.toContain("secret-or-untrusted-value");
   });
 });
