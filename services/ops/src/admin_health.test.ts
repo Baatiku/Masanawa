@@ -74,7 +74,40 @@ describe("safe release evidence", () => {
       headers: { authorization: "Bearer valid-admin" },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().release).toEqual({ opsSha: null });
+    expect(response.json().release).toEqual({ opsSha: null, gatewaySha: null, workerSha: null, matching: false });
     expect(response.body).not.toContain("secret-or-untrusted-value");
+  });
+});
+
+describe("cross-container release parity", () => {
+  it("requires three valid identical revisions before reporting parity", async () => {
+    const sha = "b".repeat(40);
+    const app = createOpsApp({
+      adminDashboard: operator(),
+      runtimeMetadata: { providers: [], flags: [], releaseSha: sha },
+      runtimeReleaseChecks: { gateway: async () => sha, worker: async () => sha },
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET", url: "/v1/admin/health",
+      headers: { authorization: "Bearer valid-admin" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().release).toEqual({ opsSha: sha, gatewaySha: sha, workerSha: sha, matching: true });
+  });
+
+  it("does not invent healthy parity when the Worker is stale or unreachable", async () => {
+    const sha = "b".repeat(40), old = "c".repeat(40);
+    const app = createOpsApp({
+      adminDashboard: operator(),
+      runtimeMetadata: { providers: [], flags: [], releaseSha: sha },
+      runtimeReleaseChecks: { gateway: async () => sha, worker: async () => old },
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET", url: "/v1/admin/health",
+      headers: { authorization: "Bearer valid-admin" },
+    });
+    expect(response.json().release).toEqual({ opsSha: sha, gatewaySha: sha, workerSha: old, matching: false });
   });
 });
