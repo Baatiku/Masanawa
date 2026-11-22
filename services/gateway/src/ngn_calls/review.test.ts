@@ -25,7 +25,7 @@ function fixture(){
 describe('protected direct NGN call review',()=>{
   it('fails safe to a free, zero-wallet call if the pricing adapter is not attached',async()=>{
     const f=fixture();
-    f.ports.pricing=undefined;
+    delete f.ports.pricing;
     f.ports.balance=async()=>({balanceKobo:0,heldKobo:0,availableKobo:0,debtKobo:0,frozen:false});
     const review=await f.service.review(f.actor,f.args);
     expect(review).toMatchObject({budgetKobo:0,maxConnectedSeconds:600,rateKoboPerStartedSecond:0});
