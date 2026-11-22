@@ -1133,6 +1133,13 @@
       "description": "Exact deployed source revision, reported in the Gateway readiness response header."
     },
     {
+      "name": "MASANAWA_RESPONSE_TEXT_MODEL",
+      "owner": "gateway/civic-response",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional text and multimodal Gemini model for evidence-based incident interviews; defaults to gemini-3.6-flash."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_BROWSER_ENABLED",
       "owner": "ops/worker",
       "classification": "public",
