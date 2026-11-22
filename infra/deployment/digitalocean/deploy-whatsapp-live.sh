@@ -204,6 +204,27 @@ printf '%s\n' "checkpoint_reason=owner-confirmed-working-voice-notes" \
   "source_checkpoint=dccebe9c61bc783c1baa4993de415f241a20f828" \
   "source_release=$release_sha" >"$backup/checkpoint.txt"
 
+stage='qualify persona calls before stopping services'
+python3 - "$runtime_file" <<'PY'
+import sys
+from pathlib import Path
+path=Path(sys.argv[1])
+rows=[r for r in path.read_text().splitlines() if r and not r.lstrip().startswith('#') and '=' in r]
+values={}
+for row in rows:
+    name,_,value=row.partition('=')
+    if name in values: raise SystemExit('Duplicate private runtime setting requires inspection: '+name)
+    values[name]=value
+key=values.get('MASANAWA_GEMINI_API_KEY','').strip()
+if len(key)<24 or any(marker in key.lower() for marker in ('change_me','placeholder','not-configured','example')):
+    raise SystemExit('Persona calls require an existing real MASANAWA_GEMINI_API_KEY in the private DigitalOcean runtime file')
+review=values.get('MASANAWA_GB_SEND_REVIEW_SECRET')
+if review is not None and len(review.encode())<32:
+    raise SystemExit('Existing private call review secret is too short; review it before activation')
+# This gate verifies shape and presence, not provider authorization or quota.
+# The Gateway still enforces real model, account, ledger and relay readiness.
+print('Persona-call credential prerequisites present; provider acceptance still requires a live test.')
+PY
 stage='stop applications'
 changed=true
 echo 'Applying forward-only schema checks with the application services paused...'
@@ -216,7 +237,8 @@ python3 - "$runtime_file" "$release_sha" "$calls_option" <<'PY'
 import os,secrets,sys,tempfile
 from pathlib import Path
 path=Path(sys.argv[1])
-settings={'MASANAWA_RELEASE_SHA':sys.argv[2],'MASANAWA_WHATSAPP_BROWSER_ENABLED':'true'}
+settings={'MASANAWA_RELEASE_SHA':sys.argv[2],'MASANAWA_WHATSAPP_BROWSER_ENABLED':'true',
+          'MASANAWA_NGN_CALLS_ENABLED':'true'}
 if sys.argv[3]!='keep': settings['MASANAWA_WHATSAPP_CALLS_ENABLED']=sys.argv[3]
 # The same private runtime file is mounted in Ops and Worker. Mint a strong
 # monitoring secret only once; do not rotate a working token on redeployment.
@@ -226,6 +248,12 @@ if not existing:
     settings['MASANAWA_OPS_MONITOR_TOKEN']=secrets.token_urlsafe(48)
 elif len(existing)!=1 or len(existing[0])<32 or '\\n' in existing[0]:
     raise SystemExit('Existing private Worker monitor token requires inspection')
+call_review=[row.partition('=')[2] for row in path.read_text().splitlines()
+             if row.startswith('MASANAWA_GB_SEND_REVIEW_SECRET=')]
+if not call_review:
+    settings['MASANAWA_GB_SEND_REVIEW_SECRET']=secrets.token_urlsafe(48)
+elif len(call_review)!=1 or len(call_review[0].encode())<32:
+    raise SystemExit('Existing private call review credential requires inspection')
 lines=[line for line in path.read_bytes().splitlines(keepends=True)
        if not any(line.lstrip().startswith((key+'=').encode()) for key in settings)]
 contents=b''.join(lines)
@@ -249,6 +277,18 @@ stage='start Gateway and Ops'
   --wait --wait-timeout 180 gateway ops >"$backup/gateway-ops.log" 2>&1
 stage='check Gateway'
 probe gateway 3000 /readyz=200
+stage='confirm persona call activation inside Gateway'
+docker exec masanawa-gateway-1 node -e '
+ const e=process.env;
+ if(e.MASANAWA_NGN_CALLS_ENABLED!=="true"||
+    !e.MASANAWA_GEMINI_API_KEY||e.MASANAWA_GEMINI_API_KEY.trim().length<24||
+    !e.MASANAWA_GB_SEND_REVIEW_SECRET||e.MASANAWA_GB_SEND_REVIEW_SECRET.length<32)process.exit(1);
+ console.log("Persona call admission runtime enabled with private credentials");
+'
+stage='verify mounted NGN call admission route'
+probe gateway 3000 /v1/ngn/calls/admissions/original/healthcheck_route_probe=401
+stage='verify emergency catalogue'
+probe gateway 3000 /v1/response/categories=200
 stage='check Ops'
 probe ops 3002 /readyz=200 /v1/admin/whatsapp=401
 stage='start Worker'
