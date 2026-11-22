@@ -110,3 +110,36 @@ describe("cross-container release parity", () => {
     expect(response.json().release).toEqual({ opsSha: sha, gatewaySha: sha, workerSha: old, matching: false });
   });
 });
+
+describe("private Worker job monitoring", () => {
+  it("does not query job metrics before administrator authorization", async () => {
+    let probed = false;
+    const app = createOpsApp({ adminDashboard: operator(),
+      workerJobsReader: async () => { probed = true; return []; } });
+    apps.push(app);
+    const rejected = await app.inject({ method: "GET", url: "/v1/admin/worker-jobs" });
+    expect(rejected.statusCode).toBe(401);
+    expect(probed).toBe(false);
+  });
+
+  it("returns bounded sanitized job metrics and avoids leaking worker exceptions", async () => {
+    const sample = Array.from({ length: 55 }, (_, i) => ({
+      name: `queue_${i}`, stuck: i, oldestPendingSeconds: i * 3,
+    }));
+    const app = createOpsApp({ adminDashboard: operator(),
+      workerJobsReader: async () => sample });
+    apps.push(app);
+    const accepted = await app.inject({ method: "GET", url: "/v1/admin/worker-jobs",
+      headers: { authorization: "Bearer valid-admin" } });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().jobs).toHaveLength(40);
+    const failing = createOpsApp({ adminDashboard: operator(),
+      workerJobsReader: async () => { throw new Error("private-token-should-not-leak"); } });
+    apps.push(failing);
+    const failure = await failing.inject({ method: "GET", url: "/v1/admin/worker-jobs",
+      headers: { authorization: "Bearer valid-admin" } });
+    expect(failure.statusCode).toBe(503);
+    expect(failure.body).toContain("worker_job_monitoring_unavailable");
+    expect(failure.body).not.toContain("private-token-should-not-leak");
+  });
+});
