@@ -254,8 +254,24 @@ export async function startOpsService(
             } catch { return { ready: false }; }
           },
         },
+        {
+          name: "Worker readiness",
+          check: async () => {
+            try {
+              // Private Compose DNS; an intentionally stopped Worker is not
+              // evidence that background jobs or notifications are operating.
+              const response = await fetch("http://worker:3001/readyz", {
+                signal: AbortSignal.timeout(2500), redirect: "error", cache: "no-store",
+              });
+              const report = await response.json() as { status?: unknown; checks?: { ready?: unknown }[] };
+              return { ready: response.ok && report.status === "ready" &&
+                (!Array.isArray(report.checks) || report.checks.every(item => item.ready === true)) };
+            } catch { return { ready: false }; }
+          },
+        },
       ],
       runtimeMetadata:{
+        releaseSha: /^[0-9a-f]{40}$/.test(env.MASANAWA_RELEASE_SHA ?? "") ? env.MASANAWA_RELEASE_SHA : undefined,
         providers:[['Gemini',['MASANAWA_GEMINI_API_KEY','GEMINI_API_KEY','MASANAWA_ALPHA_GEMINI_API_KEY']],['Billstack',['MASANAWA_BILLSTACK_SECRET_KEY','BILLSTACK_SECRET_KEY']],['Flutterwave',['FLUTTERWAVE_SECRET_KEY','MASANAWA_FLUTTERWAVE_SECRET_KEY']],['Resend',['RESEND_API_KEY','MASANAWA_RESEND_API_KEY']]].map(([name,keys])=>({name:String(name),configured:(keys as string[]).some(k=>Boolean(env[k]?.trim())),verification:'not_checked'})),
         flags:['MASANAWA_NGN_CALLS_ENABLED','MASANAWA_NGN_DATA_CATALOG_ENABLED','MASANAWA_NGN_DATA_PURCHASE_ENABLED','MASANAWA_BILLSTACK_LIVE_DEPOSITS_ENABLED'].map(name=>({name,enabled:env[name]==='true'})),
       },
