@@ -20,7 +20,13 @@ const IncidentBody=Type.Object({
   structuredFacts:Type.Optional(Type.Record(Type.String({maxLength:60}),Type.Unknown())),
 },{additionalProperties:false});
 
-const SYSTEM_INSTRUCTION=`You are the Masanawa Civic Response interview guide. You are NOT a government operator, dispatcher, emergency number or police officer. Your job is to gather facts from a Nigerian citizen's incident report. No legal or medical diagnoses. Never promise emergency dispatch, agency delivery, or rescue. If there is immediate danger, first advise calling Nigeria 112 now and moving to safety if possible. Ask ONE concise, empathetic next question per turn, following up on safety, exact place (state/LGA/landmark), what happened, when, witnesses, injuries, affected people, and available evidence. Do not request passwords, BVN, NIN, full ID documents, sensitive medical histories or unnecessary identity details. Never invent report facts. Respond as JSON with exactly: {"question":"...","readyToReview":boolean,"facts":{"category":"...","urgency":"routine|priority|urgent|immediate","title":"...","description":"...","locationState":"...","locationLga":"...","locationDetails":"...","incidentAt":"...","peopleAtRisk":null,"injuriesReported":null,"dangerOngoing":null,"reporterSafe":null}}. Allowed category identifiers: ${RESPONSE_CATEGORIES.map(item=>item.id).join(', ')}. Only fill supported factual fields and use empty strings / null for unknowns. `;
+const SYSTEM_INSTRUCTION=`You are Masanawa's professional Nigerian civic incident intake assistant, not a dispatcher, police officer or official government operator.
+PURPOSE: Conduct a focused, compassionate, evidence-grounded interview to prepare a citizen's factual incident report for the citizen's approval. You do not file reports, contact authorities, make medical/legal diagnoses or promise intervention.
+SPEECH UNDERSTANDING: If supplied with audio, reason directly from its *meaning*, context and clearly supported statements. Accent, hesitation, poor grammar, code-switching, paraphrasing and automatic-transcription errors must not be copied as gibberish into the report. Never make up or silently repair an uncertain fact. Ask for clarification when a specific place, number, incident, time or injury status is unclear. Never return a transcript.
+INTERVIEW: First assess immediate danger and tell the person to contact Nigeria's 112 emergency services if they are in danger. Then establish what happened, which state/FCT and LGA, nearest landmark or address, when it happened, whether danger is ongoing, injuries and people at risk. Ask ONE concise, relevant question at a time. In Hausa or English, use the citizen's language naturally. Prioritise missing essential facts, avoid repeating answered questions. Acknowledge emotional distress briefly, then gently bring unrelated stories or political discussion back to the actual incident; do not scold or let digressions become report facts. Avoid leading questions and unsupported assumptions.
+EVIDENCE: Distinguish what the reporter observed from hearsay, allegations or estimates. Do not fabricate names, suspects, agency responses, dates, coordinates, witness testimony, numbers, photographs or certainty. Explicitly qualify uncertainty in the description. Do not request BVN, NIN, account numbers, passwords, ID scans or unnecessary personal/medical details. Use neutral wording. Treat imminent threats, injured persons and vulnerable people with appropriate urgency, but never overstate risk.
+READY: Only set readyToReview true once a real incident, readable title and summary, a confirmed Nigerian state/FCT, category and urgency are clear. If any is missing, ask a targeted question. The report is a reviewable draft; the citizen must correct and explicitly submit it.
+OUTPUT: Strict JSON only, with keys {"question":"one next question or a short review invitation","readyToReview":boolean,"facts":{"category":"allowed category id or empty","urgency":"routine|priority|urgent|immediate","title":"short factual heading","description":"clear coherent account in the citizen's own language","locationState":"known state or FCT","locationLga":"known LGA or empty","locationDetails":"known landmark or empty","incidentAt":"ISO datetime only when certain, else empty","peopleAtRisk":null,"injuriesReported":null,"dangerOngoing":null,"reporterSafe":null}}. Preserve known context supported by earlier turns. Unknown optional values must be empty strings or null. Allowed categories: ${RESPONSE_CATEGORIES.map(item=>item.id).join(', ')}.`;
 const fallbackQuestions=[
   'Are you or anyone else in immediate danger right now? If so, call 112 first.',
   'Please describe what happened, in your own words.',
@@ -47,8 +53,10 @@ function providerBudget(perMinute:number,perHour:number){
 }
 
 async function geminiJson(key:string,parts:object[],instruction:string,maxTokens=900):Promise<Record<string,unknown>> {
-  const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{
-    method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},signal:AbortSignal.timeout(15000),
+  const model=process.env.MASANAWA_RESPONSE_TEXT_MODEL?.trim()||'gemini-3.6-flash';
+   if(!/^[a-zA-Z0-9._-]{1,100}$/.test(model))throw new Error('invalid_response_model');
+   const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
+    method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},signal:AbortSignal.timeout(parts.some(part=>'inlineData' in part)?45_000:15_000),
     body:JSON.stringify({systemInstruction:{parts:[{text:instruction}]},contents:[{role:'user',parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2,maxOutputTokens:maxTokens}}),
   });
   if(!response.ok)throw new Error('provider_unavailable');
@@ -124,13 +132,53 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
       const history=body.history;
       const text=history.filter(row=>row.role==='citizen').map(row=>row.text).join(' ').toLowerCase();
       const danger=/\b(?:fire|dying|kidnap|shoot|bleed|knife|gun|emergency|danger|unconscious|collapse|robbery)\b/u.test(text);
-      if(!options.geminiKey)return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:history.length>=6,facts:{},emergencyHint:danger};
+      if(!options.geminiKey)return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:false,facts:{},emergencyHint:danger};
       try{
         const result=await geminiJson(options.geminiKey,[{text:JSON.stringify({language:body.language||'English',history})}],SYSTEM_INSTRUCTION);
         if(typeof result.question!=='string'||!result.question.trim())throw new Error('invalid_ai_question');
         const facts=result.facts&&typeof result.facts==='object'&&!Array.isArray(result.facts)?result.facts:{};
         return {mode:'ai',question:result.question.slice(0,500),readyToReview:result.readyToReview===true,facts,emergencyHint:danger};
-      }catch{return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:history.length>=6,facts:{},emergencyHint:danger,providerUnavailable:true};}
+      }catch{return {mode:'guided',question:fallbackQuestions[Math.min(history.length,fallbackQuestions.length-1)],readyToReview:false,facts:{},emergencyHint:danger,providerUnavailable:true};}
+    }catch(error){return failure(error,reply)}
+  });
+  // Multimodal voice intake operates on semantic meaning, not a separate transcript.
+  // Raw audio is sent directly to the configured provider for this one request and is not stored here.
+  app.post('/v1/response/understand-audio',{bodyLimit:2_000_000,schema:{body:Type.Object({
+    mimeType:Type.Union([Type.Literal('audio/webm'),Type.Literal('audio/ogg'),Type.Literal('audio/mp4')]),
+    dataBase64:Type.String({minLength:64,maxLength:1750000}),
+    prompt:Type.Optional(Type.String({maxLength:500})),
+    context:Type.Optional(Type.Record(Type.String({maxLength:35}),Type.String({maxLength:3000}))),
+    language:Type.Optional(Type.String({maxLength:15})),
+  },{additionalProperties:false})}},async(req,reply)=>{
+    try{
+      admitTranscription(await options.authorize(req.headers.authorization));
+      if(!options.geminiKey){reply.code(503);return {error:'voice_understanding_not_configured'};}
+      const body=req.body as {mimeType:string;dataBase64:string;prompt?:string;context?:Record<string,string>;language?:string};
+      const bytes=Buffer.from(body.dataBase64,'base64');
+      if(bytes.length<100||bytes.length>1_250_000||bytes.toString('base64')!==body.dataBase64){
+        reply.code(413);return {error:'audio_format_or_size_invalid'};
+      }
+      const result=await geminiJson(options.geminiKey,[
+        {text:JSON.stringify({language:body.language||'the spoken language',previousReportFacts:body.context??{},
+          mostRecentQuestion:body.prompt||'What happened? Please explain what you know.'})},
+        {inlineData:{mimeType:body.mimeType,data:body.dataBase64}},
+        {text:'Listen to the entire recording and infer only the facts the speaker conveys. Do not generate a transcript. Update the structured report and ask the single most useful missing-information question.'},
+      ],SYSTEM_INSTRUCTION,1700);
+      const record=result.facts&&typeof result.facts==='object'&&!Array.isArray(result.facts)
+        ?result.facts as Record<string,unknown>:{};
+      const allowed=['title','description','category','subcategory','urgency','locationState','locationLga',
+        'locationDetails','incidentAt','peopleAtRisk','injuriesReported','dangerOngoing','reporterSafe'];
+      const facts=Object.fromEntries(Object.entries(record).filter(([key,value])=>
+        allowed.includes(key)&&(typeof value==='string'||typeof value==='boolean'||typeof value==='number'||value===null)));
+      if(typeof facts.category==='string'&&!RESPONSE_CATEGORIES.some(item=>item.id===facts.category))delete facts.category;
+      if(typeof facts.urgency==='string'&&!['routine','priority','urgent','immediate'].includes(facts.urgency))delete facts.urgency;
+      const readyToReview=result.readyToReview===true&&typeof facts.title==='string'&&facts.title.trim().length>=6&&
+        typeof facts.description==='string'&&facts.description.trim().length>=15&&typeof facts.category==='string'&&
+        typeof facts.locationState==='string'&&facts.locationState.trim().length>=2;
+      const question=typeof result.question==='string'&&result.question.trim()?result.question.trim().slice(0,500):
+        readyToReview?'Please review the drafted report and correct any details.':'Which state and LGA did this happen in?';
+      return {mode:'ai_audio',question,readyToReview,facts,
+        emergencyHint:facts.dangerOngoing===true||facts.urgency==='immediate',recordingStored:false};
     }catch(error){return failure(error,reply)}
   });
   app.post('/v1/response/transcribe',{bodyLimit:2_000_000,schema:{body:Type.Object({mimeType:Type.Union([Type.Literal('audio/webm'),Type.Literal('audio/ogg'),Type.Literal('audio/mp4')]),dataBase64:Type.String({minLength:64,maxLength:1750000}),language:Type.Optional(Type.String({maxLength:15}))},{additionalProperties:false})}},async(req,reply)=>{

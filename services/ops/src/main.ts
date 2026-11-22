@@ -5,6 +5,7 @@ import {FlutterwaveBillsClient,FlutterwaveHttpTransport} from '@masanawa/provide
 import { pathToFileURL } from "node:url";
 import {createVoiceAdmin} from './voice_admin.js';
 import {createWalletAdmin} from './wallet_admin.js';
+import {createUsageBillingAdmin} from './usage_billing_admin.js';
 import {createBillstackPaymentAdmin} from './billstack_payment_admin.js';
 import {getSettledBillstackTransfer} from '@masanawa/providers';
 import {createPersonaAdmin} from './persona_admin.js';
@@ -64,6 +65,7 @@ export interface ServiceDatabaseDependency {
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
+  readonly usageBillingAdmin?: ReturnType<typeof createUsageBillingAdmin>;
   readonly billstackPaymentAdmin?: ReturnType<typeof createBillstackPaymentAdmin>;
   readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
   readonly portraitAdmin?: ReturnType<typeof createPortraitAdmin>;
@@ -145,6 +147,7 @@ function createDefaultDatabaseDependency(
     whatsappAdmin:createWhatsAppAdmin({pool:database.pool,authorize:adminDashboard.authorize,env}),
     evidenceAdmin:createEvidenceAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     walletAdmin:createWalletAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
+    usageBillingAdmin:createUsageBillingAdmin({pool:database.pool,authorize:adminDashboard.authorize}),
     billstackPaymentAdmin:createBillstackPaymentAdmin({pool:database.pool,authorize:adminDashboard.authorize,
       deposit:createNgnWalletRepository(database.pool).deposit,
       ...(env.MASANAWA_BILLSTACK_SECRET_KEY?.trim()||env.BILLSTACK_SECRET_KEY?.trim()?{

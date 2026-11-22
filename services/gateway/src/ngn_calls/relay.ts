@@ -162,7 +162,7 @@ export function createNgnCallRelay(options:RelayOptions){
       if(connected||stopping)return;
       await assertAccess(ticket);
       if(stopping)return;
-      fundedDeadlineAt=now().getTime()+row.budgetKobo*10-row.verifiedConnectedMs;
+      fundedDeadlineAt=now().getTime()+row.maxConnectedSeconds*1000-row.verifiedConnectedMs;
       await options.store.connected(ticket.actor,ticket.id,lease);
       if(stopping)return;
       connected=true;

@@ -7,6 +7,7 @@ import type {createDataReconciliation} from './data_reconciliation.js';
 import Fastify from "fastify";
 import {VoiceAdminError,type createVoiceAdmin} from './voice_admin.js';
 import {WalletAdminError,type createWalletAdmin} from './wallet_admin.js';
+import type {createUsageBillingAdmin} from './usage_billing_admin.js';
 import type {createBillstackPaymentAdmin} from './billstack_payment_admin.js';
 import {PersonaAdminError,type createPersonaAdmin} from './persona_admin.js';
 import type {createPortraitAdmin} from './portrait_admin.js';
@@ -37,6 +38,7 @@ export interface OpsAppOptions {
   readonly evidenceAdmin?: ReturnType<typeof createEvidenceAdmin>;
   readonly voiceAdmin?: ReturnType<typeof createVoiceAdmin>;
   readonly walletAdmin?: ReturnType<typeof createWalletAdmin>;
+  readonly usageBillingAdmin?:ReturnType<typeof createUsageBillingAdmin>;
   readonly billstackPaymentAdmin?: ReturnType<typeof createBillstackPaymentAdmin>;
   readonly personaAdmin?: ReturnType<typeof createPersonaAdmin>;
   readonly portraitAdmin?: ReturnType<typeof createPortraitAdmin>;
@@ -325,6 +327,26 @@ export function createOpsApp(options: OpsAppOptions = {}) {
     app.get('/v1/admin/persona/config',{schema:{querystring:Type.Object({characterId:Type.String({maxLength:128})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.personaAdmin!.read(request.headers.authorization,request.query.characterId)));
     app.post('/v1/admin/persona/config',{schema:{body:Type.Object({characterId:Type.String({maxLength:128}),state:Type.Union([Type.Literal('active'),Type.Literal('paused'),Type.Literal('disabled')]),mainPrompt:Type.String({maxLength:8000}),tone:Type.String({maxLength:2000}),biography:Type.String({maxLength:8000}),context:Type.String({maxLength:16000}),researchEnabled:Type.Optional(Type.Boolean()),expectedRevision:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.personaAdmin!.publish(request.headers.authorization,request.body)));
     app.post('/v1/admin/persona/restore',{schema:{body:Type.Object({characterId:Type.String({maxLength:128}),revision:Type.Integer({minimum:1,maximum:Number.MAX_SAFE_INTEGER}),expectedRevision:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER})},{additionalProperties:false})}},async(request,reply)=>execute(reply,()=>options.personaAdmin!.restore(request.headers.authorization,request.body)));
+  }
+  if(options.usageBillingAdmin){
+    const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{
+      try{return await run();}
+      catch(error){
+        const status=error instanceof OpsAdminAccessError?error.statusCode:
+          typeof error==='object'&&error!==null&&'statusCode' in error&&
+          (error.statusCode===409||error.statusCode===422)?error.statusCode:503;
+        reply.code(status);
+        return {error:error instanceof Error?error.message:'billing_settings_unavailable'};
+      }
+    };
+    app.get('/v1/admin/billing',async(req,reply)=>execute(reply,()=>options.usageBillingAdmin!.read(req.headers.authorization)));
+    app.put('/v1/admin/billing',{schema:{body:Type.Object({
+      expectedRevision:Type.Integer({minimum:0,maximum:Number.MAX_SAFE_INTEGER}),
+      billingEnabled:Type.Boolean(),
+      replyKobo:Type.Integer({minimum:1,maximum:100000}),
+      callKoboPerStartedSecond:Type.Integer({minimum:1,maximum:100000}),
+    },{additionalProperties:false})}},async(req,reply)=>
+      execute(reply,()=>options.usageBillingAdmin!.write(req.headers.authorization,req.body)));
   }
   if(options.walletAdmin){
     const execute=async(reply:{code:(status:number)=>unknown},run:()=>Promise<unknown>)=>{try{return await run();}catch(error){reply.code(error instanceof WalletAdminError?error.statusCode:error instanceof OpsAdminAccessError?error.statusCode:503);return {error:error instanceof WalletAdminError?error.code:error instanceof OpsAdminAccessError&&error.message==='fresh_admin_sign_in_required'?'fresh_admin_sign_in_required':'wallet_admin_unavailable'};}};

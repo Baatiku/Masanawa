@@ -19,6 +19,8 @@ export type AdminCapability =
   | "news.read"
   | "news.write"
   | "wallet.read"
+  | "billing.read"
+  | "billing.write"
   | "wallet.test.write"
   | "wallet.adjust.write"
   | "roles.read"

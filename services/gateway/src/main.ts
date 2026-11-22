@@ -5,7 +5,7 @@ import {createBrowserPushService} from './browser_push.js';
 import {createCustomerMemoryService} from './customer_memory.js';
 import {createMessageControlService} from './message_controls.js';
 import {ensureBillstackAccount} from './gb_wallet/billstack_funding_routes.js';
-import {createNgnSpending,createNgnCallAdmissions,createNgnDataJournal,createPostgresNgnTransferRepository,createPostgresNgnRequestRepository} from '@masanawa/postgres';
+import {createNgnSpending,readUsageBilling,createNgnCallAdmissions,createNgnDataJournal,createPostgresNgnTransferRepository,createPostgresNgnRequestRepository} from '@masanawa/postgres';
 import {ngnDataActivation} from './ngn_data/activation.js';
 import {ngnCallsEnabled} from './ngn_calls/activation.js';
 import {createNgnCallRelay} from './ngn_calls/relay.js';
@@ -1021,7 +1021,7 @@ export async function startGatewayService(
       const fallbackModel =
         env.MASANAWA_GEMINI_MODEL?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_MODEL?.trim() ||
-        "gemini-3.8-flash";
+        "gemini-3.6-flash";
       const credentialsJson =
         env.MASANAWA_GEMINI_CREDENTIALS_JSON?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_IMPORTED_CREDENTIALS_JSON?.trim();
@@ -1934,6 +1934,7 @@ export async function startGatewayService(
      conversationAuthorizer && publicBaseUrl ? {
       authorize:resolveFeatureFan,approved:approvedNgnCallMasana,
       balance:createNgnSpending(featurePool!).balance,
+      pricing:(actor)=>readUsageBilling(featurePool!,actor.tenantId),
       journal:ngnCallJournal,reviewSecret:ngnCallSecret,
       ready:()=>ngnRelay?.ready()===true,
       grant:async(actor,authorizationHeader,id)=>{
@@ -2030,6 +2031,7 @@ export async function startGatewayService(
   const directNgnWallet:GatewayAppOptions['directNgnWallet']=options.appOptions?.directNgnWallet??
     (ngnSpending&&featurePool&&sessions&&featureTenant?{
       authorize:resolveFeatureFan,balance:ngnSpending.balance,
+      pricing:(actor)=>readUsageBilling(featurePool,actor.tenantId),
       holds:async(actor,id)=>{
         const result=await featurePool.query(`SELECT * FROM gb_wallet.ngn_spends WHERE tenant_id=$1 AND user_id=$2 AND ($3::text IS NULL OR operation_id=$3) ORDER BY created_at DESC,operation_id DESC LIMIT 75`,[actor.tenantId,actor.userId,id??null]);
         return result.rows.map(r=>({operationId:r.operation_id,kind:r.purpose,operationState:r.state,currency:'NGN',unit:'kobo',state:r.state==='reserved'?'reserved':r.state==='completed'?'captured':'released',reservedKobo:Number(r.amount_kobo),heldKobo:r.state==='reserved'?Number(r.amount_kobo):0,chargedKobo:Number(r.captured_kobo),releasedKobo:r.state==='reserved'?0:Number(r.amount_kobo)-Number(r.captured_kobo),createdAt:new Date(r.created_at).toISOString(),resolvedAt:r.resolved_at?new Date(r.resolved_at).toISOString():null,entryIds:r.state==='completed'?['ngn:'+r.operation_id]:[]}));
