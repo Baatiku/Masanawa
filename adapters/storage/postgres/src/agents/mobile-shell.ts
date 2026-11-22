@@ -1,4 +1,5 @@
 import {createNgnSpending} from '../gb_wallet/ngn_spending.js';
+import {readUsageBilling} from '../gb_wallet/usage_billing.js';
 import { createHash } from "node:crypto";
 import { createGbUsageReservations } from "../gb_wallet/reservations.js";
 import type { Pool } from "pg";
@@ -132,11 +133,14 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
         );
         if (result.rows[0]) {
           if (options.billReplies) {
-            const actor = chargeActor(input);
-            await createNgnSpending(pool, client).reserve({...actor,
-              idempotencyKey: actor.operationId, purpose: "reply", amountKobo: 200});
-            await client.query(`UPDATE agents.mobile_turn_commands SET ngn_reply_operation_id=$3
-              WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,input.requestId,actor.operationId]);
+            const pricing=await readUsageBilling(client,input.scope.tenantId);
+            if(pricing.billingEnabled){
+              const actor = chargeActor(input);
+              await createNgnSpending(pool, client).reserve({...actor,
+                idempotencyKey: actor.operationId, purpose: "reply", amountKobo: pricing.replyKobo});
+              await client.query(`UPDATE agents.mobile_turn_commands SET ngn_reply_operation_id=$3
+                WHERE tenant_id=$1 AND request_id=$2`,[actor.tenantId,input.requestId,actor.operationId]);
+            }
           }
           return Object.freeze({ state: "created" as const, command: command(result.rows[0]) });
         }
@@ -189,7 +193,10 @@ export function createPostgresMobileShellRepository(pool: Pool, options: {billRe
       }
       if (result.rows[0].ngn_reply_operation_id) {
         const actor={...chargeActor(input),operationId:result.rows[0].ngn_reply_operation_id as string};
-        await createNgnSpending(pool, client).capture(actor, 200);
+        const spending=createNgnSpending(pool,client);
+        const hold=await spending.read(actor.tenantId,actor.operationId,actor.userId);
+        if(!hold)throw new Error('ngn.reservation_missing');
+        await spending.capture(actor,hold.amountKobo);
       }
       if (result.rows[0].mb_reply_operation_id) {
       const wallet = createGbUsageReservations(pool, client);
