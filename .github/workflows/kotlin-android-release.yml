@@ -1,6 +1,6 @@
 name: Masanawa Android signed release
 
-# Release Masanawa Android: public news previews and official notification icon.
+# Release Masanawa Android 1.3.3: original branding, launcher badge and official notification icon.
 # Produces a signed, installable APK and a Play-ready bundle without publishing
 # either to the store. The new package identity is distinct from Flutter.
 on:
@@ -47,13 +47,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
           EXPECTED_SHA256: ${{ secrets.SHELL_EXPECTED_UPLOAD_SHA256 }}
-          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 14 }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 15 }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64" && test -n "$STORE_PASSWORD" &&
             test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$EXPECTED_SHA256"
-          # Release must supersede the last Kotlin debug candidate (code 12).
-          test "$SHELL_RELEASE_VERSION_CODE" -gt 13
+          # Release must supersede the previous Android 1.3.2 candidate (code 14).
+          test "$SHELL_RELEASE_VERSION_CODE" -gt 14
           # Accept either the raw Base64 value or a copied .env assignment.
           # Never print signing material; keep invalid inputs failed closed.
           python3 - <<'PY'
@@ -120,7 +120,7 @@ jobs:
           SHELL_RELEASE_STORE_PASSWORD: ${{ secrets.SHELL_RELEASE_STORE_PASSWORD }}
           SHELL_RELEASE_KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           SHELL_RELEASE_KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
-          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 14 }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 15 }}
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease :app:testDebugUnitTest
