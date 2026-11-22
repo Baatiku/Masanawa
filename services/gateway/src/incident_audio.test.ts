@@ -50,7 +50,7 @@ describe('public incident voice bulletin privacy and media',()=>{
     const render=vi.fn(async(_text:string)=>({mimeType:'audio/l16;rate=24000',
       dataBase64:Buffer.from([0,0]).toString('base64'),durationMs:1}));
     const voice=createIncidentAudioService({renderer:{render} as never,now:()=>100_000});
-    for(let i=0;i<3;i++)await voice.render({...source,status:'state_'+i},'127.0.0.2');
-    await expect(voice.render({...source,status:'state_3'},'127.0.0.2')).rejects.toThrow('incident_audio_rate_limited');
+    for(const status of ['submitted','triage','resolved'])await voice.render({...source,status},'127.0.0.2');
+    await expect(voice.render({...source,status:'closed'},'127.0.0.2')).rejects.toThrow('incident_audio_rate_limited');
   });
 });
