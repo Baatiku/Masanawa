@@ -97,7 +97,7 @@ export function createNgnCallAdmissions(pool:Pool,now:()=>Date=()=>new Date()){
     return project(await mutate(actor,id,r=>{
       if(r.state==='completed'||r.state==='failed')return;
       if(r.state!=='settling')fail('not_settling');
-      r.state=chargedKobo===0?'failed':'completed';r.charged_kobo=chargedKobo;
+      r.state=Number(r.verified_connected_ms)>0?'completed':'failed';r.charged_kobo=chargedKobo;
     }));
   };
   return {
