@@ -8,7 +8,7 @@ export interface UsageBillingPolicy {
   revision:number;
 }
 const DEFAULT:UsageBillingPolicy=Object.freeze({
-  billingEnabled:true,replyKobo:200,callKoboPerStartedSecond:100,revision:0,
+  billingEnabled:false,replyKobo:200,callKoboPerStartedSecond:100,revision:0,
 });
 type Reader=Pick<Pool|PoolClient,'query'>;
 function policy(row:any):UsageBillingPolicy {
