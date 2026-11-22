@@ -15,7 +15,7 @@ class OwnerBillingGrantTest(unittest.TestCase):
         ops = script.index("stage='start Gateway and Ops'")
         self.assertLess(migrate, grant)
         self.assertLess(grant, ops)
-        self.assertIn('grant-owner-admin.py" \\\n  >"$backup/grant-owner-admin.py"', script)
+        self.assertIn('/$release_sha/infra/deployment/digitalocean/grant-owner-admin.py', script)
         self.assertIn('python3 "$backup/grant-owner-admin.py" >"$backup/owner-grant.log" 2>&1', script)
         self.assertIn("trap 'rollback", script)
 
