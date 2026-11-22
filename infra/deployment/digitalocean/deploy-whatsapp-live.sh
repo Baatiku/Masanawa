@@ -253,7 +253,9 @@ for entry in path.read_text().splitlines():
         name,_,value=entry.partition('=')
         if name in private_values: raise SystemExit('Duplicate private runtime setting: '+name)
         private_values[name]=value
-if not private_values.get('MASANAWA_GEMINI_API_KEY','').strip():
+current=private_values.get('MASANAWA_GEMINI_API_KEY','').strip()
+if len(current)<24 or any(mark in current.lower() for mark in
+    ('change_me','placeholder','not-configured','example')):
     alias=private_values.get('GEMINI_API_KEY','').strip()
     if len(alias)>=24 and not any(mark in alias.lower() for mark in
         ('change_me','placeholder','not-configured','example')):
