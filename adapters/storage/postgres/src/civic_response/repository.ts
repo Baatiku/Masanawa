@@ -134,8 +134,8 @@ export function createCivicResponseRepository(pool: Pool) {
       const limit=Math.min(50,Math.max(1,input.limit??20)),offset=Math.min(10000,Math.max(0,input.offset??0));
       if(input.category&&!publicCategorySet.has(input.category))return [];
       const result=await pool.query(`SELECT reference,
-        CASE WHEN publication_status='published' THEN public_title ELSE COALESCE(public_title,'New community incident report') END AS "title",
-        CASE WHEN publication_status='published' THEN public_summary ELSE COALESCE(public_summary,'An incident has been reported. Details are awaiting independent review.') END AS "summary",
+        CASE WHEN publication_status='published' THEN public_title ELSE CONCAT('Reported ',REPLACE(category,'_',' '),' issue in ',location_state) END AS "title",
+        CASE WHEN publication_status='published' THEN public_summary ELSE 'A citizen submitted a report about this category of public issue. The details are awaiting editorial review and have not been independently verified.' END AS "summary",
         category,location_state AS "locationState",location_lga AS "locationLga",location_details AS "locationDetails",status,
         publication_status AS "publicationStatus",COALESCE(published_at,created_at) AS "publishedAt",updated_at AS "updatedAt"
         FROM civic_response.incidents WHERE publication_status IN ('pending_review','published') AND public_consent=true AND hidden_at IS NULL
