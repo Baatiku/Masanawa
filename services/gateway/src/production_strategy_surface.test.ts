@@ -72,6 +72,30 @@ describe("production strategy surface guidance", () => {
   });
 });
 
+it("streams app text before optional speech and preserves a substantive answer",async()=>{
+  const onTextDelta=vi.fn();
+  const generate=vi.fn(async (_input:unknown,controls?:{onTextDelta?:(delta:string)=>void|Promise<void>})=>{
+    await controls?.onTextDelta?.("A detailed explanation with useful context.");
+    return {text:"A detailed explanation with useful context."};
+  });
+  const speakReply=vi.fn(async()=>({transcript:"Short speech",dataBase64:"AAAAAA==",mimeType:"audio/l16;rate=24000",durationMs:1}));
+  const strategy=createProductionAgentStrategy({inference:{generate},skills:{} as never,guides:{} as never});
+  const result=await strategy.execute({
+    agentRunId:createCanonicalId("agent-run"),
+    characterSessionId:createCanonicalId("character-session"),
+    characterVersionId:createCanonicalId("character-version"),
+    skillVersionIds:[],
+    presentation:{displayName:"Amina",roleLabel:"Research",about:""},
+    input:{kind:"text",text:"Explain the background and implications."},
+    speakReply,onTextDelta,
+  });
+  expect(result.reply).toBe("A detailed explanation with useful context.");
+  expect(onTextDelta).toHaveBeenCalledWith("A detailed explanation with useful context.");
+  expect(speakReply).not.toHaveBeenCalled();
+  expect(generate).toHaveBeenCalledOnce();
+  expect(generate.mock.calls[0]?.[1]?.onTextDelta).toBe(onTextDelta);
+});
+
 it("uses the native Live transcript as the reply without running a second model",async()=>{
   const generate=vi.fn(async()=>({text:"fallback"}));
   const audio={transcript:"Thanks for asking.",dataBase64:"AAAAAA==",mimeType:"audio/l16;rate=24000",durationMs:1};
