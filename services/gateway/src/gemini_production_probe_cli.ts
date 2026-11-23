@@ -5,7 +5,8 @@
  */
 import WebSocket from "ws";
 import {loadSupabaseGeminiCredentialPool,parseGeminiCredentialPool,
-  parseNurainImportedGeminiCredentialPool,type GeminiCredentialPool} from "./production_inference.js";
+  parseNurainImportedGeminiCredentialPool,withGeminiModelFallback,
+  type GeminiCredentialPool} from "./production_inference.js";
 
 const env=process.env;
 let key=(env.MASANAWA_GEMINI_API_KEY||env.MASANAWA_ALPHA_GEMINI_API_KEY||"").trim();
@@ -33,7 +34,10 @@ if(!selected&&env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY&&encryptionKey){tr
 }catch{source="supabase_unavailable";}}
 if(!selected&&key){selected=parseGeminiCredentialPool({apiKey:key,
   ...(modelPreference?{models:modelPreference}:{}),fallbackModel});source="direct";}
-if(selected){key=selected.apiKeys[0]||"";models=[...selected.models].slice(0,4);}
+if(selected){
+ if(env.MASANAWA_GEMINI_DISABLE_AUTOMATIC_FALLBACK!=="true")selected=withGeminiModelFallback(selected);
+ key=selected.apiKeys[0]||"";models=[...selected.models].slice(0,4);
+}
 const liveModel=(env.MASANAWA_GEMINI_LIVE_MODEL||"gemini-3.8-live").trim();
 const voice=(env.MASANAWA_GEMINI_LIVE_VOICE||"Bodi").trim();
 
