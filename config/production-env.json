@@ -498,7 +498,7 @@
       "owner": "gateway/inference",
       "classification": "public",
       "requiredIn": [],
-      "description": "Optional emergency rollback switch for automatic Gemini multimodal reply model fallback; default is false so failover remains enabled."
+      "description": "Optional rollback flag; automatic Gemini multimodal reply model fallback is enabled when unset."
     },
     {
       "name": "MASANAWA_GEMINI_LIVE_MODEL",
@@ -858,27 +858,6 @@
       "description": "Production configuration for MASANAWA_PUBLIC_BASE_URL."
     },
     {
-      "name": "MASANAWA_RELEASE_SHA",
-      "owner": "infra/deployment/digitalocean",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Exact deployed source revision, reported in the Gateway readiness response header."
-    },
-    {
-      "name": "MASANAWA_RESPONSE_TEXT_MODEL",
-      "owner": "gateway/civic-response",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional text and multimodal Gemini model for evidence-based incident interviews; defaults to gemini-3.6-flash."
-    },
-    {
-      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
-      "owner": "services/worker",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
-    },
-    {
       "name": "MASANAWA_ROOMS_MEMBERSHIP_ENABLED",
       "owner": "services/gateway",
       "classification": "public",
@@ -887,6 +866,13 @@
     },
     {
       "name": "MASANAWA_ROOMS_TEACHER_WORKER_ID",
+      "owner": "services/worker",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional feature configuration consumed by services/worker/src/main.ts; absence must use that feature's explicit unavailable/default behavior."
+    },
+    {
+      "name": "MASANAWA_ROOM_NOTICE_WORKER_ID",
       "owner": "services/worker",
       "classification": "public",
       "requiredIn": [],
@@ -1119,6 +1105,48 @@
       "description": "Owner contact URI for standards-based web push."
     },
     {
+      "name": "MASANAWA_WHATSAPP_LIVE_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Gemini Live native audio model for WhatsApp paired audio and output transcription; defaults to gemini-3.8-live."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional Gemini inference model for linked-device WhatsApp text and voice-note understanding."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_TTS_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional Gemini TTS model used for WhatsApp Ogg/Opus voice replies. Defaults to Masanawa voice service model."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_SESSION_KEY",
+      "owner": "ops/whatsapp-and-worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
+    },
+    {
+      "name": "MASANAWA_RELEASE_SHA",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Exact deployed source revision, reported in the Gateway readiness response header."
+    },
+    {
+      "name": "MASANAWA_RESPONSE_TEXT_MODEL",
+      "owner": "gateway/civic-response",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional text and multimodal Gemini model for evidence-based incident interviews; defaults to gemini-3.6-flash."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_BROWSER_ENABLED",
       "owner": "ops/worker",
       "classification": "public",
@@ -1147,39 +1175,11 @@
       "description": "Opt-in enables the bounded linked-device WhatsApp Worker connector (requires a stable encrypted session key and Worker process)."
     },
     {
-      "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
-      "owner": "worker/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional Gemini inference model for linked-device WhatsApp text and voice-note understanding."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_LIVE_MODEL",
-      "owner": "worker/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Gemini Live native audio model for WhatsApp paired audio and output transcription; defaults to gemini-3.8-live."
-    },
-    {
       "name": "MASANAWA_WHATSAPP_MODE",
       "owner": "gateway/channels",
       "classification": "public",
       "requiredIn": [],
       "description": "Production WhatsApp transport mode. Must be linked-device when WhatsApp is enabled."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_SESSION_KEY",
-      "owner": "ops/whatsapp-and-worker",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_TTS_MODEL",
-      "owner": "worker/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional Gemini TTS model used for WhatsApp Ogg/Opus voice replies. Defaults to Masanawa voice service model."
     },
     {
       "name": "MASANAWA_WORKER_HOST",
@@ -1322,6 +1322,13 @@
       "description": "Production configuration for NOWPAYMENTS_API_KEY."
     },
     {
+      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
+    },
+    {
       "name": "NOWPAYMENTS_CONVERSION_ENABLED",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -1334,13 +1341,6 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_CONVERSION_PROVIDER_CODES."
-    },
-    {
-      "name": "NOWPAYMENTS_CONVERSIONS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_CONVERSIONS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_CUSTODY_ENABLED",
@@ -1392,6 +1392,13 @@
       "description": "Production configuration for NOWPAYMENTS_IPN_SECRET."
     },
     {
+      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
+      "owner": "gateway/crypto",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
+    },
+    {
       "name": "NOWPAYMENTS_PAYOUT_2FA_READY",
       "owner": "gateway/crypto",
       "classification": "public",
@@ -1439,13 +1446,6 @@
       "classification": "secret",
       "requiredIn": [],
       "description": "Production configuration for NOWPAYMENTS_PAYOUT_VERIFICATION_CODE."
-    },
-    {
-      "name": "NOWPAYMENTS_PAYOUTS_ENABLED",
-      "owner": "gateway/crypto",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Production configuration for NOWPAYMENTS_PAYOUTS_ENABLED."
     },
     {
       "name": "NOWPAYMENTS_RELAY_URL",
