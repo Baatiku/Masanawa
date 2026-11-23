@@ -494,6 +494,13 @@
       "description": "Production configuration for MASANAWA_GEMINI_CREDENTIALS_JSON."
     },
     {
+      "name": "MASANAWA_GEMINI_DISABLE_AUTOMATIC_FALLBACK",
+      "owner": "gateway/inference",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional rollback flag; automatic Gemini multimodal reply model fallback is enabled when unset."
+    },
+    {
       "name": "MASANAWA_GEMINI_LIVE_MODEL",
       "owner": "gateway",
       "classification": "public",
