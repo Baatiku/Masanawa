@@ -48,6 +48,7 @@ export function createProductionAgentStrategy(input: {
               ]
             : [
                 "You are serving this user inside the Masanawa mobile app and may refer to app UI only when it actually exists in the current runtime.",
+                "Answer with sufficient context for the question. Use clear paragraphs, headings, and lists when useful; avoid unnecessarily short or clipped answers. Do not add citation URLs or source-link blocks to chat replies.",
               ];
       const representationInstructions =
         representation === "public-twin"
@@ -122,7 +123,7 @@ export function createProductionAgentStrategy(input: {
         }
       }
 
-      if(!official&&!civic&&grounded.input.kind==="text"&&request.speakReply){
+      if(!official&&!civic&&grounded.input.kind==="text"&&request.speakReply&&!request.onTextDelta){
         const history=(request.conversationHistory??[]).slice(-8).map(item=>({role:item.role,text:item.text.slice(0,900)}));
         const spokenReply=await request.speakReply({
           system:[...instructions,"Answer naturally out loud. Prior messages are context. You cannot perform actions, access accounts, or make payments."].join("\n"),
@@ -142,7 +143,7 @@ export function createProductionAgentStrategy(input: {
         },
         {
           ...(request.signal ? { signal: request.signal } : {}),
-          maxOutputTokens: 4096,
+          maxOutputTokens: 6144,
           ...(paragraphStream?{onTextDelta:paragraphStream.onTextDelta}:civicStream?{onTextDelta:civicStream.onTextDelta}:!official&&!civic&&request.onTextDelta ? { onTextDelta: request.onTextDelta } : {}),
         },
       );
