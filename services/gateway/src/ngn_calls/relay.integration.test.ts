@@ -173,7 +173,12 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     const f=await fixture();
     try {
       const client=await f.open(await f.issue());await f.setup(client);
-      expect(f.received[0]?.setup).toMatchObject({contextWindowCompression:{slidingWindow:{}}});
+      expect(f.received[0]?.setup).toMatchObject({
+        contextWindowCompression:{slidingWindow:{}},
+        realtimeInputConfig:{automaticActivityDetection:{
+          disabled:false,silenceDurationMs:800,endOfSpeechSensitivity:'END_SENSITIVITY_HIGH',
+        }},
+      });
       for (const text of ['Hello', 'I can help with that too']) {
         const audio={data:'AQAAAA==',mimeType:'audio/pcm;rate=24000'};
         const frames=[
@@ -195,8 +200,13 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     const f=await fixture();
     try{
       const client=await f.open(await f.issue());
-      const greeting=once(client,'message');
+      const ready=once(client,'message');
       client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      expect(JSON.parse((await ready)[0].toString())).toEqual({callReady:true});
+      expect(f.received.some(m=>!!m.clientContent)).toBe(false);
+      // The caller sees Connected before the backend instructs Gemini to speak.
+      const greeting=once(client,'message');
+      client.send(JSON.stringify({greetingReady:true}));
       expect(JSON.parse((await greeting)[0].toString())).toHaveProperty('openingAudio');
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
       expect(f.received[0]?.setup).not.toHaveProperty('playbackAcknowledgement');
@@ -218,6 +228,9 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       const frames:Record<string,any>[]=[];
       client.on('message',raw=>frames.push(JSON.parse(raw.toString())));
       client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      await until(async()=>frames.some(frame=>frame.callReady===true));
+      expect(f.received.some(frame=>!!frame.clientContent)).toBe(false);
+      client.send(JSON.stringify({greetingReady:true}));
       await until(async()=>f.received.some(frame=>!!frame.clientContent));
       f.provider()!.send(JSON.stringify(sound));
       await until(async()=>frames.some(frame=>!!frame.openingAudio?.modelTurn));
@@ -235,6 +248,8 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     try{
       const client=await f.open(await f.issue());
       client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
+      await until(async()=>f.received.some(frame=>!!frame.setup));
+      client.send(JSON.stringify({greetingReady:true}));
       await until(async()=>f.received.some(frame=>!!frame.clientContent));
       client.send(JSON.stringify({greetingPlayback:true}));
       f.provider()!.send(JSON.stringify({serverContent:{modelTurn:{parts:[
@@ -358,20 +373,21 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     }finally{await f.cleanup()}
   });
 
-  it("forwards caller PCM, hybrid-VAD end markers and subsequent AI audio with safe milestone logging",async()=>{
+  it("forwards continuous caller PCM without injecting microphone-off markers and forwards subsequent AI audio",async()=>{
  const f=await fixture(5,{rateKoboPerSecond:0});
  const info=vi.spyOn(console,"info").mockImplementation(()=>{});
  try{
   const client=await f.open(await f.issue());
   await f.setup(client);
   client.send(JSON.stringify({realtimeInput:{audio:{data:"ABAAAA==",mimeType:"audio/pcm;rate=16000"}}}));
-  client.send(JSON.stringify({realtimeInput:{audioStreamEnd:true}}));
-  await until(async()=>f.received.some(r=>(r.realtimeInput as {audioStreamEnd?:boolean}|undefined)?.audioStreamEnd===true));
+  client.send(JSON.stringify({realtimeInput:{audio:{data:"ABAAAA==",mimeType:"audio/pcm;rate=16000"}}}));
+  await until(async()=>f.received.filter(r=>!!(r.realtimeInput as {audio?:unknown}|undefined)?.audio).length>=2);
+  expect(f.received.some(r=>(r.realtimeInput as {audioStreamEnd?:boolean}|undefined)?.audioStreamEnd===true)).toBe(false);
   f.provider()!.send(JSON.stringify(sound));
   await until(async()=>info.mock.calls.some(row=>String(row[0]).includes("model_reply_audio_forwarded")));
   const labels=info.mock.calls.map(row=>String(row[0]));
   expect(labels.some(x=>x.includes("first_mic_packet_forwarded"))).toBe(true);
-  expect(labels.some(x=>x.includes("speech_end_forwarded"))).toBe(true);
+  expect(labels.some(x=>x.includes("speech_end_forwarded"))).toBe(false);
   expect(labels.some(x=>x.includes("model_reply_audio_forwarded"))).toBe(true);
   expect(labels.join(" ")).not.toContain("ABAAAA==");
   expect((await f.store.read(f.actor,f.id))?.state).toBe("connected");
