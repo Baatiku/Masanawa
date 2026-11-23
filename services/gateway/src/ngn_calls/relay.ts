@@ -111,6 +111,8 @@ export function createNgnCallRelay(options:RelayOptions){
     }
     let chain=Promise.resolve(),stopping=false,setup=false,connected=false;
     let providerReady=false,playbackRequired=false,greetingSent=false,previewBytes=0;
+    let greetingRequested=false;
+    let greetingStartTimer:ReturnType<typeof setTimeout>|undefined;
     let greetingCompleted=false,playbackAcknowledged=false;
     let microphoneSeen=false,replyAudioSeen=false,speechEndSeen=false;
     const trace=(phase:string)=>console.info(JSON.stringify({event:'ngn.call.audio_rail',
@@ -137,7 +139,7 @@ export function createNgnCallRelay(options:RelayOptions){
     const stop=(confirmed:boolean,finish:boolean):Promise<void>=>{
       if(closedTask)return finish?closedTask.then(async()=>{await options.store.finish(ticket.actor,ticket.id)}):closedTask;
       if(stopping)return Promise.resolve();
-      stopping=true;clearTimeout(setupDeadline);clearTimeout(deadline);clearInterval(heartbeat);
+      stopping=true;clearTimeout(setupDeadline);clearTimeout(greetingStartTimer);clearTimeout(deadline);clearInterval(heartbeat);
       if (finish && confirmed && client.readyState === WebSocket.OPEN) {
         client.close(4001, 'Call settled');
       } else {
@@ -167,6 +169,12 @@ export function createNgnCallRelay(options:RelayOptions){
     };
     const flushSetup=()=>{
       if(setupFrame&&!setupSent&&provider.readyState===WebSocket.OPEN){setupSent=true;send(provider,setupFrame);}
+    };
+    const startGreeting=()=>{
+      if(!providerReady||resumedProvider||greetingRequested||stopping)return;
+      greetingRequested=true;clearTimeout(greetingStartTimer);
+      send(provider,JSON.stringify(callOpeningTurn(ticket.greeting)));
+      trace('opening_prompt_after_ui_ready');
     };
     const checkpoint=async()=>{
       await assertAccess(ticket);
@@ -216,6 +224,14 @@ export function createNgnCallRelay(options:RelayOptions){
           };
           playbackRequired=input.playbackAcknowledgement===true;
           delete canonical.playbackAcknowledgement;
+          // Always use provider automatic VAD for a continuously open
+          // microphone. A pause in the caller's speech is NOT microphone-off.
+          // Do not let an untrusted client override the relay's VAD mode.
+          canonical.realtimeInputConfig={automaticActivityDetection:{
+            disabled:false,startOfSpeechSensitivity:'START_SENSITIVITY_LOW',
+            endOfSpeechSensitivity:'END_SENSITIVITY_HIGH',
+            prefixPaddingMs:250,silenceDurationMs:800,
+          }};
           if(ticket.grant.systemInstruction)canonical.systemInstruction={parts:[{text:ticket.grant.systemInstruction}]};
           else delete canonical.systemInstruction;
           if(officialEvidence){
@@ -230,6 +246,10 @@ export function createNgnCallRelay(options:RelayOptions){
           }
           setupFrame=JSON.stringify({setup:canonical});setup=true;
           flushSetup();
+          return;
+        }
+        if(Object.keys(message).length===1&&message.greetingReady===true){
+          if(playbackRequired&&providerReady&&!resumedProvider)startGreeting();
           return;
         }
         if(Object.keys(message).length===1&&message.greetingPlayback===true){
@@ -283,7 +303,13 @@ export function createNgnCallRelay(options:RelayOptions){
           if(!providerReady){
             providerReady=true;
             if(resumedProvider)await activate();
-            else send(provider,JSON.stringify(callOpeningTurn(ticket.greeting)));
+            else if(playbackRequired){
+              // Call UI must visibly paint Connected before Gemini is even
+              // instructed to speak. Legacy clients still get a bounded
+              // fallback if they do not understand this optional handshake.
+              send(client,JSON.stringify({callReady:true}));
+              greetingStartTimer=setTimeout(()=>enqueue(startGreeting),3000);
+            }else startGreeting();
           }
           return;
         }
