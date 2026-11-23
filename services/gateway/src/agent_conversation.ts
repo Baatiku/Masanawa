@@ -32,12 +32,41 @@ export function agentFailureCode(error: unknown, fallback: string): string {
   if (!(error instanceof GeminiProviderError)) return fallback;
   if (error.providerReason === "QUOTA_EXCEEDED") return "agent.provider_quota_exceeded";
   if (error.providerReason === "RATE_LIMIT_EXCEEDED") return "agent.provider_rate_limited";
+  if (error.providerStatus === 429 || error.providerReason === "RESOURCE_EXHAUSTED") return "agent.provider_rate_limited";
   if ([
     "API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED",
     "API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED",
     "UNAUTHENTICATED", "PERMISSION_DENIED",
   ].includes(error.providerReason)) return "agent.provider_auth_failed";
   return "agent.provider_unavailable";
+}
+
+/** Allowlisted failure signals only; never log provider messages, user prompts or URLs. */
+export function agentFailureDiagnostic(error:unknown):string {
+  if(error instanceof GeminiProviderError){
+    if(error.providerStatus===429)return "google_http_429";
+    if(error.providerStatus===503)return "google_http_503";
+    if(error.providerStatus===400)return "google_http_400";
+    if(error.providerStatus===404)return "google_http_404";
+    if(error.providerStatus===403)return "google_http_403";
+    if(error.providerStatus===401)return "google_http_401";
+    return "google_http_other";
+  }
+  if(error instanceof Error){
+    if(error.name==="TimeoutError"||error.name==="AbortError")return "timeout_or_cancel";
+    const allowed=new Set([
+      "Gemini returned no text","Gemini stream returned no body",
+      "official_stream_limit","official_stream_empty",
+      "civic_stream_limit","civic_stream_empty",
+      "official_evidence_retrieval_unavailable","civic_evidence_retrieval_unavailable",
+      "official_speech_unintelligible","civic_speech_unintelligible",
+      "official_evidence_scope_changed","civic_evidence_scope_changed",
+    ]);
+    if(allowed.has(error.message))return error.message;
+    if(error instanceof SyntaxError)return "response_parse_failed";
+    if(error instanceof TypeError)return "invalid_response_or_transport";
+  }
+  return "unclassified";
 }
 
 function hashTurnPayload(value: string): string {
@@ -452,6 +481,7 @@ export function createAgentConversationService(input: {
       } catch (error) {
         const failureCode = agentFailureCode(error, "alpha.strategy_failed");
         console.warn(JSON.stringify({event:"agent.text_turn_failed",stage,failureCode,
+          diagnostic:agentFailureDiagnostic(error),
           reason:request.signal?.aborted?"client_disconnected":"processing_failed"}));
         await input.runs
           .finish({
@@ -645,7 +675,8 @@ export function createAgentConversationService(input: {
         });
       } catch (error) {
         const failureCode = agentFailureCode(error, "alpha.media_strategy_failed");
-        console.warn(JSON.stringify({event:"agent.media_turn_failed",failureCode}));
+        console.warn(JSON.stringify({event:"agent.media_turn_failed",failureCode,
+          diagnostic:agentFailureDiagnostic(error)}));
         await input.runs
           .finish({
             authority: admission.authority,
