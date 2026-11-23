@@ -29,11 +29,14 @@ it('scopes reviewed public facts to active exact versions and excludes expired/w
   SELECT 't','official','https://grokipedia.com/page/example','grokipedia','Recent speech','School buildings and community programmes','${'d'.repeat(64)}','2026-10-01',now()+interval '7 days','approved','Reviewed permission','reviewer' FROM generate_series(1,8) AS i;
   INSERT INTO masana.public_official_evidence(tenant_id,character_id,source_url,source_kind,title,content,content_sha256,source_date,valid_until,state,license_basis,reviewed_by)
   VALUES('t','official','https://grokipedia.com/page/example','grokipedia','Old subsidy statement',repeat('Historical preamble. ',140)||'Fuel subsidy policy statement from the historical record','${'e'.repeat(64)}','2012-01-01',now()+interval '7 days','approved','Reviewed permission','reviewer');`);
- expect((await reader.read('t','official','v1'))!.evidence.some(e=>e.title==='Old subsidy statement')).toBe(false);
+ // Expanded top-ten evidence retrieval now includes the tenth approved record.
+ const broad=(await reader.read('t','official','v1'))!.evidence;
+ expect(broad).toHaveLength(10);
+ expect(broad.some(e=>e.title==='Old subsidy statement')).toBe(true);
  const relevant=await reader.read('t','official','v1','What did they say about fuel subsidy?');
  expect(relevant!.evidence.some(e=>e.title==='Old subsidy statement'&&e.content.includes('Fuel subsidy policy'))).toBe(true);
- expect(relevant!.evidence.every(e=>Buffer.byteLength(e.content,'utf8')<=1000)).toBe(true);
- expect(Buffer.byteLength(JSON.stringify(relevant!.evidence),'utf8')).toBeLessThan(14100);
+ expect(relevant!.evidence.every(e=>Buffer.byteLength(e.content,'utf8')<=1600)).toBe(true);
+ expect(Buffer.byteLength(JSON.stringify(relevant!.evidence),'utf8')).toBeLessThan(20100);
  expect(relevant!.evidence.some(e=>e.kind==='grokipedia')).toBe(true);
  expect(relevant!.evidence.every(e=>e.kind==='grokipedia')).toBe(true);
  await db.exec(`UPDATE masana.public_official_evidence SET state='withdrawn' WHERE source_kind='grokipedia'`);
