@@ -8,8 +8,8 @@ const fixture={
   sourceUrl:'https://statehouse.gov.ng/road-commissioned/',sourceDate:'2026-11-21',stage:'commissioned'}],
 };
 it('binds web dossier facts to independently verified identity, bounds fetch and caches by topic',async()=>{
- const fetcher=vi.fn(async()=>Response.json(fixture));
- const reader=createWebCivicKnowledgeReader({fetch:fetcher as typeof fetch});
+ const fetcher=vi.fn(async(_url:string)=>Response.json(fixture));
+ const reader=createWebCivicKnowledgeReader({fetch:fetcher as unknown as typeof fetch});
  const query={kind:'person' as const,name:'Bola Ahmed Tinubu',sourceUrl:source,query:'road'};
  const first=await reader.read(query);
  expect(first).toHaveLength(1);
