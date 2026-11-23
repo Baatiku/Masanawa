@@ -208,3 +208,27 @@ validates feature prerequisites, including a configured private Billstack key
 when signed-webhook deposits are enabled. Backup progress emits only fixed stage
 names; environment files and provider responses remain private. The container
 fallback uses the reviewed installed preflight module with its pinned Node image.
+
+
+### Production Gemini communications acceptance — 23 November 2026
+
+The presence of `MASANAWA_GEMINI_API_KEY` and `MASANAWA_NGN_CALLS_ENABLED=true` in Docker is **configuration**, not proof that chat, voice notes or full-duplex Live audio works. Production can also prefer imported or Supabase Gemini credential pools over the direct key. Always test the **effective selected pool**.
+
+After the guarded release is marked `deployed` in `/var/lib/masanawa-deploy/state.json` and the Gateway passes `/readyz`, an authorized operator may run:
+
+```bash
+sudo docker exec masanawa-gateway-1 node --conditions=production services/gateway/dist/gemini_production_probe_cli.js
+```
+
+This makes small **real and potentially billable** Google requests for a text reply, a synthetic silent-WAV multimodal request, and a Gemini Live opening-audio response. It never uses customer recordings or messages and returns status metadata only. It does not claim that a silent synthetic WAV proves human speech understanding or that a Live greeting proves two-way microphone delivery.
+
+Inspect privacy-safe operational events (no raw credentials, model prompts or speech content):
+
+```bash
+sudo docker logs --since 15m masanawa-gateway-1 2>&1 |
+  grep -E 'gemini.production_probe|gemini.request_failed|agent.text_turn_failed|agent.media_turn_failed|ngn.call.audio_rail'
+```
+
+For Android **after installing an updated native shell**, compare the following transport checkpoints from one real call: `connected_after_greeting` → `first_mic_packet_forwarded` → `speech_end_forwarded` → `model_reply_audio_forwarded`. Missing stages isolate a broken browser capture, WebSocket relay, VAD signal, or provider output. The call's connected timer alone is not evidence of microphone or response success.
+
+Only declare production communications recovered after **all** of the following: authenticated text reply is persisted/displayed, an authentic user voice note is understood and answered, the handset microphone leads to an audible second Live turn, and the NGN receipt confirms zero charge under free mode. Do not expose API keys or private user media when sharing diagnostics.
