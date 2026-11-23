@@ -243,12 +243,17 @@ export function createNgnCallRelay(options:RelayOptions){
         }
         if(!Object.keys(message).length||Object.keys(message).some(key=>!['realtimeInput','clientContent'].includes(key)))throw rejected();
         const realtime=message.realtimeInput as {text?:unknown;audio?:unknown;audioStreamEnd?:unknown}|undefined;
-        if(connected&&realtime?.audio&&!microphoneSeen){microphoneSeen=true;trace('first_mic_packet_forwarded');}
-        if(connected&&realtime?.audioStreamEnd===true&&!speechEndSeen){speechEndSeen=true;trace('speech_end_forwarded');}
+        const firstMic=connected&&Boolean(realtime?.audio)&&!microphoneSeen;
+        const firstEnd=connected&&realtime?.audioStreamEnd===true&&!speechEndSeen;
         const legacyText=realtime?.text;
         if(typeof legacyText==='string'&&legacyText.startsWith('You have answered this call.'))return;
-        if(connected)send(provider,text);
-        else{waitingBytes+=Buffer.byteLength(text);if(waitingBytes>maxFrame)throw rejected();waiting.push(text);}
+        if(connected){
+          send(provider,text);
+          // Log only after a successful provider socket send. A queueing or
+          // transport exception is not evidence that Google received PCM.
+          if(firstMic){microphoneSeen=true;trace('first_mic_packet_forwarded');}
+          if(firstEnd){speechEndSeen=true;trace('speech_end_forwarded');}
+        }else{waitingBytes+=Buffer.byteLength(text);if(waitingBytes>maxFrame)throw rejected();waiting.push(text);}
       });
     });
     provider.on('open',()=>enqueue(flushSetup));
@@ -328,9 +333,6 @@ export function createNgnCallRelay(options:RelayOptions){
           if(!connected||openingPreviewed)return;
         }
         if(connected&&now().getTime()-lastProof>=beatMs)await checkpoint();
-        if(connected&&!replyAudioSeen&&audibleGreetingFrame(message)>0){
-          replyAudioSeen=true;trace('model_reply_audio_forwarded');
-        }
         if(connected){
           const allowed=['setupComplete','setup_complete','serverContent','server_content',
             'sessionResumptionUpdate','session_resumption_update','goAway','go_away','usageMetadata'];
@@ -340,6 +342,9 @@ export function createNgnCallRelay(options:RelayOptions){
               visible.resumed = resumedProvider;
             }
             send(client,JSON.stringify(visible));
+            if(!replyAudioSeen&&audibleGreetingFrame(message)>0){
+              replyAudioSeen=true;trace('model_reply_audio_forwarded');
+            }
           }
         }
       });
