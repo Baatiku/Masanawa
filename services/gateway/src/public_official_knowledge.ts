@@ -12,8 +12,8 @@ const biographyHosts=OFFICIAL_BIOGRAPHY_HOSTS.map(h=>h.replaceAll('.','[.]')).jo
 const referenceSql=`^https://(www[.])?(${biographyHosts})/[^?#[:space:]]+$`;
 const grokipediaSql="^https://(www[.])?grokipedia[.]com/page/[^/?#[:space:]]+$";
 /** Public evidence is deliberately separate from per-citizen conversational memory. */
-export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,research?:ReturnType<typeof import('./public_record_research.js').createPublicRecordResearch>){
- const civicWeb=createWebCivicKnowledgeReader();
+export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,research?:ReturnType<typeof import('./public_record_research.js').createPublicRecordResearch>,web?:ReturnType<typeof createWebCivicKnowledgeReader>|null){
+ const civicWeb=web===undefined?(process.env.NODE_ENV==='test'?null:createWebCivicKnowledgeReader()):web;
  return {
   async read(tenantId:string,characterId:string,characterVersionId:string,query='',allowResearch=false):Promise<PublicOfficialPersona|null>{
    const r=await pool.query(`SELECT d.*,c.active_character_version_id,c.state AS character_state,o.kind AS owner_kind FROM masana.public_official_dossiers d
@@ -46,7 +46,7 @@ export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,research?:
    // web feed receives only a fixed public topic, never a citizen's message.
    const topic=['education','road','budget','election','leadership','health','legislation','security',
      'tax','service','infrastructure','history','commissioned','school'].find(t=>query.toLowerCase().includes(t))??'';
-   const civic=await civicWeb.read({kind:'person',name:d.official_name,sourceUrl:d.identity_source_url,query:topic});
+   const civic=civicWeb?await civicWeb.read({kind:'person',name:d.official_name,sourceUrl:d.identity_source_url,query:topic}):[];
    const combined=[...evidence,...civic.slice(0,10)];
    return {officialName:d.official_name,office:d.office,countryCode:'NG',
     identitySourceUrl:d.identity_source_url,reviewedAt:new Date(d.reviewed_at).toISOString(),
