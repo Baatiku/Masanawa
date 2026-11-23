@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createGeminiCredentialPoolInferenceProvider } from "./production_inference.js";
+import { createGeminiCredentialPoolInferenceProvider,withGeminiModelFallback } from "./production_inference.js";
 describe("production Gemini chat transport", () => {
   it("authenticates streaming replies without putting credentials inside the alt parameter", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
@@ -142,4 +142,11 @@ it("does not manufacture an answer if every configured Gemini model rejects the 
   await expect(provider.generate({systemInstructions:[],input:{kind:"text",text:"Hello"}})).rejects.toMatchObject({providerStatus:429});
   expect(fetchImpl).toHaveBeenCalledTimes(2);
  }finally{log.mockRestore();}
+});
+
+it("preserves operator-selected reply model order while adding an audio-capable fallback",()=>{
+ const pool={apiKeys:["a"],models:["gemini-3.6-flash"]};
+ expect(withGeminiModelFallback(pool).models).toEqual(["gemini-3.6-flash","gemini-3.8-flash"]);
+ expect(withGeminiModelFallback(withGeminiModelFallback(pool)).models).toEqual(["gemini-3.6-flash","gemini-3.8-flash"]);
+ expect(pool.models).toEqual(["gemini-3.6-flash"]);
 });
