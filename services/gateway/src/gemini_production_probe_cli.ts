@@ -4,11 +4,36 @@
  * This probe makes small, billable Google requests and changes no customer data.
  */
 import WebSocket from "ws";
+import {loadSupabaseGeminiCredentialPool,parseGeminiCredentialPool,
+  parseNurainImportedGeminiCredentialPool,type GeminiCredentialPool} from "./production_inference.js";
 
 const env=process.env;
-const key=(env.MASANAWA_GEMINI_API_KEY||env.MASANAWA_ALPHA_GEMINI_API_KEY||"").trim();
-const models=[...new Set((env.MASANAWA_GEMINI_REPLY_MODELS||env.GEMINI_REPLY_MODELS||
-  "gemini-3.6-flash,gemini-3.8-flash").split(",").map(s=>s.trim()).filter(s=>/^gemini-[0-9a-z.-]{3,90}$/u.test(s)))].slice(0,4);
+let key=(env.MASANAWA_GEMINI_API_KEY||env.MASANAWA_ALPHA_GEMINI_API_KEY||"").trim();
+let models=["gemini-3.6-flash","gemini-3.8-flash"];
+let source="direct";
+// Exactly match the running Gateway credential resolution precedence. The
+// existence of a direct MASANAWA_GEMINI_API_KEY does not prove it is the key
+// selected for chat when an imported/Supabase pool is configured.
+const modelPreference=env.MASANAWA_GEMINI_REPLY_MODELS||env.GEMINI_REPLY_MODELS;
+const fallbackModel=env.MASANAWA_GEMINI_MODEL||env.MASANAWA_ALPHA_GEMINI_MODEL||"gemini-3.6-flash";
+const encryptedJson=env.MASANAWA_GEMINI_CREDENTIALS_JSON||env.MASANAWA_ALPHA_GEMINI_IMPORTED_CREDENTIALS_JSON;
+const encryptionKey=env.CREDENTIAL_ENCRYPTION_KEY;
+const encryptionKeyPrevious=env.CREDENTIAL_ENCRYPTION_KEY_PREVIOUS;
+let selected:GeminiCredentialPool|undefined;
+if(encryptedJson&&encryptionKey){try{
+  selected=parseNurainImportedGeminiCredentialPool({importedCredentialsJson:encryptedJson,
+    encryptionKey,...(encryptionKeyPrevious?{encryptionKeyPrevious}:{}),
+    ...(modelPreference?{models:modelPreference}:{}),fallbackModel});source="imported";
+}catch{source="imported_unavailable";}}
+if(!selected&&env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY&&encryptionKey){try{
+  selected=await loadSupabaseGeminiCredentialPool({supabaseUrl:env.SUPABASE_URL,
+    serviceRoleKey:env.SUPABASE_SERVICE_ROLE_KEY,encryptionKey,
+    ...(encryptionKeyPrevious?{encryptionKeyPrevious}:{}),
+    ...(modelPreference?{models:modelPreference}:{}),fallbackModel});source="supabase";
+}catch{source="supabase_unavailable";}}
+if(!selected&&key){selected=parseGeminiCredentialPool({apiKey:key,
+  ...(modelPreference?{models:modelPreference}:{}),fallbackModel});source="direct";}
+if(selected){key=selected.apiKeys[0]||"";models=[...selected.models].slice(0,4);}
 const liveModel=(env.MASANAWA_GEMINI_LIVE_MODEL||"gemini-3.8-live").trim();
 const voice=(env.MASANAWA_GEMINI_LIVE_VOICE||"Bodi").trim();
 
@@ -88,7 +113,7 @@ async function live(){
 }
 
 if(!key||key.length<24){
-  console.log(JSON.stringify({event:"gemini.production_probe",status:"missing_key"}));
+  console.log(JSON.stringify({event:"gemini.production_probe",status:"missing_key",source}));
   process.exitCode=1;
 }else{
   const results=[];
@@ -97,7 +122,7 @@ if(!key||key.length<24){
     results.push(await generate(model,"audio"));
   }
   results.push(await live());
-  console.log(JSON.stringify({event:"gemini.production_probe",results}));
+  console.log(JSON.stringify({event:"gemini.production_probe",source,results}));
   if(!results.some(r=>r.kind==="text"&&r.status==="reply_received")||
      !results.some(r=>r.kind==="audio"&&r.status==="reply_received")||
      !results.some(r=>r.kind==="live"&&r.status==="audio_received"))process.exitCode=1;
