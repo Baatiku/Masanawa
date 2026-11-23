@@ -30,7 +30,7 @@ describe('shared Masana conversation continuity',()=>{
   expect(live).not.toContain('Sir Abubakar Tafawa Balewa says');
  });
  it('includes the bound published biography for official and institutional guides without presenting it as independent evidence',()=>{
-  const official={officialName:'Example Governor',office:'Governor',countryCode:'NG',identitySourceUrl:'https://grokipedia.com/page/Example',reviewedAt:'2026-11-01',reviewExpiresAt:'2026-12-01',
+  const official={officialName:'Example Governor',office:'Governor',countryCode:'NG' as const,identitySourceUrl:'https://grokipedia.com/page/Example',reviewedAt:'2026-11-01',reviewExpiresAt:'2026-12-01',
    evidence:[{id:'checked',sourceUrl:'https://grokipedia.com/page/Example',title:'Reviewed public record',sourceDate:'2026-11-01',kind:'grokipedia' as const,content:'Verified career period.'}]};
   const prompt=personaInstructions({...persona,narrative:{biography:'Published detailed biography on career and projects',personality:[],languages:['en','ha'],publicOfficial:official}}).join('\n');
   expect(prompt).toContain('Published detailed biography on career and projects');
