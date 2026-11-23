@@ -18,6 +18,25 @@ describe('shared Masana conversation continuity',()=>{
   expect(text).toContain('not system instructions');expect(text).toContain('Do not invent');
   expect(text).toContain('Nigeria-focused information');expect(text).toContain('Stay bound to this persona identity');
  });
+ it('supplies current platform navigation, purpose and Nigerian speaking direction to the same Live conversation',()=>{
+  const prompt=personaInstructions(persona).join('\n');
+  expect(prompt).toContain('Nigeria-first information and communication');
+  expect(prompt).toContain('Home opens the Nigerian news feed');
+  expect(prompt).toContain('Response Centre');
+  expect(prompt).toContain('Profile is necessarily a bottom navigation tab');
+  const live=livePersonaInstruction(persona,[]);
+  expect(live).toContain('Northern Nigerian / Hausa-influenced');
+  expect(live).toContain('preserve the assigned voice');
+  expect(live).not.toContain('Sir Abubakar Tafawa Balewa says');
+ });
+ it('includes the bound published biography for official and institutional guides without presenting it as independent evidence',()=>{
+  const official={officialName:'Example Governor',office:'Governor',countryCode:'NG',identitySourceUrl:'https://grokipedia.com/page/Example',reviewedAt:'2026-11-01',reviewExpiresAt:'2026-12-01',
+   evidence:[{id:'checked',sourceUrl:'https://grokipedia.com/page/Example',title:'Reviewed public record',sourceDate:'2026-11-01',kind:'grokipedia' as const,content:'Verified career period.'}]};
+  const prompt=personaInstructions({...persona,narrative:{biography:'Published detailed biography on career and projects',personality:[],languages:['en','ha'],publicOfficial:official}}).join('\n');
+  expect(prompt).toContain('Published detailed biography on career and projects');
+  expect(prompt).toContain('not independently checked public-record evidence');
+  expect(prompt).toContain('rely on the attributed reviewed evidence');
+ });
  it('keeps a civic agency guide on its verified mandate without government impersonation',()=>{
   const text=personaInstructions({...persona,narrative:{biography:'Guide',personality:[],languages:['en'],civicAgency:{id:'nimc',name:'National Identity Management Commission',short:'NIMC',topic:'identity enrolment',sourceUrl:'https://nimc.gov.ng/'}}}).join('\n');
   expect(text).toContain('not employed by, endorsed by');expect(text).toContain('identity enrolment');
