@@ -357,4 +357,24 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect(f.relay.ready()).toBe(false);
     }finally{await f.cleanup()}
   });
+
+  it("forwards caller PCM, hybrid-VAD end markers and subsequent AI audio with safe milestone logging",async()=>{
+ const f=await fixture(5,{rateKoboPerSecond:0});
+ const info=vi.spyOn(console,"info").mockImplementation(()=>{});
+ try{
+  const client=await f.open(await f.issue());
+  await f.setup(client);
+  client.send(JSON.stringify({realtimeInput:{audio:{data:"ABAAAA==",mimeType:"audio/pcm;rate=16000"}}}));
+  client.send(JSON.stringify({realtimeInput:{audioStreamEnd:true}}));
+  await until(async()=>f.received.some(r=>(r.realtimeInput as {audioStreamEnd?:boolean}|undefined)?.audioStreamEnd===true));
+  f.provider()!.send(JSON.stringify(sound));
+  await until(async()=>info.mock.calls.some(row=>String(row[0]).includes("model_reply_audio_forwarded")));
+  const labels=info.mock.calls.map(row=>String(row[0]));
+  expect(labels.some(x=>x.includes("first_mic_packet_forwarded"))).toBe(true);
+  expect(labels.some(x=>x.includes("speech_end_forwarded"))).toBe(true);
+  expect(labels.some(x=>x.includes("model_reply_audio_forwarded"))).toBe(true);
+  expect(labels.join(" ")).not.toContain("ABAAAA==");
+  expect((await f.store.read(f.actor,f.id))?.state).toBe("connected");
+ }finally{info.mockRestore();await f.cleanup();}
+  });
 });

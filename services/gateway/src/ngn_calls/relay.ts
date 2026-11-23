@@ -112,6 +112,9 @@ export function createNgnCallRelay(options:RelayOptions){
     let chain=Promise.resolve(),stopping=false,setup=false,connected=false;
     let providerReady=false,playbackRequired=false,greetingSent=false,previewBytes=0;
     let greetingCompleted=false,playbackAcknowledged=false;
+    let microphoneSeen=false,replyAudioSeen=false,speechEndSeen=false;
+    const trace=(phase:string)=>console.info(JSON.stringify({event:'ngn.call.audio_rail',
+      admission:digest(ticket.id).slice(0,12),phase}));
     let resumeHandle:string|undefined;
     let closedTask:Promise<void>|undefined;
     const officialEvidence=ticket.readOfficialEvidence?createOfficialLiveEvidenceSession(ticket.readOfficialEvidence):undefined;
@@ -177,6 +180,7 @@ export function createNgnCallRelay(options:RelayOptions){
       await options.store.connected(ticket.actor,ticket.id,lease);
       if(stopping)return;
       connected=true;
+      trace('connected_after_greeting');
       if(resumeHandle)resumptions.set(ticket.id,{handle:resumeHandle,expires:now().getTime()+30000});
       clearTimeout(setupDeadline);
       lastProof=now().getTime();
@@ -238,10 +242,18 @@ export function createNgnCallRelay(options:RelayOptions){
           return;
         }
         if(!Object.keys(message).length||Object.keys(message).some(key=>!['realtimeInput','clientContent'].includes(key)))throw rejected();
-        const legacyText=(message.realtimeInput as {text?:unknown}|undefined)?.text;
+        const realtime=message.realtimeInput as {text?:unknown;audio?:unknown;audioStreamEnd?:unknown}|undefined;
+        const firstMic=connected&&Boolean(realtime?.audio)&&!microphoneSeen;
+        const firstEnd=connected&&realtime?.audioStreamEnd===true&&!speechEndSeen;
+        const legacyText=realtime?.text;
         if(typeof legacyText==='string'&&legacyText.startsWith('You have answered this call.'))return;
-        if(connected)send(provider,text);
-        else{waitingBytes+=Buffer.byteLength(text);if(waitingBytes>maxFrame)throw rejected();waiting.push(text);}
+        if(connected){
+          send(provider,text);
+          // Log only after a successful provider socket send. A queueing or
+          // transport exception is not evidence that Google received PCM.
+          if(firstMic){microphoneSeen=true;trace('first_mic_packet_forwarded');}
+          if(firstEnd){speechEndSeen=true;trace('speech_end_forwarded');}
+        }else{waitingBytes+=Buffer.byteLength(text);if(waitingBytes>maxFrame)throw rejected();waiting.push(text);}
       });
     });
     provider.on('open',()=>enqueue(flushSetup));
@@ -330,13 +342,19 @@ export function createNgnCallRelay(options:RelayOptions){
               visible.resumed = resumedProvider;
             }
             send(client,JSON.stringify(visible));
+            if(!replyAudioSeen&&audibleGreetingFrame(message)>0){
+              replyAudioSeen=true;trace('model_reply_audio_forwarded');
+            }
           }
         }
       });
     });
     provider.on('pong',()=>enqueue(async()=>{if(connected)await checkpoint()}));
     provider.on('error',()=>{void stop(false,false)});
-    provider.on('close',(code:number)=>{void stop(code===1000,false)});
+    provider.on('close',(code:number)=>{
+      if(connected&&!replyAudioSeen)trace('provider_closed_without_reply_audio');
+      void stop(code===1000,false);
+    });
     client.on('error',()=>{void stop(false,false)});
     client.on('close',(code:number)=>{void stop(code===1000,false)});
   };

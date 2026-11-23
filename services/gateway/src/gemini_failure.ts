@@ -90,5 +90,10 @@ export async function geminiFailure(
       ...(stage === "speech" ? { rejection } : {}),
     }),
   );
-  return new GeminiProviderError(response.status, reason);
+  // HTTP/API status is safe operational evidence even if Google supplies no
+  // ErrorInfo.reason. Never turn the untrusted provider message into a log.
+  const canonicalReason = reason !== "UNKNOWN" ? reason : providerCode !== "UNKNOWN"
+    ? providerCode : response.status === 429 ? "RESOURCE_EXHAUSTED"
+    : response.status === 503 ? "UNAVAILABLE" : "UNKNOWN";
+  return new GeminiProviderError(response.status, canonicalReason);
 }

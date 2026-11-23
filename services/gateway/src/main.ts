@@ -155,6 +155,7 @@ import {
   parseGeminiCredentialPool,
   parseNurainImportedGeminiCredentialPool,
   verifyGeminiCredentialPool,
+  withGeminiModelFallback,
   type GeminiCredentialPool,
 } from "./production_inference.js";
 import { createProductionAgentStrategy } from "./production_strategy.js";
@@ -1017,7 +1018,10 @@ export async function startGatewayService(
 
       const models =
         env.MASANAWA_GEMINI_REPLY_MODELS?.trim() ||
-        env.GEMINI_REPLY_MODELS?.trim();
+        env.GEMINI_REPLY_MODELS?.trim() ||
+        // Try the established Flash model first, then a currently documented
+        // multimodal Flash model if it is unavailable or rejects audio.
+        "gemini-3.6-flash,gemini-3.8-flash";
       const fallbackModel =
         env.MASANAWA_GEMINI_MODEL?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_MODEL?.trim() ||
@@ -1093,6 +1097,12 @@ export async function startGatewayService(
         );
       }
 
+      // Even a manually selected single model can become unavailable or
+      // reject audio while the credential itself remains valid. Keep operator
+      // model order but add one documented multimodal failover model.
+      if(env.MASANAWA_GEMINI_DISABLE_AUTOMATIC_FALLBACK!=="true"){
+        productionGeminiPool=withGeminiModelFallback(productionGeminiPool);
+      }
       if (env.MASANAWA_GEMINI_VERIFY_ON_START === "true") {
         const verification = await verifyGeminiCredentialPool({
           pool: productionGeminiPool,

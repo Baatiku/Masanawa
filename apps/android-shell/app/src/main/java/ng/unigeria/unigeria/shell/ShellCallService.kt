@@ -26,11 +26,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Reports an *already-connected* web/AI voice session to Android Telecom.
- *
- * Telecom does not provide media, authentication, a call invitation or NGN
- * admission. Those remain inside the authenticated web/Gateway session.
- * Never invent an incoming call or resume one after process death.
+ * Foreground notification for an already-connected WebView-hosted AI call.
+ * WebView owns microphone capture, playback, authentication and settlement.
+ * Telecom routing must not seize audio focus from that existing WebView media
+ * pipeline. Core-Telecom may be re-enabled only with a native-owned audio
+ * transport that can follow its audio-route and focus callbacks correctly.
  */
 class ShellCallService : Service() {
     companion object {
@@ -44,6 +44,9 @@ class ShellCallService : Service() {
         const val EVENT_MUTE = "mute"
         private const val CHANNEL = "masanawa_active_calls"
         private const val NOTIFICATION_ID = 7501
+        // Explicit compatibility gate for WebView-owned PCM; preserve the
+        // Core-Telecom implementation for a future native media integration.
+        private const val TELECOM_CONTROLS_WEBVIEW_AUDIO = false
     }
 
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
@@ -101,6 +104,12 @@ class ShellCallService : Service() {
     }
 
     private suspend fun registerConnectedCall() {
+        // The live WebView is already using microphone and AudioContext by
+        // this point. Adding a Telecom call here can change its audio route
+        // immediately after the web call enters 'connected'. Keep the ongoing
+        // notification, microphone foreground service and Hang Up action but
+        // do not reconfigure audio focus from a second native call owner.
+        if (!TELECOM_CONTROLS_WEBVIEW_AUDIO) return
         // Core-Telecom's minimum supported platform is Android 8 (API 26).
         // Android 7 keeps the ordinary microphone foreground notification.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

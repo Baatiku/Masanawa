@@ -67,3 +67,14 @@ it.each([
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-key|secret-prompt|Bodi/);
   } finally {log.mockRestore();}
 });
+
+it("retains provider HTTP status codes when optional ErrorInfo.reason is absent",async()=>{
+ const log=vi.spyOn(console,"error").mockImplementation(()=>{});
+ try{
+  const error=await geminiFailure(
+    Response.json({error:{status:"RESOURCE_EXHAUSTED",message:"sensitive request contents"}},{status:429}),"inference");
+  expect(error.providerReason).toBe("RESOURCE_EXHAUSTED");
+  expect(error.providerStatus).toBe(429);
+  expect(JSON.stringify(log.mock.calls)).not.toContain("sensitive request contents");
+ }finally{log.mockRestore();}
+});
