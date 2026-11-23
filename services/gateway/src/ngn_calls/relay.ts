@@ -308,7 +308,7 @@ export function createNgnCallRelay(options:RelayOptions){
               // instructed to speak. Legacy clients still get a bounded
               // fallback if they do not understand this optional handshake.
               send(client,JSON.stringify({callReady:true}));
-              greetingStartTimer=setTimeout(()=>enqueue(startGreeting),1800);
+              greetingStartTimer=setTimeout(()=>enqueue(startGreeting),3000);
             }else startGreeting();
           }
           return;
