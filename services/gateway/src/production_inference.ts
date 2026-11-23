@@ -125,6 +125,16 @@ export function parseGeminiCredentialPool(input: {
   });
 }
 
+/** Keep the operator's model priority but ensure a documented alternative
+ * remains available when a single configured model rejects text or audio.
+ * Never switch after a partial reply has already been sent to the client. */
+export function withGeminiModelFallback(pool:GeminiCredentialPool,
+  fallback="gemini-3.8-flash"):GeminiCredentialPool {
+  if(!/^gemini-[0-9a-z.-]{3,90}$/u.test(fallback))throw new TypeError("Invalid Gemini fallback model");
+  return Object.freeze({apiKeys:pool.apiKeys,
+    models:Object.freeze([...new Set([...pool.models,fallback])])});
+}
+
 interface GeminiResponse {
   readonly candidates?: readonly {
     readonly content?: {
