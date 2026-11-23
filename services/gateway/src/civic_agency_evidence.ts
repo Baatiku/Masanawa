@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {createWebCivicKnowledgeReader} from './web_civic_knowledge.js';
 import {CIVIC_AGENCY_CATALOG,approvedCivicAgencyId} from './civic_agency_bootstrap.js';
 import {institutionEvidence} from './civic_institution_evidence.js';
 
@@ -17,8 +18,11 @@ interface CivicAgencySource {readonly id:string;readonly name:string;readonly sh
  * delegated tool authority or proof that a current form/fee remains valid.
  * The citizen's question never becomes a URL, and redirects stay on the
  * configured agency's HTTPS host. No customer data is stored in this cache. */
-export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:()=>number}={}) {
+export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:()=>number;web?:ReturnType<typeof createWebCivicKnowledgeReader>}={}) {
   const fetcher=input.fetch??fetch,now=input.now??Date.now;
+  // Source-retrieval tests can use a fully local fetcher; only production
+  // defaults contact the public, read-only Masanawa web dossier feed.
+  const web=input.web??(input.fetch?null:createWebCivicKnowledgeReader());
   const cache=new Map<string,{until:number;data:readonly CivicAgencyEvidence[]}>();
   const pending=new Map<string,Promise<readonly CivicAgencyEvidence[]>>();
 
@@ -44,11 +48,21 @@ export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:
         content:[...reviewed.responsibilities,...(reviewed.history??[]),...(reviewed.services??[])].join(' '),
       }):undefined;
       const starting:readonly CivicAgencyEvidence[]=Object.freeze(reviewedEvidence?[seed,reviewedEvidence]:[seed]);
-      if(!terms.length)return starting;
+      const withDossier=async(base:readonly CivicAgencyEvidence[])=>{
+        if(!web)return base;
+        const topic=['education','road','budget','election','leadership','health','legislation','security',
+          'tax','service','history','commissioned','school'].find(t=>question.toLowerCase().includes(t))??'';
+        const docs=await web.read({kind:'agency',id:canonicalDirectoryId,name:agency.name,short:agency.short,query:topic});
+        return Object.freeze([...base,...docs.slice(0,10).map(d=>({
+          id:d.id,title:d.title,sourceUrl:d.sourceUrl,sourceDate:d.sourceDate,
+          sourceDateKind:'retrieval' as const,content:d.content
+        }))]);
+      };
+      if(!terms.length)return withDossier(starting);
       const key=agencyId+':'+createHash('sha256').update(terms.join(' ')).digest('hex');
-      const old=cache.get(key);if(old&&old.until>now())return old.data;
-      if(pending.has(key))return pending.get(key)!;
-      if(pending.size>=3)return starting;
+      const old=cache.get(key);if(old&&old.until>now())return withDossier(old.data);
+      if(pending.has(key))return withDossier(await pending.get(key)!);
+      if(pending.size>=3)return withDossier(starting);
       const task=(async()=>{
         const deadline=AbortSignal.timeout(6500),results:CivicAgencyEvidence[]=[...starting];
         const candidates:{url:string;score:number}[]=[{url:agency.source,score:100}];
@@ -111,7 +125,7 @@ export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:
         return data;
       })();
       pending.set(key,task);
-      try{return await task;}finally{pending.delete(key);}
+      try{return await withDossier(await task);}finally{pending.delete(key);}
     },
   });
 }
