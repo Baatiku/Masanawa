@@ -31,6 +31,30 @@ A controlled call test should record: voice assignment, model, system-instructio
 - Gemini Live adds a Nigerian English accent, subtle Hausa-inflected delivery and historical oratorical quality prompt while retaining the persona's selected prebuilt voice and honest synthetic identity.
 - Regression tests assert the shared platform guide, Nigerian speech direction, biography context and evidence bounds.
 
+## Follow-up implementation — 23 November 2026
+
+The initial **read-only civic directory bridge is now source-implemented** across
+both repositories. Companion Web PR
+[Baatiku/Masanawa-Web#121](https://github.com/Baatiku/Masanawa-Web/pull/121)
+publishes a bounded, public, versioned snapshot of already-displayed sourced
+biographical facts, dated projects and their explicit completion stages,
+institutional leadership, history and citizen services. The Gateway's
+`web_civic_knowledge.ts` consumes this projection under the independently
+verified official identity source or canonical institution binding. Existing
+approved biography references continue to govern admission. The Web feed
+is **retrieved public information**, not newly admitted human-reviewed evidence
+and never an instruction, privileged API or official endorsement. Only fixed
+topic labels are sent to the Web service, not citizen messages or memories.
+
+Calls use the existing `read_official_evidence` tool path; no signal, TTS, charging
+or speech transport changes were needed. The agency reader preserves its
+approved official-site lookup and appends the source-marked Web dossiers.
+Unavailable Web retrieval falls back to existing approved records. Unreviewed
+institutions intentionally fail closed; this does not guarantee complete
+coverage of all visible public profiles, and it does not populate backend
+persistent verified-evidence tables. The Web deployment and backend rollout
+must be separately verified before claiming live answer-quality improvements.
+
 ## Next integration needed for complete profile parity
 A full guarantee that *every* profile's on-screen dossier is available to Gemini requires a coordinated **two-repository publishing pipeline**, not just larger prompts.
 
