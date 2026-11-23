@@ -1,4 +1,5 @@
 import type {Pool} from '@masanawa/postgres';
+import {createWebCivicKnowledgeReader} from './web_civic_knowledge.js';
 import {isApprovedBiographySourceUrl,isApprovedBiographyEvidence,OFFICIAL_BIOGRAPHY_HOSTS,type PublicOfficialPersona} from '@masanawa/agents';
 function evidenceExcerpt(content:string,query:string){
  const ignored=new Set(['what','when','where','which','please','about','their','they','them','have','were','from','there','this','that','does','with','tell','show','more','give','detail','history','explain']);
@@ -12,6 +13,7 @@ const referenceSql=`^https://(www[.])?(${biographyHosts})/[^?#[:space:]]+$`;
 const grokipediaSql="^https://(www[.])?grokipedia[.]com/page/[^/?#[:space:]]+$";
 /** Public evidence is deliberately separate from per-citizen conversational memory. */
 export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,research?:ReturnType<typeof import('./public_record_research.js').createPublicRecordResearch>){
+ const civicWeb=createWebCivicKnowledgeReader();
  return {
   async read(tenantId:string,characterId:string,characterVersionId:string,query='',allowResearch=false):Promise<PublicOfficialPersona|null>{
    const r=await pool.query(`SELECT d.*,c.active_character_version_id,c.state AS character_state,o.kind AS owner_kind FROM masana.public_official_dossiers d
@@ -40,10 +42,16 @@ export function createOfficialKnowledgeReader(pool:Pick<Pool,'query'>,research?:
     .filter(value=>{const size=Buffer.byteLength(JSON.stringify(value),'utf8');if(bytes+size>20000)return false;bytes+=size;return true;});
    if(!isApprovedBiographySourceUrl(d.identity_source_url)||!evidence.length)
     throw Object.assign(new Error('official_evidence_incomplete'),{statusCode:409});
+   // This URL is bound to the exact reviewed backend official. The public
+   // web feed receives only a fixed public topic, never a citizen's message.
+   const topic=['education','road','budget','election','leadership','health','legislation','security',
+     'tax','service','infrastructure','history','commissioned','school'].find(t=>query.toLowerCase().includes(t))??'';
+   const civic=await civicWeb.read({kind:'person',name:d.official_name,sourceUrl:d.identity_source_url,query:topic});
+   const combined=[...evidence,...civic.slice(0,10)];
    return {officialName:d.official_name,office:d.office,countryCode:'NG',
     identitySourceUrl:d.identity_source_url,reviewedAt:new Date(d.reviewed_at).toISOString(),
     reviewExpiresAt:new Date(d.review_expires_at).toISOString(),
-    evidence:allowResearch&&query&&research?[...evidence,...await research(query,[d.identity_source_url,...e.rows.map(x=>String(x.source_url))])]:evidence};
+    evidence:allowResearch&&query&&research?[...combined,...await research(query,[d.identity_source_url,...e.rows.map(x=>String(x.source_url))])]:combined};
   },
   async simulations(tenantId:string,ids:readonly string[]){
    if(!ids.length)return new Set<string>();
