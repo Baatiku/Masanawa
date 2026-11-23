@@ -22,7 +22,7 @@ export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:
   const fetcher=input.fetch??fetch,now=input.now??Date.now;
   // Source-retrieval tests can use a fully local fetcher; only production
   // defaults contact the public, read-only Masanawa web dossier feed.
-  const web=input.web??(input.fetch?null:createWebCivicKnowledgeReader());
+  const web=input.web??(input.fetch||process.env.NODE_ENV==='test'?null:createWebCivicKnowledgeReader());
   const cache=new Map<string,{until:number;data:readonly CivicAgencyEvidence[]}>();
   const pending=new Map<string,Promise<readonly CivicAgencyEvidence[]>>();
 
