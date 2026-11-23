@@ -188,16 +188,18 @@ export function createAgentConversationService(input: {
           }} : {}),
         },
       );
-    }, signal, 55_000);
+    }, signal, 18_000);
   }
 
   async function stagePairedAudio(scope:import("@masanawa/agents").CharacterSessionScope,
     requestId:string,audio:NativeAudioRenderResult|undefined,signal?:AbortSignal){
-    if(!input.stageReplyAudio)return;
+    // Audio is enrichment, not a condition for the durable text reply. An
+    // unavailable TTS provider or media store must not invalidate completed
+    // text inference (including a voice note's understood text response).
+    if(!input.stageReplyAudio || !audio)return;
     signal?.throwIfAborted();
-    if(!audio)throw new PlatformError({code:"agent.voice_unavailable",category:"unavailable",
-      message:"The audio reply was unavailable. Try again.",retryable:true});
-    await input.stageReplyAudio(scope,requestId,audio);
+    try { await input.stageReplyAudio(scope,requestId,audio); }
+    catch { console.warn(JSON.stringify({event:"agent.reply_audio_staging_failed",code:"agent.audio_optional"})); }
   }
 
   async function conversationHistory(scope: import("@masanawa/agents").CharacterSessionScope, requestId:string) {
@@ -352,7 +354,7 @@ export function createAgentConversationService(input: {
               const audio=await optionalAudioReply(async signal=>{
                 const voice=await input.voiceForCharacter?.(admission.scope);
                 return input.generateSpokenReply!(message,system,signal,voice);
-              },request.signal,35_000);
+              },request.signal,15_000);
               request.signal?.throwIfAborted();
               return audio?.transcript?.trim()?{...audio,transcript:audio.transcript.trim()}:undefined;
             },
