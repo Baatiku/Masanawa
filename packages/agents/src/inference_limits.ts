@@ -5,7 +5,7 @@ export interface AgentInferenceLimits {
   readonly maxOutputCharacters: number;
 }
 export const defaultAgentInferenceLimits: AgentInferenceLimits = Object.freeze({
-  timeoutMs: 60_000, maxOutputTokens: 2048, maxOutputCharacters: 16_000,
+  timeoutMs: 60_000, maxOutputTokens: 2048, maxOutputCharacters: 24_000,
 });
 export function normalizeAgentInferenceLimits(input: Partial<AgentInferenceLimits> = {}): AgentInferenceLimits {
   const result = { timeoutMs: input.timeoutMs ?? defaultAgentInferenceLimits.timeoutMs,

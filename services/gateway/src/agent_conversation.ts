@@ -201,6 +201,7 @@ export function createAgentConversationService(input: {
     onAudioPcmChunk?: (dataBase64: string) => void | Promise<void>,
     onAudioTranscriptDelta?: (delta: string) => void | Promise<void>,
     official=false,
+    timeoutMs=18_000,
   ) {
     if (!input.nativeAudio || signal?.aborted) return undefined;
     return optionalAudioReply(async (audioSignal) => {
@@ -217,7 +218,7 @@ export function createAgentConversationService(input: {
           }} : {}),
         },
       );
-    }, signal, 18_000);
+    }, signal, timeoutMs);
   }
 
   async function stagePairedAudio(scope:import("@masanawa/agents").CharacterSessionScope,
@@ -622,7 +623,10 @@ export function createAgentConversationService(input: {
         if (!reply) throw new Error("empty strategy reply");
         recordMasanaQuality(admission.scope.characterId,reply);
 
-        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency));
+        // Voice notes take longer to transcribe and synthesize than typed turns.
+        // Give their optional spoken companion more time without holding text-only
+        // requests hostage to the same longer TTS deadline.
+        const audio = await renderAudio(reply, admission.scope, request.signal, request.onAudioPcmChunk, request.onAudioTranscriptDelta, !!(admission.presentation.narrative?.publicOfficial||admission.presentation.narrative?.civicAgency), 26_000);
         await stagePairedAudio(admission.scope,request.requestId,audio,request.signal);
 
         await input.runs.finish({
