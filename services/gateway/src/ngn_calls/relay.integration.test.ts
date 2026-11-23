@@ -247,9 +247,9 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
     const f=await fixture(5,{silent:true});
     try{
       const client=await f.open(await f.issue());
+      const greetingReadyFrame=once(client,'message');
       client.send(JSON.stringify({setup:{playbackAcknowledgement:true}}));
-      await until(async()=>f.received.some(frame=>!!frame.clientContent)===false);
-      await new Promise(resolve=>setTimeout(resolve,30));
+      expect(JSON.parse((await greetingReadyFrame)[0].toString())).toEqual({callReady:true});
       client.send(JSON.stringify({greetingReady:true}));
       await until(async()=>f.received.some(frame=>!!frame.clientContent));
       client.send(JSON.stringify({greetingPlayback:true}));
