@@ -357,9 +357,8 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect(f.relay.ready()).toBe(false);
     }finally{await f.cleanup()}
   });
-});
 
-it("forwards caller PCM, hybrid-VAD end markers and subsequent AI audio with safe milestone logging",async()=>{
+  it("forwards caller PCM, hybrid-VAD end markers and subsequent AI audio with safe milestone logging",async()=>{
  const f=await fixture(5,{rateKoboPerSecond:0});
  const info=vi.spyOn(console,"info").mockImplementation(()=>{});
  try{
@@ -377,4 +376,5 @@ it("forwards caller PCM, hybrid-VAD end markers and subsequent AI audio with saf
   expect(labels.join(" ")).not.toContain("ABAAAA==");
   expect((await f.store.read(f.actor,f.id))?.state).toBe("connected");
  }finally{info.mockRestore();await f.cleanup();}
+  });
 });
