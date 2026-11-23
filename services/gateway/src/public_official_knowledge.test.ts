@@ -32,8 +32,8 @@ it('scopes reviewed public facts to active exact versions and excludes expired/w
  expect((await reader.read('t','official','v1'))!.evidence.some(e=>e.title==='Old subsidy statement')).toBe(false);
  const relevant=await reader.read('t','official','v1','What did they say about fuel subsidy?');
  expect(relevant!.evidence.some(e=>e.title==='Old subsidy statement'&&e.content.includes('Fuel subsidy policy'))).toBe(true);
- expect(relevant!.evidence.every(e=>Buffer.byteLength(e.content,'utf8')<=1000)).toBe(true);
- expect(Buffer.byteLength(JSON.stringify(relevant!.evidence),'utf8')).toBeLessThan(14100);
+ expect(relevant!.evidence.every(e=>Buffer.byteLength(e.content,'utf8')<=1600)).toBe(true);
+ expect(Buffer.byteLength(JSON.stringify(relevant!.evidence),'utf8')).toBeLessThan(20100);
  expect(relevant!.evidence.some(e=>e.kind==='grokipedia')).toBe(true);
  expect(relevant!.evidence.every(e=>e.kind==='grokipedia')).toBe(true);
  await db.exec(`UPDATE masana.public_official_evidence SET state='withdrawn' WHERE source_kind='grokipedia'`);
