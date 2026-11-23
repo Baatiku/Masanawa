@@ -1017,7 +1017,10 @@ export async function startGatewayService(
 
       const models =
         env.MASANAWA_GEMINI_REPLY_MODELS?.trim() ||
-        env.GEMINI_REPLY_MODELS?.trim();
+        env.GEMINI_REPLY_MODELS?.trim() ||
+        // Try the established Flash model first, then a currently documented
+        // multimodal Flash model if it is unavailable or rejects audio.
+        "gemini-3.6-flash,gemini-3.8-flash";
       const fallbackModel =
         env.MASANAWA_GEMINI_MODEL?.trim() ||
         env.MASANAWA_ALPHA_GEMINI_MODEL?.trim() ||
