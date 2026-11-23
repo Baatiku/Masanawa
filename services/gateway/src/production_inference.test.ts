@@ -111,3 +111,35 @@ it('uses documented low thinking for latency-sensitive Gemini 3.8 Flash chat',as
  const provider=createGeminiCredentialPoolInferenceProvider({pool:{apiKeys:['key'],models:['gemini-3.8-flash']},fetchImpl});
  await provider.generate({systemInstructions:[],input:{kind:'text',text:'Hello'}});
 });
+
+it("falls back to a documented multimodal model when the first model rejects voice-note input",async()=>{
+ const log=vi.spyOn(console,"error").mockImplementation(()=>{});
+ const models:string[]=[];
+ const fetchImpl=vi.fn<typeof fetch>(async(url,init)=>{
+  const model=new URL(String(url)).pathname;
+  models.push(model);
+  const body=JSON.parse(String(init?.body));
+  expect(body.contents.at(-1).parts.some((p:{inline_data?:unknown})=>Boolean(p.inline_data))).toBe(true);
+  if(model.includes("gemini-3.6-flash"))return Response.json({error:{status:"INVALID_ARGUMENT",message:"Model does not support audio"}},{status:400});
+  return Response.json({candidates:[{content:{parts:[{text:"I heard the recording."}]}}]});
+ });
+ try{
+  const provider=createGeminiCredentialPoolInferenceProvider({
+   pool:{apiKeys:["private-key"],models:["gemini-3.6-flash","gemini-3.8-flash"]},fetchImpl});
+  const result=await provider.generate({systemInstructions:["Reply naturally"],
+    input:{kind:"media",caption:"",mimeType:"audio/wav",dataBase64:"UklGRg=="}});
+  expect(result.text).toBe("I heard the recording.");
+  expect(models).toHaveLength(2);
+ }finally{log.mockRestore();}
+});
+
+it("does not manufacture an answer if every configured Gemini model rejects the call",async()=>{
+ const log=vi.spyOn(console,"error").mockImplementation(()=>{});
+ const fetchImpl=vi.fn<typeof fetch>(async()=>Response.json({error:{status:"RESOURCE_EXHAUSTED"}},{status:429}));
+ try{
+  const provider=createGeminiCredentialPoolInferenceProvider({
+   pool:{apiKeys:["private-key"],models:["gemini-3.6-flash","gemini-3.8-flash"]},fetchImpl});
+  await expect(provider.generate({systemInstructions:[],input:{kind:"text",text:"Hello"}})).rejects.toMatchObject({providerStatus:429});
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+ }finally{log.mockRestore();}
+});
