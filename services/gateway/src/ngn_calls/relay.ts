@@ -111,6 +111,7 @@ export function createNgnCallRelay(options:RelayOptions){
     }
     let chain=Promise.resolve(),stopping=false,setup=false,connected=false;
     let providerReady=false,playbackRequired=false,greetingSent=false,previewBytes=0;
+    let greetingCompleted=false,playbackAcknowledged=false;
     let resumeHandle:string|undefined;
     let closedTask:Promise<void>|undefined;
     const officialEvidence=ticket.readOfficialEvidence?createOfficialLiveEvidenceSession(ticket.readOfficialEvidence):undefined;
@@ -228,7 +229,12 @@ export function createNgnCallRelay(options:RelayOptions){
           return;
         }
         if(Object.keys(message).length===1&&message.greetingPlayback===true){
-          if(playbackRequired&&greetingSent&&!connected)await activate();
+          if(playbackRequired&&greetingSent&&!connected){
+            playbackAcknowledged=true;
+            // Never start the paid/connected clock on the first audio frame.
+            // The provider must complete the opening before admission advances.
+            if(greetingCompleted)await activate();
+          }
           return;
         }
         if(!Object.keys(message).length||Object.keys(message).some(key=>!['realtimeInput','clientContent'].includes(key)))throw rejected();
@@ -285,26 +291,34 @@ export function createNgnCallRelay(options:RelayOptions){
         }
         if(providerReady&&!connected){
           const bytes=audibleGreetingFrame(message);
+          const content=(message.serverContent??message.server_content) as {turnComplete?:boolean}|undefined;
+          let openingPreviewed=false;
           if(bytes>0){
             greetingSent=true;
             if(!playbackRequired) await activate();
-            else if(previewBytes+bytes<=192000){
+            else if(previewBytes+bytes<=384000){
               previewBytes+=bytes;
               send(client,JSON.stringify({openingAudio:message.serverContent??message.server_content}));
+              openingPreviewed=true;
             }
           }
-          const content=(message.serverContent??message.server_content) as {turnComplete?:boolean}|undefined;
-          // Gemini may finish its greeting in a separate, silent frame before the browser's
-          // audible-playback acknowledgement. Preserve that completion marker so the
-          // browser can safely release the microphone only after playback finishes.
-          if(playbackRequired&&greetingSent&&bytes===0&&content?.turnComplete){
-            send(client,JSON.stringify({openingAudio:{turnComplete:true}}));
+          if(playbackRequired&&greetingSent&&content?.turnComplete){
+            greetingCompleted=true;
+            // Preserve completion even when a final audio frame exceeds the
+            // bounded opening-preview budget. Never strand the client mic.
+            if(!openingPreviewed){
+              send(client,JSON.stringify({openingAudio:{turnComplete:true}}));
+              openingPreviewed=true;
+            }
+            if(playbackAcknowledged&&!connected)await activate();
           }
           if(!greetingSent&&content?.turnComplete){
             options.report?.({stage:'provider',code:'unavailable',providerStatus:'GREETING_NO_AUDIO'});
             void Promise.resolve().then(()=>stop(false,true));
           }
-          if(!connected)return;
+          // Avoid playing a completed greeting twice if activation happened
+          // in this same provider frame after early client acknowledgement.
+          if(!connected||openingPreviewed)return;
         }
         if(connected&&now().getTime()-lastProof>=beatMs)await checkpoint();
         if(connected){

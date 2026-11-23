@@ -424,3 +424,65 @@ it('requires a fresh official session after a published-version change before cr
  await expect(service.turn({authorizationHeader:'Bearer customer',characterId:f.scope.characterId,characterSessionId:session.characterSessionId,text:'Hello',requestId:createCanonicalId('request'),correlationId:createCanonicalId('correlation')})).rejects.toMatchObject({code:'agents.session_closed'});
  expect(held).toBe(false);
 });
+
+
+describe("optional audio must not fail a completed reply", () => {
+  it.each(["text", "voice-note"] as const)(
+    "finishes a %s turn when Gemini speech is unavailable",
+    async kind => {
+      const f=fixture(),session=sessionFor(f);
+      const saved=vi.fn(async()=>{}),failed=vi.fn(async()=>{}),staged=vi.fn(async()=>{});
+      const finished=vi.fn(async()=>({}));
+      const service=createAgentConversationService({
+        sessions:{read:async()=>session} as never,
+        runs:{create:async()=>({}),finish:finished} as never,
+        authorizer:{authorize:async()=>f.admission},
+        strategy:{execute:async()=>({reply:"The answer survived audio failure.",parts:[]})},
+        mobileShell:{
+          claimTurn:async()=>({state:"created"}),appendEvent:async()=>{},
+          completeTurn:saved,failTurn:failed,listHistory:async()=>[],
+        } as never,
+        nativeAudio:{render:async()=>{throw Error("Provider speech unavailable");}} as never,
+        stageReplyAudio:staged,
+        sessionDurationMs:60000,
+      });
+      const common={authorizationHeader:"Bearer test",characterId:f.scope.characterId,
+        characterSessionId:session.characterSessionId,requestId:createCanonicalId("request"),
+        correlationId:createCanonicalId("correlation")};
+      const result=kind==="text"
+        ?await service.turn({...common,text:"Hello"})
+        :await service.mediaTurn({...common,caption:"",mimeType:"audio/mp4",dataBase64:"YWJj"});
+      expect(result.reply).toBe("The answer survived audio failure.");
+      expect(saved).toHaveBeenCalledOnce();
+      expect(failed).not.toHaveBeenCalled();
+      expect(staged).not.toHaveBeenCalled();
+      expect(finished).toHaveBeenCalledWith(expect.objectContaining({outcome:{state:"completed"}}));
+    },
+  );
+
+  it("does not lose a generated text reply when optional private audio staging fails",async()=>{
+    const f=fixture(),session=sessionFor(f);
+    const completed=vi.fn(async()=>{}),failed=vi.fn(async()=>{});
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    try{
+      const service=createAgentConversationService({
+        sessions:{read:async()=>session} as never,
+        runs:{create:async()=>({}),finish:async()=>({})} as never,
+        authorizer:{authorize:async()=>f.admission},
+        strategy:{execute:async()=>({reply:"Persist the actual answer",parts:[]})},
+        mobileShell:{claimTurn:async()=>({state:"created"}),appendEvent:async()=>{},
+          completeTurn:completed,failTurn:failed,listHistory:async()=>[]} as never,
+        nativeAudio:{render:async()=>({dataBase64:"AAAAAA==",mimeType:"audio/l16;rate=24000",durationMs:1})} as never,
+        stageReplyAudio:async()=>{throw Error("Media quota exceeded");},
+        sessionDurationMs:60000,
+      });
+      const result=await service.turn({authorizationHeader:"Bearer test",characterId:f.scope.characterId,
+        characterSessionId:session.characterSessionId,requestId:createCanonicalId("request"),
+        correlationId:createCanonicalId("correlation"),text:"Hello"});
+      expect(result.reply).toBe("Persist the actual answer");
+      expect(completed).toHaveBeenCalledOnce();
+      expect(failed).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("agent.reply_audio_staging_failed"));
+    }finally{warn.mockRestore();}
+  });
+});

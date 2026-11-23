@@ -201,9 +201,13 @@ async function until(check:()=>Promise<boolean>,timeout=5000){
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
       expect(f.received[0]?.setup).not.toHaveProperty('playbackAcknowledgement');
       expect(JSON.stringify(f.received)).toContain('follow-up question');
-      const connected=once(client,'message');
+      // An acknowledgement arriving at the beginning of playback is not
+      // proof that the assistant finished greeting the caller.
       client.send(JSON.stringify({greetingPlayback:true}));
-      expect(JSON.parse((await connected)[0].toString())).toMatchObject({setupComplete:{},greetedByRelay:true});
+      await new Promise(resolve=>setTimeout(resolve,25));
+      expect((await f.store.read(f.actor,f.id))?.state).toBe('connecting');
+      f.provider()!.send(JSON.stringify({serverContent:{turnComplete:true}}));
+      await until(async()=>(await f.store.read(f.actor,f.id))?.state==='connected');
       expect((await f.store.read(f.actor,f.id))?.state).toBe('connected');
     }finally{await f.cleanup();}
   });
