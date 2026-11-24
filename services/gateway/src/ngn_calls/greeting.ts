@@ -7,9 +7,9 @@ export function callGreeting(greeting?:string|null):CallGreeting {
     ? "Assalamu alaikum" : "Hello";
 }
 
-export function callOpeningTurn(greeting:CallGreeting) {
+export function callOpeningTurn(_greeting:CallGreeting) {
   return {clientContent:{turns:[{role:"user",parts:[{text:
-    `The call has connected. Speak first, out loud. Begin with “${greeting}”, then add one brief, warm and natural follow-up question inviting the caller to speak. Use your persona's conversational style; don't repeat a fixed script. Keep the whole opening under six seconds, then pause and listen. Do not use a tool for this opening.`,
+    `You are now in a real two-way voice call. Initiate the conversation yourself, speaking naturally as your assigned persona. Choose a fresh, context-aware opening in your own words: make a useful observation or introduction and invite the caller with a warm follow-up question. Do not use a fixed salutation, required first word, one-word greeting, or repeated script. A returning caller should hear a natural variation informed by any available conversation context. Speak for one or two complete, engaging sentences, then give the caller room to answer. Listen to their live speech and continue a responsive, back-and-forth conversation throughout the call. Do not use a tool for this opening.`,
   }]}],turnComplete:true}};
 }
 
