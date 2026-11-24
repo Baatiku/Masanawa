@@ -156,7 +156,7 @@ export function createGeminiLiveAudioRenderer(input: {
                     input: [
                       {
                         type: "user_input",
-                        content: [{ type: "text", text: masanawaReadAloud(prompt, context?.narrationLanguage) }],
+                        content: [masanawaSpeechPart(prompt)],
                       },
                     ],
                     response_format: {
@@ -169,7 +169,7 @@ export function createGeminiLiveAudioRenderer(input: {
                     },
                   }
                 : {
-                    contents: [{ role: "user", parts: [{ text: masanawaReadAloud(prompt, context?.narrationLanguage) }] }],
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
                     generationConfig: {
                       responseModalities: ["AUDIO"],
                       speechConfig: {
