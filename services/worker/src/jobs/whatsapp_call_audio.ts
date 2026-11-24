@@ -1,3 +1,4 @@
+import { MASANAWA_HAUSA_CONVERSATION } from '@masanawa/contracts';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {geminiLiveUrl,liveProviderError,LiveProviderError,readGeminiLiveFrame} from './whatsapp_live.js';
@@ -113,7 +114,7 @@ export function openWhatsAppCallLive(input:{apiKey:string;model:string;voice:str
       try{
         socket.send(JSON.stringify({setup:{model:'models/'+input.model,
           generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:input.voice}}}},
-          systemInstruction:{parts:[{text:input.system}]}}}));
+          systemInstruction:{parts:[{text:input.system+'\n'+MASANAWA_HAUSA_CONVERSATION}]}}}));
       }catch{fail(new LiveProviderError('live_unavailable'));}
     });
     socket.addEventListener('message',event=>{
