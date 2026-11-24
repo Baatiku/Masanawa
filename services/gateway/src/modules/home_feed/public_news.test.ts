@@ -21,23 +21,23 @@ describe("public approved news export",()=>{
   const newsList=vi.fn(async()=>({items:[fixture()],nextCursor:null}));
   registerPublicNews(app,{tenant:"tenant_platform",service:{newsList} as unknown as FeedRoutesOptions["service"],enabled:()=>true});
   try{
-   const response=await app.inject({method:"GET",url:"/public/news"});
+   const response=await app.inject({method:"GET",url:"/v1/public/news"});
    expect(response.statusCode).toBe(200);
    expect(newsList).toHaveBeenCalledWith("tenant_platform",null,undefined);
    expect(response.json().items).toHaveLength(1);
    expect(response.headers["cache-control"]).toBe("public, max-age=60");
-   for(const url of ["/public/news?tenant=other","/public/news?cursor=x&cursor=y","/public/news?cursor=%21"]){
+   for(const url of ["/v1/public/news?tenant=other","/v1/public/news?cursor=x&cursor=y","/v1/public/news?cursor=%21"]){
     expect((await app.inject({method:"GET",url})).statusCode).toBe(422);
    }
    expect(newsList).toHaveBeenCalledTimes(1);
-   expect((await app.inject({method:"POST",url:"/public/news"})).statusCode).toBe(404);
+   expect((await app.inject({method:"POST",url:"/v1/public/news"})).statusCode).toBe(404);
   }finally{await app.close();}
  });
  it("fails closed when disabled",async()=>{
   const app=Fastify();
   const newsList=vi.fn();
   registerPublicNews(app,{tenant:"tenant_platform",service:{newsList} as unknown as FeedRoutesOptions["service"],enabled:()=>false});
-  try{expect((await app.inject({method:"GET",url:"/public/news"})).statusCode).toBe(503);expect(newsList).not.toHaveBeenCalled();}
+  try{expect((await app.inject({method:"GET",url:"/v1/public/news"})).statusCode).toBe(503);expect(newsList).not.toHaveBeenCalled();}
   finally{await app.close();}
  });
 });
