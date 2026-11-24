@@ -1,3 +1,4 @@
+import { MASANAWA_EMERGENCY_VOICE } from '@masanawa/contracts';
 import {createHash} from 'node:crypto';
 import {createGeminiLiveAudioRenderer, type NativeAudioRenderer} from './native_audio.js';
 
@@ -67,7 +68,7 @@ export function createIncidentAudioService(options:{
   const limits=new Map<string,{start:number,count:number}>();
   let globalStart=0,globalCount=0;
   const model=options.model??'gemini-3.8-flash-lite-tts';
-  const voice=options.voice??'Sulafat';
+  const voice=options.voice??MASANAWA_EMERGENCY_VOICE;
   const renderer=options.renderer??(options.apiKey?createGeminiLiveAudioRenderer({apiKey:options.apiKey,model,voiceName:voice}):undefined);
   return {
     async render(source:PublicIncidentAudioSource,requestIp:string):Promise<Buffer>{
@@ -84,7 +85,7 @@ export function createIncidentAudioService(options:{
       if(quota.count>=3||globalCount>=20)throw new Error('incident_audio_rate_limited');
       quota.count++;globalCount++;limits.set(ip,quota);
       const result=await renderer.render(
-        'Read this approved public incident bulletin exactly once, in a calm and clear Nigerian radio-news style. Do not invent details, embellish, dramatize or claim official verification.\n'+JSON.stringify(script),
+        'Narrate this approved public incident bulletin once in standard Nigerian Hausa, faithfully translating its meaning and retaining all uncertainty, names, numbers and location details. Use a calm and clear radio-news style. Do not invent details, embellish, dramatize or claim official verification.\n'+JSON.stringify(script),
         AbortSignal.timeout(40_000),
       );
       const audio=audioToWav(result.dataBase64,result.mimeType);
