@@ -151,6 +151,8 @@ describe('Masanawa Response route boundary',()=>{
       const options=JSON.parse(String(calls[0]?.init.body));
       expect(options).toMatchObject({uses:1,liveConnectConstraints:{model:'models/gemini-3.1-flash-live-preview',config:{responseModalities:['AUDIO']}}});
       expect(first.json().model).toBe('gemini-3.1-flash-live-preview');
+      expect(first.json().voiceName).toBe('Sulafat');
+      expect(first.json().speechDirection).toContain('85–105 words per minute');
       expect((await server.inject(input)).statusCode).toBe(200);
       expect((await server.inject(input)).statusCode).toBe(429);
       expect(calls).toHaveLength(2);
