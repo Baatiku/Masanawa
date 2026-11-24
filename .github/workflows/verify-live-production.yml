@@ -1,0 +1,30 @@
+name: Verify live production release
+on:
+  push:
+    branches: [ops/verify-live-release-20261124]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify exact running Gateway release and public emergency endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=db6ff5e73e30fd83ed85cfa9e8f0fc91df2b8cb5
+          api=https://api.masanawa.com
+          for attempt in $(seq 1 30); do
+            release="$(curl --max-time 10 -fsS -D - -o /dev/null "$api/readyz" | awk 'tolower($1)=="x-masanawa-release:" {gsub(/\r/,"",$2);print $2}' || true)"
+            echo "Attempt $attempt: release=${release:-unavailable}"
+            if [ "$release" = "$expected" ]; then break; fi
+            if [ "$attempt" = 30 ]; then exit 1; fi
+            sleep 20
+          done
+          curl --max-time 15 -fsS "$api/v1/response/categories" | jq -e '.categories | length > 0'
+          curl --max-time 15 -fsS "$api/v1/response/contacts" | jq -e '.contacts | type == "array"'
+          curl --max-time 15 -fsS "$api/v1/response/public-incidents?limit=1" | jq -e '.incidents | type == "array"'
+          code="$(curl --max-time 15 -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$api/v1/response/live-token")"
+          test "$code" = 401
+          echo "Exact release, catalog, directory, feed and authentication boundary passed"
