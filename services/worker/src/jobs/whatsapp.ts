@@ -132,7 +132,7 @@ export function createWhatsAppWorker(input:Input){
       const system=mode==='scripted'?
         `Speak the following pre-approved assistant message exactly, in its original language. Do not add, paraphrase, omit or translate any word. Read URLs and one-time codes accurately. Only speak the provided message. ${identity}`:
         `${identity}\n${source.personality}. ${source.instructions}\n`+
-        (source.language==='ha'?'Speak natural standard Hausa.':source.language==='en'?'Speak English.':'Reply in the sender\'s language.')+
+        'Speak natural standard Hausa at a gentle measured pace, regardless of the sender’s language.'+
         '\nRespond conversationally, with enough depth to answer the actual question. A simple greeting can be short; substantive topics deserve thoughtful explanation. Avoid repetitive sign-offs and unsolicited message-taking. Use conversation context. Never invent financial records, prices, identity, wallet authorization or transactions. Do not request passwords, PINs, OTPs, BVN or NIN. You have no account tools.';
       let prompt=actual;
       if(mode==='assistant'&&source.remember_context){
@@ -386,7 +386,7 @@ export function createWhatsAppWorker(input:Input){
         ORDER BY created_at DESC LIMIT 24`,[row.tenant_id,row.thread_id,row.message_id]):{rows:[]};
       const safeContext=row.remember_context?safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse()):'';
       const memory=row.remember_context?(await readWhatsAppMemory(input.pool,row.tenant_id,row.thread_id,body)||row.memory_summary):'';
-      const language=row.language==='ha'?'Respond in natural, standard Hausa.':row.language==='en'?'Respond in English.':'Reply in the language the customer uses.';
+      const language='Respond in natural, standard Hausa. Understand English and Hausa; preserve exact technical identifiers.';
       const lastAway=row.last_away_notice_at?new Date(row.last_away_notice_at).getTime():0;
       const system=`${whatsappIdentityInstructions({numberPurpose:row.number_purpose??'service',
         ownerName:row.owner_name??'',ownerTitle:row.owner_title??'',assistantName:row.assistant_name,
