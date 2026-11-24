@@ -205,7 +205,7 @@ export function createWhatsAppCallHandler(input:Dependencies){
     async function openProvider(policy:CallPolicy){
       const system=`You are ${policy.name}, the AI assistant ${policy.number_purpose==='personal'?
         `for ${policy.owner_name||'the owner of this number'}`:'for Masanawa'}. Keep answers brief and conversational. `+
-        `${policy.language==='ha'?'Speak standard Hausa.':policy.language==='en'?'Speak English.':'Use the caller’s language.'}`+
+        `Speak standard Hausa slowly and clearly regardless of the caller’s language.`+
         `\nAssistant preferences: ${policy.personality}\n${policy.instructions}\n`+
         'Always identify as AI when asked. Never impersonate the owner. You have no account or wallet access. '+
         'Never request passwords, PINs, OTPs, BVN or NIN. If the caller wants a person, ask them to message the number directly.';
