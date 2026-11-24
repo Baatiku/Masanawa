@@ -2322,7 +2322,10 @@ export async function startGatewayService(
       ...(ngnWallet ? { ngnWallet } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
-      ...(featurePool&&sessions&&featureTenant?{civicResponse:{repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?.trim()?{geminiKey:(env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)!.trim()}: {})}}:{}),
+      ...(featurePool&&sessions&&featureTenant?{civicResponse:{
+        repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,
+        geminiKey:productionGeminiPool?.apiKeys[0]||env.MASANAWA_GEMINI_API_KEY?.trim()||env.MASANAWA_ALPHA_GEMINI_API_KEY?.trim()||env.GEMINI_API_KEY?.trim()||'',
+      }}:{}),
       ...(sessions ? { mobileDiagnostics: {
         sessions,
         observe: (report) => { process.stdout.write(JSON.stringify(report) + "\n"); },
