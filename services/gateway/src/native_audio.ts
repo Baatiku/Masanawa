@@ -1,3 +1,4 @@
+import { masanawaReadAloud } from '@masanawa/contracts';
 import { geminiFailure } from "./gemini_failure.js";
 export interface NativeAudioRenderResult {
   readonly dataBase64: string;
@@ -155,7 +156,7 @@ export function createGeminiLiveAudioRenderer(input: {
                     input: [
                       {
                         type: "user_input",
-                        content: [{ type: "text", text: prompt }],
+                        content: [{ type: "text", text: masanawaReadAloud(prompt) }],
                       },
                     ],
                     response_format: {
@@ -168,7 +169,7 @@ export function createGeminiLiveAudioRenderer(input: {
                     },
                   }
                 : {
-                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    contents: [{ role: "user", parts: [{ text: masanawaReadAloud(prompt) }] }],
                     generationConfig: {
                       responseModalities: ["AUDIO"],
                       speechConfig: {
