@@ -196,7 +196,7 @@ export function createGeminiRecordedLiveAudioRenderer(input: {
                       parts: [
                         {
                           text: system ? prompt :
-                            "Read this transcript aloud exactly once:\n" + JSON.stringify(prompt),
+                            (context?.narrationLanguage==='ha' ? "Narrate this public bulletin faithfully in Hausa once:\n" : "Read this transcript aloud exactly once:\n") + JSON.stringify(prompt),
                         },
                       ],
                     },
