@@ -12,7 +12,7 @@ export interface NativeAudioRenderer {
     text: string,
     signal?: AbortSignal,
     onPcmChunk?: (chunk: Buffer) => void | Promise<void>,
-    context?: Readonly<{ voiceName?: string; onTranscriptDelta?: (text: string) => void | Promise<void> }>,
+    context?: Readonly<{ voiceName?: string; narrationLanguage?: 'ha'; onTranscriptDelta?: (text: string) => void | Promise<void> }>,
   ): Promise<NativeAudioRenderResult>;
 }
 
@@ -156,7 +156,7 @@ export function createGeminiLiveAudioRenderer(input: {
                     input: [
                       {
                         type: "user_input",
-                        content: [{ type: "text", text: masanawaReadAloud(prompt) }],
+                        content: [{ type: "text", text: masanawaReadAloud(prompt, context?.narrationLanguage) }],
                       },
                     ],
                     response_format: {
@@ -169,7 +169,7 @@ export function createGeminiLiveAudioRenderer(input: {
                     },
                   }
                 : {
-                    contents: [{ role: "user", parts: [{ text: masanawaReadAloud(prompt) }] }],
+                    contents: [{ role: "user", parts: [{ text: masanawaReadAloud(prompt, context?.narrationLanguage) }] }],
                     generationConfig: {
                       responseModalities: ["AUDIO"],
                       speechConfig: {
@@ -204,6 +204,7 @@ export function createGeminiLiveAudioRenderer(input: {
         ) {
           return input.fallback.render(prompt, requestSignal, onPcmChunk, {
             voiceName: selectedVoice,
+            ...(context?.narrationLanguage ? {narrationLanguage:context.narrationLanguage} : {}),
           });
         }
         throw failure;
