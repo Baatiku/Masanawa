@@ -149,8 +149,8 @@ describe('Masanawa Response route boundary',()=>{
       expect(JSON.stringify(first.json())).not.toContain('test-only-secret');
       expect(calls[0]?.url).toContain('/v1beta/auth_tokens');
       const options=JSON.parse(String(calls[0]?.init.body));
-      expect(options).toMatchObject({uses:1,fieldMask:'model,generationConfig'});
-      expect(options.bidiGenerateContentSetup.generationConfig.responseModalities).toEqual(['AUDIO']);
+      expect(options).toMatchObject({uses:1,liveConnectConstraints:{model:'models/gemini-3.1-flash-live-preview',config:{responseModalities:['AUDIO']}}});
+      expect(first.json().model).toBe('gemini-3.1-flash-live-preview');
       expect((await server.inject(input)).statusCode).toBe(200);
       expect((await server.inject(input)).statusCode).toBe(429);
       expect(calls).toHaveLength(2);
