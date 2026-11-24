@@ -707,6 +707,7 @@ export async function startGatewayService(
   const platformTenantRaw = env.MASANAWA_PLATFORM_TENANT_ID?.trim();
   const otpPepper = env.MASANAWA_AUTH_OTP_PEPPER?.trim();
   let platformTenantId: TenantId | undefined;
+  let productionGeminiPool: GeminiCredentialPool | undefined;
   if (
     platformTenantRaw &&
     otpPepper &&
@@ -1007,7 +1008,6 @@ export async function startGatewayService(
     }
 
 
-    let productionGeminiPool: GeminiCredentialPool | undefined;
     if (!strategy) {
       if (!database.skills || !database.skillGuides) {
         await database.close().catch(() => undefined);
@@ -1195,7 +1195,14 @@ export async function startGatewayService(
           model: liveModel,voiceName: liveVoice,
         } satisfies Parameters<typeof createGeminiLiveTokenService>[0];
         mbLiveVoiceTokens = createGeminiLiveTokenService(relayProvider);
-        ngnLiveVoiceTokens = createGeminiLiveTokenService({ ...relayProvider, serverRelayProvider: true });
+        // Temporary, NGN-call-only compatibility fallback for the reported Gemini
+        // 3.8 Live realtime-audio regression. Keep recorded replies and other
+        // configured models unchanged. Requalify 3.8 with multi-turn speech.
+        ngnLiveVoiceTokens = createGeminiLiveTokenService({
+          ...relayProvider,
+          model: liveModel === "gemini-3.8-live" ? "gemini-3.1-flash-live-preview" : liveModel,
+          serverRelayProvider: true,
+        });
       }
     }
   }
@@ -2315,7 +2322,10 @@ export async function startGatewayService(
       ...(ngnWallet ? { ngnWallet } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
-      ...(featurePool&&sessions&&featureTenant?{civicResponse:{repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,...((env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)?.trim()?{geminiKey:(env.MASANAWA_GEMINI_API_KEY??env.GEMINI_API_KEY)!.trim()}: {})}}:{}),
+      ...(featurePool&&sessions&&featureTenant?{civicResponse:{
+        repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,
+        geminiKey:productionGeminiPool?.apiKeys[0]||env.MASANAWA_GEMINI_API_KEY?.trim()||env.MASANAWA_ALPHA_GEMINI_API_KEY?.trim()||env.GEMINI_API_KEY?.trim()||'',
+      }}:{}),
       ...(sessions ? { mobileDiagnostics: {
         sessions,
         observe: (report) => { process.stdout.write(JSON.stringify(report) + "\n"); },
