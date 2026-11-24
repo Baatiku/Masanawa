@@ -1195,7 +1195,14 @@ export async function startGatewayService(
           model: liveModel,voiceName: liveVoice,
         } satisfies Parameters<typeof createGeminiLiveTokenService>[0];
         mbLiveVoiceTokens = createGeminiLiveTokenService(relayProvider);
-        ngnLiveVoiceTokens = createGeminiLiveTokenService({ ...relayProvider, serverRelayProvider: true });
+        // Temporary, NGN-call-only compatibility fallback for the reported Gemini
+        // 3.8 Live realtime-audio regression. Keep recorded replies and other
+        // configured models unchanged. Requalify 3.8 with multi-turn speech.
+        ngnLiveVoiceTokens = createGeminiLiveTokenService({
+          ...relayProvider,
+          model: liveModel === "gemini-3.8-live" ? "gemini-3.1-flash-live-preview" : liveModel,
+          serverRelayProvider: true,
+        });
       }
     }
   }
