@@ -35,12 +35,12 @@ export function publicNewsProjection(payload:unknown,now=Date.now()){
 export function registerPublicNews(app:FastifyInstance,options:{
  tenant:string;service:FeedRoutesOptions["service"];enabled:()=>boolean;
 }){
- app.get("/public/news",async(request,reply)=>{
+ app.get("/v1/public/news",async(request,reply)=>{
   reply.header("X-Content-Type-Options","nosniff").header("Cache-Control","no-store");
   if(!options.enabled()||!options.service.newsList)return reply.code(503).send({code:"news_unavailable"});
   const q=object(request.query),cursor=q.cursor;
   if(Object.keys(q).some(k=>k!=="cursor")||
-    new URL(request.raw.url??"/public/news","http://local").searchParams.getAll("cursor").length>1||
+    new URL(request.raw.url??"/v1/public/news","http://local").searchParams.getAll("cursor").length>1||
     cursor!==undefined&&(typeof cursor!=="string"||!/^[A-Za-z0-9_=-]{1,700}$/.test(cursor)))
    return reply.code(422).send({code:"invalid_news_query"});
   try{
