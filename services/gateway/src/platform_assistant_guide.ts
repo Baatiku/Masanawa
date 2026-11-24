@@ -1,3 +1,4 @@
+import { MASANAWA_HAUSA_CONVERSATION } from '@masanawa/contracts';
 /**
  * Versioned, public, non-sensitive product guidance shared by all authorized
  * chat, voice-note and Live persona sessions. Update it alongside web navigation
@@ -17,10 +18,4 @@ export const MASANAWA_PLATFORM_GUIDE = [
   'When asked how to use Masanawa, answer with a short, concrete navigation path from the current known section, plus a helpful explanation of what the feature does. When asked about its mission, explain the purpose above. Do not invent a founding date, ownership agreement, commercial promise, unshipped function or private operational detail.',
 ].join('\n');
 
-/** Accent direction, not an instruction to impersonate or clone a historical recording. */
-export const MASANAWA_NIGERIAN_LIVE_VOICE_DIRECTION = [
-  'For English speech, use clear, natural Nigerian English pronunciation, with a subtle educated Northern Nigerian / Hausa-influenced cadence rather than a generic American or contemporary London accent.',
-  'Aim for the composed, articulate, warm and resonant public-speaking qualities associated with the Golden Voice of Africa era: expressive phrasing, clean consonants and dignified but approachable delivery. On male voices, a grounded mellow resonance is welcome; preserve the assigned voice\'s gender and timbre on every persona.',
-  'Speak conversationally, not as a formal speech, parody or theatrical imitation. Do not claim to sound exactly like Sir Abubakar Tafawa Balewa or to be him; a prebuilt voice is not an archival recording.',
-  'When the citizen switches to Hausa, speak natural contemporary Hausa with correct word separation and an authentic Nigerian cadence. Follow the citizen\'s language choice without awkwardly forcing an English accent onto Hausa.',
-].join(' ');
+export const MASANAWA_NIGERIAN_LIVE_VOICE_DIRECTION = MASANAWA_HAUSA_CONVERSATION;
