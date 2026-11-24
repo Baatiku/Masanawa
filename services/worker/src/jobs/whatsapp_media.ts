@@ -80,10 +80,10 @@ export async function synthesizeWhatsAppVoice(input:{text:string;voice:string;ap
     method:'POST',redirect:'error',signal,
     headers:{'x-goog-api-key':input.apiKey,'content-type':'application/json'},
     body:JSON.stringify(interactions?{
-      model:input.model,store:false,input:[{type:'user_input',content:[{type:'text',text:masanawaReadAloud(input.text)}]}],
+      model:input.model,store:false,input:[{type:'user_input',content:[masanawaSpeechPart(input.text)]}],
       response_format:{type:'audio',mime_type:'audio/l16',sample_rate:24000},
       generation_config:{speech_config:[{voice:input.voice}]},
-    }:{contents:[{role:'user',parts:[{text:masanawaReadAloud(input.text)}]}],generationConfig:{
+    }:{contents:[{role:'user',parts:[{text:input.text}]}],generationConfig:{
       responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:input.voice}}},
     }}),
   });
