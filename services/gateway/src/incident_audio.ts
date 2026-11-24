@@ -85,8 +85,8 @@ export function createIncidentAudioService(options:{
       if(quota.count>=3||globalCount>=20)throw new Error('incident_audio_rate_limited');
       quota.count++;globalCount++;limits.set(ip,quota);
       const result=await renderer.render(
-        'Narrate this approved public incident bulletin once in standard Nigerian Hausa, faithfully translating its meaning and retaining all uncertainty, names, numbers and location details. Use a calm and clear radio-news style. Do not invent details, embellish, dramatize or claim official verification.\n'+JSON.stringify(script),
-        AbortSignal.timeout(40_000),
+        script,
+        AbortSignal.timeout(40_000), undefined, {voiceName:voice,narrationLanguage:'ha'},
       );
       const audio=audioToWav(result.dataBase64,result.mimeType);
       cached.set(key,{audio,at:current});
