@@ -707,6 +707,7 @@ export async function startGatewayService(
   const platformTenantRaw = env.MASANAWA_PLATFORM_TENANT_ID?.trim();
   const otpPepper = env.MASANAWA_AUTH_OTP_PEPPER?.trim();
   let platformTenantId: TenantId | undefined;
+  let productionGeminiPool: GeminiCredentialPool | undefined;
   if (
     platformTenantRaw &&
     otpPepper &&
@@ -1007,7 +1008,6 @@ export async function startGatewayService(
     }
 
 
-    let productionGeminiPool: GeminiCredentialPool | undefined;
     if (!strategy) {
       if (!database.skills || !database.skillGuides) {
         await database.close().catch(() => undefined);
