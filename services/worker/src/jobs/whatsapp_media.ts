@@ -1,4 +1,4 @@
-import { masanawaReadAloud } from '@masanawa/contracts';
+import { masanawaSpeechPart } from '@masanawa/contracts';
 import {spawn} from 'node:child_process';
 
 const MAX_AUDIO_BYTES=8*1024*1024;
