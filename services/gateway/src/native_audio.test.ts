@@ -14,7 +14,8 @@ describe("independent Gemini voice reply synthesis", () => {
         );
         const body = JSON.parse(String(init?.body));
         expect(body.model).toBe("gemini-3.8-flash-tts");
-        expect(body.input[0].content[0].text).toBe("Hello there");
+        expect(body.input[0].content[0].text).toContain("Transcript:\nHello there");
+        expect(body.input[0].content[0].text).toContain("85–105 words per minute");
         expect(body.generation_config.speech_config).toEqual([
           { voice: voiceName },
         ]);
@@ -124,7 +125,7 @@ it.each(["Bodi", "Fora"])(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent",
       );
       const body = JSON.parse(String(init?.body));
-      expect(body.contents[0].parts[0].text).toBe("Exact reply");
+      expect(body.contents[0].parts[0].text).toContain("Transcript:\nExact reply");
       expect(body.generationConfig.speechConfig.voiceConfig).toEqual({
         voice: voiceName,
       });
