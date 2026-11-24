@@ -6,3 +6,5 @@ export * from "./external-ref.js";
 export * from "./ids.js";
 export * from "./time.js";
 export * from './ngn-data-approval.js';
+
+export * from './speech-direction.js';
