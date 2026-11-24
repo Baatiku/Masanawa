@@ -1,3 +1,4 @@
+import {registerPublicNews} from "./public_news.js";
 import {registerPostSafetyRoutes,type PostSafetyPort} from './safety_routes.js';
 import type {FastifyInstance,FastifyRequest} from "fastify";
 import {registerHomeFeedRoutes,type FeedRoutesOptions} from "./routes.js";
@@ -21,6 +22,8 @@ export interface StatusRuntime {
  /** Optional server-derived spam risk rule; ordinary authenticated comments are visible. */
  isNewAccount?:(session:StatusSession)=>Promise<boolean>;
  enabled?:()=>boolean;
+ /** Configured platform tenant for anonymous approved-news metadata only. */
+ publicNewsTenant?:string;
  safety?:PostSafetyPort;
  promotions?:PromotionPort;
  promotionsEnabled?:()=>boolean;
@@ -46,6 +49,7 @@ export interface StatusRuntime {
 /** One registration for the canonical feed/editorial/media services. No
  * separate session store, publisher, ledger or PostgreSQL connection. */
 export async function registerStatusRuntime(app:FastifyInstance,options:StatusRuntime){
+ if(options.publicNewsTenant)registerPublicNews(app,{tenant:options.publicNewsTenant,service:options.feed,enabled:options.enabled??(()=>true)});
  // This route is a read-only crawler preview outside the signed-in fan scope.
  if(options.publicLanding){
   const landing=options.publicLanding;

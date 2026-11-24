@@ -1722,6 +1722,7 @@ export async function startGatewayService(
       createApprovedPublicImageReader(publicPreview,mediaConfiguration):undefined;
     status = {
       sessions,
+      ...(platformTenantId?{publicNewsTenant:platformTenantId}:{}),
       ...(database.featurePool?{safety:new PgPostSafetyRepository(database.featurePool,
         (t,u,id)=>new PgHomeFeedRepository(database.featurePool!,true).find(t,u,id,true))}:{}),
       feed: new FeedService(
