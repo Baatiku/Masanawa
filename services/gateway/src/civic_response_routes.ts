@@ -136,18 +136,19 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
       if(!options.geminiKey){reply.code(503);return {error:'live_reporting_not_configured'};}
       admitLive(actor);
       const now=Date.now(),expiresAt=new Date(now+15*60_000).toISOString();
+      const model='gemini-3.1-flash-live-preview';
       const provider=await fetch('https://generativelanguage.googleapis.com/v1beta/auth_tokens',{
         method:'POST',signal:AbortSignal.timeout(20_000),
         headers:{'content-type':'application/json','x-goog-api-key':options.geminiKey},
         body:JSON.stringify({uses:1,expireTime:expiresAt,newSessionExpireTime:new Date(now+60_000).toISOString(),
-          fieldMask:'model,generationConfig',bidiGenerateContentSetup:{model:'models/gemini-3.8-live',generationConfig:{responseModalities:['AUDIO']}}}),
+          liveConnectConstraints:{model:'models/'+model,config:{responseModalities:['AUDIO']}}}),
       });
       if(!provider.ok){reply.code(503);return {error:'live_reporting_unavailable'};}
       const payload=await provider.json() as {name?:unknown};
       if(typeof payload.name!=='string'||payload.name.length<16){reply.code(503);return {error:'live_reporting_unavailable'};}
       reply.header('Cache-Control','no-store');
       return {websocketUrl:'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token='+encodeURIComponent(payload.name),
-        model:'gemini-3.8-live',expiresAt};
+        model,expiresAt};
     }catch(error){return failure(error,reply)}
   });
   app.post('/v1/response/interview',{schema:{body:Type.Object({history:Type.Array(Type.Object({role:Type.Union([Type.Literal('citizen'),Type.Literal('assistant')]),text:Type.String({minLength:1,maxLength:2000})},{additionalProperties:false}),{minItems:1,maxItems:18}),language:Type.Optional(Type.String({maxLength:15}))},{additionalProperties:false})}},async(req,reply)=>{
