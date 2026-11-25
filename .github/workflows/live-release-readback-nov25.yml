@@ -1,0 +1,23 @@
+name: Read public Masanawa release versions
+on:
+  push:
+    branches: [diagnostic/live-release-readback-nov25]
+    paths: ['.github/workflows/live-release-readback-nov25.yml']
+permissions:
+  contents: read
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read production Gateway and web release
+        run: |
+          set -u
+          h="$(mktemp)"
+          b="$(mktemp)"
+          trap 'rm -f "$h" "$b"' EXIT
+          curl -sS --max-time 15 -H 'Cache-Control: no-cache' -D "$h" -o /dev/null https://api.masanawa.com/readyz || true
+          awk 'BEGIN {IGNORECASE=1} /^HTTP\// || tolower($0) ~ /^x-masanawa-release:/ {print}' "$h"
+          curl -sS --max-time 15 -H 'Cache-Control: no-cache' -D "$h" -o "$b" "https://app.masanawa.com/masanawa-web-release.json?t=$(date +%s)" || true
+          awk '/^HTTP\// {print}' "$h"
+          python3 -c 'import json,sys,re; v=json.load(open(sys.argv[1])).get("revision",""); print("web revision:",v if re.fullmatch(r"[a-zA-Z0-9._:-]{8,100}",v) else "unavailable")' "$b" || true
