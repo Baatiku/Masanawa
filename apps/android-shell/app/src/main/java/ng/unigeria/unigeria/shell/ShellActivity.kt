@@ -228,6 +228,14 @@ class ShellActivity : ComponentActivity() {
         }?.forEach { it.delete() }
         webView = newWebView()
         pendingWebRefresh = webUpdatePrefs.getBoolean("pending_refresh", false)
+        // On an online APK upgrade discard stale HTTP assets, not cookies, account data or drafts.
+        val nativeVersion = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+        val refreshAfterUpgrade = nativeVersion.isNotEmpty() && hasInternetNetwork() &&
+            webUpdatePrefs.getString("native_release_version", null) != nativeVersion
+        if (refreshAfterUpgrade) {
+            webView.clearCache(true)
+            webUpdatePrefs.edit().putString("native_release_version", nativeVersion).apply()
+        }
         container.addView(webView, FrameLayout.LayoutParams(-1, -1))
         articleReader = ShellArticleReader(this, container) { destination ->
             // Native tabs operate on the existing trusted Masanawa web navigation.
@@ -287,7 +295,7 @@ class ShellActivity : ComponentActivity() {
         })
 
         collectSharedInput(intent)
-        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null)
+        if (refreshAfterUpgrade || savedInstanceState == null || webView.restoreState(savedInstanceState) == null)
             webView.loadUrl(launchUrl(intent))
     }
 

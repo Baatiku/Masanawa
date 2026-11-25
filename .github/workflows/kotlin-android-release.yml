@@ -1,6 +1,6 @@
 name: Masanawa Android signed release
 
-# Release Masanawa Android 1.3.4: original branding, launcher badge and official notification icon.
+# Release Masanawa Android 1.3.5: refresh web assets after an online native upgrade.
 # Produces a signed, installable APK and a Play-ready bundle without publishing
 # either to the store. The new package identity is distinct from Flutter.
 on:
@@ -30,6 +30,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Observe production Gateway release (nonblocking)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          trap 'rm -f "$headers"' EXIT
+          curl --silent --show-error --max-time 20 --dump-header "$headers" --output /dev/null https://api.masanawa.com/readyz
+          awk 'BEGIN {IGNORECASE=1} /^HTTP\// || tolower($0) ~ /^x-masanawa-release:/ {print}' "$headers"
       - name: Install Android platform
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -47,13 +55,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
           EXPECTED_SHA256: ${{ secrets.SHELL_EXPECTED_UPLOAD_SHA256 }}
-          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 16 }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 17 }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64" && test -n "$STORE_PASSWORD" &&
             test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$EXPECTED_SHA256"
-          # Release must supersede the previous Android 1.3.2 candidate (code 15).
-          test "$SHELL_RELEASE_VERSION_CODE" -gt 15
+          # Release must supersede the previous Android 1.3.4 release (code 16).
+          test "$SHELL_RELEASE_VERSION_CODE" -gt 16
           # Accept either the raw Base64 value or a copied .env assignment.
           # Never print signing material; keep invalid inputs failed closed.
           python3 - <<'PY'
@@ -120,7 +128,7 @@ jobs:
           SHELL_RELEASE_STORE_PASSWORD: ${{ secrets.SHELL_RELEASE_STORE_PASSWORD }}
           SHELL_RELEASE_KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           SHELL_RELEASE_KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
-          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 16 }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 17 }}
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease :app:testDebugUnitTest
