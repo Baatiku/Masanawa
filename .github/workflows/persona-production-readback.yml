@@ -26,5 +26,6 @@ jobs:
           const source=(v)=>{if(!text(v,1800))return false;try{const u=new URL(v);return u.protocol==="https:"&&!u.username&&!u.password&&!u.port&&!u.hash&&u.hostname.includes(".")&&!/^\d|^\[/.test(u.hostname)&&!u.hostname.endsWith(".local")&&u.href===v;}catch{return false;}};
           const bad=r.people.filter(p=>!text(p.name,160)||!p.name.trim()||!Array.isArray(p.aliases)||p.aliases.length>10||!p.aliases.every(a=>text(a,160))||!text(p.office,240)||!p.office.trim()||!text(p.jurisdiction,240)||!text(p.status,40)||!text(p.period,240)||!text(p.summary,1600)||!["roster","researched"].includes(p.evidenceLevel)||!Array.isArray(p.sources)||p.sources.length>20||!p.sources.every(source));
           console.log(JSON.stringify({gatewayCompatible:r.people.length-bad.length,invalid:bad.map(p=>p.id)}));
+          for(const p of bad){console.log(JSON.stringify({id:p.id,fields:Object.entries(p).filter(([k,v])=>typeof v==="string"&&!text(v,k==="summary"?1600:k==="name"?160:k==="status"?40:240)).map(([k,v])=>({key:k,length:v.length})),aliases:p.aliases.filter(a=>!text(a,160)),badSources:p.sources.filter(s=>!source(s))}));}
           if(bad.length)process.exit(1);
           NODE
