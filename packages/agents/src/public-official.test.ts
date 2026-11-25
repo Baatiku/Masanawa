@@ -10,6 +10,19 @@ it('admits approved attributed launch references without admitting social posts,
   'https://user@en.wikipedia.org/wiki/Person','https://en.wikipedia.org/wiki/Person?redirect=x',
   'https://x.com/official/status/123','https://example.gov.ng/record','https://en.wikipedia.org/wiki/%00'])expect(isApprovedBiographySourceUrl(url)).toBe(false);
 });
+it('accepts exact reviewed national-leadership primary sources without broad domain bypasses',()=>{
+ for(const url of ['https://statehouse.gov.ng/team/kashim-shettima/',
+  'https://nass.gov.ng/mps/senators','https://officeofthespeaker.ng/about-the-speaker/',
+  'https://www.supremecourt.gov.ng/Chief-Justice-of-Nigeria',
+  'https://www.osgf.gov.ng/about/the-sgf/','https://www.efcc.gov.ng/Leadership',
+  'https://www.cbn.gov.ng/AboutCBN/Biodata/cardoso.htm',
+  'https://www.finance.gov.ng/about','https://fcda.gov.ng/management/']){
+  expect(isApprovedBiographySourceUrl(url),url).toBe(true);
+ }
+ for(const url of ['https://finance.gov.ng.evil.test/about','https://finance.gov.ng/',
+  'http://finance.gov.ng/about','https://finance.gov.ng/about?return=evil'])
+  expect(isApprovedBiographySourceUrl(url),url).toBe(false);
+});
 it('accepts only direct HTTPS Grokipedia article URLs without wrappers or alternate hosts',()=>{
  for(const url of ['https://grokipedia.com/page/Bola_Tinubu','https://www.grokipedia.com/page/Peter_Obi'])expect(isGrokipediaArticleUrl(url)).toBe(true);
  for(const url of [undefined,'http://grokipedia.com/page/name','https://grokipedia.com.evil.test/page/name',
