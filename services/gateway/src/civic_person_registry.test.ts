@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
-import {civicPersonBinding,decodeCivicPersonRegistry,loadCivicPersonRegistry,rotateCivicRecords,summarizeCivicRegistration} from './civic_person_registry.js';
-const row={id:'person-example',name:'Example Person',aliases:[],office:'Legislator',jurisdiction:'Nigeria',status:'Current',period:'2023–2027',evidenceLevel:'roster',summary:'Published directory row',sources:['https://nass.gov.ng/mps/members']};
+import {civicPersonBinding,decodeCivicPersonRegistry,loadCivicPersonRegistry,rotateCivicRecords,summarizeCivicRegistration,type CivicPersonRecord} from './civic_person_registry.js';
+const row:CivicPersonRecord={id:'person-example',name:'Example Person',aliases:[],office:'Legislator',jurisdiction:'Nigeria',status:'Current',period:'2023–2027',evidenceLevel:'roster',summary:'Published directory row',sources:['https://nass.gov.ng/mps/members']};
 it('validates published registry and rejects duplicate IDs and unsafe source URLs',()=>{
  expect(decodeCivicPersonRegistry({schema:1,people:[row]})).toEqual([row]);
  expect(()=>decodeCivicPersonRegistry({schema:1,people:[row,row]})).toThrow();
