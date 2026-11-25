@@ -27,6 +27,8 @@ describe('shared Masana conversation continuity',()=>{
   const live=livePersonaInstruction(persona,[]);
   expect(live).toContain('Northern Nigerian / Hausa-influenced');
   expect(live).toContain('preserve the assigned voice');
+   expect(live).toContain('85–105 words per minute');
+   expect(live).toContain('Always answer conversationally in natural standard Hausa');
   expect(live).not.toContain('Sir Abubakar Tafawa Balewa says');
  });
  it('includes the bound published biography for official and institutional guides without presenting it as independent evidence',()=>{

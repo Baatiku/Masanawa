@@ -15,6 +15,7 @@ describe("independent Gemini voice reply synthesis", () => {
         const body = JSON.parse(String(init?.body));
         expect(body.model).toBe("gemini-3.8-flash-tts");
         expect(body.input[0].content[0].text).toBe("Hello there");
+        expect(body.input[0].content[0].annotations[0]).toMatchObject({type:"speech_metadata",style:expect.stringContaining("85–105 words per minute")});
         expect(body.generation_config.speech_config).toEqual([
           { voice: voiceName },
         ]);

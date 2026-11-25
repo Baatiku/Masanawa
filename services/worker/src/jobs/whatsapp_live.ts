@@ -1,3 +1,4 @@
+import { MASANAWA_HAUSA_CONVERSATION, MASANAWA_SPEECH_DIRECTION } from '@masanawa/contracts';
 import type {Pool} from '@masanawa/postgres';
 import {decryptLinkedSecret} from './whatsapp_linked.js';
 
@@ -61,7 +62,7 @@ export function generateLiveReply(input:LiveRequest):Promise<LiveReply>{
     socket.addEventListener('open',()=>{
       socket.send(JSON.stringify({setup:{model:'models/'+input.model,
         generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:input.voice}}}},
-        systemInstruction:{parts:[{text:input.system}]},outputAudioTranscription:{}}}));
+        systemInstruction:{parts:[{text:input.system+'\n'+(input.system.includes('Speak the following pre-approved assistant message exactly')?MASANAWA_SPEECH_DIRECTION:MASANAWA_HAUSA_CONVERSATION)}]},outputAudioTranscription:{}}}));
     });
     socket.addEventListener('message',event=>{
       received=received.then(async()=>{
