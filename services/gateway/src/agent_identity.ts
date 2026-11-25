@@ -91,7 +91,7 @@ export function createPgAgentMasanaIdentityReader(
         const photo=reviewed&&row.requested_portrait==null?OFFICIAL_PORTRAITS.find(p=>p.characterId===row.character_id&&p.officialName===reviewed.officialName):undefined;
         const subject=reviewed?OFFICIAL_ROSTER_MANIFEST.find(p=>p.characterId===row.character_id&&p.officialName===reviewed.officialName):undefined;
         const portrait=photo?{url:publicOfficialMediaUrl(photo.assetKey),sourceUrl:photo.sourceUrl,credit:photo.credit,licenseLabel:photo.licenseLabel,...(photo.licenseUrl?{licenseUrl:photo.licenseUrl}:{})}:undefined;
-        const party=subject?{code:subject.party,name:OFFICIAL_PARTIES[subject.party].name,emblemUrl:partyEmblemUrl(subject.party),sourceUrl:subject.rosterSourceUrl,checkedAt:subject.rosterCheckedAt}:undefined;
+        const party=subject?.party?{code:subject.party,name:OFFICIAL_PARTIES[subject.party].name,emblemUrl:partyEmblemUrl(subject.party),sourceUrl:subject.rosterSourceUrl,checkedAt:subject.rosterCheckedAt}:undefined;
         const constitutionalId=row.civic_representation==='independent_civic_ai_guide'
           ? approvedCivicAgencyId(row.constitutional_civic_id) : null;
         const previouslySeededId=row.profile_approved_by==='masanawa-civic-seed-v1'
