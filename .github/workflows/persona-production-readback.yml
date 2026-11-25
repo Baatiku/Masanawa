@@ -18,3 +18,13 @@ jobs:
         run: |
           curl --fail-with-body --silent --show-error --max-time 30 https://app.masanawa.com/api/ai/civic-registry -o /tmp/registry
           node -e 'const r=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8"));if(r.schema!==1||!Array.isArray(r.people)||!r.people.length)throw Error("registry unavailable");const keys=new Set(r.people.map(p=>p.id));if(keys.size!==r.people.length)throw Error("duplicate profile IDs");const invalid=r.people.filter(p=>!/^person-[a-z0-9-]{3,125}$/.test(p.id)||typeof p.name!=="string"||!Array.isArray(p.sources));if(invalid.length)throw Error("invalid registry records");console.log(JSON.stringify({schema:r.schema,publishedPeople:r.people.length,sourceLinked:r.people.filter(p=>p.sources.length).length,researched:r.people.filter(p=>p.evidenceLevel==="researched").length,roster:r.people.filter(p=>p.evidenceLevel==="roster").length}));'
+      - name: Validate every published record against Gateway bounds
+        run: |
+          node <<'NODE'
+          const r=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8"));
+          const text=(v,max)=>typeof v==="string"&&v.length<=max&&!/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(v);
+          const source=(v)=>{if(!text(v,1800))return false;try{const u=new URL(v);return u.protocol==="https:"&&!u.username&&!u.password&&!u.port&&!u.hash&&u.hostname.includes(".")&&!/^\d|^\[/.test(u.hostname)&&!u.hostname.endsWith(".local")&&u.href===v;}catch{return false;}};
+          const bad=r.people.filter(p=>!text(p.name,160)||!p.name.trim()||!Array.isArray(p.aliases)||p.aliases.length>10||!p.aliases.every(a=>text(a,160))||!text(p.office,240)||!p.office.trim()||!text(p.jurisdiction,240)||!text(p.status,40)||!text(p.period,240)||!text(p.summary,1600)||!["roster","researched"].includes(p.evidenceLevel)||!Array.isArray(p.sources)||p.sources.length>20||!p.sources.every(source));
+          console.log(JSON.stringify({gatewayCompatible:r.people.length-bad.length,invalid:bad.map(p=>p.id)}));
+          if(bad.length)process.exit(1);
+          NODE
