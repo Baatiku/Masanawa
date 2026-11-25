@@ -1,0 +1,20 @@
+name: Production persona readback
+on:
+  push:
+    branches: [ops/persona-production-readback-20261125]
+permissions:
+  contents: read
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Public readiness and release
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 20 --dump-header /tmp/headers https://api.masanawa.com/readyz -o /tmp/readiness
+          grep -i '^x-masanawa-release:' /tmp/headers
+          jq '{service,status}' /tmp/readiness
+      - name: Public civic registry contract
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 30 https://app.masanawa.com/api/ai/civic-registry -o /tmp/registry
+          node -e 'const r=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8"));if(r.schema!==1||!Array.isArray(r.people)||!r.people.length)throw Error("registry unavailable");const keys=new Set(r.people.map(p=>p.id));if(keys.size!==r.people.length)throw Error("duplicate profile IDs");const invalid=r.people.filter(p=>!/^person-[a-z0-9-]{3,125}$/.test(p.id)||typeof p.name!=="string"||!Array.isArray(p.sources));if(invalid.length)throw Error("invalid registry records");console.log(JSON.stringify({schema:r.schema,publishedPeople:r.people.length,sourceLinked:r.people.filter(p=>p.sources.length).length,researched:r.people.filter(p=>p.evidenceLevel==="researched").length,roster:r.people.filter(p=>p.evidenceLevel==="roster").length}));'
