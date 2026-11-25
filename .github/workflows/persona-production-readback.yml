@@ -13,6 +13,56 @@ jobs:
         run: |
           curl --fail-with-body --silent --show-error --max-time 20 --dump-header /tmp/headers https://api.masanawa.com/readyz -o /tmp/readiness
           grep -i '^x-masanawa-release:' /tmp/headers
+          tr -d '\r' < /tmp/headers | grep -Eiq '^x-masanawa-release:[[:space:]]*e80946d135a2c9186a57fe7a1a180fc7daa59e49[[:space:]]*
+          jq '{service,status}' /tmp/readiness
+      - name: Public civic registry contract
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 30 https://app.masanawa.com/api/ai/civic-registry -o /tmp/registry
+          node -e 'const r=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8"));if(r.schema!==1||!Array.isArray(r.people)||!r.people.length)throw Error("registry unavailable");const keys=new Set(r.people.map(p=>p.id));if(keys.size!==r.people.length)throw Error("duplicate profile IDs");const invalid=r.people.filter(p=>!/^person-[a-z0-9-]{3,125}$/.test(p.id)||typeof p.name!=="string"||!Array.isArray(p.sources));if(invalid.length)throw Error("invalid registry records");console.log(JSON.stringify({schema:r.schema,publishedPeople:r.people.length,sourceLinked:r.people.filter(p=>p.sources.length).length,researched:r.people.filter(p=>p.evidenceLevel==="researched").length,roster:r.people.filter(p=>p.evidenceLevel==="roster").length}));'
+      - name: Validate every published record against Gateway bounds
+        run: |
+          node <<'NODE'
+          const r=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8"));
+          const text=(v,max)=>typeof v==="string"&&v.length<=max&&!/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(v);
+          const source=(v)=>{if(!text(v,1800))return false;try{const u=new URL(v);return u.protocol==="https:"&&!u.username&&!u.password&&!u.port&&!u.hash&&u.hostname.includes(".")&&!/^\d|^\[/.test(u.hostname)&&!u.hostname.endsWith(".local")&&u.href===v;}catch{return false;}};
+          const bad=r.people.filter(p=>!text(p.name,160)||!p.name.trim()||!Array.isArray(p.aliases)||p.aliases.length>10||!p.aliases.every(a=>text(a,160))||!text(p.office,240)||!p.office.trim()||!text(p.jurisdiction,240)||!text(p.status,40)||!text(p.period,240)||!text(p.summary,1600)||!["roster","researched"].includes(p.evidenceLevel)||!Array.isArray(p.sources)||p.sources.length>20||!p.sources.every(source));
+          console.log(JSON.stringify({gatewayCompatible:r.people.length-bad.length,invalid:bad.map(p=>p.id)}));
+          for(const p of bad){console.log(JSON.stringify({id:p.id,fields:Object.entries(p).filter(([k,v])=>typeof v==="string"&&!text(v,k==="summary"?1600:k==="name"?160:k==="status"?40:240)).map(([k,v])=>({key:k,length:v.length})),aliases:p.aliases.filter(a=>!text(a,160)),badSources:p.sources.filter(s=>!source(s))}));}
+          if(bad.length)process.exit(1);
+          NODE
+      - name: Legacy reservation coverage audit
+        run: |
+          node <<'NODE'
+          const r=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8"));
+          const legacyNames=["Bola Ahmed Tinubu","Atiku Abubakar","Peter Gregory Obi","Sandy Ojang Onor","Kalu Kalu Agu","Opah Eric Chinemeucheya","Ogah Iroetugo Ndubuisi","Anosike Kelechi","Modibbo Hammantukur Ribadu","Aminu Ahmed Galadima","Dahiru Aishatu Ahmed","Vunobolki Maurice Michael","John James Akpanudoedehe","Eno Umo Bassey","Enyong Michael Okon","Brownson Ibanga Akpan","Halliru Dauda Jika","Abubakar Mohammed Abdullahi","Kashim Ibrahim Muhammad","Adamu Usman Ahmed","Hembe Iorwase Herman","Alia Hyacinth Iormem","Shija Terhemba","Aondoakaa Michael Kaase","Babagana Buhari","Gubio Alhaji Mustapha","Ibrahim Sanusi Kashim","Abba-Gana Ibrahim Baba","Otu Bassey Edet","Archibong Arthur Javis","Ogboru Ovedje Great","Oborevwori Sheriff Francis Orohwedor","Iyovwaye Chris","Mrakpor Peter Adogbejire","Ukpai Mba Udeh","Nwifuru Ogbonna Francis","Igwe Nwagu Paulinus","Chukwuma Odii Ifeanyi","Ocho Obodoeze Chukwuma","Mbah Peter Ndubuisi","Ohaa Chinyeaka Christian","Nnaji Uchechukwu Geoffrey","Bala Bello","Gwamna Jamil Isyaku","Ardo Babayo Kumo","Sabo Mohammed Nakudu","Namadi Umar A.","Dutse Aminu Sani","Sule Mustapha Lamido","Isa Mohammed Ashiru","Sani Uba","Bawa Shehu Usman","Ibrahim Ali Amin","Yusuf Abba Kabir","Abacha Muhammed Sani","Ahmad Babba Kaita","Umaru Dikko Radda","Ilu-Barde Aliyu","Garba Yakubu Lado","Malami Abubakar","Idris Nasir","Zakari Mohammed","Yakubu Danladi Salihu","Abdulmumin Yinka Ajia","Kawu Sulaiman Bolakale","Gbadebo Rhodes Vivour","Hamzat Kadri Obafemi","Doherty Olufunso Adeshina","Doherty Adedeji Olugbemiga","Nuhu Angbazo","Aliyu Ahmed Wadada","Emmanuel David Ombugadu","Mohammed Kpautagi","Mohammed Umaru Bago","Muhammad Yahaya Adam","Muhammad Mamman Nami","Lawal Jimi Adebisi","Adeola Solomon Olamilekan","Adegoke Taofeek Adegboyega","Alli Sharafadeen Abiodun","Yusuf Akim Adebola","Gbolarumi Hazeem Ola","Sura John Sunday","Mutfwang Caleb Manasseh","Akuns Jonathan Sunday","Ropshik Kefas Wungak","Pidomson Gabriel Baritulem","Chinda Kingsley Ogundu","Lilu-Briggs Dumo Owukori","Ejekwu Samuel Soni","Manir Muhammad Dan'Iya","Aliyu Ahmed Sokoto","Aliyu Shamsudeen Ahmad","Abdullahi Sokoto Abubakar","Abubakar Umar Tutare","Kefas Agbu","Yahaya Mohammed Sani","Bwacha Emmanuel","Kassim Gaidam","Wali Baba Mallam","Ibrahim Mallam Shuaibu","Usman Abdullahi","Shinkafi Bilyaminu Yusuf","Lawal Dauda","Marafa Kabiru Garba","Shehu-Gusau Ibrahim","Kashim Shettima","Godswill Akpabio","Tajudeen Abbas","Kudirat Kekere-Ekun","George Akume","Nuhu Ribadu","Olayemi Cardoso","Taiwo Oyedele","Nyesom Wike"];
+          const key=s=>s.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().toLowerCase();
+          const reserved=new Set(legacyNames.map(key));
+          const aliases=new Map();
+          for(const p of r.people)for(const k of [p.name,...p.aliases].map(key).filter(Boolean)){const ids=aliases.get(k)||new Set();ids.add(p.id);aliases.set(k,ids);}
+          const legacy=r.people.filter(p=>[p.name,...p.aliases].map(key).some(k=>reserved.has(k)));
+          const ambiguous=r.people.filter(p=>[p.name,...p.aliases].map(key).some(k=>(aliases.get(k)?.size||0)>1));
+          console.log(JSON.stringify({published:r.people.length,manifestSubjects:legacyNames.length,staticLegacyReserved:legacy.length,staticAmbiguous:ambiguous.length,missingSource:r.people.filter(p=>!p.sources.length).length,legacyProfileIds:legacy.map(p=>p.id),ambiguousProfileIds:ambiguous.map(p=>p.id),actualDatabaseRegistration:"NOT_VERIFIED"}));
+          NODE
+      - name: Confirm customer directory authentication boundary
+        run: |
+          code=$(curl --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' https://api.masanawa.com/agent/directory)
+          echo "Unauthenticated directory HTTP status: $code"
+          case "$code" in 401|403) ;; *) echo "Unexpected directory response"; exit 1;; esac
+      - name: Read aggregate database registration status when supported
+        run: |
+          node <<'NODE'
+          const headers=require("fs").readFileSync("/tmp/headers","utf8");
+          const match=headers.match(/^x-masanawa-civic-registration:\s*(.+)$/im);
+          if(!match)throw Error("Actual database registration aggregate unavailable");
+          const status=JSON.parse(match[1]);
+          const keys=["directReady","legacyReady","legacyUnresolved","ambiguous","unready","unregistered"];
+          if(!keys.every(k=>Number.isSafeInteger(status[k])&&status[k]>=0)||!Number.isSafeInteger(status.published)||keys.reduce((n,k)=>n+status[k],0)!==status.published||!Number.isFinite(Date.parse(status.checkedAt)))throw Error("invalid registration aggregate");
+          if(Math.abs(Date.now()-Date.parse(status.checkedAt))>120000)throw Error("stale registration aggregate");
+          const expected=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8")).people.length;
+          if(expected!==status.published)throw Error("database audit catalogue count differs from current published registry");
+          console.log(JSON.stringify({databaseRegistration:status,structurallyReady:status.directReady+status.legacyReady,liveProviderTest:"NOT_PERFORMED"}));
+          NODE
+ || { echo 'Expected production release not yet active'; exit 1; }
           jq '{service,status}' /tmp/readiness
       - name: Public civic registry contract
         run: |
