@@ -75,14 +75,14 @@ describe('Masanawa Response route boundary',()=>{
     expect(script).not.toContain('Private report');
     expect((await server.inject({url})).statusCode).toBe(200);
     expect(render).toHaveBeenCalledOnce();
-    expect(service.publicAudioSource).toHaveBeenCalledTimes(2); // revocation is re-checked even on a cache hit
+    expect(service.publicAudioSource).toHaveBeenCalledTimes(4); // eligibility before and after every render/read
     await server.close();
   });
   it('does not narrate unreviewed citizen allegations as verified facts',async()=>{
     const render=vi.fn(async(_text:string)=>({mimeType:'audio/l16;rate=24000',
       dataBase64:Buffer.from([0,0,0,0]).toString('base64'),durationMs:1}));
     const {server,service}=app(undefined,{render});
-    service.publicAudioSource.mockResolvedValueOnce({
+    service.publicAudioSource.mockResolvedValue({
       reference:'MR-20261120-EA46A4B0',title:'A private identifying allegation',
       summary:'Private identifying allegation not yet reviewed',category:'infrastructure',
       locationState:'Oyo',locationLga:'Ibadan North',status:'submitted',publicationStatus:'pending_review'});
@@ -167,4 +167,14 @@ describe('Masanawa Response route boundary',()=>{
     expect(blocked.statusCode).toBe(429);expect(blocked.json().error).toBe('response_ai_rate_limited');
     await server.close();
   });
+});
+
+it('does not return a bulletin withdrawn during generation',async()=>{
+  const render=vi.fn(async()=>({mimeType:'audio/l16;rate=24000',dataBase64:'AAA=',durationMs:1}));
+  const {server,service}=app(undefined,{render});
+  const initial=await service.publicAudioSource();
+  service.publicAudioSource.mockResolvedValueOnce(initial).mockRejectedValueOnce(Error('withdrawn'));
+  const response=await server.inject({url:'/v1/response/public-incidents/MR-20261120-EA46A4B0/audio'});
+  expect(response.statusCode).not.toBe(200);expect(response.headers['content-type']).not.toContain('audio/wav');
+  await server.close();
 });

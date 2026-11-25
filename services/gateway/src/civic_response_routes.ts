@@ -1,12 +1,12 @@
 import { MASANAWA_EMERGENCY_VOICE, MASANAWA_HAUSA_CONVERSATION } from '@masanawa/contracts';
 import type { FastifyInstance } from 'fastify';
-import {createIncidentAudioService} from './incident_audio.js';
+import {createIncidentAudioService,type IncidentBulletinStore} from './incident_audio.js';
 import type {NativeAudioRenderer} from './native_audio.js';
 import Type from 'typebox';
 import { CivicResponseError, RESPONSE_CATEGORIES, type NewIncident, type ResponseActor, createCivicResponseRepository } from '@masanawa/postgres';
 
 type Repository=ReturnType<typeof createCivicResponseRepository>;
-type Options={repository:Repository;authorize:(authorization:string|undefined)=>Promise<ResponseActor>;geminiKey?:string;audioRenderer?:NativeAudioRenderer};
+type Options={repository:Repository;authorize:(authorization:string|undefined)=>Promise<ResponseActor>;geminiKey?:string;audioRenderer?:NativeAudioRenderer;bulletinStore?:IncidentBulletinStore};
 const uuid='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const small=Type.String({maxLength:100});
 const boolOrNull=Type.Optional(Type.Union([Type.Boolean(),Type.Null()]));
@@ -84,7 +84,22 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
   const incidentAudio=createIncidentAudioService({
     ...(options.geminiKey?{apiKey:options.geminiKey}:{}),
     ...(options.audioRenderer?{renderer:options.audioRenderer}:{}),
+    ...(options.bulletinStore?{store:options.bulletinStore}:{}),
   });
+  // One background job at a time; restart-safe object reads prevent repeated synthesis.
+  // Scan recent public cases only. Playback can still generate older eligible cases.
+  if(options.bulletinStore&&options.geminiKey){
+    let timer:ReturnType<typeof setInterval>|undefined,working=false,position=0,closing=false;
+    app.addHook('onReady',async()=>{timer=setInterval(()=>{
+      if(working||closing)return;working=true;
+      void (async()=>{const rows=await repo.publicIncidents({limit:20,offset:0});if(!rows.length)return;
+        const row=rows[position++%rows.length];if(!row||typeof row.reference!=='string')return;
+        const source=await repo.publicAudioSource(row.reference);
+        await incidentAudio.render(source,'background-bulletin');
+      })().catch(()=>{/* retry on a subsequent scan; no incident details in logs */}).finally(()=>{working=false;});
+    },60_000);timer.unref();});
+    app.addHook('onClose',async()=>{closing=true;clearInterval(timer);});
+  }
   app.get('/v1/response/categories',async()=>({categories:repo.categories()}));
   app.get('/v1/response/contacts',{schema:{querystring:Type.Object({state:Type.Optional(small),serviceType:Type.Optional(small)},{additionalProperties:false})}},async(req,reply)=>{
     try{return {contacts:await repo.contacts(req.query as {state?:string;serviceType?:string})}}catch(error){return failure(error,reply)}
@@ -98,6 +113,8 @@ export function registerCivicResponseRoutes(app:FastifyInstance,options:Options)
     try{
       const source=await repo.publicAudioSource((req.params as {reference:string}).reference);
       const wav=await incidentAudio.render(source,req.ip||'unavailable');
+      const current=await repo.publicAudioSource(source.reference);
+      if(incidentAudio.keyFor(current)!==incidentAudio.keyFor(source)){reply.code(409);return {error:'incident_audio_revision_changed'};}
       reply.header('Cache-Control','no-store');
       reply.header('X-Content-Type-Options','nosniff');
       reply.header('Content-Disposition','inline; filename="masanawa-incident-bulletin.wav"');

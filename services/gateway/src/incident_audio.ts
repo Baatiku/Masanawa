@@ -1,5 +1,6 @@
 import { MASANAWA_EMERGENCY_VOICE } from '@masanawa/contracts';
 import {createHash} from 'node:crypto';
+import type {StatusMediaConfiguration} from './modules/home_feed/media_runtime.js';
 import {createGeminiLiveAudioRenderer, type NativeAudioRenderer} from './native_audio.js';
 
 export type PublicIncidentAudioSource={
@@ -18,7 +19,7 @@ const statuses:Record<string,string>={
   routed:'under internal routing review',acknowledged:'agency receipt recorded',
   in_progress:'being tracked',resolved:'marked resolved',closed:'closed',dismissed:'dismissed',
 };
-const squash=(value:string,max:number)=>value.replace(/[\r\n\t]+/g,' ').replace(/\\s+/g,' ').trim().slice(0,max);
+const squash=(value:string,max:number)=>value.replace(/[\r\n\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
 
 /** Narration is sourced ONLY from fields authorized for public display.
  * Never pass the private description, original voice note, reporter identity,
@@ -56,17 +57,44 @@ export function audioToWav(dataBase64:string,mimeType:string):Buffer{
   return Buffer.concat([header,audio]);
 }
 
-/** Bounded memory-only cache, intentionally not persistent: withdrawal is
- * checked in PostgreSQL on EVERY request, even if a bulletin was rendered.
- */
+export type IncidentBulletinStore={read:(key:string)=>Promise<Buffer|null>;write:(key:string,audio:Buffer)=>Promise<void>};
+const MAX_WAV=4_000_044;
+export function createIncidentBulletinStore(configuration:StatusMediaConfiguration,fetchImpl:typeof fetch=fetch):IncidentBulletinStore|undefined {
+  const {objects}=configuration;
+  if(!objects.putObject)return undefined;
+  const put=objects.putObject;
+  const origins=new Set(configuration.approvedDownloadOrigins);
+  const objectKey=(key:string)=>{if(!/^[a-f0-9]{64}$/.test(key))throw Error('incident_audio_invalid_key');return 'incident-bulletins/v1/'+key+'.wav';};
+  return {
+    async read(key){
+      const path=objectKey(key),stat=await objects.statObject(path);
+      if(!stat)return null;
+      if(stat.contentType!=='audio/wav'||!Number.isSafeInteger(stat.bytes)||stat.bytes<44||stat.bytes>MAX_WAV)throw Error('incident_audio_invalid_storage');
+      const grant=await objects.presignGet(path,60),url=new URL(grant.url);
+      if(url.protocol!=='https:'||!origins.has(url.origin)||url.username||url.password||url.hash)throw Error('incident_audio_invalid_origin');
+      const response=await fetchImpl(url,{redirect:'error',signal:AbortSignal.timeout(10000)});
+      if(!response.ok||!response.body||response.headers.get('content-type')?.split(';')[0]!=='audio/wav')throw Error('incident_audio_storage_unavailable');
+      const reader=response.body.getReader(),chunks:Buffer[]=[];let length=0;
+      try{for(;;){const part=await reader.read();if(part.done)break;length+=part.value.byteLength;if(length>stat.bytes||length>MAX_WAV)throw Error('incident_audio_invalid_storage');chunks.push(Buffer.from(part.value));}}finally{await reader.cancel().catch(()=>{});}
+      if(length!==stat.bytes)throw Error('incident_audio_invalid_storage');
+      const wav=Buffer.concat(chunks);if(wav.toString('ascii',0,4)!=='RIFF'||wav.toString('ascii',8,12)!=='WAVE')throw Error('incident_audio_invalid_storage');
+      return wav;
+    },
+    async write(key,wav){const result=await put(objectKey(key),wav,'audio/wav');
+      if(result.bytes!==wav.length||result.sha256!==createHash('sha256').update(wav).digest('hex'))throw Error('incident_audio_storage_checksum');}
+  };
+}
+
+/** Immutable, public-safe narration revisions; authorization stays at the Gateway. */
 export function createIncidentAudioService(options:{
   apiKey?:string;model?:string;voice?:string;
-  renderer?:NativeAudioRenderer;now?:()=>number;fetchImpl?:typeof fetch;
+  renderer?:NativeAudioRenderer;now?:()=>number;fetchImpl?:typeof fetch;store?:IncidentBulletinStore;
 }={}){
   const now=options.now??Date.now;
   const cached=new Map<string,{audio:Buffer;at:number}>();
   const limits=new Map<string,{start:number,count:number}>();
   let globalStart=0,globalCount=0;
+  const active=new Map<string,Promise<Buffer>>(),retryAfter=new Map<string,number>();
   const model=options.model??'gemini-3.8-flash-lite-tts';
   const voice=options.voice??MASANAWA_EMERGENCY_VOICE;
   const renderer=options.renderer??(options.apiKey?createGeminiLiveAudioRenderer({apiKey:options.apiKey,model,voiceName:voice}):undefined);
@@ -84,12 +112,19 @@ export function createIncidentAudioService(options:{
     if(!translated||translated.length>5000)throw Error('incident_audio_translation_invalid');
     return translated;
   };
+  const keyFor=(source:PublicIncidentAudioSource)=>createHash('sha256').update('bulletin-v1\n'+source.reference+'\n'+incidentBulletin(source)+'\n'+model+'\n'+voice+'\n'+(process.env.MASANAWA_RESPONSE_TEXT_MODEL?.trim()||'gemini-3.6-flash')).digest('hex');
   return {
+    keyFor,
     async render(source:PublicIncidentAudioSource,requestIp:string):Promise<Buffer>{
-      const script=incidentBulletin(source);
-      const key=createHash('sha256').update(source.reference+'\n'+script+'\n'+model+'\n'+voice).digest('hex');
+      const script=incidentBulletin(source),key=keyFor(source);
       const hit=cached.get(key);
       if(hit&&now()-hit.at<20*60_000){cached.delete(key);cached.set(key,hit);return hit.audio;}
+      const pending=active.get(key);if(pending)return pending;
+      if((retryAfter.get(key)??0)>now())throw Error('incident_audio_retry_later');
+      if(active.size>=2)throw Error('incident_audio_rate_limited');
+      const task=(async()=>{
+      const stored=await options.store?.read(key);
+      if(stored){cached.set(key,{audio:stored,at:now()});while(cached.size>10)cached.delete(cached.keys().next().value!);return stored;}
       if(!renderer)throw new Error('incident_audio_not_configured');
       const current=now();
       const ip=requestIp.slice(0,100);
@@ -103,9 +138,14 @@ export function createIncidentAudioService(options:{
         AbortSignal.timeout(40_000), undefined, {voiceName:voice},
       );
       const audio=audioToWav(result.dataBase64,result.mimeType);
+      await options.store?.write(key,audio);
       cached.set(key,{audio,at:current});
       while(cached.size>10)cached.delete(cached.keys().next().value!);
       return audio;
+      })();
+      active.set(key,task);
+      try{return await task;}catch(error){if(!(error instanceof Error&&error.message==='incident_audio_rate_limited')){retryAfter.set(key,now()+60_000);while(retryAfter.size>256)retryAfter.delete(retryAfter.keys().next().value!);}throw error;}
+      finally{active.delete(key);}
     },
   };
 }

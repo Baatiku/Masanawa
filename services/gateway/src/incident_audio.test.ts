@@ -54,3 +54,27 @@ describe('public incident voice bulletin privacy and media',()=>{
     await expect(voice.render({...source,status:'closed'},'127.0.0.2')).rejects.toThrow('incident_audio_rate_limited');
   });
 });
+
+
+describe('durable bulletin reuse and bounded concurrency',()=>{
+  it('reuses a stored revision across service restart and deduplicates concurrent requests',async()=>{
+    const render=vi.fn(async()=>({mimeType:'audio/l16;rate=24000',dataBase64:'AAA=',durationMs:1}));
+    const objects=new Map<string,Buffer>();
+    const store={read:async(key:string)=>objects.get(key)??null,write:async(key:string,wav:Buffer)=>{objects.set(key,wav);}};
+    const first=createIncidentAudioService({renderer:{render} as never,store});
+    await Promise.all([first.render(source,'a'),first.render(source,'b')]);
+    expect(render).toHaveBeenCalledOnce();
+    const restarted=createIncidentAudioService({renderer:{render} as never,store});
+    await restarted.render(source,'c');expect(render).toHaveBeenCalledOnce();
+    await restarted.render({...source,status:'resolved'},'c');expect(render).toHaveBeenCalledTimes(2);
+  });
+  it('backs off a failed generation and retries after the cooldown',async()=>{
+    let now=100_000;
+    const render=vi.fn(async()=>({mimeType:'audio/l16;rate=24000',dataBase64:'AAA=',durationMs:1}));
+    render.mockRejectedValueOnce(Error('provider unavailable'));
+    const service=createIncidentAudioService({renderer:{render} as never,now:()=>now});
+    await expect(service.render(source,'a')).rejects.toThrow('provider unavailable');
+    await expect(service.render(source,'b')).rejects.toThrow('incident_audio_retry_later');
+    now+=61_000;await service.render(source,'b');expect(render).toHaveBeenCalledTimes(2);
+  });
+});

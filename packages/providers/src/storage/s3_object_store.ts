@@ -116,7 +116,9 @@ export function createReplayObjectStore(input:Readonly<{
   return Object.freeze<ReplayObjectStore>({
     async putObject(objectKey,body,contentType){
       if(!Buffer.isBuffer(body)||body.length<1||body.length>maxObjectBytes ||
-         !/^(?:image\/(?:png|jpeg|webp)|application\/pdf)$/.test(contentType)){
+         !(/^(?:image\/(?:png|jpeg|webp)|application\/pdf)$/.test(contentType) ||
+           (contentType==='audio/wav' && /^incident-bulletins\/v1\/[a-f0-9]{64}\.wav$/.test(objectKey) && body.length<=4_000_044 &&
+             body.length>=44 && body.toString('ascii',0,4)==='RIFF' && body.toString('ascii',8,12)==='WAVE'))){
         throw new TypeError("Replay object upload invalid");
       }
       const url=objectUrl(objectKey),digest=sha256(body);
