@@ -1,6 +1,7 @@
 import {callGreeting} from './ngn_calls/greeting.js';
 import {createNewsFeedPoller} from '@masanawa/postgres';
 import {createCivicResponseRepository} from '@masanawa/postgres';
+import {createIncidentBulletinStore} from './incident_audio.js';
 import {createBrowserPushService} from './browser_push.js';
 import {createCustomerMemoryService} from './customer_memory.js';
 import {createMessageControlService} from './message_controls.js';
@@ -2324,6 +2325,7 @@ export async function startGatewayService(
       ...(customerAuth ? { customerAuth } : {}),
       ...(featurePool&&sessions&&featureTenant?{civicResponse:{
         repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,
+        ...(mediaConfiguration?.objects.putObject?{bulletinStore:createIncidentBulletinStore(mediaConfiguration)!}:{}),
         geminiKey:productionGeminiPool?.apiKeys[0]||env.MASANAWA_GEMINI_API_KEY?.trim()||env.MASANAWA_ALPHA_GEMINI_API_KEY?.trim()||env.GEMINI_API_KEY?.trim()||'',
       }}:{}),
       ...(sessions ? { mobileDiagnostics: {
