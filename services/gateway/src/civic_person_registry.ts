@@ -13,7 +13,7 @@ const MAX_RECORDS=1200;
 export type CivicPersonBinding={id:string;name:string;sourceUrl:string};
 export type CivicPersonRecord={id:string;name:string;aliases:string[];office:string;jurisdiction:string;status:string;period:string;evidenceLevel:'researched'|'roster';summary:string;sources:string[]};
 const validId=(v:unknown):v is string=>typeof v==='string'&&/^person-[a-z0-9-]{3,125}$/.test(v);
-const text=(v:unknown,max:number):v is string=>typeof v==='string'&&v.length<=max&&!/[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]/u.test(v);
+const text=(v:unknown,max:number):v is string=>typeof v==='string'&&v.length<=max&&!/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(v);
 const source=(v:unknown):v is string=>{if(!text(v,1800))return false;try{const u=new URL(v);
  return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.hash&&u.hostname.includes('.')&&!/^\d|^\[/.test(u.hostname)&&!u.hostname.endsWith('.local')&&u.href===v;
 }catch{return false;}};
@@ -127,7 +127,7 @@ export async function syncCivicPersonGuides(input:RegistryInput){
     await input.skillAssignments.put({expectedRevision:null,assignment:{schemaVersion:1,tenantId:input.tenantId,characterId,skillVersionIds:Object.freeze([...skills]),revision:1}});
    }
    const profile=validateMasanaProfile({handle:'civic.person.'+createHash('sha256').update(r.id).digest('hex').slice(0,24),displayName:label,
-    profession:r.office.slice(0,120),biography:scope,lifeStory:biography.slice(0,8000),languages:['en','ha'],talents:['Civic questions'],
+    profession:r.office.slice(0,100),biography:scope,lifeStory:biography.slice(0,8000),languages:['en','ha'],talents:['Civic questions'],
     goals:['Explain the published public record'],roomId:null,portraitMediaId:null,bannerMediaId:null});
    await input.pool.query(`INSERT INTO masana.character_revisions(tenant_id,character_id,revision,state,profile,approved_by,approved_at)
     SELECT $1,$2,1,'approved',$3::jsonb,'masanawa-civic-person-v1',clock_timestamp()
