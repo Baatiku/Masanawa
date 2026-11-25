@@ -47,3 +47,17 @@ jobs:
           code=$(curl --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' https://api.masanawa.com/agent/directory)
           echo "Unauthenticated directory HTTP status: $code"
           case "$code" in 401|403) ;; *) echo "Unexpected directory response"; exit 1;; esac
+      - name: Read aggregate database registration status when supported
+        run: |
+          node <<'NODE'
+          const headers=require("fs").readFileSync("/tmp/headers","utf8");
+          const match=headers.match(/^x-masanawa-civic-registration:\s*(.+)$/im);
+          if(!match){console.log("Actual database registration: NOT VERIFIED (active release has no fresh aggregate)");process.exit(0);}
+          const status=JSON.parse(match[1]);
+          const keys=["directReady","legacyReady","legacyUnresolved","ambiguous","unready","unregistered"];
+          if(!keys.every(k=>Number.isSafeInteger(status[k])&&status[k]>=0)||!Number.isSafeInteger(status.published)||keys.reduce((n,k)=>n+status[k],0)!==status.published||!Number.isFinite(Date.parse(status.checkedAt)))throw Error("invalid registration aggregate");
+          if(Math.abs(Date.now()-Date.parse(status.checkedAt))>120000)throw Error("stale registration aggregate");
+          const expected=JSON.parse(require("fs").readFileSync("/tmp/registry","utf8")).people.length;
+          if(expected!==status.published)throw Error("database audit catalogue count differs from current published registry");
+          console.log(JSON.stringify({databaseRegistration:status,structurallyReady:status.directReady+status.legacyReady,liveProviderTest:"NOT_PERFORMED"}));
+          NODE
