@@ -25,7 +25,7 @@ function decode(p:RawProfile,identity:{kind:'person'|'agency';name:string;source
  const reviewed=Date.parse(p.reviewedAt);
  if(!Number.isFinite(reviewed)||reviewed>Date.now()+86_400_000||reviewed<Date.now()-365*86_400_000)return [];
  if(identity.kind==='person'){
-  if(!identity.sourceUrl||!Array.isArray(p.identitySources)||!p.identitySources.includes(identity.sourceUrl))return [];
+  if((identity.id&&identity.id!==p.id)||!identity.sourceUrl||!Array.isArray(p.identitySources)||!p.identitySources.includes(identity.sourceUrl))return [];
  }else{
   if(identity.id!==p.id||typeof p.agencyShort!=='string'||norm(p.agencyShort)!==norm(identity.short??''))return [];
  }
@@ -61,7 +61,7 @@ export function createWebCivicKnowledgeReader(options:{fetch?:typeof fetch;now?:
    u.searchParams.set('id',identity.id);
   }
   u.searchParams.set('q',identity.query??'');
-  const key=u.href,hit=cache.get(key);
+  const key=u.href+'|'+(identity.id??''),hit=cache.get(key);
   if(hit&&hit.until>now())return hit.value;
   if(pending.has(key))return pending.get(key)!;
   if(pending.size>=4)return [];

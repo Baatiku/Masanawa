@@ -5,10 +5,12 @@ import { validateMasanaBiographicalFacts, validateMasanaSocialChannels, type Mas
 import { MASANA_CHARACTER_DESIGNS } from "./masana_character_design.js";
 import type { CharacterId } from "@masanawa/contracts";
 import {approvedCivicAgencyId} from './civic_agency_bootstrap.js';
+import {civicPersonBinding,type CivicPersonBinding} from './civic_person_registry.js';
 /** Tenant and user-scoped approved identity and follow preferences. Identity
  * is looked up through the canonical server character ID, never by display name. */
 export interface ApprovedMasanaDirectoryIdentity {
   readonly civicAgencyId?:string;
+  readonly civicPerson?:CivicPersonBinding;
   readonly publicOfficialSimulation?:boolean;
   readonly avatarUrl?:string;
   readonly biography?:string;
@@ -46,6 +48,8 @@ export function createPgAgentMasanaIdentityReader(
           revision.approved_by AS profile_approved_by,
           active_version.constitution->'disclosurePolicy'->>'representation' AS civic_representation,
           active_version.constitution->'disclosurePolicy'->>'civicAgencyId' AS constitutional_civic_id,
+          active_version.constitution->'disclosurePolicy' AS civic_person_policy,
+          active_version.constitution->'publicOfficial'->>'officialName' AS civic_person_subject,
           EXISTS(SELECT 1 FROM masana.follows following
             WHERE following.tenant_id=revision.tenant_id
               AND following.character_id=revision.character_id
@@ -76,7 +80,7 @@ export function createPgAgentMasanaIdentityReader(
       const simulations=await officials?.simulations(tenantId,characterIds);
       const result=new Map<CharacterId,ApprovedMasanaDirectoryIdentity>();
       for(const raw of found.rows) {
-        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown;requested_portrait?:unknown;civic_agency_id?:unknown;profile_approved_by?:unknown;civic_representation?:unknown;constitutional_civic_id?:unknown};
+        const row=raw as {character_id?:unknown;portrait_media_id?:unknown;following?:unknown;social_channels?:unknown;biographical_facts?:unknown;public_biography?:unknown;requested_portrait?:unknown;civic_agency_id?:unknown;profile_approved_by?:unknown;civic_representation?:unknown;constitutional_civic_id?:unknown;civic_person_policy?:unknown;civic_person_subject?:unknown};
         if(typeof row.character_id!=="string" ||
            !characterIds.includes(row.character_id as CharacterId)) {
           throw new Error("invalid_masana_identity_projection");
@@ -103,8 +107,9 @@ export function createPgAgentMasanaIdentityReader(
         const conflictingProfileId=constitutionalId&&typeof row.civic_agency_id==='string'
           &&row.civic_agency_id!==constitutionalId;
         const civicAgencyId=conflictingProfileId?null:(constitutionalId??previouslySeededId);
+        const civicPerson=civicPersonBinding(row.civic_person_policy,row.civic_person_subject);
         result.set(row.character_id as CharacterId,
-          Object.freeze({...(civicAgencyId?{civicAgencyId}:{}),...(portrait?{avatarUrl:portrait.url}:{}),...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(portrait?{portrait}:{}),...(party?{party}:{}),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
+          Object.freeze({...(civicPerson?{civicPerson}:{}),...(civicAgencyId?{civicAgencyId}:{}),...(portrait?{avatarUrl:portrait.url}:{}),...(simulations?.has(row.character_id)?{publicOfficialSimulation:true}:{}),...(publicRecords?.get(row.character_id)?{publicOfficial:{...publicRecords.get(row.character_id),...(portrait?{portrait}:{}),...(party?{party}:{}),...(typeof row.public_biography==='string'&&row.public_biography.length<=8000?{biography:row.public_biography}:{}),...(row.biographical_facts!=null?{biographicalFacts:validateMasanaBiographicalFacts(row.biographical_facts)}:{})}}:{}),portraitKey,following:row.following===true,
             socialChannels:validateMasanaSocialChannels(row.social_channels)}));
       }
       if(portraitBaseUrl){

@@ -65,6 +65,7 @@ import {
 } from "@masanawa/postgres";
 import {ensureOfficialPlatformAgents} from './official_roster_bootstrap.js';
 import {ensureCivicAgencyAgents} from './civic_agency_bootstrap.js';
+import {syncCivicPersonGuides,loadCivicPersonRegistry} from './civic_person_registry.js';
 import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import {createGbCallRelay} from "./gb_calls/relay.js";
 import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
@@ -2403,6 +2404,8 @@ export async function startGatewayService(
   let browserPushTimer:ReturnType<typeof setInterval>|undefined;
   let officialSocialTimer:ReturnType<typeof setInterval>|undefined;
   let officialSocialRunning=false;
+  let civicRegistryTimer:ReturnType<typeof setInterval>|undefined;
+  let civicRegistryRun:Promise<void>|undefined;
   let replyRecoveryTimer: ReturnType<typeof setInterval> | undefined;
   let statusRetention: StatusRetentionWorker | undefined;
   let replyRecoveryRunning=false;
@@ -2426,6 +2429,7 @@ export async function startGatewayService(
       clearInterval(browserPushTimer);
       clearInterval(replyRecoveryTimer);
       clearInterval(officialSocialTimer);
+      clearInterval(civicRegistryTimer);
       void statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
@@ -2438,12 +2442,14 @@ export async function startGatewayService(
       clearInterval(browserPushTimer);
       clearInterval(replyRecoveryTimer);
       clearInterval(officialSocialTimer);
+      clearInterval(civicRegistryTimer);
       await statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
         ownerAccessSweepTimer = undefined;
       }
       await newsRun;
+      await civicRegistryRun;
       await composedBrowserPush?.stop();
       await database.close();
     },
@@ -2451,6 +2457,24 @@ export async function startGatewayService(
       processRef.exitCode = 1;
     },
   });
+
+  // Independently reconcile the published civic catalogue without blocking
+  // Gateway readiness or depending on a chat, call or administrator click.
+  if(process.env.NODE_ENV!=='test'&&platformTenantId&&database.featurePool?.connect&&database.platformAgentIdentity&&database.agentPresentations&&database.platformAgentProfiles&&database.characterSkillAssignments&&database.skillDistribution){
+    const tenantId=platformTenantId,pool=database.featurePool;
+    const run=()=>{if(civicRegistryRun||drain.isDraining())return;
+      civicRegistryRun=(async()=>{
+        const records=await loadCivicPersonRegistry();
+        if(drain.isDraining())return;
+        const result=await withCatalogProvisionLock(pool,tenantId,()=>syncCivicPersonGuides({
+          tenantId,pool,records,identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
+          profiles:database.platformAgentProfiles!,skillAssignments:database.characterSkillAssignments!,skillDistribution:database.skillDistribution!,
+        }));
+        process.stdout.write(JSON.stringify({event:'civic_person_registry_reconciled',...result})+'\n');
+      })().catch(()=>{console.error(JSON.stringify({event:'civic_person_registry_unavailable'}));}).finally(()=>{civicRegistryRun=undefined;});
+    };
+    run();civicRegistryTimer=setInterval(run,30000);civicRegistryTimer.unref();
+  }
 
   if(database.featurePool&&env.MASANAWA_PILOT_NEWS_ENABLED==='true'&&env.MASANAWA_PLATFORM_TENANT_ID){const poller=createNewsFeedPoller(database.featurePool,(url,init)=>fetch(url,{...init,signal:AbortSignal.any([newsAbort.signal,...(init?.signal?[init.signal]:[])])}),env.MASANAWA_PLATFORM_TENANT_ID,env.MASANAWA_NEWS_GATEWAY_ORIGIN,1);const run=()=>{if(newsRun||drain.isDraining())return;newsRun=poller.runOnce().catch(()=>{console.error(JSON.stringify({event:'pilot.news.refresh_unavailable'}));}).finally(()=>{newsRun=undefined;});};newsTimer=setInterval(run,60000);newsTimer.unref();}
   if(composedBrowserPush?.configured){const deliver=async()=>{if(drain.isDraining())return;try{await composedBrowserPush.pump();}catch{console.error(JSON.stringify({event:'browser.push.delivery_unavailable'}));}};browserPushTimer=setInterval(()=>{void deliver();},15000);browserPushTimer.unref();}

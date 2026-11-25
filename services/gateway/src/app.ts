@@ -223,7 +223,2284 @@ const AgentDirectoryEntrySchema = Type.Object(
       url:Type.String({maxLength:2048}),
     },{additionalProperties:false}),{maxItems:7})),
     publicOfficialSimulation: Type.Optional(Type.Boolean()),
-    civicAgencyId: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9-]{1,127}$'})),
+    civicAgencyId: Type.Optional(Type.String({pattern:'^[a-z][a-z0-9-]{1,127}
+    publicOfficial: Type.Optional(Type.Object({
+      officialName:Type.String(),office:Type.String(),identitySourceUrl:Type.String(),
+      reviewedAt:Type.String(),reviewExpiresAt:Type.String(),
+      verification:Type.Literal('source_reviewed'),representation:Type.Literal('ai_simulation'),
+      biography:Type.Optional(Type.String({maxLength:8000})),
+      portrait:Type.Optional(Type.Object({url:Type.String(),sourceUrl:Type.String(),credit:Type.String(),licenseLabel:Type.String(),licenseUrl:Type.Optional(Type.String())},{additionalProperties:false})),
+      party:Type.Optional(Type.Object({code:Type.String(),name:Type.String(),emblemUrl:Type.String(),sourceUrl:Type.String(),checkedAt:Type.String()},{additionalProperties:false})),
+      biographicalFacts:Type.Optional(Type.Object({dateOfBirth:Type.Optional(Type.String({pattern:'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'})),stateOfOrigin:Type.Optional(Type.String({maxLength:100})),cityOfOrigin:Type.Optional(Type.String({maxLength:100})),birthPlace:Type.Optional(Type.String({maxLength:100}))},{additionalProperties:false})),
+    },{additionalProperties:false})),
+  },
+  { additionalProperties: false },
+);
+
+const AgentDirectoryResponseSchema = Type.Object(
+  {
+    agents: Type.Array(AgentDirectoryEntrySchema),
+  },
+  { additionalProperties: false },
+);
+
+
+const AgentSessionOpenBodySchema = Type.Object(
+  { characterId: Type.String() },
+  { additionalProperties: false },
+);
+
+const AgentSessionOpenResponseSchema = Type.Object(
+  { characterSessionId: Type.String() },
+  { additionalProperties: false },
+);
+
+const AgentSessionParamsSchema = Type.Object(
+  { characterSessionId: Type.String() },
+  { additionalProperties: false },
+);
+
+const AgentTurnBodySchema = Type.Object(
+  {
+    characterId: Type.String(),
+    text: Type.String({ minLength: 1, maxLength: 32000 }),
+  },
+  { additionalProperties: false },
+);
+
+
+const AgentMediaTurnBodySchema = Type.Object(
+  {
+    characterId: Type.String(),
+    caption: Type.String({ maxLength: 32000 }),
+    mimeType: Type.String({ minLength: 3, maxLength: 160 }),
+    dataBase64: Type.String({ minLength: 1, maxLength: 12000000 }),
+  },
+  { additionalProperties: false },
+);
+
+const AgentMediaSetTurnBodySchema = Type.Object(
+  {
+    characterId: Type.String(),
+    caption: Type.String({ maxLength: 32000 }),
+    media: Type.Array(
+      Type.Object(
+        {
+          mimeType: Type.String({ minLength: 3, maxLength: 160 }),
+          dataBase64: Type.String({ minLength: 1, maxLength: 12000000 }),
+          name: Type.Optional(Type.String({ maxLength: 240 })),
+        },
+        { additionalProperties: false },
+      ),
+      { minItems: 2, maxItems: 8 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+const AgentTurnResponseSchema = Type.Object(
+  {
+    reply: Type.String(),
+    agentRunId: Type.String(),
+    parts: Type.Array(Type.Unknown()),
+    audioBase64: Type.Optional(Type.String()),
+    audioMimeType: Type.Optional(Type.String()),
+    audioDurationMs: Type.Optional(Type.Number()),
+    audioTranscript: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+const ReadinessResponseSchema = Type.Object(
+  {
+    service: Type.Literal("gateway"),
+    status: Type.Union([Type.Literal("ready"), Type.Literal("not-ready")]),
+    time: Type.String(),
+    checks: Type.Array(ReadinessCheckSchema),
+  },
+  { additionalProperties: false },
+);
+
+export function createGatewayApp(options: GatewayAppOptions = {}) {
+  const app = Fastify({
+    logger: false,
+    routerOptions: { maxParamLength: 1024 },
+    bodyLimit: 1_048_576,
+    requestTimeout: 30_000,
+  }).withTypeProvider<TypeBoxTypeProvider>();
+
+  const browserOrigins = new Set(parseWebAllowedOrigins(options.webAllowedOrigins?.join(",")));
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (!origin) return;
+    reply.header("Vary", "Origin");
+    if (!browserOrigins.has(origin)) {
+      return reply.code(403).send({ error: { code: "web.origin_denied", message: "Origin not allowed" } });
+    }
+    reply.header("Access-Control-Allow-Origin", origin);
+    // Never set Access-Control-Allow-Credentials. The browser uses bearer
+    // auth; any future cookie session needs a separate CSRF review.
+  });
+  const browserPreflight = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.headers.origin || !request.headers["access-control-request-method"]) {
+      return reply.code(400).send({ error: { code: "web.preflight_invalid" } });
+    }
+    const method = request.headers["access-control-request-method"].toUpperCase();
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      return reply.code(405).send({ error: { code: "web.method_not_allowed" } });
+    }
+    return reply
+      .header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE")
+      .header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-Masanawa-Client-Platform, Idempotency-Key, X-Idempotency-Key")
+      .header("Access-Control-Max-Age", "600")
+      .code(204).send();
+  };
+  // Only the documented versioned and compatibility API families accept
+  // browser preflight. A global /* route would violate public API lifecycle.
+  app.options("/v1/*", browserPreflight);
+  app.options("/agent/*", browserPreflight);
+  app.options("/auth/*", browserPreflight);
+
+  registerOfficialMediaRoutes(app);
+  const now = options.now ?? nowInstant;
+  const checks = options.readinessChecks ?? [];
+
+  app.setErrorHandler((error, request, reply) => {
+    if(error instanceof MbCallAdmissionRequiredError){
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
+      return;
+    }
+    const walletFailure=replyWalletFailure(error);
+    if(walletFailure){
+      void reply.code(walletFailure.status).send({error:{code:walletFailure.code,message:walletFailure.message}});
+      return;
+    }
+    if(error instanceof CustomerAuthError) {
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.code}});
+      return;
+    }
+    if (error instanceof GbCallRelayError || error instanceof NgnCallRelayError) {
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
+      return;
+    }
+    if (error instanceof GeminiProviderError) {
+      void reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
+      return;
+    }
+    if (error instanceof Error && error.message === "financial.auth.unauthorized") {
+      void reply.code(401).send({
+        error: {
+          code: "financial.auth.unauthorized",
+          message: "Authentication required",
+        },
+      });
+      return;
+    }
+    const statusCode =
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      typeof (error as { readonly statusCode?: unknown }).statusCode === "number"
+        ? (error as { readonly statusCode: number }).statusCode
+        : 500;
+    if (statusCode >= 400 && statusCode < 500) {
+      void reply.code(statusCode).send({
+        error: {
+          code: statusCode === 400 ? "gateway.invalid_request" : "gateway.request_rejected",
+          message: statusCode === 400 ? "Invalid request" : "Request rejected",
+        },
+      });
+      return;
+    }
+    request.log.error(error);
+    void reply.code(500).send({
+      error: {
+        code: "gateway.internal_error",
+        message: "Internal server error",
+      },
+    });
+  });
+
+  registerGatewayRequestCorrelation(app);
+  if(options.directNgn)app.addHook('onRequest',async(request,reply)=>{
+    const path=request.url.split('?')[0]!;
+    const retiredRead=/^\/v1\/gb\/(?:recharge\/(?:packages|preview)|wallet\/exchange\/packages)$/.test(path);
+    const retiredWrite=request.method!=='GET'&&(
+      /^\/v1\/gb\/wallet\/(?:exchange\/(?:quote|confirm)|send\/(?:quote|confirm)|tips\/(?:review|confirm))$/.test(path)||
+      /^\/v1\/gb\/wallet\/requests(?:\/[^/]+\/pay)?$/.test(path)||
+      /^\/v1\/gb\/data\/redeem$/.test(path)||
+      /^\/v1\/gb\/calls\/(?:review|admissions(?:\/[^/]+\/grant)?)$/.test(path));
+    if(retiredRead||retiredWrite)return reply.code(410).send({error:{code:'ngn_update_required',message:'Update the app to use your Naira wallet.'}});
+  });
+  registerHistoricalFinancialCallbacks(app, options);
+  // Apply to all money-affecting HTTP writes regardless of the individual
+  // service's route registration. Reads and non-financial account recovery
+  // remain available for restricted customers. Refuse new financial actions
+  // during the first 24h after a password reset.
+  app.addHook("preHandler",async(request)=>{
+    // A provider-signed callback must reconcile even if the customer's
+    // login is restricted or recovering. The callback handler separately
+    // authenticates the provider signature against the original payload.
+    // Unknown/retired URLs have no mutation handler and must remain 404.
+    if (!request.routeOptions.url) return;
+    if(!requiresFinancialCustomerState(request.method,request.url))return;
+    // A missing customer-auth component is a production configuration failure,
+    // not permission to spend. Never silently bypass suspended/recovery holds.
+    if (!options.customerAuth) {
+      throw new CustomerAuthError("AUTH_UNAVAILABLE", 503);
+    }
+    await options.customerAuth.authorizeSensitiveMutation({
+      authorizationHeader:request.headers.authorization,
+    });
+  });
+
+
+
+  if (options.accountDeletion) {
+    registerAccountDeletionRoutes(app, options.accountDeletion);
+  }
+
+  // READ-ONLY discovery and pricing preview. No user-provided amount ever
+  // creates a balance, payment intent, verified deposit or wallet receipt.
+  // Historical compatibility reference only. New deposits settle NGN; the
+  // signed exchange routes are the only current package purchase authority.
+  const rechargeBook = options.gbRechargeRateBook ?? DEFAULT_RECHARGE_RATE_BOOK;
+  validateRechargeRateBook(rechargeBook);
+  app.get("/v1/gb/recharge/packages", async () => ({
+    version: rechargeBook.version,
+    packages: rechargeBook.tiers.map((tier) => quotePackage(tier.sizeGb, rechargeBook)),
+    settlement: "historical_reference_only" as const,
+    automaticDepositConversion: false,
+    currentPackagesPath: "/v1/gb/wallet/exchange/packages",
+  }));
+  app.get("/v1/gb/recharge/preview", {
+    schema: {
+      querystring: Type.Object({
+        amountKobo: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+      }, { additionalProperties: false }),
+    },
+  }, async (request) => ({
+    previewOnly: true as const,
+    historicalReferenceOnly: true as const,
+    automaticDepositConversion: false,
+    ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
+  }));
+
+  if (options.gbDataCatalogue) {
+    registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
+  }
+
+  if(options.directNgnWallet)registerDirectNgnWalletRoutes(app,options.directNgnWallet);
+  if(options.whatsappLinks)registerWhatsAppLinkRoutes(app,options.whatsappLinks);
+  if(options.whatsappData)registerWhatsAppDataRoutes(app,options.whatsappData);
+  if(options.ngnSendReview)registerNgnSendReviewRoutes(app,options.ngnSendReview);
+  if(options.ngnRequests)registerNgnRequestRoutes(app,options.ngnRequests);
+  if(options.ngnCalls)registerNgnCallRoutes(app,options.ngnCalls);
+  if(options.ngnCallRelay)installNgnCallRelay(app,options.ngnCallRelay);
+  if(options.ngnDataCatalogue)registerNgnDataCatalogueRoutes(app,options.ngnDataCatalogue);
+  if(options.ngnDataPurchases)registerNgnDataPurchaseRoutes(app,options.ngnDataPurchases);
+  if (options.gbDataPurchases) registerGbDataPurchaseRoutes(app, options.gbDataPurchases);
+  if (options.ngnWallet) registerNgnWalletRoutes(app, options.ngnWallet);
+  if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
+  if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
+  if (options.gbWalletActivity) registerGbWalletActivityRoutes(app,options.gbWalletActivity);
+  if(options.gbRetainedFinance)app.register(async scope=>{
+    await registerGbRetainedFinanceRoutes(scope,options.gbRetainedFinance!);
+  });
+  if(options.usernames)registerUsernameRoutes(app,options.usernames);
+  if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
+  if (options.gbStatusTips) registerGbStatusTipRoutes(app, options.gbStatusTips);
+  if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
+  if (options.gbCalls) registerGbCallRoutes(app, options.gbCalls);
+  if (options.gbCallRelay) installGbCallRelay(app, options.gbCallRelay);
+  registerAuthEmailRoutes(app);
+  if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
+
+  if(options.accountDataExports) {
+    const exports=options.accountDataExports;
+    const fail=(error:unknown,reply:{code(statusCode:number):unknown})=>{
+      const status=error instanceof AccountExportError?error.statusCode:
+        error instanceof CustomerAuthError?error.statusCode:
+        error instanceof Error&&error.message==="wallet.export_range_too_large"?413:503;
+      reply.code(status);
+      return {code:status===413?"EXPORT_TOO_LARGE":status===503?"EXPORT_UNAVAILABLE":
+        error instanceof AccountExportError?error.code:"UNAUTHORIZED"};
+    };
+    app.get("/v1/account/summary",async(request,reply)=>{
+      try{return await exports.summary({authorizationHeader:request.headers.authorization});}
+      catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/profile",async(request,reply)=>{
+      try{return await exports.personalData({
+        authorizationHeader:request.headers.authorization,
+      });}catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/conversations",{
+      schema:{querystring:Type.Object({
+        cursor:Type.Optional(Type.String({maxLength:512})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await exports.conversations({
+        authorizationHeader:request.headers.authorization,
+        ...(request.query.cursor?{cursor:request.query.cursor}:{}),
+      });}catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/financial",{
+      schema:{querystring:Type.Object({
+        from:Type.Optional(Type.String({maxLength:10})),
+        to:Type.Optional(Type.String({maxLength:10})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await exports.financialStatement({
+        authorizationHeader:request.headers.authorization,
+        ...request.query,
+      });}catch(error){return fail(error,reply);}
+    });
+  }
+
+  if (options.customerAuth) {
+    const auth = options.customerAuth;
+    const authError = (
+      error: unknown,
+      reply: { code(statusCode: number): unknown },
+    ) => {
+      if (error instanceof CustomerAuthError) {
+        reply.code(error.statusCode);
+        return { code: error.code, message: error.code };
+      }
+      reply.code(503);
+      return { code: "AUTH_UNAVAILABLE", message: "AUTH_UNAVAILABLE" };
+    };
+
+    app.get("/auth/capabilities", async () => auth.capabilities());
+
+    app.get("/auth/session", async (request,reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      try {
+        if (!auth.currentSession) throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+        return {user:await auth.currentSession({authorizationHeader:request.headers.authorization})};
+      } catch(error) {return authError(error,reply);}
+    });
+
+    app.post(
+      "/auth/otp",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.Optional(Type.String({ minLength: 7, maxLength: 40 })),
+              email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.sendOtp({
+            ...(request.body.phone === undefined
+              ? {}
+              : { phone: request.body.phone }),
+            ...(request.body.email === undefined
+              ? {}
+              : { email: request.body.email }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/auth/verify",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.Optional(Type.String({ minLength: 7, maxLength: 40 })),
+              email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+              code: Type.String({ minLength: 6, maxLength: 6 }),
+              username:Type.Optional(Type.String({minLength:2,maxLength:40})),
+              name: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+              firstName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+              lastName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+              contactPhone: Type.Optional(Type.String({ minLength: 11, maxLength: 24 })),
+              countryIso:Type.Optional(Type.String({minLength:2,maxLength:2})),
+              subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+              deviceId: Type.Optional(Type.String({minLength:32,maxLength:32})),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.verifyOtp({
+            ...(request.body.phone === undefined
+              ? {}
+              : { phone: request.body.phone }),
+            ...(request.body.email === undefined
+              ? {}
+              : { email: request.body.email }),
+            code: request.body.code,
+            ...(request.body.username===undefined?{}:{username:request.body.username}),
+            ...(request.body.name === undefined
+              ? {}
+              : { name: request.body.name }),
+            ...(request.body.firstName === undefined ? {} : {firstName:request.body.firstName}),
+            ...(request.body.lastName === undefined ? {} : {lastName:request.body.lastName}),
+            ...(request.body.contactPhone === undefined ? {} : {contactPhone:request.body.contactPhone}),
+            ...(request.body.countryIso===undefined?{}:{countryIso:request.body.countryIso}),
+            ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+            ...(request.body.deviceId===undefined?{}:{deviceId:request.body.deviceId}),
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.get(
+      "/v1/auth/account/status",
+      {
+        schema: {
+          querystring: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.accountStatus({
+            phone: request.query.phone,
+            deviceId: request.query.deviceId,
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/v1/auth/device/restore",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.deviceRestore({
+            phone: request.body.phone,
+            deviceId: request.body.deviceId,
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/v1/auth/password/verify",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+              password: Type.String({ minLength: 6, maxLength: 6 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.passwordVerify({
+            phone: request.body.phone,
+            deviceId: request.body.deviceId,
+            password: request.body.password,
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/v1/auth/password/setup",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+              password: Type.String({ minLength: 6, maxLength: 6 }),
+              name: Type.String({ minLength: 1, maxLength: 160 }),
+              email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+              firstName:Type.Optional(Type.String({minLength:1,maxLength:80})),
+              lastName:Type.Optional(Type.String({minLength:1,maxLength:80})),
+              contactPhone:Type.Optional(Type.String({minLength:7,maxLength:24})),
+              countryIso:Type.Optional(Type.String({minLength:2,maxLength:2})),
+              subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.passwordSetup({
+            phone: request.body.phone,
+            deviceId: request.body.deviceId,
+            password: request.body.password,
+            name: request.body.name,
+            ...(request.body.email === undefined
+              ? {}
+              : { email: request.body.email }),
+            ...(request.body.firstName===undefined?{}:{firstName:request.body.firstName}),
+            ...(request.body.lastName===undefined?{}:{lastName:request.body.lastName}),
+            ...(request.body.contactPhone===undefined?{}:{contactPhone:request.body.contactPhone}),
+            ...(request.body.countryIso===undefined?{}:{countryIso:request.body.countryIso}),
+            ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.get('/v1/auth/profile/contact-geography',async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      try{return await auth.contactGeography({authorizationHeader:request.headers.authorization});}
+      catch(error){return authError(error,reply);}
+    });
+    app.patch('/v1/auth/profile/contact-geography',{
+      schema:{body:Type.Object({
+        contactPhone:Type.String({minLength:7,maxLength:24}),
+        countryIso:Type.String({minLength:2,maxLength:2}),
+        subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      try{return await auth.updateContactGeography({
+        authorizationHeader:request.headers.authorization,
+        contactPhone:request.body.contactPhone,countryIso:request.body.countryIso,
+        ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+      });}catch(error){return authError(error,reply);}
+    });
+
+    app.post(
+      "/auth/refresh",
+      {
+        schema: {
+          body: Type.Object(
+            { refreshToken: Type.String({ minLength: 20, maxLength: 256 }) },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.refresh({ refreshToken: request.body.refreshToken });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post("/v1/auth/password/recovery/start", {
+      schema:{body:Type.Object({phone:Type.String({minLength:7,maxLength:40})},{additionalProperties:false})},
+    },async (request,reply) => {
+      try {return await auth.requestPasswordRecovery({phone:request.body.phone});}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/password/recovery/complete", {
+      schema:{body:Type.Object({
+        phone:Type.String({minLength:7,maxLength:40}),
+        code:Type.String({minLength:6,maxLength:6}),
+        password:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async (request,reply) => {
+      try {return await auth.completePasswordRecovery(request.body);}
+      catch(error) {return authError(error,reply);}
+    });
+
+    app.post("/v1/auth/security/email/start", {
+      schema:{body:Type.Object({email:Type.String({minLength:3,maxLength:320})},{additionalProperties:false})},
+    },async (request,reply) => {
+      try {
+        return await auth.startEmailLink({
+          authorizationHeader:request.headers.authorization,email:request.body.email,
+        });
+      } catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/email/confirm", {
+      schema:{body:Type.Object({
+        email:Type.String({minLength:3,maxLength:320}),
+        code:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async (request,reply) => {
+      try {
+        return await auth.confirmEmailLink({
+          authorizationHeader:request.headers.authorization,
+          email:request.body.email,code:request.body.code,
+        });
+      } catch(error) {return authError(error,reply);}
+    });
+
+    const withdrawalFields = {
+      requestId: Type.String({minLength:1,maxLength:128}),
+      providerCode: Type.String({minLength:2,maxLength:32}),
+      amount: Type.String({minLength:1,maxLength:80}),
+      destinationAddress: Type.String({minLength:1,maxLength:512}),
+    };
+    app.post("/v1/auth/security/withdrawal/start",{
+      schema:{body:Type.Object(withdrawalFields,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginWithdrawalStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/withdrawal/confirm",{
+      schema:{body:Type.Object({...withdrawalFields,code:Type.String({minLength:6,maxLength:6})},
+        {additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.confirmWithdrawalStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+
+    const bankChallengeFields={
+      bankCode:Type.String({minLength:3,maxLength:6}),
+      accountNumber:Type.String({minLength:10,maxLength:10}),
+    };
+    app.post("/v1/auth/security/bank/start",{
+      schema:{body:Type.Object(bankChallengeFields,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginBankStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/bank/confirm",{
+      schema:{body:Type.Object({...bankChallengeFields,
+        code:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.confirmBankStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    const contactChangeBody={
+      channel:Type.Union([Type.Literal("email"),Type.Literal("sms")]),
+      nextIdentifier:Type.String({minLength:3,maxLength:320}),
+    };
+    app.post("/v1/auth/security/contacts/change/start",{
+      schema:{body:Type.Object(contactChangeBody,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginContactChange({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/contacts/change/confirm",{
+      schema:{body:Type.Object({...contactChangeBody,
+        oldCode:Type.String({minLength:6,maxLength:6}),
+        newCode:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.completeContactChange({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.get("/v1/auth/security/sessions", async (request, reply) => {
+      try {return {sessions:await auth.sessions({authorizationHeader:request.headers.authorization})};}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/sessions/logout-all", async (request, reply) => {
+      try {await auth.logoutAll({authorizationHeader:request.headers.authorization});return {success:true as const};}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/sessions/:sessionId/revoke", {
+      schema:{params:Type.Object({sessionId:Type.String({minLength:36,maxLength:36})})},
+    }, async (request,reply) => {
+      try {
+        await auth.revokeSession({authorizationHeader:request.headers.authorization,sessionId:request.params.sessionId});
+        return {success:true as const};
+      } catch(error) {return authError(error,reply);}
+    });
+    app.get("/v1/auth/security/history", async (request,reply) => {
+      try {return {events:await auth.loginHistory({authorizationHeader:request.headers.authorization})};}
+      catch(error) {return authError(error,reply);}
+    });
+
+    app.post("/auth/logout", async (request) => {
+      await auth.logout({
+        authorizationHeader: request.headers.authorization,
+      });
+      return { success: true as const };
+    });
+  }
+
+  if(options.personaPortraits){
+    app.get('/v1/personas/:characterId/portrait',async(request,reply)=>{
+      const id=(request.params as {characterId?:string}).characterId??'';if(!/^[a-zA-Z0-9_-]{1,128}$/.test(id))return reply.code(400).send({error:'invalid_persona'});
+      const image=await options.personaPortraits!.read(id);if(!image)return reply.code(404).send({error:'portrait_not_found'});
+      return reply.header('Content-Type','image/png').header('X-Content-Type-Options','nosniff').header('Cache-Control','public, max-age=300').send(image);
+    });
+  }
+  if (options.agentDirectory) {
+    const directory = options.agentDirectory;
+    app.get(
+      "/agent/directory",
+      {
+        schema: {
+          response: { 200: AgentDirectoryResponseSchema },
+        },
+      },
+      async (request) => ({
+        agents: (await directory.list({authorizationHeader:request.headers.authorization})).map(entry=>{
+          const {conversationStarters,socialChannels,publicOfficial,...rest}=entry;
+          return {...rest,
+            ...(conversationStarters?{conversationStarters:[...conversationStarters]}:{}),
+            ...(socialChannels?{socialChannels:socialChannels.map(channel=>({...channel}))}:{}),
+            ...(publicOfficial?{publicOfficial:{...publicOfficial}}:{}),
+          };
+        }),
+      }),
+    );
+
+    app.put(
+      "/agent/preferences/default",
+      {
+        schema: {
+          body: Type.Object(
+            { characterId: Type.String() },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object(
+              { characterId: Type.String() },
+              { additionalProperties: false },
+            ),
+          },
+        },
+      },
+      async (request) =>
+        directory.setDefaultPlatformAgent({
+          authorizationHeader: request.headers.authorization,
+          characterId: request.body.characterId,
+        }),
+    );
+  }
+
+  if(options.browserPush)registerBrowserPushRoutes(app,options.browserPush);
+  if(options.customerMemory)registerCustomerMemoryRoutes(app,options.customerMemory);
+  if(options.civicResponse)registerCivicResponseRoutes(app,options.civicResponse);
+  if(options.messageControls)registerMessageControlRoutes(app,options.messageControls);
+  if (options.agentConversation) {
+    const conversation = options.agentConversation;
+
+    const resultBody = (result: Awaited<ReturnType<AgentConversationService["turn"]>>) => ({
+      reply: result.reply,
+      agentRunId: result.agentRunId,
+      parts: [...result.parts],
+      ...(result.audioBase64 ? { audioBase64: result.audioBase64 } : {}),
+      ...(result.audioMimeType ? { audioMimeType: result.audioMimeType } : {}),
+      ...(result.audioTranscript ? { audioTranscript: result.audioTranscript } : {}),
+      ...(result.audioDurationMs !== undefined
+        ? { audioDurationMs: result.audioDurationMs }
+        : {}),
+    });
+
+    app.post(
+      "/agent/sessions/open",
+      {
+        schema: {
+          body: AgentSessionOpenBodySchema,
+          response: { 200: AgentSessionOpenResponseSchema },
+        },
+      },
+      async (request) =>
+        conversation.open({
+          authorizationHeader: request.headers.authorization,
+          characterId: request.body.characterId,
+        }),
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/turn",
+      {
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentTurnBodySchema,
+          response: { 200: AgentTurnResponseSchema },
+        },
+      },
+      async (request, reply) => {
+        const controller = new AbortController();
+        let finished = false;
+        const abort = () => {
+          if (!finished) controller.abort();
+        };
+        reply.raw.once("close", abort);
+        try {
+          return resultBody(await conversation.turn({
+            authorizationHeader: request.headers.authorization,
+            characterSessionId: request.params.characterSessionId,
+            characterId: request.body.characterId,
+            text: request.body.text,
+            requestId: parseCanonicalId(
+              "request",
+              request.headers["x-request-id"] as string,
+            ),
+            correlationId: parseCanonicalId(
+              "correlation",
+              request.headers["x-correlation-id"] as string,
+            ),
+            signal: controller.signal,
+          }));
+        } finally {
+          finished = true;
+          reply.raw.off("close", abort);
+        }
+      },
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/turn-stream",
+      {
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentTurnBodySchema,
+        },
+      },
+      async (request, reply) => {
+        await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+        return streamConversationReply(reply, async (callbacks, signal) =>
+        resultBody(await conversation.turn({
+          authorizationHeader: request.headers.authorization,
+          characterSessionId: request.params.characterSessionId,
+          characterId: request.body.characterId,
+          text: request.body.text,
+          requestId: parseCanonicalId("request", request.headers["x-request-id"] as string),
+          correlationId: parseCanonicalId("correlation", request.headers["x-correlation-id"] as string),
+          ...callbacks, signal,
+        })));},
+    );
+
+    app.post("/agent/sessions/:characterSessionId/media-turn-stream", {
+      bodyLimit: 13_000_000,
+      schema: {params:AgentSessionParamsSchema,body:AgentMediaTurnBodySchema},
+    }, async (request,reply) => {
+      await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+      return streamConversationReply(reply, async (callbacks,signal) =>
+      resultBody(await conversation.mediaTurn({
+        authorizationHeader:request.headers.authorization,
+        characterSessionId:request.params.characterSessionId,
+        ...request.body,
+        requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
+        correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
+        ...callbacks,signal,
+      })));});
+
+    app.post("/agent/sessions/:characterSessionId/media-set-turn-stream", {
+      bodyLimit: 17_000_000,
+      schema: {params:AgentSessionParamsSchema,body:AgentMediaSetTurnBodySchema},
+    }, async (request,reply) => {
+      await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+      return streamConversationReply(reply, async (callbacks,signal) =>
+      resultBody(await conversation.mediaSetTurn({
+        authorizationHeader:request.headers.authorization,
+        characterSessionId:request.params.characterSessionId,
+        ...request.body,
+        requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
+        correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
+        ...callbacks,signal,
+      })));});
+
+    app.post(
+      "/agent/sessions/:characterSessionId/media-turn",
+      {
+        bodyLimit: 13_000_000,
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentMediaTurnBodySchema,
+          response: { 200: AgentTurnResponseSchema },
+        },
+      },
+      async (request, reply) => {
+        const controller = new AbortController();
+        let finished = false;
+        const abort = () => {
+          if (!finished) controller.abort();
+        };
+        reply.raw.once("close", abort);
+        try {
+          return resultBody(await conversation.mediaTurn({
+            authorizationHeader: request.headers.authorization,
+            characterSessionId: request.params.characterSessionId,
+            characterId: request.body.characterId,
+            caption: request.body.caption,
+            mimeType: request.body.mimeType,
+            dataBase64: request.body.dataBase64,
+            requestId: parseCanonicalId(
+              "request",
+              request.headers["x-request-id"] as string,
+            ),
+            correlationId: parseCanonicalId(
+              "correlation",
+              request.headers["x-correlation-id"] as string,
+            ),
+            signal: controller.signal,
+          }) as Awaited<ReturnType<AgentConversationService["turn"]>>);
+        } finally {
+          finished = true;
+          reply.raw.off("close", abort);
+        }
+      },
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/media-set-turn",
+      {
+        bodyLimit: 17_000_000,
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentMediaSetTurnBodySchema,
+          response: { 200: AgentTurnResponseSchema },
+        },
+      },
+      async (request, reply) => {
+        const controller = new AbortController();
+        let finished = false;
+        const abort = () => {
+          if (!finished) controller.abort();
+        };
+        reply.raw.once("close", abort);
+        try {
+          return resultBody(await conversation.mediaSetTurn({
+            authorizationHeader: request.headers.authorization,
+            characterSessionId: request.params.characterSessionId,
+            characterId: request.body.characterId,
+            caption: request.body.caption,
+            media: request.body.media,
+            requestId: parseCanonicalId(
+              "request",
+              request.headers["x-request-id"] as string,
+            ),
+            correlationId: parseCanonicalId(
+              "correlation",
+              request.headers["x-correlation-id"] as string,
+            ),
+            signal: controller.signal,
+          }) as Awaited<ReturnType<AgentConversationService["turn"]>>);
+        } finally {
+          finished = true;
+          reply.raw.off("close", abort);
+        }
+      },
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/close",
+      {
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: Type.Object(
+            { characterId: Type.String() },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object(
+              { closed: Type.Literal(true) },
+              { additionalProperties: false },
+            ),
+          },
+        },
+      },
+      async (request) => {
+        await conversation.close({
+          authorizationHeader: request.headers.authorization,
+          characterSessionId: request.params.characterSessionId,
+          characterId: request.body.characterId,
+        });
+        return { closed: true as const };
+      },
+    );
+  }
+
+  // These modules reuse the same host app, tenant authority and database.
+  if (options.status) {
+    app.register(async scope => {
+      await registerStatusRuntime(scope, {
+        ...options.status!,
+        // Root Status is Masana-editorial only in the reduced product.
+        // Normal fans retain reactions, comments, follows and saves.
+      });
+    });
+  }
+  if (options.masana) registerMasanaRoutes(app, options.masana);
+  if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
+  if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
+  if (options.privateChatMedia) {
+    registerPrivateChatMediaRoutes(app, options.privateChatMedia);
+  }
+  registerAgentShellRoutes(app, {
+    ...(options.agentShell ? { agentShell: options.agentShell } : {}),
+    ...(options.liveVoiceTokens
+      ? { liveVoiceTokens: options.liveVoiceTokens }
+      : {}),
+    ...(options.mobilePush ? { mobilePush: options.mobilePush } : {}),
+    ...(options.mobileNotifications
+      ? { mobileNotifications: options.mobileNotifications } : {}),
+  });
+  if (options.talkSafety) registerTalkSafetyRoutes(app, options.talkSafety);
+
+  if (options.talkProfiles) {
+    registerTalkProfileRoutes(app, options.talkProfiles);
+  }
+  if (options.twinProduction) registerTwinSafetyRoutes(app, options.twinProduction.twinSafety);
+
+  app.get(
+    "/healthz",
+    {
+      schema: {
+        response: {
+          200: HealthResponseSchema,
+        },
+      },
+    },
+    async () => ({
+      service: "gateway" as const,
+      status: "ok" as const,
+      time: now(),
+    }),
+  );
+
+  app.get(
+    "/readyz",
+    {
+      schema: {
+        response: {
+          200: ReadinessResponseSchema,
+          503: ReadinessResponseSchema,
+        },
+      },
+    },
+    async (_request, reply) => {
+      const dependencyResults = await Promise.all(
+        checks.map(async (check) => {
+          try {
+            const result = await check.check();
+            return {
+              name: check.name,
+              ready: result.ready,
+              ...(result.reason ? { reason: result.reason } : {}),
+            };
+          } catch {
+            return {
+              name: check.name,
+              ready: false,
+              reason: "readiness check failed",
+            };
+          }
+        }),
+      );
+
+      const results = [
+        ...(options.isDraining?.()
+          ? [
+              {
+                name: "lifecycle",
+                ready: false,
+                reason: "service is shutting down",
+              },
+            ]
+          : []),
+        ...dependencyResults,
+      ];
+
+      const ready = results.every((result) => result.ready);
+      if (options.releaseSha && /^[0-9a-f]{40}$/.test(options.releaseSha)) {
+        reply.header("x-masanawa-release", options.releaseSha).header("cache-control", "no-store");
+      }
+      if (!ready) {
+        reply.code(503);
+      }
+
+      return {
+        service: "gateway" as const,
+        status: ready ? ("ready" as const) : ("not-ready" as const),
+        time: now(),
+        checks: results,
+      };
+    },
+  );
+
+  return app;
+}
+})),
+    civicPerson: Type.Optional(Type.Object({id:Type.String({pattern:'^person-[a-z0-9-]{3,125}
+    publicOfficial: Type.Optional(Type.Object({
+      officialName:Type.String(),office:Type.String(),identitySourceUrl:Type.String(),
+      reviewedAt:Type.String(),reviewExpiresAt:Type.String(),
+      verification:Type.Literal('source_reviewed'),representation:Type.Literal('ai_simulation'),
+      biography:Type.Optional(Type.String({maxLength:8000})),
+      portrait:Type.Optional(Type.Object({url:Type.String(),sourceUrl:Type.String(),credit:Type.String(),licenseLabel:Type.String(),licenseUrl:Type.Optional(Type.String())},{additionalProperties:false})),
+      party:Type.Optional(Type.Object({code:Type.String(),name:Type.String(),emblemUrl:Type.String(),sourceUrl:Type.String(),checkedAt:Type.String()},{additionalProperties:false})),
+      biographicalFacts:Type.Optional(Type.Object({dateOfBirth:Type.Optional(Type.String({pattern:'^[0-9]{4}-[0-9]{2}-[0-9]{2}$'})),stateOfOrigin:Type.Optional(Type.String({maxLength:100})),cityOfOrigin:Type.Optional(Type.String({maxLength:100})),birthPlace:Type.Optional(Type.String({maxLength:100}))},{additionalProperties:false})),
+    },{additionalProperties:false})),
+  },
+  { additionalProperties: false },
+);
+
+const AgentDirectoryResponseSchema = Type.Object(
+  {
+    agents: Type.Array(AgentDirectoryEntrySchema),
+  },
+  { additionalProperties: false },
+);
+
+
+const AgentSessionOpenBodySchema = Type.Object(
+  { characterId: Type.String() },
+  { additionalProperties: false },
+);
+
+const AgentSessionOpenResponseSchema = Type.Object(
+  { characterSessionId: Type.String() },
+  { additionalProperties: false },
+);
+
+const AgentSessionParamsSchema = Type.Object(
+  { characterSessionId: Type.String() },
+  { additionalProperties: false },
+);
+
+const AgentTurnBodySchema = Type.Object(
+  {
+    characterId: Type.String(),
+    text: Type.String({ minLength: 1, maxLength: 32000 }),
+  },
+  { additionalProperties: false },
+);
+
+
+const AgentMediaTurnBodySchema = Type.Object(
+  {
+    characterId: Type.String(),
+    caption: Type.String({ maxLength: 32000 }),
+    mimeType: Type.String({ minLength: 3, maxLength: 160 }),
+    dataBase64: Type.String({ minLength: 1, maxLength: 12000000 }),
+  },
+  { additionalProperties: false },
+);
+
+const AgentMediaSetTurnBodySchema = Type.Object(
+  {
+    characterId: Type.String(),
+    caption: Type.String({ maxLength: 32000 }),
+    media: Type.Array(
+      Type.Object(
+        {
+          mimeType: Type.String({ minLength: 3, maxLength: 160 }),
+          dataBase64: Type.String({ minLength: 1, maxLength: 12000000 }),
+          name: Type.Optional(Type.String({ maxLength: 240 })),
+        },
+        { additionalProperties: false },
+      ),
+      { minItems: 2, maxItems: 8 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+const AgentTurnResponseSchema = Type.Object(
+  {
+    reply: Type.String(),
+    agentRunId: Type.String(),
+    parts: Type.Array(Type.Unknown()),
+    audioBase64: Type.Optional(Type.String()),
+    audioMimeType: Type.Optional(Type.String()),
+    audioDurationMs: Type.Optional(Type.Number()),
+    audioTranscript: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+const ReadinessResponseSchema = Type.Object(
+  {
+    service: Type.Literal("gateway"),
+    status: Type.Union([Type.Literal("ready"), Type.Literal("not-ready")]),
+    time: Type.String(),
+    checks: Type.Array(ReadinessCheckSchema),
+  },
+  { additionalProperties: false },
+);
+
+export function createGatewayApp(options: GatewayAppOptions = {}) {
+  const app = Fastify({
+    logger: false,
+    routerOptions: { maxParamLength: 1024 },
+    bodyLimit: 1_048_576,
+    requestTimeout: 30_000,
+  }).withTypeProvider<TypeBoxTypeProvider>();
+
+  const browserOrigins = new Set(parseWebAllowedOrigins(options.webAllowedOrigins?.join(",")));
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (!origin) return;
+    reply.header("Vary", "Origin");
+    if (!browserOrigins.has(origin)) {
+      return reply.code(403).send({ error: { code: "web.origin_denied", message: "Origin not allowed" } });
+    }
+    reply.header("Access-Control-Allow-Origin", origin);
+    // Never set Access-Control-Allow-Credentials. The browser uses bearer
+    // auth; any future cookie session needs a separate CSRF review.
+  });
+  const browserPreflight = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.headers.origin || !request.headers["access-control-request-method"]) {
+      return reply.code(400).send({ error: { code: "web.preflight_invalid" } });
+    }
+    const method = request.headers["access-control-request-method"].toUpperCase();
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      return reply.code(405).send({ error: { code: "web.method_not_allowed" } });
+    }
+    return reply
+      .header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE")
+      .header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-Masanawa-Client-Platform, Idempotency-Key, X-Idempotency-Key")
+      .header("Access-Control-Max-Age", "600")
+      .code(204).send();
+  };
+  // Only the documented versioned and compatibility API families accept
+  // browser preflight. A global /* route would violate public API lifecycle.
+  app.options("/v1/*", browserPreflight);
+  app.options("/agent/*", browserPreflight);
+  app.options("/auth/*", browserPreflight);
+
+  registerOfficialMediaRoutes(app);
+  const now = options.now ?? nowInstant;
+  const checks = options.readinessChecks ?? [];
+
+  app.setErrorHandler((error, request, reply) => {
+    if(error instanceof MbCallAdmissionRequiredError){
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
+      return;
+    }
+    const walletFailure=replyWalletFailure(error);
+    if(walletFailure){
+      void reply.code(walletFailure.status).send({error:{code:walletFailure.code,message:walletFailure.message}});
+      return;
+    }
+    if(error instanceof CustomerAuthError) {
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.code}});
+      return;
+    }
+    if (error instanceof GbCallRelayError || error instanceof NgnCallRelayError) {
+      void reply.code(error.statusCode).send({error:{code:error.code,message:error.message}});
+      return;
+    }
+    if (error instanceof GeminiProviderError) {
+      void reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
+      return;
+    }
+    if (error instanceof Error && error.message === "financial.auth.unauthorized") {
+      void reply.code(401).send({
+        error: {
+          code: "financial.auth.unauthorized",
+          message: "Authentication required",
+        },
+      });
+      return;
+    }
+    const statusCode =
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      typeof (error as { readonly statusCode?: unknown }).statusCode === "number"
+        ? (error as { readonly statusCode: number }).statusCode
+        : 500;
+    if (statusCode >= 400 && statusCode < 500) {
+      void reply.code(statusCode).send({
+        error: {
+          code: statusCode === 400 ? "gateway.invalid_request" : "gateway.request_rejected",
+          message: statusCode === 400 ? "Invalid request" : "Request rejected",
+        },
+      });
+      return;
+    }
+    request.log.error(error);
+    void reply.code(500).send({
+      error: {
+        code: "gateway.internal_error",
+        message: "Internal server error",
+      },
+    });
+  });
+
+  registerGatewayRequestCorrelation(app);
+  if(options.directNgn)app.addHook('onRequest',async(request,reply)=>{
+    const path=request.url.split('?')[0]!;
+    const retiredRead=/^\/v1\/gb\/(?:recharge\/(?:packages|preview)|wallet\/exchange\/packages)$/.test(path);
+    const retiredWrite=request.method!=='GET'&&(
+      /^\/v1\/gb\/wallet\/(?:exchange\/(?:quote|confirm)|send\/(?:quote|confirm)|tips\/(?:review|confirm))$/.test(path)||
+      /^\/v1\/gb\/wallet\/requests(?:\/[^/]+\/pay)?$/.test(path)||
+      /^\/v1\/gb\/data\/redeem$/.test(path)||
+      /^\/v1\/gb\/calls\/(?:review|admissions(?:\/[^/]+\/grant)?)$/.test(path));
+    if(retiredRead||retiredWrite)return reply.code(410).send({error:{code:'ngn_update_required',message:'Update the app to use your Naira wallet.'}});
+  });
+  registerHistoricalFinancialCallbacks(app, options);
+  // Apply to all money-affecting HTTP writes regardless of the individual
+  // service's route registration. Reads and non-financial account recovery
+  // remain available for restricted customers. Refuse new financial actions
+  // during the first 24h after a password reset.
+  app.addHook("preHandler",async(request)=>{
+    // A provider-signed callback must reconcile even if the customer's
+    // login is restricted or recovering. The callback handler separately
+    // authenticates the provider signature against the original payload.
+    // Unknown/retired URLs have no mutation handler and must remain 404.
+    if (!request.routeOptions.url) return;
+    if(!requiresFinancialCustomerState(request.method,request.url))return;
+    // A missing customer-auth component is a production configuration failure,
+    // not permission to spend. Never silently bypass suspended/recovery holds.
+    if (!options.customerAuth) {
+      throw new CustomerAuthError("AUTH_UNAVAILABLE", 503);
+    }
+    await options.customerAuth.authorizeSensitiveMutation({
+      authorizationHeader:request.headers.authorization,
+    });
+  });
+
+
+
+  if (options.accountDeletion) {
+    registerAccountDeletionRoutes(app, options.accountDeletion);
+  }
+
+  // READ-ONLY discovery and pricing preview. No user-provided amount ever
+  // creates a balance, payment intent, verified deposit or wallet receipt.
+  // Historical compatibility reference only. New deposits settle NGN; the
+  // signed exchange routes are the only current package purchase authority.
+  const rechargeBook = options.gbRechargeRateBook ?? DEFAULT_RECHARGE_RATE_BOOK;
+  validateRechargeRateBook(rechargeBook);
+  app.get("/v1/gb/recharge/packages", async () => ({
+    version: rechargeBook.version,
+    packages: rechargeBook.tiers.map((tier) => quotePackage(tier.sizeGb, rechargeBook)),
+    settlement: "historical_reference_only" as const,
+    automaticDepositConversion: false,
+    currentPackagesPath: "/v1/gb/wallet/exchange/packages",
+  }));
+  app.get("/v1/gb/recharge/preview", {
+    schema: {
+      querystring: Type.Object({
+        amountKobo: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+      }, { additionalProperties: false }),
+    },
+  }, async (request) => ({
+    previewOnly: true as const,
+    historicalReferenceOnly: true as const,
+    automaticDepositConversion: false,
+    ...quoteVerifiedDeposit(request.query.amountKobo, rechargeBook),
+  }));
+
+  if (options.gbDataCatalogue) {
+    registerGbDataCatalogueRoutes(app, options.gbDataCatalogue);
+  }
+
+  if(options.directNgnWallet)registerDirectNgnWalletRoutes(app,options.directNgnWallet);
+  if(options.whatsappLinks)registerWhatsAppLinkRoutes(app,options.whatsappLinks);
+  if(options.whatsappData)registerWhatsAppDataRoutes(app,options.whatsappData);
+  if(options.ngnSendReview)registerNgnSendReviewRoutes(app,options.ngnSendReview);
+  if(options.ngnRequests)registerNgnRequestRoutes(app,options.ngnRequests);
+  if(options.ngnCalls)registerNgnCallRoutes(app,options.ngnCalls);
+  if(options.ngnCallRelay)installNgnCallRelay(app,options.ngnCallRelay);
+  if(options.ngnDataCatalogue)registerNgnDataCatalogueRoutes(app,options.ngnDataCatalogue);
+  if(options.ngnDataPurchases)registerNgnDataPurchaseRoutes(app,options.ngnDataPurchases);
+  if (options.gbDataPurchases) registerGbDataPurchaseRoutes(app, options.gbDataPurchases);
+  if (options.ngnWallet) registerNgnWalletRoutes(app, options.ngnWallet);
+  if (options.billstackFunding) registerBillstackFundingRoutes(app, options.billstackFunding);
+  if (options.gbWalletSummary) registerGbWalletSummaryRoutes(app,options.gbWalletSummary);
+  if (options.gbWalletActivity) registerGbWalletActivityRoutes(app,options.gbWalletActivity);
+  if(options.gbRetainedFinance)app.register(async scope=>{
+    await registerGbRetainedFinanceRoutes(scope,options.gbRetainedFinance!);
+  });
+  if(options.usernames)registerUsernameRoutes(app,options.usernames);
+  if (options.gbSendReview) registerGbSendReviewRoutes(app, options.gbSendReview);
+  if (options.gbStatusTips) registerGbStatusTipRoutes(app, options.gbStatusTips);
+  if (options.gbRequests) registerGbRequestRoutes(app, options.gbRequests);
+  if (options.gbCalls) registerGbCallRoutes(app, options.gbCalls);
+  if (options.gbCallRelay) installGbCallRelay(app, options.gbCallRelay);
+  registerAuthEmailRoutes(app);
+  if (options.mobileDiagnostics) registerMobileDiagnosticsRoutes(app, options.mobileDiagnostics);
+
+  if(options.accountDataExports) {
+    const exports=options.accountDataExports;
+    const fail=(error:unknown,reply:{code(statusCode:number):unknown})=>{
+      const status=error instanceof AccountExportError?error.statusCode:
+        error instanceof CustomerAuthError?error.statusCode:
+        error instanceof Error&&error.message==="wallet.export_range_too_large"?413:503;
+      reply.code(status);
+      return {code:status===413?"EXPORT_TOO_LARGE":status===503?"EXPORT_UNAVAILABLE":
+        error instanceof AccountExportError?error.code:"UNAUTHORIZED"};
+    };
+    app.get("/v1/account/summary",async(request,reply)=>{
+      try{return await exports.summary({authorizationHeader:request.headers.authorization});}
+      catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/profile",async(request,reply)=>{
+      try{return await exports.personalData({
+        authorizationHeader:request.headers.authorization,
+      });}catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/conversations",{
+      schema:{querystring:Type.Object({
+        cursor:Type.Optional(Type.String({maxLength:512})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await exports.conversations({
+        authorizationHeader:request.headers.authorization,
+        ...(request.query.cursor?{cursor:request.query.cursor}:{}),
+      });}catch(error){return fail(error,reply);}
+    });
+    app.get("/v1/account/exports/financial",{
+      schema:{querystring:Type.Object({
+        from:Type.Optional(Type.String({maxLength:10})),
+        to:Type.Optional(Type.String({maxLength:10})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await exports.financialStatement({
+        authorizationHeader:request.headers.authorization,
+        ...request.query,
+      });}catch(error){return fail(error,reply);}
+    });
+  }
+
+  if (options.customerAuth) {
+    const auth = options.customerAuth;
+    const authError = (
+      error: unknown,
+      reply: { code(statusCode: number): unknown },
+    ) => {
+      if (error instanceof CustomerAuthError) {
+        reply.code(error.statusCode);
+        return { code: error.code, message: error.code };
+      }
+      reply.code(503);
+      return { code: "AUTH_UNAVAILABLE", message: "AUTH_UNAVAILABLE" };
+    };
+
+    app.get("/auth/capabilities", async () => auth.capabilities());
+
+    app.get("/auth/session", async (request,reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      try {
+        if (!auth.currentSession) throw new CustomerAuthError("AUTH_UNAVAILABLE",503);
+        return {user:await auth.currentSession({authorizationHeader:request.headers.authorization})};
+      } catch(error) {return authError(error,reply);}
+    });
+
+    app.post(
+      "/auth/otp",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.Optional(Type.String({ minLength: 7, maxLength: 40 })),
+              email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.sendOtp({
+            ...(request.body.phone === undefined
+              ? {}
+              : { phone: request.body.phone }),
+            ...(request.body.email === undefined
+              ? {}
+              : { email: request.body.email }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/auth/verify",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.Optional(Type.String({ minLength: 7, maxLength: 40 })),
+              email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+              code: Type.String({ minLength: 6, maxLength: 6 }),
+              username:Type.Optional(Type.String({minLength:2,maxLength:40})),
+              name: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+              firstName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+              lastName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+              contactPhone: Type.Optional(Type.String({ minLength: 11, maxLength: 24 })),
+              countryIso:Type.Optional(Type.String({minLength:2,maxLength:2})),
+              subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+              deviceId: Type.Optional(Type.String({minLength:32,maxLength:32})),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.verifyOtp({
+            ...(request.body.phone === undefined
+              ? {}
+              : { phone: request.body.phone }),
+            ...(request.body.email === undefined
+              ? {}
+              : { email: request.body.email }),
+            code: request.body.code,
+            ...(request.body.username===undefined?{}:{username:request.body.username}),
+            ...(request.body.name === undefined
+              ? {}
+              : { name: request.body.name }),
+            ...(request.body.firstName === undefined ? {} : {firstName:request.body.firstName}),
+            ...(request.body.lastName === undefined ? {} : {lastName:request.body.lastName}),
+            ...(request.body.contactPhone === undefined ? {} : {contactPhone:request.body.contactPhone}),
+            ...(request.body.countryIso===undefined?{}:{countryIso:request.body.countryIso}),
+            ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+            ...(request.body.deviceId===undefined?{}:{deviceId:request.body.deviceId}),
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.get(
+      "/v1/auth/account/status",
+      {
+        schema: {
+          querystring: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.accountStatus({
+            phone: request.query.phone,
+            deviceId: request.query.deviceId,
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/v1/auth/device/restore",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.deviceRestore({
+            phone: request.body.phone,
+            deviceId: request.body.deviceId,
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/v1/auth/password/verify",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+              password: Type.String({ minLength: 6, maxLength: 6 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.passwordVerify({
+            phone: request.body.phone,
+            deviceId: request.body.deviceId,
+            password: request.body.password,
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/v1/auth/password/setup",
+      {
+        schema: {
+          body: Type.Object(
+            {
+              phone: Type.String({ minLength: 7, maxLength: 40 }),
+              deviceId: Type.String({ minLength: 32, maxLength: 32 }),
+              password: Type.String({ minLength: 6, maxLength: 6 }),
+              name: Type.String({ minLength: 1, maxLength: 160 }),
+              email: Type.Optional(Type.String({ minLength: 3, maxLength: 320 })),
+              firstName:Type.Optional(Type.String({minLength:1,maxLength:80})),
+              lastName:Type.Optional(Type.String({minLength:1,maxLength:80})),
+              contactPhone:Type.Optional(Type.String({minLength:7,maxLength:24})),
+              countryIso:Type.Optional(Type.String({minLength:2,maxLength:2})),
+              subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.passwordSetup({
+            phone: request.body.phone,
+            deviceId: request.body.deviceId,
+            password: request.body.password,
+            name: request.body.name,
+            ...(request.body.email === undefined
+              ? {}
+              : { email: request.body.email }),
+            ...(request.body.firstName===undefined?{}:{firstName:request.body.firstName}),
+            ...(request.body.lastName===undefined?{}:{lastName:request.body.lastName}),
+            ...(request.body.contactPhone===undefined?{}:{contactPhone:request.body.contactPhone}),
+            ...(request.body.countryIso===undefined?{}:{countryIso:request.body.countryIso}),
+            ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+            clientLabel:authClientLabel({
+              platformHeader:request.headers["x-masanawa-client-platform"],
+              userAgent:request.headers["user-agent"],
+            }),
+          });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.get('/v1/auth/profile/contact-geography',async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      try{return await auth.contactGeography({authorizationHeader:request.headers.authorization});}
+      catch(error){return authError(error,reply);}
+    });
+    app.patch('/v1/auth/profile/contact-geography',{
+      schema:{body:Type.Object({
+        contactPhone:Type.String({minLength:7,maxLength:24}),
+        countryIso:Type.String({minLength:2,maxLength:2}),
+        subdivisionIso:Type.Optional(Type.String({minLength:4,maxLength:8})),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      reply.header('Cache-Control','private, no-store');
+      try{return await auth.updateContactGeography({
+        authorizationHeader:request.headers.authorization,
+        contactPhone:request.body.contactPhone,countryIso:request.body.countryIso,
+        ...(request.body.subdivisionIso===undefined?{}:{subdivisionIso:request.body.subdivisionIso}),
+      });}catch(error){return authError(error,reply);}
+    });
+
+    app.post(
+      "/auth/refresh",
+      {
+        schema: {
+          body: Type.Object(
+            { refreshToken: Type.String({ minLength: 20, maxLength: 256 }) },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        try {
+          return await auth.refresh({ refreshToken: request.body.refreshToken });
+        } catch (error) {
+          return authError(error, reply);
+        }
+      },
+    );
+
+    app.post("/v1/auth/password/recovery/start", {
+      schema:{body:Type.Object({phone:Type.String({minLength:7,maxLength:40})},{additionalProperties:false})},
+    },async (request,reply) => {
+      try {return await auth.requestPasswordRecovery({phone:request.body.phone});}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/password/recovery/complete", {
+      schema:{body:Type.Object({
+        phone:Type.String({minLength:7,maxLength:40}),
+        code:Type.String({minLength:6,maxLength:6}),
+        password:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async (request,reply) => {
+      try {return await auth.completePasswordRecovery(request.body);}
+      catch(error) {return authError(error,reply);}
+    });
+
+    app.post("/v1/auth/security/email/start", {
+      schema:{body:Type.Object({email:Type.String({minLength:3,maxLength:320})},{additionalProperties:false})},
+    },async (request,reply) => {
+      try {
+        return await auth.startEmailLink({
+          authorizationHeader:request.headers.authorization,email:request.body.email,
+        });
+      } catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/email/confirm", {
+      schema:{body:Type.Object({
+        email:Type.String({minLength:3,maxLength:320}),
+        code:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async (request,reply) => {
+      try {
+        return await auth.confirmEmailLink({
+          authorizationHeader:request.headers.authorization,
+          email:request.body.email,code:request.body.code,
+        });
+      } catch(error) {return authError(error,reply);}
+    });
+
+    const withdrawalFields = {
+      requestId: Type.String({minLength:1,maxLength:128}),
+      providerCode: Type.String({minLength:2,maxLength:32}),
+      amount: Type.String({minLength:1,maxLength:80}),
+      destinationAddress: Type.String({minLength:1,maxLength:512}),
+    };
+    app.post("/v1/auth/security/withdrawal/start",{
+      schema:{body:Type.Object(withdrawalFields,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginWithdrawalStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/withdrawal/confirm",{
+      schema:{body:Type.Object({...withdrawalFields,code:Type.String({minLength:6,maxLength:6})},
+        {additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.confirmWithdrawalStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+
+    const bankChallengeFields={
+      bankCode:Type.String({minLength:3,maxLength:6}),
+      accountNumber:Type.String({minLength:10,maxLength:10}),
+    };
+    app.post("/v1/auth/security/bank/start",{
+      schema:{body:Type.Object(bankChallengeFields,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginBankStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/bank/confirm",{
+      schema:{body:Type.Object({...bankChallengeFields,
+        code:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.confirmBankStepUp({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    const contactChangeBody={
+      channel:Type.Union([Type.Literal("email"),Type.Literal("sms")]),
+      nextIdentifier:Type.String({minLength:3,maxLength:320}),
+    };
+    app.post("/v1/auth/security/contacts/change/start",{
+      schema:{body:Type.Object(contactChangeBody,{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.beginContactChange({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/contacts/change/confirm",{
+      schema:{body:Type.Object({...contactChangeBody,
+        oldCode:Type.String({minLength:6,maxLength:6}),
+        newCode:Type.String({minLength:6,maxLength:6}),
+      },{additionalProperties:false})},
+    },async(request,reply)=>{
+      try{return await auth.completeContactChange({
+        authorizationHeader:request.headers.authorization,...request.body,
+      });}catch(error){return authError(error,reply);}
+    });
+    app.get("/v1/auth/security/sessions", async (request, reply) => {
+      try {return {sessions:await auth.sessions({authorizationHeader:request.headers.authorization})};}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/sessions/logout-all", async (request, reply) => {
+      try {await auth.logoutAll({authorizationHeader:request.headers.authorization});return {success:true as const};}
+      catch(error) {return authError(error,reply);}
+    });
+    app.post("/v1/auth/security/sessions/:sessionId/revoke", {
+      schema:{params:Type.Object({sessionId:Type.String({minLength:36,maxLength:36})})},
+    }, async (request,reply) => {
+      try {
+        await auth.revokeSession({authorizationHeader:request.headers.authorization,sessionId:request.params.sessionId});
+        return {success:true as const};
+      } catch(error) {return authError(error,reply);}
+    });
+    app.get("/v1/auth/security/history", async (request,reply) => {
+      try {return {events:await auth.loginHistory({authorizationHeader:request.headers.authorization})};}
+      catch(error) {return authError(error,reply);}
+    });
+
+    app.post("/auth/logout", async (request) => {
+      await auth.logout({
+        authorizationHeader: request.headers.authorization,
+      });
+      return { success: true as const };
+    });
+  }
+
+  if(options.personaPortraits){
+    app.get('/v1/personas/:characterId/portrait',async(request,reply)=>{
+      const id=(request.params as {characterId?:string}).characterId??'';if(!/^[a-zA-Z0-9_-]{1,128}$/.test(id))return reply.code(400).send({error:'invalid_persona'});
+      const image=await options.personaPortraits!.read(id);if(!image)return reply.code(404).send({error:'portrait_not_found'});
+      return reply.header('Content-Type','image/png').header('X-Content-Type-Options','nosniff').header('Cache-Control','public, max-age=300').send(image);
+    });
+  }
+  if (options.agentDirectory) {
+    const directory = options.agentDirectory;
+    app.get(
+      "/agent/directory",
+      {
+        schema: {
+          response: { 200: AgentDirectoryResponseSchema },
+        },
+      },
+      async (request) => ({
+        agents: (await directory.list({authorizationHeader:request.headers.authorization})).map(entry=>{
+          const {conversationStarters,socialChannels,publicOfficial,...rest}=entry;
+          return {...rest,
+            ...(conversationStarters?{conversationStarters:[...conversationStarters]}:{}),
+            ...(socialChannels?{socialChannels:socialChannels.map(channel=>({...channel}))}:{}),
+            ...(publicOfficial?{publicOfficial:{...publicOfficial}}:{}),
+          };
+        }),
+      }),
+    );
+
+    app.put(
+      "/agent/preferences/default",
+      {
+        schema: {
+          body: Type.Object(
+            { characterId: Type.String() },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object(
+              { characterId: Type.String() },
+              { additionalProperties: false },
+            ),
+          },
+        },
+      },
+      async (request) =>
+        directory.setDefaultPlatformAgent({
+          authorizationHeader: request.headers.authorization,
+          characterId: request.body.characterId,
+        }),
+    );
+  }
+
+  if(options.browserPush)registerBrowserPushRoutes(app,options.browserPush);
+  if(options.customerMemory)registerCustomerMemoryRoutes(app,options.customerMemory);
+  if(options.civicResponse)registerCivicResponseRoutes(app,options.civicResponse);
+  if(options.messageControls)registerMessageControlRoutes(app,options.messageControls);
+  if (options.agentConversation) {
+    const conversation = options.agentConversation;
+
+    const resultBody = (result: Awaited<ReturnType<AgentConversationService["turn"]>>) => ({
+      reply: result.reply,
+      agentRunId: result.agentRunId,
+      parts: [...result.parts],
+      ...(result.audioBase64 ? { audioBase64: result.audioBase64 } : {}),
+      ...(result.audioMimeType ? { audioMimeType: result.audioMimeType } : {}),
+      ...(result.audioTranscript ? { audioTranscript: result.audioTranscript } : {}),
+      ...(result.audioDurationMs !== undefined
+        ? { audioDurationMs: result.audioDurationMs }
+        : {}),
+    });
+
+    app.post(
+      "/agent/sessions/open",
+      {
+        schema: {
+          body: AgentSessionOpenBodySchema,
+          response: { 200: AgentSessionOpenResponseSchema },
+        },
+      },
+      async (request) =>
+        conversation.open({
+          authorizationHeader: request.headers.authorization,
+          characterId: request.body.characterId,
+        }),
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/turn",
+      {
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentTurnBodySchema,
+          response: { 200: AgentTurnResponseSchema },
+        },
+      },
+      async (request, reply) => {
+        const controller = new AbortController();
+        let finished = false;
+        const abort = () => {
+          if (!finished) controller.abort();
+        };
+        reply.raw.once("close", abort);
+        try {
+          return resultBody(await conversation.turn({
+            authorizationHeader: request.headers.authorization,
+            characterSessionId: request.params.characterSessionId,
+            characterId: request.body.characterId,
+            text: request.body.text,
+            requestId: parseCanonicalId(
+              "request",
+              request.headers["x-request-id"] as string,
+            ),
+            correlationId: parseCanonicalId(
+              "correlation",
+              request.headers["x-correlation-id"] as string,
+            ),
+            signal: controller.signal,
+          }));
+        } finally {
+          finished = true;
+          reply.raw.off("close", abort);
+        }
+      },
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/turn-stream",
+      {
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentTurnBodySchema,
+        },
+      },
+      async (request, reply) => {
+        await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+        return streamConversationReply(reply, async (callbacks, signal) =>
+        resultBody(await conversation.turn({
+          authorizationHeader: request.headers.authorization,
+          characterSessionId: request.params.characterSessionId,
+          characterId: request.body.characterId,
+          text: request.body.text,
+          requestId: parseCanonicalId("request", request.headers["x-request-id"] as string),
+          correlationId: parseCanonicalId("correlation", request.headers["x-correlation-id"] as string),
+          ...callbacks, signal,
+        })));},
+    );
+
+    app.post("/agent/sessions/:characterSessionId/media-turn-stream", {
+      bodyLimit: 13_000_000,
+      schema: {params:AgentSessionParamsSchema,body:AgentMediaTurnBodySchema},
+    }, async (request,reply) => {
+      await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+      return streamConversationReply(reply, async (callbacks,signal) =>
+      resultBody(await conversation.mediaTurn({
+        authorizationHeader:request.headers.authorization,
+        characterSessionId:request.params.characterSessionId,
+        ...request.body,
+        requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
+        correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
+        ...callbacks,signal,
+      })));});
+
+    app.post("/agent/sessions/:characterSessionId/media-set-turn-stream", {
+      bodyLimit: 17_000_000,
+      schema: {params:AgentSessionParamsSchema,body:AgentMediaSetTurnBodySchema},
+    }, async (request,reply) => {
+      await conversation.preflight?.({authorizationHeader:request.headers.authorization,characterSessionId:request.params.characterSessionId,characterId:request.body.characterId});
+      return streamConversationReply(reply, async (callbacks,signal) =>
+      resultBody(await conversation.mediaSetTurn({
+        authorizationHeader:request.headers.authorization,
+        characterSessionId:request.params.characterSessionId,
+        ...request.body,
+        requestId:parseCanonicalId("request",request.headers["x-request-id"] as string),
+        correlationId:parseCanonicalId("correlation",request.headers["x-correlation-id"] as string),
+        ...callbacks,signal,
+      })));});
+
+    app.post(
+      "/agent/sessions/:characterSessionId/media-turn",
+      {
+        bodyLimit: 13_000_000,
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentMediaTurnBodySchema,
+          response: { 200: AgentTurnResponseSchema },
+        },
+      },
+      async (request, reply) => {
+        const controller = new AbortController();
+        let finished = false;
+        const abort = () => {
+          if (!finished) controller.abort();
+        };
+        reply.raw.once("close", abort);
+        try {
+          return resultBody(await conversation.mediaTurn({
+            authorizationHeader: request.headers.authorization,
+            characterSessionId: request.params.characterSessionId,
+            characterId: request.body.characterId,
+            caption: request.body.caption,
+            mimeType: request.body.mimeType,
+            dataBase64: request.body.dataBase64,
+            requestId: parseCanonicalId(
+              "request",
+              request.headers["x-request-id"] as string,
+            ),
+            correlationId: parseCanonicalId(
+              "correlation",
+              request.headers["x-correlation-id"] as string,
+            ),
+            signal: controller.signal,
+          }) as Awaited<ReturnType<AgentConversationService["turn"]>>);
+        } finally {
+          finished = true;
+          reply.raw.off("close", abort);
+        }
+      },
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/media-set-turn",
+      {
+        bodyLimit: 17_000_000,
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: AgentMediaSetTurnBodySchema,
+          response: { 200: AgentTurnResponseSchema },
+        },
+      },
+      async (request, reply) => {
+        const controller = new AbortController();
+        let finished = false;
+        const abort = () => {
+          if (!finished) controller.abort();
+        };
+        reply.raw.once("close", abort);
+        try {
+          return resultBody(await conversation.mediaSetTurn({
+            authorizationHeader: request.headers.authorization,
+            characterSessionId: request.params.characterSessionId,
+            characterId: request.body.characterId,
+            caption: request.body.caption,
+            media: request.body.media,
+            requestId: parseCanonicalId(
+              "request",
+              request.headers["x-request-id"] as string,
+            ),
+            correlationId: parseCanonicalId(
+              "correlation",
+              request.headers["x-correlation-id"] as string,
+            ),
+            signal: controller.signal,
+          }) as Awaited<ReturnType<AgentConversationService["turn"]>>);
+        } finally {
+          finished = true;
+          reply.raw.off("close", abort);
+        }
+      },
+    );
+
+    app.post(
+      "/agent/sessions/:characterSessionId/close",
+      {
+        schema: {
+          params: AgentSessionParamsSchema,
+          body: Type.Object(
+            { characterId: Type.String() },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object(
+              { closed: Type.Literal(true) },
+              { additionalProperties: false },
+            ),
+          },
+        },
+      },
+      async (request) => {
+        await conversation.close({
+          authorizationHeader: request.headers.authorization,
+          characterSessionId: request.params.characterSessionId,
+          characterId: request.body.characterId,
+        });
+        return { closed: true as const };
+      },
+    );
+  }
+
+  // These modules reuse the same host app, tenant authority and database.
+  if (options.status) {
+    app.register(async scope => {
+      await registerStatusRuntime(scope, {
+        ...options.status!,
+        // Root Status is Masana-editorial only in the reduced product.
+        // Normal fans retain reactions, comments, follows and saves.
+      });
+    });
+  }
+  if (options.masana) registerMasanaRoutes(app, options.masana);
+  if (options.masanaInbox) registerMasanaInboxRoutes(app, options.masanaInbox);
+  if (options.callHistory) registerCallHistoryRoutes(app, options.callHistory);
+  if (options.privateChatMedia) {
+    registerPrivateChatMediaRoutes(app, options.privateChatMedia);
+  }
+  registerAgentShellRoutes(app, {
+    ...(options.agentShell ? { agentShell: options.agentShell } : {}),
+    ...(options.liveVoiceTokens
+      ? { liveVoiceTokens: options.liveVoiceTokens }
+      : {}),
+    ...(options.mobilePush ? { mobilePush: options.mobilePush } : {}),
+    ...(options.mobileNotifications
+      ? { mobileNotifications: options.mobileNotifications } : {}),
+  });
+  if (options.talkSafety) registerTalkSafetyRoutes(app, options.talkSafety);
+
+  if (options.talkProfiles) {
+    registerTalkProfileRoutes(app, options.talkProfiles);
+  }
+  if (options.twinProduction) registerTwinSafetyRoutes(app, options.twinProduction.twinSafety);
+
+  app.get(
+    "/healthz",
+    {
+      schema: {
+        response: {
+          200: HealthResponseSchema,
+        },
+      },
+    },
+    async () => ({
+      service: "gateway" as const,
+      status: "ok" as const,
+      time: now(),
+    }),
+  );
+
+  app.get(
+    "/readyz",
+    {
+      schema: {
+        response: {
+          200: ReadinessResponseSchema,
+          503: ReadinessResponseSchema,
+        },
+      },
+    },
+    async (_request, reply) => {
+      const dependencyResults = await Promise.all(
+        checks.map(async (check) => {
+          try {
+            const result = await check.check();
+            return {
+              name: check.name,
+              ready: result.ready,
+              ...(result.reason ? { reason: result.reason } : {}),
+            };
+          } catch {
+            return {
+              name: check.name,
+              ready: false,
+              reason: "readiness check failed",
+            };
+          }
+        }),
+      );
+
+      const results = [
+        ...(options.isDraining?.()
+          ? [
+              {
+                name: "lifecycle",
+                ready: false,
+                reason: "service is shutting down",
+              },
+            ]
+          : []),
+        ...dependencyResults,
+      ];
+
+      const ready = results.every((result) => result.ready);
+      if (options.releaseSha && /^[0-9a-f]{40}$/.test(options.releaseSha)) {
+        reply.header("x-masanawa-release", options.releaseSha).header("cache-control", "no-store");
+      }
+      if (!ready) {
+        reply.code(503);
+      }
+
+      return {
+        service: "gateway" as const,
+        status: ready ? ("ready" as const) : ("not-ready" as const),
+        time: now(),
+        checks: results,
+      };
+    },
+  );
+
+  return app;
+}
+}),name:Type.String(),sourceUrl:Type.String()},{additionalProperties:false})),
     publicOfficial: Type.Optional(Type.Object({
       officialName:Type.String(),office:Type.String(),identitySourceUrl:Type.String(),
       reviewedAt:Type.String(),reviewExpiresAt:Type.String(),
