@@ -6,6 +6,7 @@ import type {Pool} from '@masanawa/postgres';
 import {validateMasanaProfile} from '@masanawa/masana';
 import type {PlatformAgentIdentityProvisioner} from './platform_agent_bootstrap.js';
 import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
+import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
 
 const ORIGIN='https://app.masanawa.com/api/ai/civic-registry';
 const MAX_BYTES=3_000_000;
@@ -57,12 +58,17 @@ export async function loadCivicPersonRegistry(fetcher:typeof fetch=fetch){
 type RegistryInput={
  tenantId:TenantId;pool:Pool;records:readonly CivicPersonRecord[];identity:PlatformAgentIdentityProvisioner;
  presentations:AgentPresentationRepository;profiles:PlatformAgentProfileRepository;skillAssignments:CharacterSkillAssignmentRepository;
- skillDistribution:SkillDistributionRepository;
+ skillDistribution:SkillDistributionRepository;cursor?:number;
 };
 /** Called under the same tenant-wide catalogue lock as the existing bootstrap.
  * The immutable constitution owns the directory ID; missing presentations can
  * be repaired without issuing another character. A staff-hidden/retired
  * identity is never automatically reactivated. */
+export function rotateCivicRecords<T>(records:readonly T[],cursor:number):readonly T[]{
+ if(!records.length)return records;
+ const offset=Number.isSafeInteger(cursor)&&cursor>=0?cursor%records.length:0;
+ return [...records.slice(offset),...records.slice(0,offset)];
+}
 export async function syncCivicPersonGuides(input:RegistryInput){
  const rows=await input.pool.query<{character_id:string;character_version_id:string;constitution:Record<string,unknown>;character_state:string;owner_kind:string}>(`
  SELECT c.character_id,v.character_version_id,v.constitution,c.state AS character_state,o.kind AS owner_kind
@@ -84,15 +90,17 @@ export async function syncCivicPersonGuides(input:RegistryInput){
  for(const r of input.records)for(const n of [r.name,...r.aliases].map(civicPersonNameKey)){
   if(!n)continue;const ids=recordNames.get(n)??new Set<string>();ids.add(r.id);recordNames.set(n,ids);
  }
- let created=0,activated=0,existingGuides=0,legacyReserved=0,ambiguous=0,missingSources=0,staffHeld=0,remaining=0,failed=0,attempts=0;
- for(const r of input.records){
+ let created=0,activated=0,existingGuides=0,legacyReserved=0,ambiguous=0,missingSources=0,staffHeld=0,remaining=0,failed=0,attempts=0,nextCursor=0;
+ const ordered=rotateCivicRecords(input.records,input.cursor??0);
+ for(const r of ordered){
   const known=existing.get(r.id)??[];
   if(known.length>1){ambiguous++;continue;}
   if(known.length===1){
    const old=known[0]!,subject=(old.constitution.publicOfficial as {officialName?:unknown}|undefined)?.officialName;
    const binding=civicPersonBinding(old.constitution.disclosurePolicy,subject)!;
    if(binding.name!==r.name||!r.sources.includes(binding.sourceUrl)||old.character_state!=='active'){staffHeld++;continue;}
-   if(byCharacter.has(old.character_id as CharacterId)){existingGuides++;continue;}
+   const presentation=byCharacter.get(old.character_id as CharacterId);
+   if(presentation){if(presentation.visibleInUserApp&&presentation.characterVersionId===old.character_version_id)existingGuides++;else staffHeld++;continue;}
   }else{
    const keys=[r.name,...r.aliases].map(civicPersonNameKey).filter(Boolean);
    if(keys.some(k=>names.has(k))){legacyReserved++;continue;}
@@ -101,6 +109,7 @@ export async function syncCivicPersonGuides(input:RegistryInput){
   if(!r.sources.length){missingSources++;continue;}
   if(attempts>=25){remaining++;continue;}
   attempts++;
+  nextCursor=(input.records.indexOf(r)+1)%input.records.length;
   try{
    const old=known[0];
    const characterId=old?parseCanonicalId('character',old.character_id):createCanonicalId('character');
@@ -142,5 +151,56 @@ export async function syncCivicPersonGuides(input:RegistryInput){
    activated++;
   }catch{failed++;}
  }
- return {published:input.records.length,created,activated,existingGuides,legacyReserved,ambiguous,missingSources,staffHeld,remaining,failed};
+ return {published:input.records.length,created,activated,existingGuides,legacyReserved,ambiguous,missingSources,staffHeld,remaining,failed,nextCursor};
+}
+
+/** Readback after reconciliation: structural registration, not a live provider
+ * session test. No customer data, identity IDs or private configuration escape. */
+export type CivicRegistrationCandidate={id:string;name:string;binding:CivicPersonBinding|null;configured:boolean;legacySource:string|null};
+export function summarizeCivicRegistration(records:readonly CivicPersonRecord[],candidates:readonly CivicRegistrationCandidate[],reserved:readonly string[]){
+ const names=new Set(reserved.map(civicPersonNameKey));
+ const direct=new Map<string,CivicRegistrationCandidate[]>(),legacy=new Map<string,CivicRegistrationCandidate[]>();
+ for(const c of candidates){
+  const map=c.binding?direct:legacy,key=c.binding?.id??civicPersonNameKey(c.name);
+  const list=map.get(key)??[];list.push(c);map.set(key,list);
+ }
+ let directReady=0,legacyReady=0,legacyUnresolved=0,ambiguous=0,unready=0,unregistered=0;
+ for(const r of records){
+  const bound=direct.get(r.id)??[],keys=[r.name,...r.aliases].map(civicPersonNameKey).filter(Boolean);
+  const old=[...new Map(keys.flatMap(k=>legacy.get(k)??[]).map(c=>[c.id,c])).values()];
+  if(bound.length>1||(bound.length&&old.length)||old.length>1){ambiguous++;continue;}
+  if(bound.length===1){const c=bound[0]!;
+   if(c.configured&&c.binding?.name===r.name&&r.sources.includes(c.binding.sourceUrl))directReady++;else unready++;
+  }else if(old.length||keys.some(k=>names.has(k))){
+   const c=old[0];
+   if(c?.configured&&c.legacySource&&r.sources.includes(c.legacySource)&&civicPersonNameKey(c.name)===civicPersonNameKey(r.name))legacyReady++;else legacyUnresolved++;
+  }else unregistered++;
+ }
+ return {published:records.length,directReady,legacyReady,legacyUnresolved,ambiguous,unready,unregistered};
+}
+export async function auditCivicPersonRegistration(input:Pick<RegistryInput,'tenantId'|'pool'|'records'>){
+ const found=await input.pool.query<{character_id:string;constitution:Record<string,unknown>;configured:boolean}>(`
+ SELECT c.character_id,v.constitution,
+  (c.state='active' AND COALESCE(p.visible_in_user_app,false)
+   AND p.character_version_id=c.active_character_version_id
+   AND f.character_id IS NOT NULL AND length(f.voice_provider)>0 AND length(f.voice_name)>0
+   AND a.character_id IS NOT NULL AND COALESCE(revision.state='approved',false)) IS TRUE AS configured
+ FROM identity.characters c
+ JOIN identity.character_versions v ON v.tenant_id=c.tenant_id AND v.character_version_id=c.active_character_version_id
+ JOIN identity.character_ownership o ON o.tenant_id=c.tenant_id AND o.character_id=c.character_id AND o.kind='platform'
+ LEFT JOIN agents.agent_presentations p ON p.tenant_id=c.tenant_id AND p.character_id=c.character_id
+ LEFT JOIN agents.platform_agent_profiles f ON f.tenant_id=c.tenant_id AND f.character_id=c.character_id
+ LEFT JOIN agents.character_skill_assignments a ON a.tenant_id=c.tenant_id AND a.character_id=c.character_id
+ LEFT JOIN LATERAL (SELECT state FROM masana.character_revisions r WHERE r.tenant_id=c.tenant_id
+  AND r.character_id=c.character_id AND r.state IN ('approved','retired') ORDER BY revision DESC LIMIT 1) revision ON true
+ WHERE c.tenant_id=$1 AND v.constitution ? 'publicOfficial'`,[input.tenantId]);
+ const candidates=found.rows.flatMap(row=>{
+  const name=(row.constitution.publicOfficial as {officialName?:unknown}|undefined)?.officialName;
+  if(typeof name!=='string')return [];
+  return [{id:row.character_id,name,binding:civicPersonBinding(row.constitution.disclosurePolicy,name),configured:row.configured===true,legacySource:null as string|null}];
+ });
+ const legacy=candidates.filter(c=>!c.binding&&c.configured);
+ const reviewed=await createOfficialKnowledgeReader(input.pool,undefined,null).directory(input.tenantId,legacy.map(c=>c.id));
+ for(const c of legacy)c.legacySource=reviewed.get(c.id)?.identitySourceUrl??null;
+ return {...summarizeCivicRegistration(input.records,candidates,OFFICIAL_ROSTER_MANIFEST.map(s=>s.officialName)),checkedAt:new Date().toISOString()};
 }

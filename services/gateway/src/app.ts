@@ -118,6 +118,7 @@ export interface GatewayAppOptions {
   readonly masanaInbox?: MasanaInboxRoutesDeps;
   readonly callHistory?: CallHistoryService;
   readonly releaseSha?: string;
+  readonly civicRegistrationStatus?:()=>string|undefined;
   readonly readinessChecks?: readonly ReadinessCheck[];
   readonly now?: () => Instant;
   readonly isDraining?: () => boolean;
@@ -1347,6 +1348,8 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
       if (options.releaseSha && /^[0-9a-f]{40}$/.test(options.releaseSha)) {
         reply.header("x-masanawa-release", options.releaseSha).header("cache-control", "no-store");
       }
+      const civicRegistration=options.civicRegistrationStatus?.();
+      if(civicRegistration)reply.header('x-masanawa-civic-registration',civicRegistration).header('cache-control','no-store');
       if (!ready) {
         reply.code(503);
       }
