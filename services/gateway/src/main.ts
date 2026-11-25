@@ -65,7 +65,7 @@ import {
 } from "@masanawa/postgres";
 import {ensureOfficialPlatformAgents} from './official_roster_bootstrap.js';
 import {ensureCivicAgencyAgents} from './civic_agency_bootstrap.js';
-import {syncCivicPersonGuides,loadCivicPersonRegistry} from './civic_person_registry.js';
+import {syncCivicPersonGuides,loadCivicPersonRegistry,auditCivicPersonRegistration} from './civic_person_registry.js';
 import {createPgAgentMasanaIdentityReader} from "./agent_identity.js";
 import {createGbCallRelay} from "./gb_calls/relay.js";
 import {GbCallReviewError,type GbCallPorts} from "./gb_calls/review.js";
@@ -2204,6 +2204,8 @@ export async function startGatewayService(
       inbox: createMasanaInboxRepository(featurePool, { hiddenTurnsReady: false,messageControlsReady:true }),
     } : undefined);
 
+  let civicRegistrationStatus:string|undefined;
+  let civicRegistryCursor=0;
   let app: ManagedNodeServer;
   try {
     const msnwPaystackEnrollment = env.PAYSTACK_SECRET_KEY?.trim() &&
@@ -2308,6 +2310,7 @@ export async function startGatewayService(
       ...(masanaInbox ? {masanaInbox} : {}),
       ...(options.appOptions ?? {}),
       ...(env.MASANAWA_RELEASE_SHA ? {releaseSha:env.MASANAWA_RELEASE_SHA} : {}),
+      civicRegistrationStatus:()=>civicRegistrationStatus,
       productScope,
       directNgn:true,
       ...(composedBrowserPush?{browserPush:composedBrowserPush}:{}),...(composedCustomerMemory?{customerMemory:composedCustomerMemory}:{}),...(composedMessageControls?{messageControls:composedMessageControls}:{}),
@@ -2467,11 +2470,14 @@ export async function startGatewayService(
         const records=await loadCivicPersonRegistry();
         if(drain.isDraining())return;
         const result=await withCatalogProvisionLock(pool,tenantId,()=>syncCivicPersonGuides({
-          tenantId,pool,records,identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
+          tenantId,pool,records,cursor:civicRegistryCursor,identity:database.platformAgentIdentity!,presentations:database.agentPresentations!,
           profiles:database.platformAgentProfiles!,skillAssignments:database.characterSkillAssignments!,skillDistribution:database.skillDistribution!,
         }));
-        process.stdout.write(JSON.stringify({event:'civic_person_registry_reconciled',...result})+'\n');
-      })().catch(()=>{console.error(JSON.stringify({event:'civic_person_registry_unavailable'}));}).finally(()=>{civicRegistryRun=undefined;});
+        civicRegistryCursor=result.nextCursor;
+        const audit=await auditCivicPersonRegistration({tenantId,pool,records});
+        civicRegistrationStatus=JSON.stringify(audit);
+        process.stdout.write(JSON.stringify({event:'civic_person_registry_reconciled',...result,audit})+'\n');
+      })().catch(()=>{civicRegistrationStatus=undefined;console.error(JSON.stringify({event:'civic_person_registry_unavailable'}));}).finally(()=>{civicRegistryRun=undefined;});
     };
     run();civicRegistryTimer=setInterval(run,30000);civicRegistryTimer.unref();
   }
