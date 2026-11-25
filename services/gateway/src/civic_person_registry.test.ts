@@ -36,3 +36,16 @@ it('separates structurally registered guides from hidden, missing, legacy and am
  expect(summarizeCivicRegistration([row],[{...ready,configured:false}],[]).unready).toBe(1);
  expect(summarizeCivicRegistration([row],[ready,{...ready,id:'duplicate'}],[]).ambiguous).toBe(1);
 });
+
+it('reconciles canonical reviewed legacy source discrepancies and known name ordering without accepting lookalikes',()=>{
+ const president:CivicPersonRecord={...row,id:'person-bola-ahmed-tinubu',name:'Bola Ahmed Tinubu',sources:['https://statehouse.gov.ng/team/bola-ahmed-tinubu/']};
+ const candidate={id:'character_01a189e8-72e3-7257-bbba-33aa50b111d1',name:'Bola Ahmed Tinubu',binding:null,configured:true,legacySource:'https://en.wikipedia.org/wiki/Bola_Tinubu'};
+ expect(summarizeCivicRegistration([president],[candidate],[]).legacyReady).toBe(1);
+ expect(summarizeCivicRegistration([president],[{...candidate,id:'different-character'}],[]).legacyUnresolved).toBe(1);
+ expect(summarizeCivicRegistration([president],[{...candidate,legacySource:'https://wrong.example/source'}],[]).legacyUnresolved).toBe(1);
+ expect(summarizeCivicRegistration([president],[{...candidate,configured:false}],[]).legacyUnresolved).toBe(1);
+ const chinda:CivicPersonRecord={...row,id:'person-chinda-kingsley-ogundu-rivers-house',name:'Kingsley Ogundu Chinda',aliases:['Chinda Kingsley Ogundu']};
+ const legacy={id:'character_01a189e8-72ec-70ed-be48-c42560540a0f',name:'Chinda Kingsley Ogundu',binding:null,configured:true,legacySource:'https://en.wikipedia.org/wiki/Kingsley_Chinda'};
+ expect(summarizeCivicRegistration([chinda],[legacy],[]).legacyReady).toBe(1);
+ expect(summarizeCivicRegistration([chinda],[legacy,{...legacy,id:'duplicate'}],[]).ambiguous).toBe(1);
+});

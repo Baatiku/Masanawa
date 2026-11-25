@@ -8,6 +8,34 @@ import type {PlatformAgentIdentityProvisioner} from './platform_agent_bootstrap.
 import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
 import {createOfficialKnowledgeReader} from './public_official_knowledge.js';
 
+
+// Fixed legacy identity bindings mirror the independently reviewed frontend
+// routing allowlist. A shared source alone or a matching name cannot authorize
+// a different canonical character. Current dossier approval remains mandatory.
+import {OFFICIAL_LAUNCH_BIOGRAPHIES} from './official_launch_biographies.js';
+const legacyCivicIds:Readonly<Record<string,string>>=Object.freeze({
+ 'person-bola-ahmed-tinubu':'Bola Ahmed Tinubu',
+ 'person-kashim-shettima':'Kashim Shettima',
+ 'person-godswill-akpabio':'Godswill Akpabio',
+ 'person-tajudeen-abbas':'Tajudeen Abbas',
+ 'person-kudirat-kekere-ekun':'Kudirat Kekere-Ekun',
+ 'person-george-akume':'George Akume',
+ 'person-nuhu-ribadu':'Nuhu Ribadu',
+ 'person-olayemi-cardoso':'Olayemi Cardoso',
+ 'person-taiwo-oyedele':'Taiwo Oyedele',
+ 'person-nyesom-wike':'Nyesom Wike',
+ 'person-chinda-kingsley-ogundu-rivers-house':'Chinda Kingsley Ogundu',
+});
+function reviewedLegacyBinding(r:CivicPersonRecord,c:CivicRegistrationCandidate){
+ const name=legacyCivicIds[r.id];
+ if(!name||!c.configured||!c.legacySource||c.name!==name)return false;
+ const subject=OFFICIAL_ROSTER_MANIFEST.find(s=>s.officialName===name);
+ const biography=OFFICIAL_LAUNCH_BIOGRAPHIES.find(b=>b.characterId===subject?.characterId&&b.officialName===name);
+ if(!subject||!biography||c.id!==subject.characterId||c.legacySource!==biography.sourceUrl)return false;
+ const approvedNames=[name,biography.displayName].map(civicPersonNameKey);
+ return approvedNames.includes(civicPersonNameKey(r.name));
+}
+
 const ORIGIN='https://app.masanawa.com/api/ai/civic-registry';
 const MAX_BYTES=3_000_000;
 const MAX_RECORDS=1200;
@@ -173,7 +201,7 @@ export function summarizeCivicRegistration(records:readonly CivicPersonRecord[],
    if(c.configured&&c.binding?.name===r.name&&r.sources.includes(c.binding.sourceUrl))directReady++;else unready++;
   }else if(old.length||keys.some(k=>names.has(k))){
    const c=old[0];
-   if(c?.configured&&c.legacySource&&r.sources.includes(c.legacySource)&&civicPersonNameKey(c.name)===civicPersonNameKey(r.name))legacyReady++;else legacyUnresolved++;
+   if(c&&(reviewedLegacyBinding(r,c)||(c.configured&&c.legacySource&&r.sources.includes(c.legacySource)&&civicPersonNameKey(c.name)===civicPersonNameKey(r.name))))legacyReady++;else legacyUnresolved++;
   }else unregistered++;
  }
  return {published:records.length,directReady,legacyReady,legacyUnresolved,ambiguous,unready,unregistered};
