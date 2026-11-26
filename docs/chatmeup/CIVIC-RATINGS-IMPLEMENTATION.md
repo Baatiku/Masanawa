@@ -1,0 +1,7 @@
+# ChatMeUp voluntary civic ratings — initial implementation
+- Ratings refer to the public performance of a listed public figure or government service, not AI answer quality, electoral intent, or an opinion poll.
+- Authenticated, active users explicitly opt in to one rating per listed Gateway character. Users can change or withdraw their rating. No comments, rewards, political targeting, or wallet writes.
+- Published summaries require 20 active accounts. Counts rounded down to tens, approval rounded to 5 percentage points. Average is rounded to one decimal. No raw individual ratings are exposed to other users or admin dashboards.
+- Privacy: stored as sensitive user-associated data; no political preference profiling or reuse for ad targeting. Account disablement removes ratings. Authenticated own-ratings endpoint provides access. Before general availability, qualify consent, data access/withdrawal, privacy retention, small-cohort disclosure and anti-Sybil protections in production.
+- This is the first source batch, not the entire engagement programme. Organic engagement measurement requires separately reviewed privacy/consent and a reliable server-side activity definition. Paid activity must be unrelated to political opinions or promotion of specific political personas, with funded treasury, independent fraud checks and legal review before any ledger credit.
+- Gate: Foundation/PostgreSQL CI, backend host release, frontend CI/deployment, signed-in browser acceptance. No live activation implied by this document.
