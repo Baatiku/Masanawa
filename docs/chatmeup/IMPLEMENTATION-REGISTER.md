@@ -189,3 +189,15 @@ Final hosted Foundation CI passed 509 files and exposed one environment-registry
 omission. MASANAWA_WEB_BASE_URL and the optional Caddy alias variable are now
 registered as public/optional in config/production-env.json; the five architecture
 environment contracts pass locally. No security gate was bypassed.
+
+Monitoring coverage completed in the existing private host monitor: read-only
+Gemini model-metadata connectivity (no AI generation), public Gateway readiness,
+credentialless WebSocket upgrade rejection on the actual relay route, and
+24-hour shared public-news freshness. Provider credentials go only to the fixed
+Google endpoint; redirects are rejected and bodies/keys are not logged. These
+checks complement existing Docker/PostgreSQL, RAM, disk, OOM, backup and release
+checks and the hourly external DNS/TLS/registration monitor. The scoped installer
+refreshes only an already-installed monitor/timer and checkpoints the old copy;
+it creates no new monitoring service. All 34 deployment Python tests pass,
+including provider-key isolation and failure reporting. Authenticated Live calls
+and real provider/media/user acceptance remain separate explicit tests.
