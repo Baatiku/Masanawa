@@ -19,7 +19,7 @@ it('binds web dossier facts to independently verified identity, bounds fetch and
  expect(await reader.read(query)).toBe(first);
  expect(fetcher).toHaveBeenCalledTimes(1);
  const requested=new URL(String(fetcher.mock.calls[0]?.[0]));
- expect(requested.origin).toBe('https://app.masanawa.com');
+ expect(requested.origin).toBe('https://app.chatmeup.online');
  expect(requested.searchParams.get('source')).toBe(source);
  expect(requested.searchParams.get('q')).toBe('road');
 });

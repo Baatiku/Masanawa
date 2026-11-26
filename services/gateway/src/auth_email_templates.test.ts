@@ -29,3 +29,10 @@ describe('branded account emails',()=>{
   }finally{await app.close();}
  });
 });
+
+it('uses ChatMeUp customer identity and the migrated web entry point',()=>{
+ const email=renderMasanawaWelcomeEmail({name:'Existing user'});
+ expect(email.subject).toBe('Welcome to ChatMeUp');
+ expect(email.html).toContain('https://app.chatmeup.online');
+ expect(email.html).not.toContain('https://app.masanawa.com');
+});

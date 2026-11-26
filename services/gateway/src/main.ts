@@ -843,7 +843,7 @@ export async function startGatewayService(
               emailDelivery: createResendOtpDelivery({
                 apiKey: resendApiKey,
                 from: resendFrom,
-                publicBaseUrl: env.MASANAWA_AUTH_PUBLIC_BASE_URL?.trim() || "https://api.masanawa.com",
+                publicBaseUrl: env.MASANAWA_AUTH_PUBLIC_BASE_URL?.trim() || "https://api.chatmeup.online",
               }),
             }
           : {}),

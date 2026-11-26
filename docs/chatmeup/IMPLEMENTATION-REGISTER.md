@@ -100,3 +100,30 @@ Rollback: restore compose.env/runtime.env from the printed private checkpoint,
 restore Caddyfile.before, validate then reload Caddy, and recreate only the same
 Gateway/Ops with original images and overrides. Keep DNS until rollback health
 passes. No SQL rollback, volume deletion or R2 cleanup is involved.
+
+## Connected web consumers follow-up
+
+The source audit also identifies civic reconciliation/evidence fetching and
+WhatsApp service replies that target the old web hostname. The coordinated map is:
+packages/contracts/src/config.ts (validated publicWebOrigin with existing config
+exports); Gateway civic_person_registry and web_civic_knowledge; account email
+renderer/default URL; WhatsApp Worker web links; corresponding registry, evidence,
+email, WhatsApp and config regression tests; private environment migration tool.
+MASANAWA_WEB_BASE_URL is the environment override. Explicit legacy HTTPS origins
+remain supported. No canonical persona binding, PostgreSQL migration, stored
+WhatsApp credential, speech pipeline, pricing, independent News/Knowledge domain
+or mobile source is changed. Account email function/asset identifiers remain
+stable; displayed identity and web entry point become ChatMeUp. The existing
+support mailbox is retained pending separately verified mail-domain setup.
+
+This follow-up changes runtime code and therefore needs a normal exact-green
+backend image release through the existing deploy-agent, separately from the
+Caddy console cutover. Do not call a merged source commit a deployed release.
+
+Connected consumer local verification: 37 targeted civic-registry/evidence,
+account-email, WhatsApp and public-origin tests PASS; root and workspace
+TypeScript checks PASS; workspace build PASS; private-env preservation test PASS.
+No Android build was run. Next.js generated configuration edits were excluded.
+The existing release request currently points at e80946d135a2c9186a57fe7a1a180fc7daa59e49
+(request civic-registration-readiness-20261125-e80946d1-v1); preserve that branch
+until a new merged release has both required main workflows green.

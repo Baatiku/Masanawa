@@ -1,3 +1,4 @@
+import {publicWebOrigin} from '@masanawa/contracts';
 import {createHash} from 'node:crypto';
 import {createCanonicalId,nowInstant,parseCanonicalId,type TenantId,type CharacterId} from '@masanawa/contracts';
 import type {AgentPresentationRepository,PlatformAgentProfileRepository,CharacterSkillAssignmentRepository} from '@masanawa/agents';
@@ -36,7 +37,7 @@ function reviewedLegacyBinding(r:CivicPersonRecord,c:CivicRegistrationCandidate)
  return approvedNames.includes(civicPersonNameKey(r.name));
 }
 
-const ORIGIN='https://app.masanawa.com/api/ai/civic-registry';
+const ORIGIN=publicWebOrigin(process.env.MASANAWA_WEB_BASE_URL)+'/api/ai/civic-registry';
 const MAX_BYTES=3_000_000;
 const MAX_RECORDS=1200;
 export type CivicPersonBinding={id:string;name:string;sourceUrl:string};

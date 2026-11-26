@@ -31,7 +31,8 @@ def migrate(compose, runtime):
     origins=[x for x in origins if x]
     if 'https://app.chatmeup.online' not in origins: origins.append('https://app.chatmeup.online')
     changes=[(compose,cl,{'MASANAWA_API_ADDITIONAL_HOSTS':' '.join(aliases)}),
-             (runtime,rl,{'MASANAWA_PUBLIC_BASE_URL':'https://api.chatmeup.online',
+             (runtime,rl,{'MASANAWA_WEB_BASE_URL':'https://app.chatmeup.online',
+                          'MASANAWA_PUBLIC_BASE_URL':'https://api.chatmeup.online',
                           'MASANAWA_AUTH_PUBLIC_BASE_URL':'https://api.chatmeup.online',
                           'MASANAWA_WEB_ALLOWED_ORIGINS':','.join(origins)})]
     backup=compose.parent/('chatmeup-rollback-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
