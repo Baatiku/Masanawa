@@ -1,3 +1,4 @@
+import {publicWebOrigin} from '@masanawa/contracts';
 import type {PublicOfficialEvidence} from '@masanawa/agents';
 /** Bounded read-only projection of the same civic dossiers displayed on
  * app.masanawa.com. A web-profile publication is NOT an identity grant or a
@@ -10,7 +11,7 @@ type RawRow={id?:unknown;title?:unknown;content?:unknown;sourceUrl?:unknown;sour
 type RawProfile={schema?:unknown;id?:unknown;kind?:unknown;name?:unknown;agencyShort?:unknown;identitySources?:unknown;
  reviewedAt?:unknown;revision?:unknown;evidence?:unknown};
 export type CivicWebEvidence=PublicOfficialEvidence & {sourceDateKind:'retrieval'};
-const HOST='https://app.masanawa.com';
+const HOST=publicWebOrigin(process.env.MASANAWA_WEB_BASE_URL);
 const safeUrl=(v:unknown):v is string=>{if(typeof v!=='string'||v.length>1800)return false;try{
  const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&
   !['localhost','127.0.0.1','0.0.0.0','::1'].includes(u.hostname)&&!u.hostname.endsWith('.local');

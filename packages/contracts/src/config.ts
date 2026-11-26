@@ -65,3 +65,13 @@ export function readOptionalEnv(
   const value = env[name]?.trim();
   return value ? value : defaultValue;
 }
+
+/** Public web identity only; never a database, storage or tenant identifier. */
+export function publicWebOrigin(value?: string): string {
+  const url = new URL(value?.trim() || "https://app.chatmeup.online");
+  if (url.protocol !== "https:" || url.username || url.password || url.port ||
+      url.pathname !== "/" || url.search || url.hash) {
+    throw new TypeError("Invalid public web origin");
+  }
+  return url.origin;
+}

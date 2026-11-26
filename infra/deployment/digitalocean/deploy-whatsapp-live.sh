@@ -9,6 +9,25 @@ release_sha="${1:?Provide an exact main-branch release SHA}"
 calls_option="${2:-keep}"
 [[ "$calls_option" =~ ^(keep|true|false)$ ]] && [ "$#" -le 2 ] || { echo 'Invalid WhatsApp calls setting'; exit 1; }
 test "$(id -u)" -eq 0 && test "$(hostname)" = 'masanawa-pilot-lon1'
+# The existing agent records its approved request before invoking this installer.
+# A web migration must preserve feature flags, grants and the browser-call image.
+if python3 - "$release_sha" <<'PYREQUEST'
+import json,sys
+from pathlib import Path
+p=Path('/var/lib/masanawa-deploy/state.json')
+try:
+ if p.is_symlink() or p.stat().st_mode & 0o077: raise ValueError()
+ r=json.loads(p.read_text())
+ ok=r.get('status')=='running' and r.get('releaseSha')==sys.argv[1] and str(r.get('requestId','')).startswith('chatmeup-web-')
+except (OSError,ValueError):ok=False
+raise SystemExit(0 if ok else 1)
+PYREQUEST
+then
+  staging=$(mktemp -d /var/lib/masanawa-deploy/chatmeup-XXXXXXXX)
+  curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/deploy-chatmeup.sh" >"$staging/install.sh"
+  bash -n "$staging/install.sh"
+  exec /usr/bin/bash "$staging/install.sh" "$release_sha"
+fi
 cd /opt/masanawa/current
 test -f compose.yaml && test -f /etc/masanawa/compose.env
 for cmd in docker python3 flock timeout curl; do command -v "$cmd" >/dev/null; done

@@ -76,7 +76,7 @@ def activate(qualification_file, configuration_root=Path('/etc/masanawa')):
     ]}
     changes['MASANAWA_NGN_DATA_APPROVALS_JSON'] = json.dumps(qualified['approved'], separators=(',', ':'))
     changes['FLUTTERWAVE_WEBHOOK_URL'] = qualified['webhookUrl']
-    changes['MASANAWA_BILLING_REDIRECT_URL'] = values.get('MASANAWA_BILLING_REDIRECT_URL') or 'https://app.masanawa.com/?tab=wallet'
+    changes['MASANAWA_BILLING_REDIRECT_URL'] = values.get('MASANAWA_BILLING_REDIRECT_URL') or (values.get('MASANAWA_WEB_BASE_URL') or 'https://app.chatmeup.online').rstrip('/') + '/?tab=wallet'
     for key in ['MASANAWA_GB_SEND_REVIEW_SECRET', 'MASANAWA_BILLING_ACTION_SECRET']:
         if values.get(key) and len(values[key]) < 32:
             raise SystemExit('Existing private setting is too short: ' + key)

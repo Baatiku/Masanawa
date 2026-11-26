@@ -622,11 +622,11 @@ describe("customer authentication", () => {
     })).rejects.toMatchObject({ code: "UNAUTHORIZED", statusCode: 401 });
   });
 
-  it("renders and sends a branded Masanawa OTP email", async () => {
+  it("renders and sends a branded ChatMeUp OTP email", async () => {
     const rendered = renderMasanawaOtpEmail("123456");
-    expect(rendered.subject).toBe("Your Masanawa sign-in code");
+    expect(rendered.subject).toBe("Your ChatMeUp sign-in code");
     expect(rendered.text).toContain("123456");
-    expect(rendered.html).toContain("Masanawa");
+    expect(rendered.html).toContain("ChatMeUp");
     expect(rendered.html).toContain("123456");
     expect(rendered.html).not.toContain("#075E54");
     expect(rendered.html).toContain("#25D366");
@@ -656,7 +656,7 @@ describe("customer authentication", () => {
     expect(payload).toMatchObject({
       from: "Masanawa <no-reply@example.test>",
       to: ["user@example.test"],
-      subject: "Your Masanawa sign-in code",
+      subject: "Your ChatMeUp sign-in code",
       text: expect.stringContaining("123456"),
       html: expect.stringContaining("123456"),
       attachments:[{filename:"masanawa-logo.png",content:expect.any(String),content_id:"masanawa-logo"}],

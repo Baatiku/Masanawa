@@ -1262,8 +1262,8 @@ export function createResendOtpDelivery(input: Readonly<{
         method:"POST",signal:AbortSignal.timeout(8000),
         headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},
         body:JSON.stringify({
-          from,to:[request.identifier],subject:"Masanawa security notice",
-          text:`A sign-in to your Masanawa account used a new device at ${request.at}. If this was not you, open Account Security and sign out of all devices.`,
+          from,to:[request.identifier],subject:"ChatMeUp security notice",
+          text:`A sign-in to your ChatMeUp account used a new device at ${request.at}. If this was not you, open Account Security and sign out of all devices.`,
           tags:[{name:"category",value:"account_security"}],
         }),
       });
@@ -1304,8 +1304,8 @@ export function createHttpSmsOtpDelivery(input: Readonly<{
         body: JSON.stringify({
           to: request.identifier,
           message: request.purpose==="password_recovery"
-            ? `Your Masanawa password recovery code is ${request.code}. It expires in 10 minutes. If this was not you, do not share it.`
-            : `Your Masanawa verification code is ${request.code}. It expires in 10 minutes.`,
+            ? `Your ChatMeUp password recovery code is ${request.code}. It expires in 10 minutes. If this was not you, do not share it.`
+            : `Your ChatMeUp verification code is ${request.code}. It expires in 10 minutes.`,
         }),
       });
       if (!response.ok) throw new Error("auth.sms_delivery_failed");
@@ -1322,7 +1322,7 @@ export function createHttpSmsOtpDelivery(input: Readonly<{
         },
         body:JSON.stringify({
           to:request.identifier,
-          message:`Security notice: a new device signed in to your Masanawa account at ${request.at}. If it was not you, go to Account Security and sign out all devices.`,
+          message:`Security notice: a new device signed in to your ChatMeUp account at ${request.at}. If it was not you, go to Account Security and sign out all devices.`,
         }),
       });
       if(!response.ok)throw new Error("auth.sms_security_notice_failed");

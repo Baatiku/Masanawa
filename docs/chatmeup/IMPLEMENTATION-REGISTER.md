@@ -100,3 +100,147 @@ Rollback: restore compose.env/runtime.env from the printed private checkpoint,
 restore Caddyfile.before, validate then reload Caddy, and recreate only the same
 Gateway/Ops with original images and overrides. Keep DNS until rollback health
 passes. No SQL rollback, volume deletion or R2 cleanup is involved.
+
+## Connected web consumers follow-up
+
+The source audit also identifies civic reconciliation/evidence fetching and
+WhatsApp service replies that target the old web hostname. The coordinated map is:
+packages/contracts/src/config.ts (validated publicWebOrigin with existing config
+exports); Gateway civic_person_registry and web_civic_knowledge; account email
+renderer/default URL; WhatsApp Worker web links; corresponding registry, evidence,
+email, WhatsApp and config regression tests; private environment migration tool.
+MASANAWA_WEB_BASE_URL is the environment override. Explicit legacy HTTPS origins
+remain supported. No canonical persona binding, PostgreSQL migration, stored
+WhatsApp credential, speech pipeline, pricing, independent News/Knowledge domain
+or mobile source is changed. Account email function/asset identifiers remain
+stable; displayed identity and web entry point become ChatMeUp. The existing
+support mailbox is retained pending separately verified mail-domain setup.
+
+This follow-up changes runtime code and therefore needs a normal exact-green
+backend image release through the existing deploy-agent, separately from the
+Caddy console cutover. Do not call a merged source commit a deployed release.
+
+Connected consumer local verification: 37 targeted civic-registry/evidence,
+account-email, WhatsApp and public-origin tests PASS; root and workspace
+TypeScript checks PASS; workspace build PASS; private-env preservation test PASS.
+No Android build was run. Next.js generated configuration edits were excluded.
+The existing release request currently points at e80946d135a2c9186a57fe7a1a180fc7daa59e49
+(request civic-registration-readiness-20261125-e80946d1-v1); preserve that branch
+until a new merged release has both required main workflows green.
+
+Hosted first-pass repair: a legacy auth test asserted the former email subject;
+it now asserts ChatMeUp. Existing mobile/API fallback origins are retained;
+production uses MASANAWA_AUTH_PUBLIC_BASE_URL and MASANAWA_PUBLIC_BASE_URL set by
+the reviewed migration. The web origin alone changes by default. No change to
+Gateway bootstrap/main.ts is required, so that unnecessary edit was removed.
+
+The final inventory is case-insensitive and includes MASANAWA environment and
+service identifiers. reference-audit.json now covers both exact original repository
+baselines, with repository/path/line and the five owner classes: 1 public copy,
+2 web URLs, 3 retained internals (including excluded Android), 4 shared-compatible
+services and 5 independent News/Knowledge. It records 6,579 reference lines across
+both repositories without copying source text or private values. Decisions are
+conservative; historical documentation and attribution are not globally replaced.
+
+Final connected consumer repair matrix: 62 tests in six files PASS; all eleven
+preflight/release-origin/deposit-reconciliation contracts PASS; root/workspace
+TypeScript PASS; Gateway and Worker dependency builds PASS; private migration
+preservation test PASS. Hosted exact-head checks must still pass after repair.
+
+Final customer-copy map also covers the shared platform guide/persona identity
+sentence, emergency intake product identity, security/deletion notices, browser
+push title and civic evidence attribution. Only product-name text changes;
+pronunciation, ringing, Gemini audio flow, persona IDs/constitutions, provider
+permissions and caller memory remain unchanged. Historical persona records are
+not rewritten; the current platform guide explicitly identifies ChatMeUp and
+preserves independent Masanawa News/Knowledge names.
+
+Complete active customer-copy validation: 87 tests in nine files PASS, including
+persona instructions, emergency intake, account security/deletion, civic readers,
+email rendering and WhatsApp guidance; root/workspace typechecks and Gateway/
+Worker builds PASS. No voice/accent/ringing logic or immutable persona record was
+changed. The runtime template remains deliberately non-runnable and now documents
+the web-origin variable; the active runbook explicitly points to ChatMeUp cutover.
+
+The scoped pinned release installer now applies the tested --web-only migration
+after its private checkpoint and before replacing services. It sets the web
+origin/allowlist and migrates only legacy app/web billing-return hosts, preserving
+paths, queries and all external callbacks. API base URLs remain unchanged until
+the validated proxy cutover. Configuration is restored on any preflight failure,
+without restarting healthy services. All 32 deployment Python tests and 11 Node
+configuration contracts PASS; installer shell syntax PASS. Provider dashboards
+still need callback verification after API TLS: Billstack
+https://api.chatmeup.online/webhooks/billstack/gb and Flutterwave
+https://api.chatmeup.online/v1/webhooks/flutterwave. Never enable a financial flag
+or overwrite a shared external callback merely to complete this migration.
+
+Release preservation refinement: the existing WhatsApp installer also activates
+call/browser flags and grants billing capabilities. Those actions are outside a
+rebranding-only release. The unchanged installed agent schema is reused, but the
+pinned installer dispatches authenticated `chatmeup-web-*` requests (matching its
+private running receipt and SHA) to deploy-chatmeup.sh. Other releases retain
+their existing installer behavior. The migration installer preserves flags,
+grants, limits and the browser-call image/service; it pulls only Gateway/Ops/
+Worker, verifies a database dump, applies canonical migrations, checks readiness
+and the running release header, and saves rollback configuration/images. It never
+builds on the Droplet, changes a price/grant, starts a new application-container profile, or deletes data.
+
+Final hosted Foundation CI passed 509 files and exposed one environment-registry
+omission. MASANAWA_WEB_BASE_URL and the optional Caddy alias variable are now
+registered as public/optional in config/production-env.json; the five architecture
+environment contracts pass locally. No security gate was bypassed.
+
+Monitoring coverage completed in the existing private host monitor: read-only
+Gemini model-metadata connectivity (no AI generation), public Gateway readiness,
+credentialless WebSocket upgrade rejection on the actual relay route, and
+24-hour shared public-news freshness. Provider credentials go only to the fixed
+Google endpoint; redirects are rejected and bodies/keys are not logged. These
+checks complement existing Docker/PostgreSQL, RAM, disk, OOM, backup and release
+checks and the hourly external DNS/TLS/registration monitor. The scoped installer refreshes the private monitor and checkpoints its old copy.
+It installs missing systemd monitor units on the existing Droplet, with a 96 MiB
+cap, 20% CPU cap, 90-second timeout and five-minute interval. Existing unit contents
+and disabled/paused timer controls remain unchanged; no paid service is added. All 34 deployment Python tests pass,
+including provider-key isolation and failure reporting. Authenticated Live calls
+and real provider/media/user acceptance remain separate explicit tests.
+
+Monitor activation validation: all 37 deployment Python tests PASS, including
+missing-unit installation, private file permissions, bounded resources, invalid
+source rejection and preservation of an existing disabled/operator timer. The
+new timer uses only the existing Droplet/Python/Docker/provider allowance.
+
+Future payment activation defaults now derive the web return URL from the same
+web-origin setting and the provider callback from the configured public API
+origin (or an explicit legacy callback for compatible older environments).
+A conflicting explicit callback still blocks qualification; custom callbacks and
+provider flags are not silently rewritten. This prevents subsequent activation
+from restoring the failed web hostname. All 37 deployment Python tests PASS;
+provider qualifier syntax and existing packaged qualification tests remain CI
+release gates. No live payment activation is performed by this migration.
+
+Autonomous host cutover: the existing outbound agent is also the permitted root
+execution path for the reviewed Caddy change. deploy-chatmeup.sh now snapshots
+the actual proxy mount and all active Compose overrides, applies the complete
+environment migration, adds the alias environment binding, validates Caddy,
+reloads without proxy restart and verifies new-host TLS/readiness before pausing
+application services. It then updates the three application images once and
+verifies the exact running commit over public HTTPS plus legacy-SNI readiness.
+Proxy/Compose/runtime configuration and old images are restored on failure.
+The earlier console helper is a fallback, not a required step when the agent
+consumes the approved release. No console action is needed unless deployment
+readback identifies an external blocker.
+
+Preflight now permits only explicitly declared, unique API hostname aliases for
+the canonical public/auth URL. Undeclared origins, wildcard/duplicate aliases,
+credentials and insecure URLs remain rejected. All 12 deployment Node contracts
+pass; 37 deployment Python tests and installer shell syntax pass. The production
+certificate authority has no observed CAA restriction at the new apex/API name.
+
+Proxy isolation hardening: production cutover transforms only the existing API
+site header and inserts an API-only private/no-transform cache rule. It preserves
+the complete actual proxy body and every unrelated site block instead of replacing
+the live Caddyfile from a template. Unknown/ambiguous topology fails before reload.
+Tests explicitly preserve synthetic independent News/Knowledge proxy blocks and
+custom API routes, and verify idempotency. All 40 deployment Python tests and
+12 Node contracts pass; Caddy 2.10 validates the dual-host template. The standard
+console helper remains historical; if autonomous execution is unavailable, prefer
+starting/installing the pinned deployment agent so it applies this guarded path.

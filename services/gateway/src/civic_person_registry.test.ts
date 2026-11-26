@@ -16,7 +16,7 @@ it('loads only the fixed production registry, with no redirects',async()=>{
  let url='',options:RequestInit|undefined;
  const fetcher=(async(u:unknown,o:RequestInit)=>{url=String(u);options=o;return Response.json({schema:1,people:[row]});}) as typeof fetch;
  expect(await loadCivicPersonRegistry(fetcher)).toEqual([row]);
- expect(url).toBe('https://app.masanawa.com/api/ai/civic-registry');
+ expect(url).toBe('https://app.chatmeup.online/api/ai/civic-registry');
  expect(options?.redirect).toBe('error');
 });
 

@@ -233,6 +233,13 @@
       "description": "Development-only canonical UserId used by the Alpha bootstrap/runtime."
     },
     {
+      "name": "MASANAWA_API_ADDITIONAL_HOSTS",
+      "owner": "digitalocean/caddy",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional space-separated additional public API hostnames for compatible Caddy routing. Empty preserves the existing single-host configuration; configure only after DNS and TLS review."
+    },
+    {
       "name": "MASANAWA_API_HOST",
       "owner": "infra/deployment/digitalocean",
       "classification": "public",
@@ -858,6 +865,20 @@
       "description": "Production configuration for MASANAWA_PUBLIC_BASE_URL."
     },
     {
+      "name": "MASANAWA_RELEASE_SHA",
+      "owner": "infra/deployment/digitalocean",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Exact deployed source revision, reported in the Gateway readiness response header."
+    },
+    {
+      "name": "MASANAWA_RESPONSE_TEXT_MODEL",
+      "owner": "gateway/civic-response",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional text and multimodal Gemini model for evidence-based incident interviews; defaults to gemini-3.6-flash."
+    },
+    {
       "name": "MASANAWA_ROOMS_MEMBERSHIP_ENABLED",
       "owner": "services/gateway",
       "classification": "public",
@@ -1084,6 +1105,13 @@
       "description": "Comma-separated exact HTTPS browser origins allowed to call the canonical Gateway with bearer auth; no wildcard, cookies or path components."
     },
     {
+      "name": "MASANAWA_WEB_BASE_URL",
+      "owner": "gateway/worker-web-identity",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional exact HTTPS public web origin for civic reconciliation, account email entry points and WhatsApp guidance. Defaults to the current ChatMeUp web origin; preserves explicit legacy environments."
+    },
+    {
       "name": "MASANAWA_WEB_PUSH_PRIVATE_KEY",
       "owner": "pilot/customer-features",
       "classification": "secret",
@@ -1103,48 +1131,6 @@
       "classification": "public",
       "requiredIn": [],
       "description": "Owner contact URI for standards-based web push."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_LIVE_MODEL",
-      "owner": "worker/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Gemini Live native audio model for WhatsApp paired audio and output transcription; defaults to gemini-3.8-live."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
-      "owner": "worker/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional Gemini inference model for linked-device WhatsApp text and voice-note understanding."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_TTS_MODEL",
-      "owner": "worker/whatsapp",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional Gemini TTS model used for WhatsApp Ogg/Opus voice replies. Defaults to Masanawa voice service model."
-    },
-    {
-      "name": "MASANAWA_WHATSAPP_SESSION_KEY",
-      "owner": "ops/whatsapp-and-worker",
-      "classification": "secret",
-      "requiredIn": [],
-      "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
-    },
-    {
-      "name": "MASANAWA_RELEASE_SHA",
-      "owner": "infra/deployment/digitalocean",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Exact deployed source revision, reported in the Gateway readiness response header."
-    },
-    {
-      "name": "MASANAWA_RESPONSE_TEXT_MODEL",
-      "owner": "gateway/civic-response",
-      "classification": "public",
-      "requiredIn": [],
-      "description": "Optional text and multimodal Gemini model for evidence-based incident interviews; defaults to gemini-3.6-flash."
     },
     {
       "name": "MASANAWA_WHATSAPP_BROWSER_ENABLED",
@@ -1175,11 +1161,39 @@
       "description": "Opt-in enables the bounded linked-device WhatsApp Worker connector (requires a stable encrypted session key and Worker process)."
     },
     {
+      "name": "MASANAWA_WHATSAPP_GEMINI_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional Gemini inference model for linked-device WhatsApp text and voice-note understanding."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_LIVE_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Gemini Live native audio model for WhatsApp paired audio and output transcription; defaults to gemini-3.8-live."
+    },
+    {
       "name": "MASANAWA_WHATSAPP_MODE",
       "owner": "gateway/channels",
       "classification": "public",
       "requiredIn": [],
       "description": "Production WhatsApp transport mode. Must be linked-device when WhatsApp is enabled."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_SESSION_KEY",
+      "owner": "ops/whatsapp-and-worker",
+      "classification": "secret",
+      "requiredIn": [],
+      "description": "Unique base64-encoded 32-byte AES-GCM encryption key for multi-number linked-device Signal credentials and short-lived QR pairing secrets. Keep in private runtime environment and back up securely."
+    },
+    {
+      "name": "MASANAWA_WHATSAPP_TTS_MODEL",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional Gemini TTS model used for WhatsApp Ogg/Opus voice replies. Defaults to Masanawa voice service model."
     },
     {
       "name": "MASANAWA_WORKER_HOST",

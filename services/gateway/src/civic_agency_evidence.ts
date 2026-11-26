@@ -21,7 +21,7 @@ interface CivicAgencySource {readonly id:string;readonly name:string;readonly sh
 export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:()=>number;web?:ReturnType<typeof createWebCivicKnowledgeReader>}={}) {
   const fetcher=input.fetch??fetch,now=input.now??Date.now;
   // Source-retrieval tests can use a fully local fetcher; only production
-  // defaults contact the public, read-only Masanawa web dossier feed.
+  // defaults contact the public, read-only ChatMeUp web dossier feed.
   const web=input.web??(input.fetch||process.env.NODE_ENV==='test'?null:createWebCivicKnowledgeReader());
   const cache=new Map<string,{until:number;data:readonly CivicAgencyEvidence[]}>();
   const pending=new Map<string,Promise<readonly CivicAgencyEvidence[]>>();
@@ -37,7 +37,7 @@ export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:
       const seed:CivicAgencyEvidence=Object.freeze({
         id:`mandate_${agencyId}`,title:`${agency.name} — introductory civic scope`,
         sourceUrl:agency.source,sourceDate:'2026-11-08',sourceDateKind:'review',
-        content:`Independent Masanawa civic catalogue scope: ${agency.name} (${agency.short}) is covered for ${agency.topic}. This introduction does not verify current leadership, fees, forms, eligibility or individual application outcomes.`,
+        content:`Independent ChatMeUp civic catalogue scope: ${agency.name} (${agency.short}) is covered for ${agency.topic}. This introduction does not verify current leadership, fees, forms, eligibility or individual application outcomes.`,
       });
       const canonicalDirectoryId=agencyId.startsWith('org-')?agencyId:'org-'+agency.name.toLowerCase().normalize('NFKD')
         .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');

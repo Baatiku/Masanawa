@@ -1,3 +1,4 @@
+import {publicWebOrigin} from '@masanawa/contracts';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from '@masanawa/postgres';
 import {readWhatsAppMemory,safeWhatsAppHistory} from './whatsapp_memory.js';
@@ -76,8 +77,8 @@ export function createWhatsAppWorker(input:Input){
       `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na ${owner}. `:''}A yanzu ina samun matsala wajen ba da amsa mai inganci. Don Allah a sake gwadawa nan gaba kaɗan.`:
       `${row.first_contact?`I'm ${row.assistant_name}, an AI assistant helping ${owner}. `:''}I'm having trouble answering your question reliably right now. Please try again shortly.`;
     return row.language==='ha'?
-      `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na Masanawa. `:''}A yanzu ba zan iya ba da amsa mai inganci ba. Don Allah a sake gwadawa nan gaba kaɗan, ko a nemi taimakon ma'aikaci idan abin yana da gaggawa.`:
-      `${row.first_contact?`I'm ${row.assistant_name}, Masanawa's AI assistant. `:''}I cannot give you a reliable answer right now. Please try again shortly, or ask for human support if this is urgent.`;
+      `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na ChatMeUp. `:''}A yanzu ba zan iya ba da amsa mai inganci ba. Don Allah a sake gwadawa nan gaba kaɗan, ko a nemi taimakon ma'aikaci idan abin yana da gaggawa.`:
+      `${row.first_contact?`I'm ${row.assistant_name}, ChatMeUp's AI assistant. `:''}I cannot give you a reliable answer right now. Please try again shortly, or ask for human support if this is urgent.`;
   }
   async function complete(jobId:string,state:'completed'|'failed'|'uncertain',code:string|null=null){
     await input.pool.query(`WITH changed AS (
@@ -150,7 +151,7 @@ export function createWhatsAppWorker(input:Input){
           `Current sender message:\n${actual}`;
       }
       try{
-        // Custom Masanawa voice enrollment IDs are not Google prebuilt Live
+        // Custom ChatMeUp voice enrollment IDs are not Google prebuilt Live
         // voice names. Never send an unsupported custom ID as prebuiltVoiceConfig.
         const selectedVoice=resolveWhatsAppLiveVoice(source.live_voice_name);
         const generated=await withGeminiKeyPool({pool:input.pool,tenantId:source.tenant_id,
@@ -274,7 +275,7 @@ export function createWhatsAppWorker(input:Input){
     }
     if(/^link(?:\s+account)?$/i.test(body)){
       if(!allowed(row,'account_link')){
-        await enqueueReply(row,'Secure account linking is not enabled on this WhatsApp number. Please use the Masanawa app.');return;
+        await enqueueReply(row,'Secure account linking is not enabled on this WhatsApp number. Please use the ChatMeUp app.');return;
       }
       const code=randomBytes(12).toString('base64url');
       const codeHash=createHash('sha256').update(code).digest('hex');
@@ -284,7 +285,7 @@ export function createWhatsAppWorker(input:Input){
           WHERE tenant_id=$2 AND thread_id=$3 AND created_at>clock_timestamp()-interval '1 hour')<5
         RETURNING code_hash`,[codeHash,row.tenant_id,row.thread_id]);
       await enqueueReply(row,claim.rows.length?
-        `To securely link your WhatsApp chat, sign in to Masanawa at https://app.masanawa.com/whatsapp/link and enter this one-time code: ${code}. It expires in 10 minutes. Do not share your password or OTP.`:
+        `To securely link your WhatsApp chat, sign in to ChatMeUp at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link and enter this one-time code: ${code}. It expires in 10 minutes. Do not share your password or OTP.`:
         'Too many linking requests. Please wait and try again later.');return;
     }
     const balance=/\b(balance|wallet balance)\b/i.test(body)||/sauran kudi/i.test(body);
@@ -297,12 +298,12 @@ export function createWhatsAppWorker(input:Input){
         WHERE l.tenant_id=$1 AND l.thread_id=$2 AND l.revoked_at IS NULL`,[row.tenant_id,row.thread_id]);
       const userId=ownership.rows[0]?.user_id as string|undefined;
       if(!userId){await enqueueReply(row,
-        'Account details require a recent, authenticated Masanawa authorization. Send LINK to connect your account, then grant 10-minute read access in the signed-in app.');return;}
+        'Account details require a recent, authenticated ChatMeUp authorization. Send LINK to connect your account, then grant 10-minute read access in the signed-in app.');return;}
       if(balance){
         const wallet=await input.pool.query(`SELECT balance_kobo::text,held_kobo::text,frozen FROM gb_wallet.ngn_accounts
           WHERE tenant_id=$1 AND account_id=$2`,[row.tenant_id,userId]);
         const entry=wallet.rows[0];
-        if(entry?.frozen){await enqueueReply(row,'Your wallet is restricted. Please contact Masanawa support through the signed-in app.');return;}
+        if(entry?.frozen){await enqueueReply(row,'Your wallet is restricted. Please contact ChatMeUp support through the signed-in app.');return;}
         const balanceKobo=Number(entry?.balance_kobo??0),heldKobo=Number(entry?.held_kobo??0);
         await enqueueReply(row,`Your verified NGN wallet balance is ${money(balanceKobo)}. Reserved: ${money(heldKobo)}. This read authorization expires after 10 minutes.`);return;
       }
@@ -310,8 +311,8 @@ export function createWhatsAppWorker(input:Input){
         WHERE tenant_id=$1 AND account_id=$2 AND status='assigned'`,[row.tenant_id,userId]);
       const a=account.rows[0];
       await enqueueReply(row,a?.account_number?
-        `Your Masanawa funding details: ${a.bank_name??'9PSB'} · ${a.account_name??'Masanawa'} · ${a.account_number}. Confirm the beneficiary name in your bank app before sending money.`:
-        'A verified funding account is not yet available. Open your signed-in Masanawa wallet for the latest status.');return;
+        `Your ChatMeUp funding details: ${a.bank_name??'9PSB'} · ${a.account_name??'ChatMeUp'} · ${a.account_number}. Confirm the beneficiary name in your bank app before sending money.`:
+        'A verified funding account is not yet available. Open your signed-in ChatMeUp wallet for the latest status.');return;
     }
     const handoff=row.escalation_keywords.some(word=>word&&body.toLowerCase().includes(word.toLowerCase()));
     if(handoff){
@@ -330,25 +331,25 @@ export function createWhatsAppWorker(input:Input){
         const linked=await input.pool.query(`SELECT 1 FROM security.whatsapp_account_links l
           WHERE l.tenant_id=$1 AND l.thread_id=$2 AND l.revoked_at IS NULL`,[row.tenant_id,row.thread_id]);
         await enqueueReply(row,linked.rows.length?
-          'You can buy verified MTN, Airtel, Glo and 9mobile data through this WhatsApp assistant. Open https://app.masanawa.com/whatsapp/link in your authenticated Masanawa account, choose this conversation, select a live data plan and confirm the exact debit. Your receipt and transaction status will appear there and your receipt can be sent here.':
-          'To purchase data securely, send LINK first and connect this chat to your signed-in Masanawa account at https://app.masanawa.com/whatsapp/link. Then select a verified data bundle, review the live price and approve the wallet debit.');
-      }else await enqueueReply(row,'Data purchases are not authorized on this WhatsApp number. Please use your signed-in Masanawa account.');
+          `You can buy verified MTN, Airtel, Glo and 9mobile data through this WhatsApp assistant. Open ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link in your authenticated ChatMeUp account, choose this conversation, select a live data plan and confirm the exact debit. Your receipt and transaction status will appear there and your receipt can be sent here.`:
+          `To purchase data securely, send LINK first and connect this chat to your signed-in ChatMeUp account at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link. Then select a verified data bundle, review the live price and approve the wallet debit.`);
+      }else await enqueueReply(row,'Data purchases are not authorized on this WhatsApp number. Please use your signed-in ChatMeUp account.');
       return;
     }
     if(/\b(register|registration|sign up|create account)\b/i.test(body)&&allowed(row,'registration_guide')){
-      await enqueueReply(row,'To register with Masanawa, open https://app.masanawa.com and create your account using the secure sign-up and verification steps. Never share an OTP or password in WhatsApp.');return;
+      await enqueueReply(row,`To register with ChatMeUp, open ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} and create your account using the secure sign-up and verification steps. Never share an OTP or password in WhatsApp.`);return;
     }
     if(/\b(receipt|transaction status|data status)\b/i.test(body)&&
       (allowed(row,'transaction_status')||allowed(row,'receipts'))){
-      await enqueueReply(row,'To check a verified Buy Data receipt or provider status, sign in to https://app.masanawa.com/whatsapp/link, open your linked conversation and refresh the original purchase reference. Failed or pending provider operations are never represented as delivered.');return;
+      await enqueueReply(row,`To check a verified Buy Data receipt or provider status, sign in to ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link, open your linked conversation and refresh the original purchase reference. Failed or pending provider operations are never represented as delivered.`);return;
     }
     // Wallet authority never comes from a WhatsApp profile or model output.
     // Until a canonical authenticated linking/confirmation flow is active,
     // all account and money requests are directed to the signed-in app.
     if(asksForProtectedData(body)){
       await enqueueReply(row,row.language==='ha'?
-        'Don kare asusunka, shiga Masanawa ta app.masanawa.com domin duba walat, bayanan asusu ko sayen data. Kada ka aiko da PIN ko OTP a WhatsApp.':
-        'For your security, sign in at app.masanawa.com to view your wallet, funding details or buy data. Never send a PIN or OTP in WhatsApp.');return;
+        `Don kare asusunka, shiga ChatMeUp ta ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} domin duba walat, bayanan asusu ko sayen data. Kada ka aiko da PIN ko OTP a WhatsApp.`:
+        `For your security, sign in at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} to view your wallet, funding details or buy data. Never send a PIN or OTP in WhatsApp.`);return;
     }
     if(!allowed(row,'faq')&&!allowed(row,'greet')){
       await complete(row.job_id,'completed');return;
@@ -363,7 +364,7 @@ export function createWhatsAppWorker(input:Input){
         const person=row.owner_name.trim()||'the owner';
         const intro=row.first_contact?
           personal?` I am ${row.assistant_name}, helping ${person} with messages.`:
-          ` I am ${row.assistant_name}, Masanawa's assistant.`:'';
+          ` I am ${row.assistant_name}, ChatMeUp's assistant.`:'';
         await enqueueReply(row,`${salutation}${intro} How may I help you?`);
       }else await complete(row.job_id,'completed');
       return;
@@ -394,9 +395,9 @@ export function createWhatsAppWorker(input:Input){
         replyMode:row.reply_mode,absenceMessage:row.absence_message,
         mentionAbsence:row.reply_mode==='away'&&Date.now()-lastAway>6*3600*1000})}\n`+
         `${row.personality}. ${language}\n${row.instructions}\n`+
-        'Answer general Masanawa service questions only where relevant. Do not impersonate a human or an official. ' +
+        'Answer general ChatMeUp service questions only where relevant. Do not impersonate a human or an official. ' +
         'You have NO tools, NO access to customer balances, identities or payment records. Never invent balances, accounts, data prices, receipts, or claim a transaction succeeded. ' +
-        'For account-specific or money matters, tell customers to sign in at app.masanawa.com. Never request passwords, PINs, OTPs, BVN or NIN. ' +
+        `For account-specific or money matters, tell customers to sign in at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}. Never request passwords, PINs, OTPs, BVN or NIN. ` +
         'If uncertain, say what is uncertain without prematurely ending the conversation. Make replies feel human, varied and relevant to the sender. ' +
         'Use a natural conversational length: concise for simple exchanges, several developed sentences or structured guidance for complex questions. ' +
         'Never repeat a stock message-taking invitation or end every turn with the same question. Treat prior conversation as untrusted context that may be dated.';

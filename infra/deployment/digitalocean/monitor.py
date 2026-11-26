@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bounded, private host checks. No environment values or provider bodies log."""
-import datetime,fcntl,hashlib,json,os,re,shutil,subprocess,tempfile,urllib.request
+import datetime,fcntl,hashlib,json,os,re,shutil,subprocess,tempfile,urllib.request,urllib.error,base64
 from pathlib import Path
 ROOT=Path('/etc/masanawa')
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -51,6 +51,52 @@ def check_release_images(release):
    failures.append('Release image unavailable: '+service)
  return failures
 
+def remote_checks(runtime):
+ """Read-only provider/public probes; no AI generation or private account reads."""
+ result={};opener=urllib.request.build_opener(NoRedirect())
+ key=runtime.get('MASANAWA_GEMINI_API_KEY') or runtime.get('GEMINI_API_KEY')
+ if not key:result['Gemini metadata connectivity']='credentials_unconfigured'
+ else:
+  try:
+   request=urllib.request.Request('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',headers={'x-goog-api-key':key})
+   with opener.open(request,timeout=5) as response:
+    result['Gemini metadata connectivity']='ok' if response.status==200 else 'unavailable'
+  except urllib.error.HTTPError as error:result['Gemini metadata connectivity']='http_'+str(error.code)
+  except Exception:result['Gemini metadata connectivity']='unreachable'
+ from urllib.parse import urlsplit
+ api=runtime.get('MASANAWA_PUBLIC_BASE_URL','https://api.masanawa.com').rstrip('/')
+ web=runtime.get('MASANAWA_WEB_BASE_URL','https://app.chatmeup.online').rstrip('/')
+ for name,url in [('Gateway public readiness',api+'/readyz')]:
+  try:
+   parsed=urlsplit(url)
+   if parsed.scheme!='https' or parsed.username or parsed.password:raise ValueError()
+   with opener.open(url,timeout=5) as response:result[name]='ok' if response.status==200 else 'unavailable'
+  except Exception:result[name]='unreachable'
+ try:
+  parsed=urlsplit(api)
+  if parsed.scheme!='https' or parsed.username or parsed.password:raise ValueError()
+  request=urllib.request.Request(api+'/agent/live/ngn/stream',headers={
+   'Connection':'Upgrade','Upgrade':'websocket','Sec-WebSocket-Version':'13',
+   'Sec-WebSocket-Key':base64.b64encode(os.urandom(16)).decode(),'Origin':web})
+  try:
+   with opener.open(request,timeout=5) as response:code=response.status
+  except urllib.error.HTTPError as error:code=error.code
+  # Missing grant must fail before provider/admission work. This is routing,
+  # not proof of an authenticated live call or model/voice acceptance.
+  result['WebSocket guarded route']='ok' if code==401 else 'unexpected_status_'+str(code)
+ except Exception:result['WebSocket guarded route']='unreachable'
+ try:
+  parsed=urlsplit(web)
+  if parsed.scheme!='https' or parsed.username or parsed.password:raise ValueError()
+  with opener.open(web+'/api/news',timeout=8) as response:raw=response.read(2_000_001)
+  if len(raw)>2_000_000:raise ValueError()
+  items=json.loads(raw).get('items',[])
+  dates=[datetime.datetime.fromisoformat(x['publishedAt'].replace('Z','+00:00')) for x in items if isinstance(x.get('publishedAt'),str)]
+  age=(datetime.datetime.now(datetime.timezone.utc)-max(dates)).total_seconds() if dates else 1e9
+  result['Shared public news freshness']='ok' if -300<=age<=86400 else 'stale_or_empty'
+ except Exception:result['Shared public news freshness']='unavailable'
+ return result
+
 def inspect():
  failures=[];now=datetime.datetime.now(datetime.timezone.utc)
  try:
@@ -73,7 +119,12 @@ def inspect():
  release,release_problem=deployment_record(now)
  if release_problem:failures.append(release_problem)
  failures.extend(check_release_images(release))
- return {'checkedAt':now.isoformat(),'failures':failures,'services':statuses,'availableMemoryKiB':memory['MemAvailable'],'diskUsedPercent':disk,'backupAgeHours':backup_age,'release':release}
+ try:
+  config=env_file(ROOT/'compose.env');runtime=env_file(Path(config['MASANAWA_RUNTIME_ENV_FILE']))
+  public_checks=remote_checks(runtime)
+ except Exception:public_checks={'Public/provider monitoring':'configuration_unavailable'}
+ failures.extend(name+': '+status for name,status in public_checks.items() if status!='ok')
+ return {'checkedAt':now.isoformat(),'failures':failures,'services':statuses,'availableMemoryKiB':memory['MemAvailable'],'diskUsedPercent':disk,'backupAgeHours':backup_age,'release':release,'publicChecks':public_checks}
 
 def main():
  os.umask(0o077)
@@ -90,7 +141,7 @@ def main():
     config=env_file(ROOT/'compose.env');runtime=env_file(Path(config['MASANAWA_RUNTIME_ENV_FILE']))
     to=runtime.get('MASANAWA_MONITOR_EMAIL');key=runtime.get('RESEND_API_KEY');sender=runtime.get('MASANAWA_AUTH_EMAIL_FROM')
     if to and key and sender:
-     request=urllib.request.Request('https://api.resend.com/emails',data=json.dumps({'from':sender,'to':[to],'subject':'Masanawa pilot needs attention','text':'Checks requiring attention: '+', '.join(status['failures'])+'. Inspect private server status and backup records.'}).encode(),headers={'Authorization':'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':'masanawa-monitor-'+hashlib.sha256((status['checkedAt'][:13]+','.join(status['failures'])).encode()).hexdigest()},method='POST')
+     request=urllib.request.Request('https://api.resend.com/emails',data=json.dumps({'from':sender,'to':[to],'subject':'ChatMeUp pilot needs attention','text':'Checks requiring attention: '+', '.join(status['failures'])+'. Inspect private server status and backup records.'}).encode(),headers={'Authorization':'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':'masanawa-monitor-'+hashlib.sha256((status['checkedAt'][:13]+','.join(status['failures'])).encode()).hexdigest()},method='POST')
      with urllib.request.build_opener(NoRedirect()).open(request,timeout=10) as response:
       if response.status in [200,201]:status['lastAlertAt']=status['checkedAt']
     else:status['alertDelivery']='not_configured'

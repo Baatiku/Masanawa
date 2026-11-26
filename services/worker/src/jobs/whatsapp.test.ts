@@ -252,3 +252,15 @@ describe('WhatsApp availability and owner takeover',()=>{
     expect(mock.calls.some(c=>c.sql.includes("THEN 'failed' ELSE 'pending'"))).toBe(false);
   });
 });
+
+it('registration guidance uses configured web origin without changing account or session authority',async()=>{
+ for(const configured of [undefined,'https://legacy.example.test']){
+  const mock=setup({body:'register',role_level:2,permissions:['registration_guide'],welcome_sent_at:'2026-11-18T07:00:00Z'},
+    {env:configured?{MASANAWA_WEB_BASE_URL:configured}:{}});
+  await mock.worker.runOnce();
+  const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
+  expect(outgoing?.parameters[3]).toContain(configured||'https://app.chatmeup.online');
+  expect(outgoing?.parameters[3]).toContain('ChatMeUp');
+  expect(mock.calls.some(c=>c.sql.includes('DELETE FROM security.whatsapp'))).toBe(false);
+ }
+});

@@ -1,5 +1,7 @@
 # Masanawa — portable DigitalOcean pilot runbook
 
+**26 November web migration:** ChatMeUp web uses `app.chatmeup.online` and `api.chatmeup.online`. Follow [the migration register](../../../docs/chatmeup/IMPLEMENTATION-REGISTER.md) for the existing-host cutover and rollback. Retain legacy API routing for Android/shared clients; the historical hostname examples below are not the new web deployment target.
+
 **Stage:** the existing pilot is provisioned: Droplet `617806415`, `masanawa-pilot-lon1`, `68.183.46.65`, `lon1`, `s-1vcpu-2gb`, $12/month. Gateway public readiness and its database-schema check returned HTTP 200 on 17 November 2026; owner console evidence shows PostgreSQL, Gateway, Ops and Caddy, with Worker off. The connected feature batch and host backup timers still require their verified console rollout. This is not full 189-item or public financial-launch qualification. Read [the shared-platform decision](../../../docs/DIGITALOCEAN-SHARED-PLATFORM-DECISION-20261109.md) and [the connected feature map](../../../docs/CONNECTED-CUSTOMER-FEATURES-MAP-20261117.md). Reuse the existing Cloudflare Worker/R2 bucket; do not add a Droplet, upgrade the plan or enable paid DigitalOcean backups.
 
 ## What this creates (and what it does not)
