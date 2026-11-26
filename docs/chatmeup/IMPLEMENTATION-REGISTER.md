@@ -234,3 +234,13 @@ the canonical public/auth URL. Undeclared origins, wildcard/duplicate aliases,
 credentials and insecure URLs remain rejected. All 12 deployment Node contracts
 pass; 37 deployment Python tests and installer shell syntax pass. The production
 certificate authority has no observed CAA restriction at the new apex/API name.
+
+Proxy isolation hardening: production cutover transforms only the existing API
+site header and inserts an API-only private/no-transform cache rule. It preserves
+the complete actual proxy body and every unrelated site block instead of replacing
+the live Caddyfile from a template. Unknown/ambiguous topology fails before reload.
+Tests explicitly preserve synthetic independent News/Knowledge proxy blocks and
+custom API routes, and verify idempotency. All 40 deployment Python tests and
+12 Node contracts pass; Caddy 2.10 validates the dual-host template. The standard
+console helper remains historical; if autonomous execution is unavailable, prefer
+starting/installing the pinned deployment agent so it applies this guarded path.

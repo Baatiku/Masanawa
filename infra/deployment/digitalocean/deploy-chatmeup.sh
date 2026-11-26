@@ -109,7 +109,9 @@ PYHOSTS
 )
 [[ ${#api_hosts[@]} = 2 && -n ${api_hosts[0]} ]]
 "${dc[@]}" config --quiet
-curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/Caddyfile" >"$backup/Caddyfile.next"
+curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/caddy-migration.py" >"$backup/caddy-migration.py"
+python3 "$backup/caddy-migration.py" "$caddy_source" "$backup/Caddyfile.next"
+# Preserve the mounted inode and every unrelated site/custom route.
 cat "$backup/Caddyfile.next" > "$caddy_source"
 docker exec -e "MASANAWA_API_HOST=${api_hosts[0]}" -e "MASANAWA_API_ADDITIONAL_HOSTS=${api_hosts[1]}" masanawa-proxy-1 caddy validate --config /etc/caddy/Caddyfile
 proxy_changed=true
