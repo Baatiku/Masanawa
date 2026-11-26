@@ -111,25 +111,12 @@ with tempfile.NamedTemporaryFile(dir=p.parent,delete=False) as f:
  f.write(('\n'.join(rows)+'\n').encode());f.flush();os.fsync(f.fileno());name=f.name
 os.chmod(name,0o600);os.replace(name,p)
 PY
-stage='refresh private host monitoring'
 monitor_target=/etc/masanawa/operations/monitor.py
-if [ -f "$monitor_target" ] && [ ! -L "$monitor_target" ]; then
-  curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/monitor.py" \
-    >"$backup/monitor.next.py"
-  python3 -m py_compile "$backup/monitor.next.py"
-  cp -p "$monitor_target" "$backup/monitor.before.py"
-  python3 - "$backup/monitor.next.py" "$monitor_target" <<'PY'
-import os,sys,tempfile
-from pathlib import Path
-source,target=Path(sys.argv[1]),Path(sys.argv[2])
-with tempfile.NamedTemporaryFile(dir=target.parent,delete=False) as f:
-    f.write(source.read_bytes());f.flush();os.fsync(f.fileno());name=f.name
-os.chmod(name,0o700);os.replace(name,target)
-PY
-  echo 'Installed exact-release private host monitoring.'
-else
-  echo 'Private monitoring timer not installed; operator activation remains outstanding.'
-fi
+if [[ -f $monitor_target && ! -L $monitor_target ]];then cp -p "$monitor_target" "$backup/monitor.before.py";fi
+for file in monitor.py install-monitor.py;do
+ curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/$file" >"$backup/$file"
+done
+python3 "$backup/install-monitor.py" "$backup/monitor.py"
 
 free -m
 df -h /

@@ -162,7 +162,7 @@ Worker builds PASS. No voice/accent/ringing logic or immutable persona record wa
 changed. The runtime template remains deliberately non-runnable and now documents
 the web-origin variable; the active runbook explicitly points to ChatMeUp cutover.
 
-The normal pinned release installer now applies the tested --web-only migration
+The scoped pinned release installer now applies the tested --web-only migration
 after its private checkpoint and before replacing services. It sets the web
 origin/allowlist and migrates only legacy app/web billing-return hosts, preserving
 paths, queries and all external callbacks. API base URLs remain unchanged until
@@ -183,7 +183,7 @@ their existing installer behavior. The migration installer preserves flags,
 grants, limits and the browser-call image/service; it pulls only Gateway/Ops/
 Worker, verifies a database dump, applies canonical migrations, checks readiness
 and the running release header, and saves rollback configuration/images. It never
-builds on the Droplet, changes a price/grant, starts a new service, or deletes data.
+builds on the Droplet, changes a price/grant, starts a new application-container profile, or deletes data.
 
 Final hosted Foundation CI passed 509 files and exposed one environment-registry
 omission. MASANAWA_WEB_BASE_URL and the optional Caddy alias variable are now
@@ -196,8 +196,14 @@ credentialless WebSocket upgrade rejection on the actual relay route, and
 24-hour shared public-news freshness. Provider credentials go only to the fixed
 Google endpoint; redirects are rejected and bodies/keys are not logged. These
 checks complement existing Docker/PostgreSQL, RAM, disk, OOM, backup and release
-checks and the hourly external DNS/TLS/registration monitor. The scoped installer
-refreshes only an already-installed monitor/timer and checkpoints the old copy;
-it creates no new monitoring service. All 34 deployment Python tests pass,
+checks and the hourly external DNS/TLS/registration monitor. The scoped installer refreshes the private monitor and checkpoints its old copy.
+It installs missing systemd monitor units on the existing Droplet, with a 96 MiB
+cap, 20% CPU cap, 90-second timeout and five-minute interval. Existing unit contents
+and disabled/paused timer controls remain unchanged; no paid service is added. All 34 deployment Python tests pass,
 including provider-key isolation and failure reporting. Authenticated Live calls
 and real provider/media/user acceptance remain separate explicit tests.
+
+Monitor activation validation: all 37 deployment Python tests PASS, including
+missing-unit installation, private file permissions, bounded resources, invalid
+source rejection and preservation of an existing disabled/operator timer. The
+new timer uses only the existing Droplet/Python/Docker/provider allowance.
