@@ -22,11 +22,13 @@ class MigrationTest(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    c=Path(d)/'compose.env';r=Path(d)/'runtime.env'
    c.write_text('MASANAWA_API_HOST=api.masanawa.com\n')
-   r.write_text('MASANAWA_PUBLIC_BASE_URL=https://api.masanawa.com\nMASANAWA_BILLING_REDIRECT_URL=https://app.masanawa.com/?tab=wallet\nMASANAWA_WEB_ALLOWED_ORIGINS=https://app.masanawa.com\n')
+   r.write_text('MASANAWA_NGN_CALLS_ENABLED=false\nMASANAWA_OPS_ADMIN_GRANTS_JSON=preserved-fixture\nMASANAWA_PUBLIC_BASE_URL=https://api.masanawa.com\nMASANAWA_BILLING_REDIRECT_URL=https://app.masanawa.com/?tab=wallet\nMASANAWA_WEB_ALLOWED_ORIGINS=https://app.masanawa.com\n')
    c.chmod(0o600);r.chmod(0o600)
    m.migrate(c,r,web_only=True)
    v=dict(x.split('=',1) for x in r.read_text().splitlines())
    self.assertEqual(v['MASANAWA_PUBLIC_BASE_URL'],'https://api.masanawa.com')
+   self.assertEqual(v['MASANAWA_NGN_CALLS_ENABLED'],'false')
+   self.assertEqual(v['MASANAWA_OPS_ADMIN_GRANTS_JSON'],'preserved-fixture')
    self.assertEqual(v['MASANAWA_BILLING_REDIRECT_URL'],'https://app.chatmeup.online/?tab=wallet')
    r.write_text(r.read_text().replace('https://app.chatmeup.online/?tab=wallet','https://external.example/return'))
    m.migrate(c,r,web_only=True)

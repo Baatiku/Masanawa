@@ -173,3 +173,14 @@ still need callback verification after API TLS: Billstack
 https://api.chatmeup.online/webhooks/billstack/gb and Flutterwave
 https://api.chatmeup.online/v1/webhooks/flutterwave. Never enable a financial flag
 or overwrite a shared external callback merely to complete this migration.
+
+Release preservation refinement: the existing WhatsApp installer also activates
+call/browser flags and grants billing capabilities. Those actions are outside a
+rebranding-only release. The unchanged installed agent schema is reused, but the
+pinned installer dispatches authenticated `chatmeup-web-*` requests (matching its
+private running receipt and SHA) to deploy-chatmeup.sh. Other releases retain
+their existing installer behavior. The migration installer preserves flags,
+grants, limits and the browser-call image/service; it pulls only Gateway/Ops/
+Worker, verifies a database dump, applies canonical migrations, checks readiness
+and the running release header, and saves rollback configuration/images. It never
+builds on the Droplet, changes a price/grant, starts a new service, or deletes data.
