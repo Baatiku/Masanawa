@@ -184,3 +184,8 @@ grants, limits and the browser-call image/service; it pulls only Gateway/Ops/
 Worker, verifies a database dump, applies canonical migrations, checks readiness
 and the running release header, and saves rollback configuration/images. It never
 builds on the Droplet, changes a price/grant, starts a new service, or deletes data.
+
+Final hosted Foundation CI passed 509 files and exposed one environment-registry
+omission. MASANAWA_WEB_BASE_URL and the optional Caddy alias variable are now
+registered as public/optional in config/production-env.json; the five architecture
+environment contracts pass locally. No security gate was bypassed.
