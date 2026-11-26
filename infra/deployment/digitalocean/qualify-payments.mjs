@@ -20,7 +20,10 @@ try{
  if(missing.length)throw Error('Missing private settings: '+missing.join(', '));
  const tenant=env.MASANAWA_PLATFORM_TENANT_ID;
  if(!/^tenant_[0-9a-f-]{36}$/i.test(tenant))throw Error('Canonical tenant needs inspection');
- const webhookUrl='https://api.masanawa.com/v1/webhooks/flutterwave';
+ const configuredCallback=env.FLUTTERWAVE_WEBHOOK_URL?.trim();
+ const origin=new URL(env.MASANAWA_PUBLIC_BASE_URL?.trim()||(configuredCallback?new URL(configuredCallback).origin:'https://api.chatmeup.online'));
+ if(origin.protocol!=='https:'||origin.username||origin.password||origin.port||origin.pathname!=='/'||origin.search||origin.hash)throw Error('Canonical API origin requires inspection');
+ const webhookUrl=origin.origin+'/v1/webhooks/flutterwave';
  if(env.FLUTTERWAVE_WEBHOOK_URL&&env.FLUTTERWAVE_WEBHOOK_URL!==webhookUrl)throw Error('FLUTTERWAVE_WEBHOOK_URL differs from the canonical callback; inspect before activation');
  stage='database_connection';
  pool=new Pool({connectionString:env.MASANAWA_DATABASE_URL||env.DATABASE_URL,max:1,connectionTimeoutMillis:10000,statement_timeout:20000});

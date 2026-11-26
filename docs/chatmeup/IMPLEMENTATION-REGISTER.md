@@ -207,3 +207,12 @@ Monitor activation validation: all 37 deployment Python tests PASS, including
 missing-unit installation, private file permissions, bounded resources, invalid
 source rejection and preservation of an existing disabled/operator timer. The
 new timer uses only the existing Droplet/Python/Docker/provider allowance.
+
+Future payment activation defaults now derive the web return URL from the same
+web-origin setting and the provider callback from the configured public API
+origin (or an explicit legacy callback for compatible older environments).
+A conflicting explicit callback still blocks qualification; custom callbacks and
+provider flags are not silently rewritten. This prevents subsequent activation
+from restoring the failed web hostname. All 37 deployment Python tests PASS;
+provider qualifier syntax and existing packaged qualification tests remain CI
+release gates. No live payment activation is performed by this migration.
