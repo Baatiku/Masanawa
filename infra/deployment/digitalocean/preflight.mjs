@@ -105,7 +105,10 @@ export function validatePilotConfig(compose, runtime) {
   const runtimeFile = required(compose, "MASANAWA_RUNTIME_ENV_FILE");
   if (!isAbsolute(runtimeFile) || runtimeFile.endsWith(".env.example")) fail("runtime_file.not_private_path");
   const hostname = required(compose, "MASANAWA_API_HOST");
-  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(hostname) || !hostname.includes(".") || hostname.endsWith(".invalid")) {
+  const aliases = (compose.get("MASANAWA_API_ADDITIONAL_HOSTS") || "").trim().split(/\s+/u).filter(Boolean);
+  const apiHosts = [hostname, ...aliases];
+  if (new Set(apiHosts).size !== apiHosts.length || apiHosts.some((host) =>
+      !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(host) || !host.includes(".") || host.endsWith(".invalid"))) {
     fail("api_host.invalid");
   }
   validateDatabaseTarget(compose, runtime);
@@ -115,8 +118,8 @@ export function validatePilotConfig(compose, runtime) {
   if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(workerImage)) fail("worker_image.not_commit_pinned");
   const opsImage = required(compose, "MASANAWA_OPS_IMAGE");
   if (!/(?:@sha256:[a-f0-9]{64}|:[a-f0-9]{40})$/u.test(opsImage)) fail("ops_image.not_commit_pinned");
-  const origin = `https://${hostname}`;
-  if (required(runtime, "MASANAWA_PUBLIC_BASE_URL") !== origin ||
+  const origin = required(runtime, "MASANAWA_PUBLIC_BASE_URL");
+  if (!apiHosts.some((host) => origin === `https://${host}`) ||
       required(runtime, "MASANAWA_AUTH_PUBLIC_BASE_URL") !== origin) {
     fail("public_origin.mismatch");
   }

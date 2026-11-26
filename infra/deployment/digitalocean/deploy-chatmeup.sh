@@ -48,11 +48,25 @@ PY
 dc=(docker compose -p masanawa --env-file /etc/masanawa/compose.env)
 while IFS= read -r file;do [[ -f $file ]];dc+=(-f "$file");done < "$backup/compose-files"
 dc+=(--profile ops --profile worker)
+base=$(head -1 "$backup/compose-files")
+caddy_source=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' masanawa-proxy-1)
+[[ -f $base && ! -L $base && -f $caddy_source && ! -L $caddy_source ]]
+cp -p "$base" "$backup/compose.yaml.before"
+cp -p "$caddy_source" "$backup/Caddyfile.before"
+old_api_host=$(docker exec masanawa-proxy-1 printenv MASANAWA_API_HOST || true)
+old_aliases=$(docker exec masanawa-proxy-1 printenv MASANAWA_API_ADDITIONAL_HOSTS || true)
+proxy_changed=false
 changed=false
 rollback(){
  trap - ERR INT TERM
  cp -p "$backup/compose.before" /etc/masanawa/compose.env
  cp -p "$backup/runtime.before" "$runtime"
+ cat "$backup/compose.yaml.before" > "$base"
+ cat "$backup/Caddyfile.before" > "$caddy_source"
+ if [[ $proxy_changed = true ]];then
+  docker exec -e "MASANAWA_API_HOST=$old_api_host" -e "MASANAWA_API_ADDITIONAL_HOSTS=$old_aliases" masanawa-proxy-1 caddy validate --config /etc/caddy/Caddyfile &&
+  docker exec -e "MASANAWA_API_HOST=$old_api_host" -e "MASANAWA_API_ADDITIONAL_HOSTS=$old_aliases" masanawa-proxy-1 caddy reload --config /etc/caddy/Caddyfile || true
+ fi
  if [[ -f $backup/monitor.before.py ]];then cp -p "$backup/monitor.before.py" /etc/masanawa/operations/monitor.py;fi
  export MASANAWA_GATEWAY_IMAGE=$old_gateway MASANAWA_OPS_IMAGE=$old_ops MASANAWA_WORKER_IMAGE=$old_worker
  if [[ $changed = true ]];then
@@ -73,7 +87,36 @@ timeout 180 docker exec masanawa-postgres-1 sh -ec 'exec pg_dump -U "$POSTGRES_U
 [[ -s $backup/database.dump ]]
 docker exec -i masanawa-postgres-1 pg_restore --list <"$backup/database.dump" >"$backup/database.contents"
 curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/migrate-chatmeup.py" >"$backup/migrate-chatmeup.py"
-python3 "$backup/migrate-chatmeup.py" --web-only
+python3 "$backup/migrate-chatmeup.py"
+# Configure both API hostnames without restarting the healthy proxy. All files
+# and environment values were checkpointed above; ACME uses existing port 80/443.
+python3 - "$base" <<'PYCOMPOSE'
+from pathlib import Path
+import re,sys
+p=Path(sys.argv[1]);s=p.read_text()
+if 'MASANAWA_API_ADDITIONAL_HOSTS:' not in s:
+ matches=list(re.finditer(r'^(\s*)MASANAWA_API_HOST:.*$',s,re.M))
+ if len(matches)!=1:raise SystemExit('Inspect the existing proxy environment block')
+ match=matches[0]
+ s=s[:match.end()]+'\n'+match[1]+'MASANAWA_API_ADDITIONAL_HOSTS: ${MASANAWA_API_ADDITIONAL_HOSTS:-}'+s[match.end():]
+ p.write_text(s)
+PYCOMPOSE
+readarray -t api_hosts < <(python3 - <<'PYHOSTS'
+from pathlib import Path
+values=dict(x.split('=',1) for x in Path('/etc/masanawa/compose.env').read_text().splitlines() if x and not x.startswith('#') and '=' in x)
+print(values['MASANAWA_API_HOST']);print(values['MASANAWA_API_ADDITIONAL_HOSTS'])
+PYHOSTS
+)
+[[ ${#api_hosts[@]} = 2 && -n ${api_hosts[0]} ]]
+"${dc[@]}" config --quiet
+curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/Caddyfile" >"$backup/Caddyfile.next"
+cat "$backup/Caddyfile.next" > "$caddy_source"
+docker exec -e "MASANAWA_API_HOST=${api_hosts[0]}" -e "MASANAWA_API_ADDITIONAL_HOSTS=${api_hosts[1]}" masanawa-proxy-1 caddy validate --config /etc/caddy/Caddyfile
+proxy_changed=true
+docker exec -e "MASANAWA_API_HOST=${api_hosts[0]}" -e "MASANAWA_API_ADDITIONAL_HOSTS=${api_hosts[1]}" masanawa-proxy-1 caddy reload --config /etc/caddy/Caddyfile
+curl -fsS --retry 12 --retry-all-errors --retry-delay 5 --max-time 10 --resolve api.chatmeup.online:443:68.183.46.65 https://api.chatmeup.online/readyz >"$backup/new-origin.before.json"
+curl -fsS --max-time 10 https://api.chatmeup.online/readyz >"$backup/public.before.json"
+
 python3 - "$runtime" "$release_sha" <<'PY'
 import os,sys,tempfile
 from pathlib import Path
@@ -92,7 +135,7 @@ for svc in gateway ops worker;do
  const svc=process.argv[1],port={gateway:3000,ops:3002,worker:3001}[svc];
  fetch(`http://127.0.0.1:${port}/readyz`,{signal:AbortSignal.timeout(8000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1));' "$svc"
 done
-curl -fsS --max-time 10 --dump-header "$backup/readiness.headers" http://127.0.0.1:3100/readyz >"$backup/readiness.json"
+curl -fsS --max-time 10 --dump-header "$backup/readiness.headers" https://api.chatmeup.online/readyz >"$backup/readiness.json"
 python3 - "$backup/readiness.headers" "$release_sha" <<'PY'
 from pathlib import Path
 import sys
@@ -121,6 +164,7 @@ python3 "$backup/install-monitor.py" "$backup/monitor.py"
 free -m
 df -h /
 docker stats --no-stream
+curl -fsS --max-time 10 --resolve api.masanawa.com:443:68.183.46.65 https://api.masanawa.com/readyz >"$backup/legacy.ready.json"
 trap - ERR INT TERM
 echo "ChatMeUp application release complete; flags, grants and browser-call service preserved. Checkpoint: $backup"
-echo 'New API TLS and public feature acceptance remain separate checks.'
+echo 'New API HTTPS/readiness and legacy origin routing verified; authenticated feature acceptance remains separate.'

@@ -216,3 +216,21 @@ provider flags are not silently rewritten. This prevents subsequent activation
 from restoring the failed web hostname. All 37 deployment Python tests PASS;
 provider qualifier syntax and existing packaged qualification tests remain CI
 release gates. No live payment activation is performed by this migration.
+
+Autonomous host cutover: the existing outbound agent is also the permitted root
+execution path for the reviewed Caddy change. deploy-chatmeup.sh now snapshots
+the actual proxy mount and all active Compose overrides, applies the complete
+environment migration, adds the alias environment binding, validates Caddy,
+reloads without proxy restart and verifies new-host TLS/readiness before pausing
+application services. It then updates the three application images once and
+verifies the exact running commit over public HTTPS plus legacy-SNI readiness.
+Proxy/Compose/runtime configuration and old images are restored on failure.
+The earlier console helper is a fallback, not a required step when the agent
+consumes the approved release. No console action is needed unless deployment
+readback identifies an external blocker.
+
+Preflight now permits only explicitly declared, unique API hostname aliases for
+the canonical public/auth URL. Undeclared origins, wildcard/duplicate aliases,
+credentials and insecure URLs remain rejected. All 12 deployment Node contracts
+pass; 37 deployment Python tests and installer shell syntax pass. The production
+certificate authority has no observed CAA restriction at the new apex/API name.

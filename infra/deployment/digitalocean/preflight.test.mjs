@@ -171,3 +171,15 @@ test("backup survives broken app/provider settings while enforcing private files
     assert.throws(() => runBackupPreflight(composeFile, composeFile), /path_mismatch/u);
   } finally { rmSync(dir, {recursive:true, force:true}); }
 });
+
+test("a declared new API hostname can be canonical while the legacy hostname stays routed",()=>{
+ const {compose,runtime}=goodConfig();
+ compose.set('MASANAWA_API_ADDITIONAL_HOSTS','api.chatmeup.online');
+ runtime.set('MASANAWA_PUBLIC_BASE_URL','https://api.chatmeup.online');
+ runtime.set('MASANAWA_AUTH_PUBLIC_BASE_URL','https://api.chatmeup.online');
+ assert.equal(validatePilotConfig(compose,runtime).apiOrigin,'https://api.chatmeup.online');
+ for(const aliases of ['api.masanawa.com','*.chatmeup.online','api.chatmeup.online api.chatmeup.online','https://api.chatmeup.online']){
+  compose.set('MASANAWA_API_ADDITIONAL_HOSTS',aliases);assert.throws(()=>validatePilotConfig(compose,runtime));
+ }
+ compose.delete('MASANAWA_API_ADDITIONAL_HOSTS');assert.throws(()=>validatePilotConfig(compose,runtime));
+});
