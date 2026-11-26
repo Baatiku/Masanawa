@@ -67,7 +67,8 @@ export MASANAWA_WORKER_IMAGE="ghcr.io/baatiku/masanawa-do-pilot-worker:$release_
 "${dc[@]}" config --quiet
 "${dc[@]}" pull gateway ops worker >"$backup/pull.log" 2>&1
 [[ $(df --output=avail -B1 /etc/masanawa | tail -1) -ge $((2*1024*1024*1024)) ]]
-docker exec masanawa-postgres-1 sh -ec 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' >"$backup/database.dump"
+timeout 180 docker exec masanawa-postgres-1 sh -ec 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' | head -c 268435457 >"$backup/database.dump"
+[[ $(stat -c %s "$backup/database.dump") -le 268435456 ]] || { echo 'Database checkpoint exceeds the existing 256 MiB pilot bound';false; }
 [[ -s $backup/database.dump ]]
 docker exec -i masanawa-postgres-1 pg_restore --list <"$backup/database.dump" >"$backup/database.contents"
 curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/migrate-chatmeup.py" >"$backup/migrate-chatmeup.py"
