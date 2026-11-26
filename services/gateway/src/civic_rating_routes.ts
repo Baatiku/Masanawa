@@ -79,4 +79,54 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
   const data=await ports.pool.query('SELECT character_id AS "characterId",score,updated_at AS "updatedAt" FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2 ORDER BY character_id',[actor.tenantId,actor.userId]);
   return {ratings:data.rows};
  }));
+ // Participation is a separate, account-wide opt-in. Never join to rating scores,
+ // expose individual political interests, or use reach as payment eligibility.
+ app.get<{Params:{id:string}}>('/v1/civic/engagement/:id',async(q,r)=>execute(r,async()=>{
+  if(!idPattern.test(q.params.id))throw new RatingError(400,'invalid_engagement_subject');
+  const actor=await ports.authorize(q.headers.authorization);
+  if(!(await ports.pool.query(eligibleSql,[actor.tenantId,q.params.id])).rows.length)throw new RatingError(404,'civic_engagement_subject_unavailable');
+  const consent=await ports.pool.query('SELECT 1 FROM agents.civic_engagement_consents WHERE tenant_id=$1 AND user_id=$2',[actor.tenantId,actor.userId]);
+  // Count distinct consenting active accounts, not messages or client-submitted
+  // events. Only chats initiated after consent qualify. No transcript fields read.
+  const counts=await ports.pool.query<{accounts:number}>(`
+   SELECT count(DISTINCT t.user_id)::integer AS accounts
+   FROM agents.mobile_turn_commands t
+   JOIN agents.civic_engagement_consents c ON c.tenant_id=t.tenant_id AND c.user_id=t.user_id AND t.created_at>=c.consented_at
+   JOIN identity.users u ON u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active'
+   WHERE t.tenant_id=$1 AND t.character_id=$2 AND t.state='completed'
+   AND t.updated_at>=clock_timestamp()-interval '30 days'`,[actor.tenantId,q.params.id]);
+  return {consented:consent.rows.length>0,days:30,...publicCivicReach(counts.rows[0]?.accounts??0)};
+ }));
+ app.get('/v1/civic/engagement/consent',async(q,r)=>execute(r,async()=>{
+  const actor=await ports.authorize(q.headers.authorization);
+  const result=await ports.pool.query('SELECT 1 FROM agents.civic_engagement_consents WHERE tenant_id=$1 AND user_id=$2',[actor.tenantId,actor.userId]);
+  return {consented:result.rows.length>0};
+ }));
+ app.post<{Body:unknown}>('/v1/civic/engagement/consent',{bodyLimit:1024},async(q,r)=>execute(r,async()=>{
+  if(!validEngagementConsent(q.body))throw new RatingError(400,'invalid_engagement_consent');
+  const actor=await ports.authorize(q.headers.authorization);
+  await ports.beforeWrite(q.headers.authorization);
+  const body=q.body;
+  return withTransaction(ports.pool,async client=>{
+   const user=await client.query("SELECT 1 FROM identity.users WHERE tenant_id=$1 AND user_id=$2 AND state='active' FOR UPDATE",[actor.tenantId,actor.userId]);
+   if(!user.rows.length)throw new RatingError(403,'inactive_account');
+   if(body.consented)await client.query('INSERT INTO agents.civic_engagement_consents(tenant_id,user_id,consent_version) VALUES($1,$2,1) ON CONFLICT(tenant_id,user_id) DO NOTHING',[actor.tenantId,actor.userId]);
+   else await client.query('DELETE FROM agents.civic_engagement_consents WHERE tenant_id=$1 AND user_id=$2',[actor.tenantId,actor.userId]);
+   return {consented:body.consented};
+  });
+ }));
+
+}
+
+// Coarse participation counts are not an approval score or a scientific poll.
+export const CIVIC_REACH_MINIMUM=50;
+export function publicCivicReach(accounts:number){
+ const published=Number.isSafeInteger(accounts)&&accounts>=CIVIC_REACH_MINIMUM;
+ return {published,minimum:CIVIC_REACH_MINIMUM,count:published?Math.floor(accounts/25)*25:null};
+}
+export function validEngagementConsent(value:unknown):value is {consented:boolean;consentVersion?:number}{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const p=value as Record<string,unknown>;
+ if(Object.keys(p).some(k=>k!=='consented'&&k!=='consentVersion'))return false;
+ return p.consented===true?p.consentVersion===1:p.consented===false&&p.consentVersion===undefined;
 }
