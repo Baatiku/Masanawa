@@ -146,3 +146,18 @@ Final connected consumer repair matrix: 62 tests in six files PASS; all eleven
 preflight/release-origin/deposit-reconciliation contracts PASS; root/workspace
 TypeScript PASS; Gateway and Worker dependency builds PASS; private migration
 preservation test PASS. Hosted exact-head checks must still pass after repair.
+
+Final customer-copy map also covers the shared platform guide/persona identity
+sentence, emergency intake product identity, security/deletion notices, browser
+push title and civic evidence attribution. Only product-name text changes;
+pronunciation, ringing, Gemini audio flow, persona IDs/constitutions, provider
+permissions and caller memory remain unchanged. Historical persona records are
+not rewritten; the current platform guide explicitly identifies ChatMeUp and
+preserves independent Masanawa News/Knowledge names.
+
+Complete active customer-copy validation: 87 tests in nine files PASS, including
+persona instructions, emergency intake, account security/deletion, civic readers,
+email rendering and WhatsApp guidance; root/workspace typechecks and Gateway/
+Worker builds PASS. No voice/accent/ringing logic or immutable persona record was
+changed. The runtime template remains deliberately non-runnable and now documents
+the web-origin variable; the active runbook explicitly points to ChatMeUp cutover.

@@ -199,13 +199,13 @@ export function createResendAccountDeletionSender(input: Readonly<{
   const fetchImpl = input.fetchImpl ?? fetch;
   return {
     async send({ destination, code }) {
-      const message = `Use code ${code} to verify your Masanawa account deletion request. It expires in 10 minutes. If you did not request deletion, do not share this code.`;
+      const message = `Use code ${code} to verify your ChatMeUp account deletion request. It expires in 10 minutes. If you did not request deletion, do not share this code.`;
       const response = await fetchImpl("https://api.resend.com/emails", {
         method: "POST",
         headers: { authorization: `Bearer ${input.apiKey}`, "content-type": "application/json" },
         body: JSON.stringify({
           from: input.from, to: [destination],
-          subject: "Verify your Masanawa account deletion request",
+          subject: "Verify your ChatMeUp account deletion request",
           text: message,
           tags: [{ name: "category", value: "account_deletion_verification" }],
         }),
@@ -232,7 +232,7 @@ export function createHttpAccountDeletionSmsSender(input: Readonly<{
         },
         body: JSON.stringify({
           to: destination,
-          message: `Masanawa account deletion verification: ${code}. Expires in 10 minutes. Do not share this code.`,
+          message: `ChatMeUp account deletion verification: ${code}. Expires in 10 minutes. Do not share this code.`,
         }),
       });
       if (!response.ok) throw new Error("account_deletion.sms_unavailable");
