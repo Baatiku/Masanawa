@@ -1,4 +1,5 @@
 import {registerBrowserPushRoutes} from './browser_push_routes.js';
+import {registerCivicRatingRoutes,type CivicRatingPorts} from './civic_rating_routes.js';
 import {registerCivicResponseRoutes} from './civic_response_routes.js';
 import {registerWhatsAppLinkRoutes,type WhatsAppLinkPorts} from './whatsapp_link.js';
 import {registerWhatsAppDataRoutes} from './whatsapp_data.js';
@@ -101,6 +102,7 @@ export interface ReadinessCheck {
 
 export interface GatewayAppOptions {
   readonly civicResponse?:Parameters<typeof registerCivicResponseRoutes>[1];
+  readonly civicRatings?:CivicRatingPorts;
   readonly whatsappLinks?:WhatsAppLinkPorts;
   readonly whatsappData?:WhatsAppLinkPorts & {pool:import('@masanawa/postgres').Pool;catalogue:NgnDataCataloguePorts;purchases:NgnDataPurchaseRoutes};
   readonly browserPush?:ReturnType<typeof createBrowserPushService>;
@@ -1020,6 +1022,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if(options.browserPush)registerBrowserPushRoutes(app,options.browserPush);
   if(options.customerMemory)registerCustomerMemoryRoutes(app,options.customerMemory);
   if(options.civicResponse)registerCivicResponseRoutes(app,options.civicResponse);
+  if(options.civicRatings)registerCivicRatingRoutes(app,options.civicRatings);
   if(options.messageControls)registerMessageControlRoutes(app,options.messageControls);
   if (options.agentConversation) {
     const conversation = options.agentConversation;
