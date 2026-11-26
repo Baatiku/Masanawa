@@ -185,6 +185,7 @@ services:
     image: caddy:2.10
     environment:
       MASANAWA_API_HOST: ${MASANAWA_API_HOST:-not-configured.invalid}
+      MASANAWA_API_ADDITIONAL_HOSTS: ${MASANAWA_API_ADDITIONAL_HOSTS:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
