@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import shutil
 
-def migrate(compose, runtime):
+def migrate(compose, runtime, *, web_only=False):
     def read(path):
         if path.is_symlink() or path.stat().st_mode & 0o077:
             raise ValueError('Private configuration permissions need inspection')
@@ -30,11 +30,20 @@ def migrate(compose, runtime):
     origins=rv.get('MASANAWA_WEB_ALLOWED_ORIGINS','').split(',')
     origins=[x for x in origins if x]
     if 'https://app.chatmeup.online' not in origins: origins.append('https://app.chatmeup.online')
+    runtime_changes={'MASANAWA_WEB_BASE_URL':'https://app.chatmeup.online',
+                     'MASANAWA_WEB_ALLOWED_ORIGINS':','.join(origins)}
+    if not web_only:
+        runtime_changes.update(MASANAWA_PUBLIC_BASE_URL='https://api.chatmeup.online',
+                               MASANAWA_AUTH_PUBLIC_BASE_URL='https://api.chatmeup.online')
+    # Preserve custom callbacks and provider credentials; migrate only known web origins.
+    from urllib.parse import urlsplit, urlunsplit
+    redirect=rv.get('MASANAWA_BILLING_REDIRECT_URL')
+    if redirect:
+        parsed=urlsplit(redirect)
+        if parsed.scheme=='https' and parsed.netloc in ('app.masanawa.com','web.masanawa.com'):
+            runtime_changes['MASANAWA_BILLING_REDIRECT_URL']=urlunsplit(parsed._replace(netloc='app.chatmeup.online'))
     changes=[(compose,cl,{'MASANAWA_API_ADDITIONAL_HOSTS':' '.join(aliases)}),
-             (runtime,rl,{'MASANAWA_WEB_BASE_URL':'https://app.chatmeup.online',
-                          'MASANAWA_PUBLIC_BASE_URL':'https://api.chatmeup.online',
-                          'MASANAWA_AUTH_PUBLIC_BASE_URL':'https://api.chatmeup.online',
-                          'MASANAWA_WEB_ALLOWED_ORIGINS':','.join(origins)})]
+             (runtime,rl,runtime_changes)]
     backup=compose.parent/('chatmeup-rollback-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
     backup.mkdir(mode=0o700)
     for path,lines,values in changes:
@@ -58,5 +67,7 @@ if __name__=='__main__':
     values=dict(line.split('=',1) for line in compose.read_text().splitlines() if line and not line.startswith('#') and '=' in line)
     runtime=Path(values['MASANAWA_RUNTIME_ENV_FILE'])
     if not runtime.resolve().is_relative_to('/etc/masanawa'):raise SystemExit('Unexpected runtime path')
-    print('Private rollback directory:',migrate(compose,runtime))
+    import sys
+    if sys.argv[1:] not in ([],['--web-only']):raise SystemExit('Unexpected migration option')
+    print('Private rollback directory:',migrate(compose,runtime,web_only='--web-only' in sys.argv))
     print('Configuration prepared. Validate Caddy before reload; recreate only Gateway/Ops if their environment changed.')

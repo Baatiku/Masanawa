@@ -161,3 +161,15 @@ email rendering and WhatsApp guidance; root/workspace typechecks and Gateway/
 Worker builds PASS. No voice/accent/ringing logic or immutable persona record was
 changed. The runtime template remains deliberately non-runnable and now documents
 the web-origin variable; the active runbook explicitly points to ChatMeUp cutover.
+
+The normal pinned release installer now applies the tested --web-only migration
+after its private checkpoint and before replacing services. It sets the web
+origin/allowlist and migrates only legacy app/web billing-return hosts, preserving
+paths, queries and all external callbacks. API base URLs remain unchanged until
+the validated proxy cutover. Configuration is restored on any preflight failure,
+without restarting healthy services. All 32 deployment Python tests and 11 Node
+configuration contracts PASS; installer shell syntax PASS. Provider dashboards
+still need callback verification after API TLS: Billstack
+https://api.chatmeup.online/webhooks/billstack/gb and Flutterwave
+https://api.chatmeup.online/v1/webhooks/flutterwave. Never enable a financial flag
+or overwrite a shared external callback merely to complete this migration.

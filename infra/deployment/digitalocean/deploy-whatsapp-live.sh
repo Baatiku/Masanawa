@@ -117,6 +117,8 @@ fi
 rollback(){
   trap - ERR INT TERM
   echo "Deployment stopped at $stage (installer line $1)."
+  cp -p "$backup/compose.before" /etc/masanawa/compose.env
+  cp -p "$backup/runtime.before" "$runtime_file"
   if [ "$changed" = false ]; then
     echo 'Preflight stopped; running services were not replaced.'
   else
@@ -126,8 +128,6 @@ rollback(){
       docker logs --tail 80 "masanawa-$svc-1" >"$backup/$svc.failed-startup.log" 2>&1 || true
     done
     echo 'Restoring previous application images without touching PostgreSQL or Signal keys...'
-    cp -p "$backup/compose.before" /etc/masanawa/compose.env
-    cp -p "$backup/runtime.before" "$runtime_file"
     export MASANAWA_GATEWAY_IMAGE="$old_gateway"
     export MASANAWA_OPS_IMAGE="$old_ops"
     export MASANAWA_WORKER_IMAGE="$old_worker"
@@ -140,6 +140,13 @@ rollback(){
   exit 1
 }
 trap 'rollback "$LINENO"' ERR INT TERM
+
+# Apply only the web-facing origin/return URL changes. API TLS routing is a
+# separate validated Caddy cutover; existing clients retain their working API.
+stage='configure ChatMeUp web origins'
+curl -fsS --max-time 25 "https://raw.githubusercontent.com/Baatiku/Masanawa/$release_sha/infra/deployment/digitalocean/migrate-chatmeup.py" >"$backup/migrate-chatmeup.py"
+python3 "$backup/migrate-chatmeup.py" --web-only
+
 
 probe(){
   local service="$1" fallback_port="$2"
