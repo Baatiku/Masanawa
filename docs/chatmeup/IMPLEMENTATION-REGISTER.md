@@ -127,3 +127,22 @@ No Android build was run. Next.js generated configuration edits were excluded.
 The existing release request currently points at e80946d135a2c9186a57fe7a1a180fc7daa59e49
 (request civic-registration-readiness-20261125-e80946d1-v1); preserve that branch
 until a new merged release has both required main workflows green.
+
+Hosted first-pass repair: a legacy auth test asserted the former email subject;
+it now asserts ChatMeUp. Existing mobile/API fallback origins are retained;
+production uses MASANAWA_AUTH_PUBLIC_BASE_URL and MASANAWA_PUBLIC_BASE_URL set by
+the reviewed migration. The web origin alone changes by default. No change to
+Gateway bootstrap/main.ts is required, so that unnecessary edit was removed.
+
+The final inventory is case-insensitive and includes MASANAWA environment and
+service identifiers. reference-audit.json now covers both exact original repository
+baselines, with repository/path/line and the five owner classes: 1 public copy,
+2 web URLs, 3 retained internals (including excluded Android), 4 shared-compatible
+services and 5 independent News/Knowledge. It records 6,579 reference lines across
+both repositories without copying source text or private values. Decisions are
+conservative; historical documentation and attribution are not globally replaced.
+
+Final connected consumer repair matrix: 62 tests in six files PASS; all eleven
+preflight/release-origin/deposit-reconciliation contracts PASS; root/workspace
+TypeScript PASS; Gateway and Worker dependency builds PASS; private migration
+preservation test PASS. Hosted exact-head checks must still pass after repair.
