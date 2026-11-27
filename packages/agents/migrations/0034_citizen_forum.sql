@@ -153,3 +153,32 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER forum_reply_follow_notice AFTER UPDATE OF state ON agents.forum_messages FOR EACH ROW EXECUTE FUNCTION agents.forum_published_reply_notice();
+
+CREATE FUNCTION agents.fanout_forum_push() RETURNS integer LANGUAGE plpgsql AS $$
+DECLARE job agents.forum_push_events%ROWTYPE; member record; processed integer:=0; last_user text;
+BEGIN
+ DELETE FROM agents.forum_push_events WHERE created_at<clock_timestamp()-interval '1 day';
+ SELECT * INTO job FROM agents.forum_push_events
+ WHERE NOT done ORDER BY created_at,tenant_id,topic_id,bucket LIMIT 1 FOR UPDATE SKIP LOCKED;
+ IF NOT FOUND THEN RETURN 0; END IF;
+ FOR member IN
+  SELECT e.user_id FROM agents.forum_engagement e
+  JOIN identity.users u ON u.tenant_id=e.tenant_id AND u.user_id=e.user_id AND u.state='active'
+  JOIN agents.forum_topics t ON t.tenant_id=e.tenant_id AND t.id=e.topic_id AND t.state='published'
+  WHERE e.tenant_id=job.tenant_id AND e.topic_id=job.topic_id AND e.signal='follow'
+   AND (job.cursor_user IS NULL OR e.user_id>job.cursor_user)
+   AND (t.system_channel OR EXISTS(SELECT 1 FROM identity.users tu WHERE tu.tenant_id=t.tenant_id AND tu.user_id=t.user_id AND tu.state='active'))
+  ORDER BY e.user_id LIMIT 100
+ LOOP
+  last_user:=member.user_id;processed:=processed+1;
+  IF EXISTS(SELECT 1 FROM agents.forum_messages m JOIN identity.users mu ON mu.tenant_id=m.tenant_id AND mu.user_id=m.user_id AND mu.state='active'
+   WHERE m.tenant_id=job.tenant_id AND m.topic_id=job.topic_id AND m.state='published' AND m.user_id<>member.user_id
+    AND m.reviewed_at>=job.bucket AND m.reviewed_at<job.bucket+interval '15 minutes') THEN
+   PERFORM agents.queue_forum_notice(job.tenant_id,member.user_id,'follow:'||job.topic_id::text||':'||extract(epoch FROM job.bucket)::text);
+  END IF;
+ END LOOP;
+ UPDATE agents.forum_push_events SET cursor_user=COALESCE(last_user,cursor_user),done=processed<100
+ WHERE tenant_id=job.tenant_id AND topic_id=job.topic_id AND bucket=job.bucket;
+ RETURN processed;
+END $$;
+REVOKE ALL ON FUNCTION agents.queue_forum_notice(text,text,text),agents.fanout_forum_push() FROM PUBLIC;
