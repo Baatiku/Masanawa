@@ -40,3 +40,19 @@ CREATE TABLE agents.forum_write_budget (
  PRIMARY KEY(tenant_id,user_id),FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
 );
 REVOKE ALL ON agents.forum_topics,agents.forum_messages,agents.forum_engagement,agents.forum_write_budget FROM PUBLIC;
+
+-- Citizen moderation cases retain an auditable decision without exposing the reporter.
+CREATE TABLE agents.forum_cases (
+ tenant_id text NOT NULL,id uuid NOT NULL,user_id text NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('report','appeal')),
+ target_kind text NOT NULL CHECK(target_kind IN ('topic','message')),
+ target_id uuid NOT NULL,reason text NOT NULL CHECK(length(reason) BETWEEN 8 AND 1000),
+ state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','resolved','dismissed')),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ reviewed_at timestamptz,reviewed_by text,review_reason text,
+ PRIMARY KEY(tenant_id,id),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX forum_case_one_pending ON agents.forum_cases(tenant_id,user_id,kind,target_kind,target_id) WHERE state='pending';
+CREATE INDEX forum_case_queue ON agents.forum_cases(tenant_id,state,created_at);
+REVOKE ALL ON agents.forum_cases FROM PUBLIC;
