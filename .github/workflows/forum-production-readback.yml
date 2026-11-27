@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Verify approved Gateway release and public Forum contract
         env:
-          EXPECTED: f1ccafb36a3ec6caefc9f2ca7e077b9b0c446ed5
+          EXPECTED: 708b64f6b8e743dac9343e1b599cc594e319d830
         run: |
           set -euo pipefail
           for i in $(seq 1 44); do
@@ -50,11 +50,14 @@ jobs:
       - name: Inspect exact main push workflow status and both live origins
         run: |
           set -u
-          for spec in Baatiku/Masanawa:f1ccafb36a3ec6caefc9f2ca7e077b9b0c446ed5 Baatiku/Masanawa-Web:3a9eacaca70517e5eb2b03f0c5dd428611267a35; do
+          for spec in Baatiku/Masanawa:708b64f6b8e743dac9343e1b599cc594e319d830 Baatiku/Masanawa-Web:693b8fe218843d42fff8d17223a333f6e6c4bca6; do
             repo="${spec%:*}"; sha="${spec#*:}"
             echo "Main release status: $repo $sha"
             curl --silent --show-error --max-time 15 "https://api.github.com/repos/$repo/actions/runs?head_sha=$sha&event=push&per_page=20" | jq '{total_count,runs:[.workflow_runs[]? | {id,name,status,conclusion,html_url}]}'
           done
+          echo "Deployment request and ancestry:"
+          curl --fail --silent --show-error --max-time 15 https://raw.githubusercontent.com/Baatiku/Masanawa/deploy/digitalocean-production/digitalocean-release.json | jq .
+          curl --fail --silent --show-error --max-time 15 'https://api.github.com/repos/Baatiku/Masanawa/compare/708b64f6b8e743dac9343e1b599cc594e319d830...main?per_page=1' | jq '{status,ahead_by,behind_by}'
           for u in https://api.chatmeup.online/readyz https://api.chatmeup.online/v1/forum/rooms https://api.chatmeup.online/v1/forum/community https://app.chatmeup.online/masanawa-web-release.json https://app.chatmeup.online/api/forum/rooms; do
             echo "Public probe: $u"
             if curl --silent --show-error --max-time 15 -H 'Cache-Control: no-cache' -D /tmp/h -o /tmp/b "$u"; then
