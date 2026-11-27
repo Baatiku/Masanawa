@@ -1,4 +1,4 @@
-import { createCivicResponseRepository, type ResponseActor } from '@masanawa/postgres';
+import { withTransaction,createCivicResponseRepository, type ResponseActor } from '@masanawa/postgres';
 import type { Pool } from '@masanawa/postgres';
 import type { AdminActor, OpsAdminDashboardService } from './admin_dashboard.js';
 
@@ -17,10 +17,28 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
       const operator=await actor(header,'incidents.read');
       const topics=(await input.pool.query("SELECT id,room,title,body,kind,jurisdiction,state,created_at FROM agents.forum_topics WHERE tenant_id=$1 AND state='pending' ORDER BY created_at LIMIT 100",[operator.tenantId])).rows;
       const messages=(await input.pool.query("SELECT m.id,m.topic_id,m.body,m.created_at,t.title FROM agents.forum_messages m JOIN agents.forum_topics t ON t.tenant_id=m.tenant_id AND t.id=m.topic_id WHERE m.tenant_id=$1 AND m.state='pending' AND t.state='published' ORDER BY m.created_at LIMIT 100",[operator.tenantId])).rows;
-      return {topics,messages};
+      const cases=(await input.pool.query(`SELECT c.id,c.kind,c.target_kind,c.target_id,c.reason AS body,c.created_at,COALESCE(t.title,'Public reply') AS title,COALESCE(t.body,m.body) AS target_body FROM agents.forum_cases c LEFT JOIN agents.forum_topics t ON c.target_kind='topic' AND t.tenant_id=c.tenant_id AND t.id=c.target_id LEFT JOIN agents.forum_messages m ON c.target_kind='message' AND m.tenant_id=c.tenant_id AND m.id=c.target_id WHERE c.tenant_id=$1 AND c.state='pending' ORDER BY c.created_at LIMIT 100`,[operator.tenantId])).rows;
+      return {topics,messages,cases};
     },
-    async forumReview(header:string|undefined,id:string,kind:'topic'|'message',state:'published'|'rejected'|'hidden',reason:string) {
+    async forumReview(header:string|undefined,id:string,kind:'topic'|'message'|'case',state:'published'|'rejected'|'hidden'|'resolved'|'dismissed',reason:string) {
       const operator=await actor(header,'incidents.write');
+      if(kind==='case'){
+        if(state!=='resolved'&&state!=='dismissed')throw new Error('invalid_case_review');
+        return withTransaction(input.pool,async c=>{
+          const item=(await c.query("SELECT id,kind,target_kind,target_id FROM agents.forum_cases WHERE tenant_id=$1 AND id=$2 AND state='pending' FOR UPDATE",[operator.tenantId,id])).rows[0];
+          if(!item)throw new Error('forum_case_conflict');
+          if(state==='resolved'){
+            const table=item.target_kind==='topic'?'agents.forum_topics':'agents.forum_messages';
+            const guard=item.target_kind==='topic'?' AND NOT system_channel':'';
+            const next=item.kind==='report'?'hidden':'published';
+            const eligible=item.kind==='report'?"state IN ('published','hidden')":"state IN ('rejected','hidden','published')";
+            const changed=await c.query(`UPDATE ${table} SET state=$3,reviewed_at=clock_timestamp(),reviewed_by=$4,review_reason=$5 WHERE tenant_id=$1 AND id=$2 AND ${eligible}${guard} RETURNING id`,[operator.tenantId,item.target_id,next,operator.actorId,reason]);
+            if(!changed.rows.length)throw new Error('forum_target_conflict');
+          }
+          return (await c.query("UPDATE agents.forum_cases SET state=$3,reviewed_at=clock_timestamp(),reviewed_by=$4,review_reason=$5 WHERE tenant_id=$1 AND id=$2 RETURNING id,state",[operator.tenantId,id,state,operator.actorId,reason])).rows[0];
+        });
+      }
+      if(state==='resolved'||state==='dismissed')throw new Error('invalid_content_review');
       const table=kind==='topic'?'agents.forum_topics':'agents.forum_messages';
       const row=await input.pool.query(`UPDATE ${table} SET state=$3,reviewed_at=clock_timestamp(),reviewed_by=$4,review_reason=$5 WHERE tenant_id=$1 AND id=$2 ${kind==='topic'?'AND NOT system_channel':''} AND (state='pending' OR (state='published' AND $3='hidden')) RETURNING id,state`,[operator.tenantId,id,state,operator.actorId,reason]);
       if(!row.rows[0])throw new Error('forum_review_conflict');
