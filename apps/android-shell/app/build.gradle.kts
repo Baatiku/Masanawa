@@ -14,8 +14,8 @@ android {
         applicationId = "com.masanawa.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 18
-        versionName = "1.3.6"
+        versionCode = System.getenv("SHELL_RELEASE_VERSION_CODE")?.toIntOrNull()?.takeIf { it > 0 } ?: 19
+        versionName = "1.3.7"
         resValue("string", "masanawa_app_label", "Citizenvoice")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The Google Services plugin reads the exact provided JSON config.
