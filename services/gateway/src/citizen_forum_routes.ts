@@ -45,9 +45,9 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   const channel=channelFor(id.toLowerCase());
   const t=(await db.query(`SELECT ${publicFields},${counts} FROM agents.forum_topics t WHERE ${visible} AND t.id=$2`,[tenant,id])).rows[0]??(channel?{id,room:channel.id,title:'General discussion',body:'A permanent public discussion for this civic room. Keep contributions constructive.',kind:'general',jurisdiction:'National',created_at:null,system_channel:true,replies:0,participants:0}:null);if(!t)throw new ForumError(404,'topic_not_found');
   const offset=Number((q.query as {offset?:string}).offset||0);if(!Number.isInteger(offset)||offset<0||offset>10000)throw new ForumError(400,'invalid_offset');
-  const rows=(await db.query<{id:string;body:string;created_at:string;user_id:string}>(`SELECT m.id,m.body,m.created_at,m.user_id FROM agents.forum_messages m JOIN identity.users u ON u.tenant_id=m.tenant_id AND u.user_id=m.user_id AND u.state='active' WHERE m.tenant_id=$1 AND m.topic_id=$2 AND m.state='published' ORDER BY m.created_at DESC,m.id DESC LIMIT 51 OFFSET $3`,[tenant,id,offset])).rows;
+  const rows=(await db.query<{id:string;body:string;created_at:string;user_id:string;reply_to:string|null;reply_body:string|null}>(`SELECT m.id,m.body,m.created_at,m.user_id,p.id AS reply_to,p.body AS reply_body FROM agents.forum_messages m LEFT JOIN agents.forum_messages p ON p.tenant_id=m.tenant_id AND p.topic_id=m.topic_id AND p.id=m.reply_to AND p.state='published' AND EXISTS(SELECT 1 FROM identity.users pu WHERE pu.tenant_id=p.tenant_id AND pu.user_id=p.user_id AND pu.state='active') JOIN identity.users u ON u.tenant_id=m.tenant_id AND u.user_id=m.user_id AND u.state='active' WHERE m.tenant_id=$1 AND m.topic_id=$2 AND m.state='published' ORDER BY m.created_at DESC,m.id DESC LIMIT 51 OFFSET $3`,[tenant,id,offset])).rows;
   // Stable topic-local alias; never return internal account IDs or contact data.
-  const messages=rows.slice(0,50).reverse().map(m=>({id:m.id,body:m.body,created_at:m.created_at,author:'Member '+createHash('sha256').update(id+':'+m.user_id).digest('hex').slice(0,8)}));
+  const messages=rows.slice(0,50).reverse().map(m=>({id:m.id,body:m.body,created_at:m.created_at,reply_to:m.reply_to,reply_excerpt:m.reply_body?.slice(0,160)??null,author:'Member '+createHash('sha256').update(id+':'+m.user_id).digest('hex').slice(0,8)}));
   return {topic:t,messages,nextOffset:rows.length>50?offset+50:null};
  }));
  app.get('/v1/forum/mine',async(q,r)=>fail(r,async()=>{
@@ -68,14 +68,15 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   });
  }));
  app.post('/v1/forum/topics/:id/messages',async(q,r)=>fail(r,async()=>{
-  const a=await actor(q.headers.authorization),{id}=q.params as {id:string},b=q.body as {id?:unknown;body?:unknown}|null;
-  if(!uuid.test(id)||!b||typeof b.id!=='string'||!uuid.test(b.id)||!validText(b.body,1,2000))throw new ForumError(400,'invalid_message');
-  const messageId=b.id,body=b.body.trim();return withTransaction(db,async c=>{
+  const a=await actor(q.headers.authorization),{id}=q.params as {id:string},b=q.body as {id?:unknown;body?:unknown;replyTo?:unknown}|null;
+  if(!uuid.test(id)||!b||typeof b.id!=='string'||!uuid.test(b.id)||!validText(b.body,1,2000)||!Object.keys(b).every(k=>['id','body','replyTo'].includes(k))||(b.replyTo!==undefined&&b.replyTo!==null&&(typeof b.replyTo!=='string'||!uuid.test(b.replyTo))))throw new ForumError(400,'invalid_message');
+  const messageId=b.id,body=b.body.trim(),replyTo=typeof b.replyTo==='string'?b.replyTo.toLowerCase():null;return withTransaction(db,async c=>{
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['forum:'+tenant+':'+a.userId]);
    await ensureChannel(c,id);if(!(await c.query(`SELECT id FROM agents.forum_topics t WHERE ${visible} AND t.id=$2 FOR SHARE`,[tenant,id])).rows.length)throw new ForumError(404,'topic_not_found');
-   const old=(await c.query('SELECT topic_id,body,state FROM agents.forum_messages WHERE tenant_id=$1 AND user_id=$2 AND id=$3',[tenant,a.userId,messageId])).rows[0];
-   if(old){if(old.topic_id!==id||old.body!==body)throw new ForumError(409,'request_conflict');return {id:messageId,state:old.state};}
-   await budget(c,a);await c.query('INSERT INTO agents.forum_messages(tenant_id,id,topic_id,user_id,body) VALUES($1,$2,$3,$4,$5)',[tenant,messageId,id,a.userId,body]);return {id:messageId,state:'pending'};
+   const old=(await c.query('SELECT topic_id,body,state,reply_to FROM agents.forum_messages WHERE tenant_id=$1 AND user_id=$2 AND id=$3',[tenant,a.userId,messageId])).rows[0];
+   if(old){if(old.topic_id!==id.toLowerCase()||old.body!==body||old.reply_to!==replyTo)throw new ForumError(409,'request_conflict');return {id:messageId,state:old.state};}
+   if(replyTo&&!(await c.query(`SELECT m.id FROM agents.forum_messages m JOIN identity.users u ON u.tenant_id=m.tenant_id AND u.user_id=m.user_id AND u.state='active' WHERE m.tenant_id=$1 AND m.topic_id=$2 AND m.id=$3 AND m.state='published' FOR SHARE OF m`,[tenant,id,replyTo])).rows.length)throw new ForumError(400,'invalid_reply');
+   await budget(c,a);await c.query('INSERT INTO agents.forum_messages(tenant_id,id,topic_id,user_id,body,reply_to) VALUES($1,$2,$3,$4,$5,$6)',[tenant,messageId,id,a.userId,body,replyTo]);return {id:messageId,state:'pending'};
   });
  }));
  app.post('/v1/forum/topics/:id/signal',async(q,r)=>fail(r,async()=>{
