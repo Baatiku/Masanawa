@@ -66,9 +66,27 @@ describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
    expect((await post(person,null)).json()).toEqual({withdrawn:true});
    await captureCivicAssessmentHistory(pool,tenantId);
    expect((await app.inject({url:'/v1/civic/assessment-history/'+person})).json()).toEqual({measure:'record',points:[]});
-   const cohort=(await pool.query("SELECT user_id FROM identity.users WHERE tenant_id=$1 LIMIT 20",[tenantId])).rows;
-   for(const voter of cohort)await pool.query('INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,4,1)',[tenantId,voter.user_id,person]);
+   const cohort=(await pool.query("SELECT user_id FROM identity.users WHERE tenant_id=$1 ORDER BY user_id LIMIT 20",[tenantId])).rows;
+   // Four votes never produce an early snapshot.
+   for(const [i,voter] of cohort.slice(0,4).entries())await pool.query('INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,$4,1)',[tenantId,voter.user_id,person,i<2?4:2]);
+   await captureCivicAssessmentHistory(pool,tenantId);
+   expect((await pool.query("SELECT 1 FROM agents.civic_early_assessments WHERE tenant_id=$1 AND character_id=$2",[tenantId,person])).rows).toHaveLength(0);
+   await pool.query('INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,4,1)',[tenantId,cohort[4]!.user_id,person]);
+   await captureCivicAssessmentHistory(pool,tenantId);
+   expect((await app.inject({url:'/v1/civic/public-assessments/'+person})).json()).toEqual({kind:'person',published:false,minimum:20,count:null,approval:null});
+   // Move the observation to a completed day to exercise the release boundary.
+   await pool.query("UPDATE agents.civic_early_assessments SET observed_day=observed_day-1 WHERE tenant_id=$1 AND character_id=$2",[tenantId,person]);
+   const early=(await app.inject({url:'/v1/civic/public-assessments/'+person})).json();
+   expect(early).toEqual({kind:'person',published:false,minimum:20,count:null,approval:null,early:{low:50,high:75,asOf:expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)}});
+   expect((await app.inject({url:'/v1/civic/ratings/'+person,headers:{authorization:'Bearer viewer'}})).json()).toMatchObject({early:early.early,average:null,approval:null,count:null});
+   // A single edit cannot alter the already recorded early band.
+   await pool.query('UPDATE agents.civic_ratings SET score=1 WHERE tenant_id=$1 AND character_id=$2',[tenantId,person]);
+   await captureCivicAssessmentHistory(pool,tenantId);
+   expect((await app.inject({url:'/v1/civic/public-assessments/'+person})).json()).toEqual(early);
+   expect((await app.inject({url:'/v1/civic/public-assessments/'+hidden})).statusCode).toBe(404);
+   for(const voter of cohort)await pool.query('INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,4,1) ON CONFLICT(tenant_id,user_id,character_id) DO UPDATE SET score=4',[tenantId,voter.user_id,person]);
    await captureCivicAssessmentHistory(pool,tenantId);await captureCivicAssessmentHistory(pool,tenantId);
+   expect((await app.inject({url:'/v1/civic/public-assessments/'+person})).json()).toEqual({kind:'person',published:true,minimum:20,count:20,approval:100});
    const snapshots=await pool.query("SELECT count(*)::integer AS n FROM agents.civic_assessment_history WHERE tenant_id=$1 AND character_id=$2",[tenantId,person]);
    expect(snapshots.rows[0]!.n).toBe(1);
    await pool.query("UPDATE agents.civic_assessment_history SET day=day-1 WHERE tenant_id=$1 AND character_id=$2",[tenantId,person]);
