@@ -22,17 +22,18 @@ export function publicRatingSummary(histogram:readonly number[]){
  if(count<CIVIC_RATING_MINIMUM)return {published:false,minimum:CIVIC_RATING_MINIMUM,count:null,average:null,approval:null};
  return {published:true,minimum:CIVIC_RATING_MINIMUM,count:Math.floor(count/10)*10,average:Math.round((one+2*two+3*three+4*four+5*five)/count*10)/10,approval:Math.round(((four+five)/count)*20)*5};
 }
-const eligibleSql=`
- SELECT CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
+const eligibleSubjectsSql=`
+ SELECT c.character_id, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>'') THEN 'agency' ELSE 'person' END AS kind
  FROM identity.characters c
  JOIN identity.character_versions v ON v.tenant_id=c.tenant_id AND v.character_version_id=c.active_character_version_id AND v.state='published'
  JOIN identity.character_ownership o ON o.tenant_id=c.tenant_id AND o.character_id=c.character_id AND o.kind='platform'
  JOIN agents.agent_presentations p ON p.tenant_id=c.tenant_id AND p.character_id=c.character_id AND p.character_version_id=c.active_character_version_id AND p.visible_in_user_app
  JOIN masana.character_revisions r ON r.tenant_id=c.tenant_id AND r.character_id=c.character_id AND r.state='approved'
- WHERE c.tenant_id=$1 AND c.character_id=$2 AND c.state='active'
+ WHERE c.tenant_id=$1 AND c.state='active'
  AND (v.constitution ? 'publicOfficial' OR v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>''))`;
+const eligibleSql=`SELECT kind FROM (${eligibleSubjectsSql}) eligible WHERE character_id=$2 ORDER BY kind LIMIT 1`;
 type Query=Pick<Pool,'query'>;
 async function readSummary(db:Query,actor:Actor,id:string){
  const eligible=await db.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
@@ -78,6 +79,31 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
   const actor=await ports.authorize(q.headers.authorization);
   const data=await ports.pool.query('SELECT character_id AS "characterId",score,updated_at AS "updatedAt" FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2 ORDER BY character_id',[actor.tenantId,actor.userId]);
   return {ratings:data.rows};
+ }));
+ // Read-only common rankings, independent of rating values and wallet records.
+ app.get<{Querystring:unknown}>('/v1/civic/engagement/rankings',async(q,r)=>execute(r,async()=>{
+  const query=q.query;
+  if(!validCivicRankingQuery(query))throw new RatingError(400,'invalid_civic_ranking_query');
+  const actor=await ports.authorize(q.headers.authorization);
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '2500ms'");
+   const result=await client.query<{characterId:string;kind:'person'|'agency';count:number}>(`
+    WITH eligible AS (
+     SELECT character_id,CASE WHEN bool_or(kind='agency') THEN 'agency' ELSE 'person' END AS kind
+     FROM (${eligibleSubjectsSql}) subjects GROUP BY character_id
+    )
+    SELECT e.character_id AS "characterId",e.kind,(count(DISTINCT t.user_id)/25*25)::integer AS count
+    FROM eligible e
+    JOIN agents.mobile_turn_commands t ON t.tenant_id=$1 AND t.character_id=e.character_id
+    JOIN agents.civic_engagement_consents c ON c.tenant_id=t.tenant_id AND c.user_id=t.user_id AND t.created_at>=c.consented_at
+    JOIN identity.users u ON u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active'
+    WHERE t.state='completed' AND t.updated_at>=clock_timestamp()-make_interval(days => $2::integer)
+    AND ($3='all' OR e.kind=$3)
+    GROUP BY e.character_id,e.kind
+    HAVING count(DISTINCT t.user_id)>=50
+    ORDER BY count DESC,e.character_id ASC LIMIT 50`,[actor.tenantId,Number(query.days),query.kind]);
+   return {days:Number(query.days),kind:query.kind,minimum:CIVIC_REACH_MINIMUM,rankings:rankCivicReach(result.rows)};
+  });
  }));
  // Participation is a separate, account-wide opt-in. Never join to rating scores,
  // expose individual political interests, or use reach as payment eligibility.
@@ -129,4 +155,23 @@ export function validEngagementConsent(value:unknown):value is {consented:boolea
  const p=value as Record<string,unknown>;
  if(Object.keys(p).some(k=>k!=='consented'&&k!=='consentVersion'))return false;
  return p.consented===true?p.consentVersion===1:p.consented===false&&p.consentVersion===undefined;
+}
+
+export function validCivicRankingQuery(value:unknown):value is {days:'7'|'30';kind:'all'|'person'|'agency'}{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const q=value as Record<string,unknown>;
+ return Object.keys(q).length===2&&(q.days==='7'||q.days==='30')&&(q.kind==='all'||q.kind==='person'||q.kind==='agency');
+}
+type CivicReachRow={characterId:string;kind:'person'|'agency';count:number};
+/** Equal public buckets share a rank; never reveal raw counts or use them as tie breakers. */
+export function rankCivicReach(rows:readonly CivicReachRow[]){
+ const valid=rows.filter(row=>idPattern.test(row.characterId)&&(row.kind==='person'||row.kind==='agency')&&Number.isSafeInteger(row.count)&&row.count>=CIVIC_REACH_MINIMUM&&row.count%25===0);
+ const unique=new Map<string,CivicReachRow>();
+ for(const row of valid)if(!unique.has(row.characterId))unique.set(row.characterId,row);
+ const sorted=[...unique.values()].sort((a,b)=>b.count-a.count||a.characterId.localeCompare(b.characterId)).slice(0,50);
+ let rank=0;
+ return sorted.map((row,i)=>{
+  if(i===0||row.count!==sorted[i-1]?.count)rank=i+1;
+  return {characterId:row.characterId,kind:row.kind,count:row.count,rank};
+ });
 }
