@@ -14,6 +14,13 @@ class ShellDeepLinksTest {
         assertEquals("https://app.chatmeup.online/?tab=home", ShellDeepLinks.route("masanawa://home"))
     }
 
+    @Test fun forumNoticesHaveOnlyTheScopedNavigationRoute() {
+        assertEquals("https://app.chatmeup.online/?tab=forum", ShellDeepLinks.route("masanawa://forum"))
+        assertNull(ShellDeepLinks.route("masanawa://forum?account=other"))
+        assertNull(ShellDeepLinks.route("masanawa://forum/anything"))
+        assertNull(ShellDeepLinks.route("masanawa://rooms"))
+    }
+
     @Test fun oldAppLinksResolveWithoutGrantingOldOriginTrust() {
         assertEquals("https://app.chatmeup.online/?tab=calls", ShellDeepLinks.route("https://app.masanawa.com/?tab=calls"))
         assertFalse(WebOriginPolicy.isTrusted("https://app.masanawa.com/"))
