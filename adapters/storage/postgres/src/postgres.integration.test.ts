@@ -251,6 +251,7 @@ describePostgres("PostgreSQL 18 foundation integration", () => {
       "security/0133_civic_response_centre.sql",
       "security/0134_civic_response_verified_directory.sql",
       "security/0135_civic_response_public_feed.sql",
+      "security/0136_customer_gemini_credentials.sql",
       "world/0001_world_foundation.sql",
       "world/0002_world_canon.sql",
       "world/0003_world_routines_story_arcs.sql",
