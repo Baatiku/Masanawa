@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import {afterAll,beforeAll,it,expect,describe} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
 import {createPostgresPool,runMigrations,platformProductMigrationRoots,type Pool} from '@masanawa/postgres';
-import {registerCivicRatingRoutes} from './civic_rating_routes.js';
+import {registerCivicRatingRoutes,captureCivicAssessmentHistory} from './civic_rating_routes.js';
 const url=process.env.MASANAWA_TEST_DATABASE_URL;
 describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
  let pool:Pool;
@@ -58,6 +58,16 @@ describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
    expect(guestConfidence.statusCode).toBe(200);expect(guestConfidence.json().published).toBe(false);
    expect(guestConfidence.json()).not.toHaveProperty('myRating');
    expect((await post(person,null)).json()).toEqual({withdrawn:true});
+   await captureCivicAssessmentHistory(pool,tenantId);
+   expect((await app.inject({url:'/v1/civic/assessment-history/'+person})).json()).toEqual({measure:'record',points:[]});
+   const cohort=(await pool.query("SELECT user_id FROM identity.users WHERE tenant_id=$1 LIMIT 20",[tenantId])).rows;
+   for(const voter of cohort)await pool.query('INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,4,1)',[tenantId,voter.user_id,person]);
+   await captureCivicAssessmentHistory(pool,tenantId);await captureCivicAssessmentHistory(pool,tenantId);
+   const snapshots=await pool.query("SELECT count(*)::integer AS n FROM agents.civic_assessment_history WHERE tenant_id=$1 AND character_id=$2",[tenantId,person]);
+   expect(snapshots.rows[0]!.n).toBe(1);
+   await pool.query("UPDATE agents.civic_assessment_history SET day=day-1 WHERE tenant_id=$1 AND character_id=$2",[tenantId,person]);
+   const history=await app.inject({url:'/v1/civic/assessment-history/'+person});expect(history.statusCode).toBe(200);
+   expect(history.json().points).toEqual([{date:expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),count:20,approval:100}]);
    const month=await get('30','all');expect(month.statusCode).toBe(200);expect(month.json().rankings).toEqual([{characterId:person,kind:'person',count:75,rank:1},{characterId:agency,kind:'agency',count:50,rank:2}]);
    const week=await get('7','all');expect(week.statusCode).toBe(200);expect(week.json().rankings).toEqual([{characterId:person,kind:'person',count:75,rank:1}]);
    expect((await get('30','agency')).json().rankings).toEqual([{characterId:agency,kind:'agency',count:50,rank:1}]);

@@ -51,13 +51,17 @@ function publicDirectoryId(personId:string|null,agencyId:string|null):string|nul
  const name=CIVIC_AGENCY_CATALOG.find(seed=>seed.id===agencyId)?.name;
  return CIVIC_INSTITUTION_SEEDS.find(seed=>seed.name===name)?.id??null;
 }
-async function readPublicSummary(db:Query,tenant:string,subject:string,confidence=false){
+async function publicSubject(db:Query,tenant:string,subject:string){
  const matches=await db.query<{character_id:string;kind:'person'|'agency'}>(`
  SELECT DISTINCT character_id,kind FROM (${eligibleSubjectsSql}) eligible
  WHERE character_id=$2 OR person_id=$2 OR agency_id=$2 OR agency_id=$3
  LIMIT 2`,[tenant,subject,agencyAlias(subject)]);
  if(matches.rows.length!==1)throw new RatingError(404,'civic_rating_subject_unavailable');
  const row=matches.rows[0]!;
+ return row;
+}
+async function readPublicSummary(db:Query,tenant:string,subject:string,confidence=false){
+ const row=await publicSubject(db,tenant,subject);
  if(confidence&&row.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
  const result=await db.query<{score:number;count:number}>(`
  SELECT x.score,count(*)::integer AS count FROM ${confidence?'agents.civic_leadership_confidence':'agents.civic_ratings'} x
@@ -84,6 +88,34 @@ async function readConfidence(db:Query,actor:Actor,id:string){
  const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
  const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
  return {kind:'person',myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
+}
+/** Daily public snapshots: no individual IDs, raw scores or inferred past results. */
+export async function captureCivicAssessmentHistory(pool:Pool,tenant:string){
+ return withTransaction(pool,async client=>{
+  await client.query("SET LOCAL statement_timeout = '5000ms'");
+  await client.query(`
+   WITH eligible AS (
+    SELECT character_id,CASE WHEN bool_or(kind='agency') THEN 'agency' ELSE 'person' END AS kind
+    FROM (${eligibleSubjectsSql}) candidates GROUP BY character_id
+   ), combined AS (
+    SELECT x.character_id,'record' AS measure,x.score FROM agents.civic_ratings x
+     JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+     WHERE x.tenant_id=$1
+    UNION ALL
+    SELECT x.character_id,'confidence' AS measure,x.score FROM agents.civic_leadership_confidence x
+     JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+     WHERE x.tenant_id=$1
+   )
+   INSERT INTO agents.civic_assessment_history(tenant_id,character_id,measure,day,count_bucket,positive_percent)
+   SELECT $1,x.character_id,x.measure,(clock_timestamp() AT TIME ZONE 'UTC')::date,
+    (count(*)/10*10)::integer,(round(count(*) FILTER(WHERE x.score>=4)::numeric/count(*)*20)*5)::integer
+   FROM combined x JOIN eligible e ON e.character_id=x.character_id
+   WHERE x.measure='record' OR e.kind='person'
+   GROUP BY x.character_id,x.measure HAVING count(*) >= $2
+   ON CONFLICT(tenant_id,character_id,measure,day) DO NOTHING
+  `,[tenant,CIVIC_RATING_MINIMUM]);
+  await client.query("DELETE FROM agents.civic_assessment_history WHERE tenant_id=$1 AND day < (clock_timestamp() AT TIME ZONE 'UTC')::date - 365",[tenant]);
+ });
 }
 export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingPorts){
  const execute=async(reply:{header:(k:string,v:string)=>unknown;code:(n:number)=>unknown},work:()=>Promise<unknown>)=>{
@@ -126,6 +158,24 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
   return withTransaction(ports.pool,async client=>{
    await client.query("SET LOCAL statement_timeout = '1500ms'");
    return readPublicSummary(client,ports.publicTenantId!,q.params.id);
+  });
+ }));
+ // Historical public aggregates use fixed daily buckets and a bounded 90-day window.
+ app.get<{Params:{id:string};Querystring:{measure?:string}}>('/v1/civic/assessment-history/:id',async(q,r)=>execute(r,async()=>{
+  const measure=q.query.measure??'record';
+  if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id)||!['record','confidence'].includes(measure)||Object.keys(q.query).some(k=>k!=='measure'))throw new RatingError(400,'invalid_assessment_history');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '1500ms'");
+   const subject=await publicSubject(client,ports.publicTenantId!,q.params.id);
+   if(measure==='confidence'&&subject.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+   const result=await client.query<{date:string;count:number;approval:number}>(`
+    SELECT to_char(day,'YYYY-MM-DD') AS date,count_bucket AS count,positive_percent AS approval
+    FROM agents.civic_assessment_history
+    WHERE tenant_id=$1 AND character_id=$2 AND measure=$3
+     AND day >= (clock_timestamp() AT TIME ZONE 'UTC')::date - 90
+     AND day < (clock_timestamp() AT TIME ZONE 'UTC')::date
+    ORDER BY day ASC LIMIT 90`,[ports.publicTenantId!,subject.character_id,measure]);
+   return {measure,points:result.rows};
   });
  }));
  // Leadership confidence is an independent question, never a conversion of legacy scores.
