@@ -1,8 +1,10 @@
 import type {FastifyInstance} from 'fastify';
 import {withTransaction,type Pool} from '@masanawa/postgres';
+import {CIVIC_AGENCY_CATALOG} from './civic_agency_bootstrap.js';
+import {CIVIC_INSTITUTION_SEEDS} from './civic_institution_seeds.js';
 
 type Actor={tenantId:string;userId:string};
-export type CivicRatingPorts={pool:Pool;authorize:(authorization:string|undefined)=>Promise<Actor>;beforeWrite:(authorization:string|undefined)=>Promise<unknown>};
+export type CivicRatingPorts={pool:Pool;publicTenantId?:string;authorize:(authorization:string|undefined)=>Promise<Actor>;beforeWrite:(authorization:string|undefined)=>Promise<unknown>};
 export const CIVIC_RATING_MINIMUM=20;
 export const CIVIC_RATING_CONSENT=1;
 const idPattern=/^character_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,7 +25,7 @@ export function publicRatingSummary(histogram:readonly number[]){
  return {published:true,minimum:CIVIC_RATING_MINIMUM,count:Math.floor(count/10)*10,average:Math.round((one+2*two+3*three+4*four+5*five)/count*10)/10,approval:Math.round(((four+five)/count)*20)*5};
 }
 const eligibleSubjectsSql=`
- SELECT c.character_id, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
+ SELECT c.character_id, v.constitution->'disclosurePolicy'->>'civicPersonId' AS person_id, v.constitution->'disclosurePolicy'->>'civicAgencyId' AS agency_id, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>'') THEN 'agency' ELSE 'person' END AS kind
  FROM identity.characters c
  JOIN identity.character_versions v ON v.tenant_id=c.tenant_id AND v.character_version_id=c.active_character_version_id AND v.state='published'
@@ -35,6 +37,30 @@ const eligibleSubjectsSql=`
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>''))`;
 const eligibleSql=`SELECT kind FROM (${eligibleSubjectsSql}) eligible WHERE character_id=$2 ORDER BY kind LIMIT 1`;
 type Query=Pick<Pool,'query'>;
+export function publicAssessmentSubject(value:string):boolean{
+ return idPattern.test(value)||/^(?:person|org)-[a-z0-9-]{1,140}$/.test(value);
+}
+function agencyAlias(id:string):string{
+ const name=CIVIC_INSTITUTION_SEEDS.find(seed=>seed.id===id)?.name;
+ return (name&&CIVIC_AGENCY_CATALOG.find(seed=>seed.name===name)?.id)||id;
+}
+async function readPublicSummary(db:Query,tenant:string,subject:string){
+ const matches=await db.query<{character_id:string;kind:'person'|'agency'}>(`
+ SELECT DISTINCT character_id,kind FROM (${eligibleSubjectsSql}) eligible
+ WHERE character_id=$2 OR person_id=$2 OR agency_id=$2 OR agency_id=$3
+ LIMIT 2`,[tenant,subject,agencyAlias(subject)]);
+ if(matches.rows.length!==1)throw new RatingError(404,'civic_rating_subject_unavailable');
+ const row=matches.rows[0]!;
+ const result=await db.query<{score:number;count:number}>(`
+ SELECT x.score,count(*)::integer AS count FROM agents.civic_ratings x
+ JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+ WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[tenant,row.character_id]);
+ const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
+ const {published,minimum,count,approval}=publicRatingSummary(histogram);
+ // Never expose account identity, personal rating, precise score mean or raw histogram.
+ return {kind:row.kind,published,minimum,count,approval};
+}
+
 async function readSummary(db:Query,actor:Actor,id:string){
  const eligible=await db.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
  if(!eligible.rows[0])throw new RatingError(404,'civic_rating_subject_unavailable');
@@ -51,6 +77,14 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
    return {error:error instanceof RatingError?error.code:'civic_ratings_unavailable'};
   }
  };
+ // Public, read-only results use the configured platform tenant, never caller-selected scope.
+ app.get<{Params:{id:string}}>('/v1/civic/public-assessments/:id',async(q,r)=>execute(r,async()=>{
+  if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id))throw new RatingError(404,'civic_rating_subject_unavailable');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '1500ms'");
+   return readPublicSummary(client,ports.publicTenantId!,q.params.id);
+  });
+ }));
  app.get<{Params:{id:string}}>('/v1/civic/ratings/:id',async(q,r)=>execute(r,async()=>{
   if(!idPattern.test(q.params.id))throw new RatingError(400,'invalid_rating_subject');
   const actor=await ports.authorize(q.headers.authorization);

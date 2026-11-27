@@ -38,9 +38,16 @@ describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
  afterAll(async()=>{await pool?.end();});
  it('returns distinct consenting accounts only, filters hidden guides and respects fixed windows and tenant scope',async()=>{
   const app=Fastify({logger:false});
-  registerCivicRatingRoutes(app,{pool,authorize:async header=>({tenantId:header==='Bearer other'?otherTenant:tenantId,userId:viewer}),beforeWrite:async()=>{}});
+  registerCivicRatingRoutes(app,{pool,publicTenantId:tenantId,authorize:async header=>({tenantId:header==='Bearer other'?otherTenant:tenantId,userId:viewer}),beforeWrite:async()=>{}});
   try{
    const get=async(days:string,kind:string,authorization='Bearer viewer')=>app.inject({url:'/v1/civic/engagement/rankings?days='+days+'&kind='+kind,headers:{authorization}});
+   const publicResult=await app.inject({url:'/v1/civic/public-assessments/'+person});
+   expect(publicResult.statusCode).toBe(200);
+   expect(publicResult.json()).toEqual({kind:'person',published:false,minimum:20,count:null,approval:null});
+   expect((await app.inject({url:'/v1/civic/public-assessments/'+hidden})).statusCode).toBe(404);
+   expect((await app.inject({url:'/v1/civic/public-assessments/not-a-subject'})).statusCode).toBe(404);
+   const publicWithAuth=await app.inject({url:'/v1/civic/public-assessments/'+person,headers:{authorization:'Bearer other'}});
+   expect(publicWithAuth.json()).toEqual(publicResult.json());
    const month=await get('30','all');expect(month.statusCode).toBe(200);expect(month.json().rankings).toEqual([{characterId:person,kind:'person',count:75,rank:1},{characterId:agency,kind:'agency',count:50,rank:2}]);
    const week=await get('7','all');expect(week.statusCode).toBe(200);expect(week.json().rankings).toEqual([{characterId:person,kind:'person',count:75,rank:1}]);
    expect((await get('30','agency')).json().rankings).toEqual([{characterId:agency,kind:'agency',count:50,rank:1}]);

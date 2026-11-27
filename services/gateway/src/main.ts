@@ -2327,7 +2327,7 @@ export async function startGatewayService(
       ...(ngnWallet ? { ngnWallet } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
-      ...(featurePool&&sessions&&featureTenant&&customerAuth?{civicRatings:{pool:featurePool,authorize:resolveFeatureFan,beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}}:{}),
+      ...(featurePool&&sessions&&featureTenant&&customerAuth?{civicRatings:{pool:featurePool,publicTenantId:featureTenant,authorize:resolveFeatureFan,beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}}:{}),
       ...(featurePool&&sessions&&featureTenant?{civicResponse:{
         repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,
         ...(mediaConfiguration?.objects.putObject?{bulletinStore:createIncidentBulletinStore(mediaConfiguration)!}:{}),
