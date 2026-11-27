@@ -65,7 +65,42 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   const v=q.query as {room?:string;sort?:string;offset?:string;query?:string};const room=v.room||null;if(room&&!FORUM_ROOMS.some(x=>x.id===room))throw new ForumError(400,'invalid_room');
   const offset=Number(v.offset||0);if(!Number.isInteger(offset)||offset<0||offset>10000||typeof v.query==='string'&&v.query.length>100)throw new ForumError(400,'invalid_query');
   const order=v.sort==='trending'?'participants DESC,replies DESC,t.created_at DESC,t.id DESC':'t.created_at DESC,t.id DESC';
-  const result=await db.query(`SELECT ${publicFields},${counts} FROM agents.forum_topics t WHERE ${visible} AND NOT t.system_channel AND ($2::text IS NULL OR t.room=$2) AND ($3::text IS NULL OR strpos(lower(t.title),lower($3))>0) ORDER BY ${order} LIMIT 31 OFFSET $4`,[tenant,room,v.query||null,offset]);return {topics:result.rows.slice(0,30),nextOffset:result.rows.length>30?offset+30:null};
+  const result=await db.query(`SELECT ${publicFields},${counts} FROM agents.forum_topics t WHERE ${visible} AND ($2::text IS NULL OR t.room=$2) AND (($3::text IS NULL AND NOT t.system_channel) OR ($3::text IS NOT NULL AND ((NOT t.system_channel AND (strpos(lower(t.title),lower($3))>0 OR strpos(lower(t.body),lower($3))>0)) OR EXISTS(SELECT 1 FROM agents.forum_messages m JOIN identity.users u ON u.tenant_id=m.tenant_id AND u.user_id=m.user_id AND u.state='active' WHERE m.tenant_id=t.tenant_id AND m.topic_id=t.id AND m.state='published' AND strpos(lower(m.body),lower($3))>0)))) ORDER BY ${order} LIMIT 31 OFFSET $4`,[tenant,room,v.query||null,offset]);return {topics:result.rows.slice(0,30),nextOffset:result.rows.length>30?offset+30:null};
+ }));
+ app.get('/v1/forum/community',async(q,r)=>fail(r,async()=>{
+  const room=(q.query as {room?:unknown}).room;
+  if(room!==undefined&&(typeof room!=='string'||!FORUM_ROOMS.some(x=>x.id===room)))throw new ForumError(400,'invalid_room');
+  const values=[tenant,room??null];
+  const pinned=(await db.query(`SELECT ${publicFields},p.pinned_at FROM agents.forum_topic_pins p JOIN agents.forum_topics t ON t.tenant_id=p.tenant_id AND t.id=p.topic_id WHERE ${visible} AND NOT t.system_channel AND ($2::text IS NULL OR t.room=$2) ORDER BY p.pinned_at DESC LIMIT 50`,values)).rows;
+  const polls=(await db.query(`SELECT p.id,p.topic_id,t.room,p.question,p.options,p.closes_at,(p.closed OR p.closes_at<=clock_timestamp()) AS closed,CASE WHEN count(u.user_id)>=5 THEN count(u.user_id)::int ELSE NULL END AS total,CASE WHEN count(u.user_id)>=5 THEN ARRAY(SELECT count(v2.user_id)::int FROM generate_subscripts(p.options,1) i LEFT JOIN (agents.forum_poll_votes v2 JOIN identity.users u2 ON u2.tenant_id=v2.tenant_id AND u2.user_id=v2.user_id AND u2.state='active') ON v2.tenant_id=p.tenant_id AND v2.poll_id=p.id AND v2.choice=i-1 GROUP BY i ORDER BY i) ELSE NULL END AS counts FROM agents.forum_polls p JOIN agents.forum_topics t ON t.tenant_id=p.tenant_id AND t.id=p.topic_id LEFT JOIN agents.forum_poll_votes v ON v.tenant_id=p.tenant_id AND v.poll_id=p.id LEFT JOIN identity.users u ON u.tenant_id=v.tenant_id AND u.user_id=v.user_id AND u.state='active' WHERE ${visible} AND ($2::text IS NULL OR t.room=$2) GROUP BY p.tenant_id,p.id,t.room ORDER BY p.created_at DESC LIMIT 30`,values)).rows;
+  const complaints=(await db.query(`SELECT t.id,t.room,t.title,t.created_at,COALESCE(c.status,'open') AS status,c.updated_at FROM agents.forum_topics t LEFT JOIN agents.forum_complaint_progress c ON c.tenant_id=t.tenant_id AND c.topic_id=t.id WHERE ${visible} AND t.kind IN ('complaint','concern') AND NOT t.system_channel AND ($2::text IS NULL OR t.room=$2) ORDER BY COALESCE(c.updated_at,t.created_at) DESC LIMIT 100`,values)).rows;
+  const representatives=(await db.query(`SELECT rep.room,count(*)::int AS count FROM agents.forum_representatives rep JOIN identity.users u ON u.tenant_id=rep.tenant_id AND u.user_id=rep.user_id AND u.state='active' WHERE rep.tenant_id=$1 AND rep.active AND ($2::text IS NULL OR rep.room=$2) GROUP BY rep.room`,values)).rows;
+  return {pinned,polls,complaints,representatives};
+ }));
+ app.get('/v1/forum/community/mine',async(q,r)=>fail(r,async()=>{
+  const a=await ports.authorize(q.headers.authorization);if(a.tenantId!==tenant)throw new ForumError(403,'forbidden');
+  const bookmarks=(await db.query('SELECT article_id FROM agents.forum_guide_bookmarks WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 200',[tenant,a.userId])).rows.map(x=>x.article_id);
+  const votes=(await db.query(`SELECT v.poll_id,v.choice FROM agents.forum_poll_votes v JOIN agents.forum_polls p ON p.tenant_id=v.tenant_id AND p.id=v.poll_id JOIN agents.forum_topics t ON t.tenant_id=p.tenant_id AND t.id=p.topic_id WHERE ${visible} AND v.user_id=$2 ORDER BY v.updated_at DESC LIMIT 200`,[tenant,a.userId])).rows;
+  return {bookmarks,votes};
+ }));
+ app.post('/v1/forum/community/bookmark',async(q,r)=>fail(r,async()=>{
+  const a=await actor(q.headers.authorization),b=q.body as {articleId?:unknown;enabled?:unknown}|null;
+  if(!b||typeof b.articleId!=='string'||!/^[a-z0-9-]{1,64}$/.test(b.articleId)||typeof b.enabled!=='boolean')throw new ForumError(400,'invalid_bookmark');
+  return withTransaction(db,async c=>{await budget(c,a);if(b.enabled){
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",['forum-bookmarks:'+tenant+':'+a.userId]);
+   const n=await c.query('SELECT count(*)::int AS n FROM agents.forum_guide_bookmarks WHERE tenant_id=$1 AND user_id=$2',[tenant,a.userId]);
+   if(Number(n.rows[0]?.n)>=200&&!(await c.query('SELECT article_id FROM agents.forum_guide_bookmarks WHERE tenant_id=$1 AND user_id=$2 AND article_id=$3',[tenant,a.userId,b.articleId])).rows.length)throw new ForumError(409,'bookmark_limit');
+   await c.query('INSERT INTO agents.forum_guide_bookmarks(tenant_id,user_id,article_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[tenant,a.userId,b.articleId]);
+  }else await c.query('DELETE FROM agents.forum_guide_bookmarks WHERE tenant_id=$1 AND user_id=$2 AND article_id=$3',[tenant,a.userId,b.articleId]);return {ok:true};});
+ }));
+ app.post('/v1/forum/community/vote',async(q,r)=>fail(r,async()=>{
+  const a=await actor(q.headers.authorization),b=q.body as {pollId?:unknown;choice?:unknown}|null;
+  if(!b||typeof b.pollId!=='string'||!uuid.test(b.pollId)||typeof b.choice!=='number'||!Number.isInteger(b.choice)||b.choice<0||b.choice>5)throw new ForumError(400,'invalid_vote');
+  return withTransaction(db,async c=>{await budget(c,a);
+   const p=(await c.query(`SELECT p.id,p.options FROM agents.forum_polls p JOIN agents.forum_topics t ON t.tenant_id=p.tenant_id AND t.id=p.topic_id WHERE ${visible} AND p.id=$2 AND NOT p.closed AND p.closes_at>clock_timestamp() FOR SHARE OF p,t`,[tenant,b.pollId])).rows[0];
+   if(!p)throw new ForumError(409,'poll_closed');if(Number(b.choice)>=p.options.length)throw new ForumError(400,'invalid_vote');
+   await c.query('INSERT INTO agents.forum_poll_votes(tenant_id,poll_id,user_id,choice) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,poll_id,user_id) DO UPDATE SET choice=excluded.choice,updated_at=clock_timestamp()',[tenant,b.pollId,a.userId,b.choice]);return {ok:true};
+  });
  }));
  app.get('/v1/forum/topics/:id',async(q,r)=>fail(r,async()=>{
   const {id}=q.params as {id:string};if(!uuid.test(id))throw new ForumError(400,'invalid_topic');
