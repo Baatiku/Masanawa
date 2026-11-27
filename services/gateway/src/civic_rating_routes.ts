@@ -1,8 +1,11 @@
 import type {FastifyInstance} from 'fastify';
 import {withTransaction,type Pool} from '@masanawa/postgres';
+import {CIVIC_AGENCY_CATALOG} from './civic_agency_bootstrap.js';
+import {CIVIC_INSTITUTION_SEEDS} from './civic_institution_seeds.js';
+import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
 
 type Actor={tenantId:string;userId:string};
-export type CivicRatingPorts={pool:Pool;authorize:(authorization:string|undefined)=>Promise<Actor>;beforeWrite:(authorization:string|undefined)=>Promise<unknown>};
+export type CivicRatingPorts={pool:Pool;publicTenantId?:string;authorize:(authorization:string|undefined)=>Promise<Actor>;beforeWrite:(authorization:string|undefined)=>Promise<unknown>};
 export const CIVIC_RATING_MINIMUM=20;
 export const CIVIC_RATING_CONSENT=1;
 const idPattern=/^character_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,7 +26,7 @@ export function publicRatingSummary(histogram:readonly number[]){
  return {published:true,minimum:CIVIC_RATING_MINIMUM,count:Math.floor(count/10)*10,average:Math.round((one+2*two+3*three+4*four+5*five)/count*10)/10,approval:Math.round(((four+five)/count)*20)*5};
 }
 const eligibleSubjectsSql=`
- SELECT c.character_id, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
+ SELECT c.character_id, v.constitution->'disclosurePolicy'->>'civicPersonId' AS person_id, v.constitution->'disclosurePolicy'->>'civicAgencyId' AS agency_id, v.constitution->'publicOfficial'->>'officialName' AS official_name, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>'') THEN 'agency' ELSE 'person' END AS kind
  FROM identity.characters c
  JOIN identity.character_versions v ON v.tenant_id=c.tenant_id AND v.character_version_id=c.active_character_version_id AND v.state='published'
@@ -35,6 +38,64 @@ const eligibleSubjectsSql=`
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>''))`;
 const eligibleSql=`SELECT kind FROM (${eligibleSubjectsSql}) eligible WHERE character_id=$2 ORDER BY kind LIMIT 1`;
 type Query=Pick<Pool,'query'>;
+/** Durable per-account write budget, shared across both questions. Removals are exempt. */
+export async function consumeAssessmentWrite(db:Query,actor:Actor){
+ const result=await db.query(`
+ INSERT INTO agents.civic_assessment_write_budget(tenant_id,user_id,hour_start,attempts)
+ VALUES($1,$2,date_trunc('hour',clock_timestamp()),1)
+ ON CONFLICT(tenant_id,user_id) DO UPDATE SET
+ hour_start=EXCLUDED.hour_start,
+ attempts=CASE WHEN civic_assessment_write_budget.hour_start=EXCLUDED.hour_start
+ THEN civic_assessment_write_budget.attempts+1 ELSE 1 END
+ WHERE civic_assessment_write_budget.hour_start<>EXCLUDED.hour_start OR civic_assessment_write_budget.attempts<120
+ RETURNING attempts`,[actor.tenantId,actor.userId]);
+ if(!result.rows.length)throw new RatingError(429,'civic_assessment_rate_limit');
+}
+
+export function publicAssessmentSubject(value:string):boolean{
+ return idPattern.test(value)||/^(?:person|org)-[a-z0-9-]{1,140}$/.test(value);
+}
+function agencyAlias(id:string):string{
+ const name=CIVIC_INSTITUTION_SEEDS.find(seed=>seed.id===id)?.name;
+ return (name&&CIVIC_AGENCY_CATALOG.find(seed=>seed.name===name)?.id)||id;
+}
+// Fixed, reviewed national leadership bindings; never match by display name alone.
+const legacyProfileNames:Readonly<Record<string,string>>=Object.freeze({"person-bola-ahmed-tinubu":"Bola Ahmed Tinubu","person-kashim-shettima":"Kashim Shettima","person-godswill-akpabio":"Godswill Akpabio","person-tajudeen-abbas":"Tajudeen Abbas","person-kudirat-kekere-ekun":"Kudirat Kekere-Ekun","person-george-akume":"George Akume","person-nuhu-ribadu":"Nuhu Ribadu","person-olayemi-cardoso":"Olayemi Cardoso","person-taiwo-oyedele":"Taiwo Oyedele","person-nyesom-wike":"Nyesom Wike","person-chinda-kingsley-ogundu-rivers-house":"Chinda Kingsley Ogundu"});
+function legacyProfile(id:string){
+ const name=legacyProfileNames[id];if(!name)return null;
+ const matches=OFFICIAL_ROSTER_MANIFEST.filter(r=>r.officialName===name);
+ return matches.length===1?{name,characterId:matches[0]!.characterId}:null;
+}
+function publicDirectoryId(personId:string|null,agencyId:string|null):string|null{
+ if(personId&&/^person-[a-z0-9-]{1,140}$/.test(personId))return personId;
+ if(!agencyId)return null;
+ if(/^org-[a-z0-9-]{1,140}$/.test(agencyId))return agencyId;
+ const name=CIVIC_AGENCY_CATALOG.find(seed=>seed.id===agencyId)?.name;
+ return CIVIC_INSTITUTION_SEEDS.find(seed=>seed.name===name)?.id??null;
+}
+async function publicSubject(db:Query,tenant:string,subject:string){
+ const legacy=legacyProfile(subject);
+ const matches=await db.query<{character_id:string;kind:'person'|'agency'}>(`
+ SELECT DISTINCT character_id,kind FROM (${eligibleSubjectsSql}) eligible
+ WHERE character_id=$2 OR person_id=$2 OR agency_id=$2 OR agency_id=$3 OR (character_id=$4 AND official_name=$5 AND kind='person')
+ LIMIT 2`,[tenant,subject,agencyAlias(subject),legacy?.characterId??null,legacy?.name??null]);
+ if(matches.rows.length!==1)throw new RatingError(404,'civic_rating_subject_unavailable');
+ const row=matches.rows[0]!;
+ return row;
+}
+async function readPublicSummary(db:Query,tenant:string,subject:string,confidence=false){
+ const row=await publicSubject(db,tenant,subject);
+ if(confidence&&row.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+ const result=await db.query<{score:number;count:number}>(`
+ SELECT x.score,count(*)::integer AS count FROM ${confidence?'agents.civic_leadership_confidence':'agents.civic_ratings'} x
+ JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+ WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[tenant,row.character_id]);
+ const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
+ const {published,minimum,count,approval}=publicRatingSummary(histogram);
+ // Never expose account identity, personal rating, precise score mean or raw histogram.
+ return {kind:row.kind,published,minimum,count,approval};
+}
+
 async function readSummary(db:Query,actor:Actor,id:string){
  const eligible=await db.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
  if(!eligible.rows[0])throw new RatingError(404,'civic_rating_subject_unavailable');
@@ -42,6 +103,42 @@ async function readSummary(db:Query,actor:Actor,id:string){
  const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
  const histogram=[0,0,0,0,0];for(const r of result.rows){histogram[r.score-1]=r.count;}
  return {kind:eligible.rows[0].kind,myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
+}
+async function readConfidence(db:Query,actor:Actor,id:string){
+ const eligible=await db.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
+ if(eligible.rows[0]?.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+ const result=await db.query<{score:number;count:number}>(`SELECT x.score,count(*)::integer AS count FROM agents.civic_leadership_confidence x JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active' WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[actor.tenantId,id]);
+ const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
+ const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
+ return {kind:'person',myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
+}
+/** Daily public snapshots: no individual IDs, raw scores or inferred past results. */
+export async function captureCivicAssessmentHistory(pool:Pool,tenant:string){
+ return withTransaction(pool,async client=>{
+  await client.query("SET LOCAL statement_timeout = '5000ms'");
+  await client.query(`
+   WITH eligible AS (
+    SELECT character_id,CASE WHEN bool_or(kind='agency') THEN 'agency' ELSE 'person' END AS kind
+    FROM (${eligibleSubjectsSql}) candidates GROUP BY character_id
+   ), combined AS (
+    SELECT x.character_id,'record' AS measure,x.score FROM agents.civic_ratings x
+     JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+     WHERE x.tenant_id=$1
+    UNION ALL
+    SELECT x.character_id,'confidence' AS measure,x.score FROM agents.civic_leadership_confidence x
+     JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+     WHERE x.tenant_id=$1
+   )
+   INSERT INTO agents.civic_assessment_history(tenant_id,character_id,measure,day,count_bucket,positive_percent)
+   SELECT $1,x.character_id,x.measure,(clock_timestamp() AT TIME ZONE 'UTC')::date,
+    (count(*)/10*10)::integer,(round(count(*) FILTER(WHERE x.score>=4)::numeric/count(*)*20)*5)::integer
+   FROM combined x JOIN eligible e ON e.character_id=x.character_id
+   WHERE x.measure='record' OR e.kind='person'
+   GROUP BY x.character_id,x.measure HAVING count(*) >= $2
+   ON CONFLICT(tenant_id,character_id,measure,day) DO NOTHING
+  `,[tenant,CIVIC_RATING_MINIMUM]);
+  await client.query("DELETE FROM agents.civic_assessment_history WHERE tenant_id=$1 AND day < (clock_timestamp() AT TIME ZONE 'UTC')::date - 365",[tenant]);
+ });
 }
 export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingPorts){
  const execute=async(reply:{header:(k:string,v:string)=>unknown;code:(n:number)=>unknown},work:()=>Promise<unknown>)=>{
@@ -51,6 +148,92 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
    return {error:error instanceof RatingError?error.code:'civic_ratings_unavailable'};
   }
  };
+ // Public volume dashboard, not a political preference leaderboard.
+ app.get<{Querystring:unknown}>('/v1/civic/public-assessments',async(q,r)=>execute(r,async()=>{
+  const query=q.query as Record<string,unknown>;
+  if(!ports.publicTenantId||Object.keys(query).length!==1||!['all','person','agency'].includes(String(query.kind)))throw new RatingError(400,'invalid_assessment_filter');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '2500ms'");
+   const rows=await client.query<{character_id:string;person_id:string|null;agency_id:string|null;kind:'person'|'agency';count:number;positive:number}>(`
+    WITH eligible AS (SELECT DISTINCT character_id,person_id,agency_id,kind FROM (${eligibleSubjectsSql}) candidates),
+    counts AS (
+     SELECT x.character_id,count(*)::integer AS count,count(*) FILTER (WHERE x.score>=4)::integer AS positive
+     FROM agents.civic_ratings x JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+     WHERE x.tenant_id=$1 GROUP BY x.character_id HAVING count(*) >= $3
+    )
+    SELECT e.character_id,e.person_id,e.agency_id,e.kind,c.count,c.positive
+    FROM eligible e JOIN counts c ON c.character_id=e.character_id
+    WHERE ($2='all' OR e.kind=$2) AND (e.person_id IS NOT NULL OR e.agency_id IS NOT NULL)
+    ORDER BY (c.count/10) DESC,e.character_id ASC LIMIT 100`,[ports.publicTenantId,query.kind,CIVIC_RATING_MINIMUM]);
+   const byId=new Map<string,{id:string;kind:'person'|'agency';count:number;approval:number}>();
+   const ambiguous=new Set<string>();
+   for(const row of rows.rows){
+    const id=publicDirectoryId(row.person_id,row.agency_id);if(!id||ambiguous.has(id))continue;
+    if(byId.has(id)){byId.delete(id);ambiguous.add(id);continue;}
+    byId.set(id,{id,kind:row.kind,count:Math.floor(row.count/10)*10,approval:Math.round(row.positive/row.count*20)*5});
+   }
+   return {kind:query.kind,minimum:CIVIC_RATING_MINIMUM,items:[...byId.values()].sort((a,b)=>b.count-a.count||a.id.localeCompare(b.id)).slice(0,50)};
+  });
+ }));
+ // Public, read-only results use the configured platform tenant, never caller-selected scope.
+ app.get<{Params:{id:string}}>('/v1/civic/public-assessments/:id',async(q,r)=>execute(r,async()=>{
+  if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id))throw new RatingError(404,'civic_rating_subject_unavailable');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '1500ms'");
+   return readPublicSummary(client,ports.publicTenantId!,q.params.id);
+  });
+ }));
+ // Historical public aggregates use fixed daily buckets and a bounded 90-day window.
+ app.get<{Params:{id:string};Querystring:{measure?:string}}>('/v1/civic/assessment-history/:id',async(q,r)=>execute(r,async()=>{
+  const measure=q.query.measure??'record';
+  if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id)||!['record','confidence'].includes(measure)||Object.keys(q.query).some(k=>k!=='measure'))throw new RatingError(400,'invalid_assessment_history');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '1500ms'");
+   const subject=await publicSubject(client,ports.publicTenantId!,q.params.id);
+   if(measure==='confidence'&&subject.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+   const result=await client.query<{date:string;count:number;approval:number}>(`
+    SELECT to_char(day,'YYYY-MM-DD') AS date,count_bucket AS count,positive_percent AS approval
+    FROM agents.civic_assessment_history
+    WHERE tenant_id=$1 AND character_id=$2 AND measure=$3
+     AND day >= (clock_timestamp() AT TIME ZONE 'UTC')::date - 90
+     AND day < (clock_timestamp() AT TIME ZONE 'UTC')::date
+    ORDER BY day ASC LIMIT 90`,[ports.publicTenantId!,subject.character_id,measure]);
+   return {measure,points:result.rows};
+  });
+ }));
+ // Leadership confidence is an independent question, never a conversion of legacy scores.
+ app.get<{Params:{id:string}}>('/v1/civic/public-confidence/:id',async(q,r)=>execute(r,async()=>{
+  if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id))throw new RatingError(404,'civic_rating_subject_unavailable');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '1500ms'");
+   return readPublicSummary(client,ports.publicTenantId!,q.params.id,true);
+  });
+ }));
+ app.get<{Params:{id:string}}>('/v1/civic/confidence/:id',async(q,r)=>execute(r,async()=>{
+  if(!idPattern.test(q.params.id))throw new RatingError(400,'invalid_rating_subject');
+  const actor=await ports.authorize(q.headers.authorization);
+  return readConfidence(ports.pool,actor,q.params.id);
+ }));
+ app.post<{Params:{id:string};Body:unknown}>('/v1/civic/confidence/:id',{bodyLimit:1024},async(q,r)=>execute(r,async()=>{
+  if(!idPattern.test(q.params.id)||!validCivicRatingBody(q.body))throw new RatingError(400,'invalid_rating');
+  const actor=await ports.authorize(q.headers.authorization);
+  await ports.beforeWrite(q.headers.authorization);
+  const body=q.body,id=q.params.id;
+  return withTransaction(ports.pool,async client=>{
+   const user=await client.query("SELECT 1 FROM identity.users WHERE tenant_id=$1 AND user_id=$2 AND state='active' FOR UPDATE",[actor.tenantId,actor.userId]);
+   if(!user.rows.length)throw new RatingError(403,'inactive_account');
+   if(body.score===null){
+    await client.query('DELETE FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3',[actor.tenantId,actor.userId,id]);
+    return {withdrawn:true};
+   }
+   const eligible=await client.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
+   if(eligible.rows[0]?.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+   await consumeAssessmentWrite(client,actor);
+   await client.query(`INSERT INTO agents.civic_leadership_confidence(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,$4,$5)
+    ON CONFLICT(tenant_id,user_id,character_id) DO UPDATE SET score=EXCLUDED.score,consent_version=EXCLUDED.consent_version,updated_at=clock_timestamp()`,[actor.tenantId,actor.userId,id,body.score,CIVIC_RATING_CONSENT]);
+   return readConfidence(client,actor,id);
+  });
+ }));
  app.get<{Params:{id:string}}>('/v1/civic/ratings/:id',async(q,r)=>execute(r,async()=>{
   if(!idPattern.test(q.params.id))throw new RatingError(400,'invalid_rating_subject');
   const actor=await ports.authorize(q.headers.authorization);
@@ -69,10 +252,23 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
     return {withdrawn:true};
    }
    if(!(await client.query(eligibleSql,[actor.tenantId,id])).rows.length)throw new RatingError(404,'civic_rating_subject_unavailable');
+   await consumeAssessmentWrite(client,actor);
    await client.query(`INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,$4,$5)
     ON CONFLICT(tenant_id,user_id,character_id) DO UPDATE SET score=EXCLUDED.score,consent_version=EXCLUDED.consent_version,updated_at=clock_timestamp()`,[actor.tenantId,actor.userId,id,body.score,CIVIC_RATING_CONSENT]);
    return readSummary(client,actor,id);
   });
+ }));
+ // One private, account-scoped assessment history across both questions.
+ app.get('/v1/civic/my-assessments',async(q,r)=>execute(r,async()=>{
+  const actor=await ports.authorize(q.headers.authorization);
+  const result=await ports.pool.query<{characterId:string;measure:'record'|'confidence';score:number;updatedAt:Date}>(`
+   SELECT character_id AS "characterId",'record' AS measure,score,updated_at AS "updatedAt"
+    FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2
+   UNION ALL
+   SELECT character_id AS "characterId",'confidence' AS measure,score,updated_at AS "updatedAt"
+    FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2
+   ORDER BY "updatedAt" DESC,"characterId" ASC,measure ASC LIMIT 2500`,[actor.tenantId,actor.userId]);
+  return {assessments:result.rows};
  }));
  // A signed-in user can retrieve their own ratings, including withdrawn or retired subjects' remaining rows.
  app.get('/v1/civic/my-ratings',async(q,r)=>execute(r,async()=>{

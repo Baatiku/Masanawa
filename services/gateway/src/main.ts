@@ -1,3 +1,4 @@
+import {captureCivicAssessmentHistory} from './civic_rating_routes.js';
 import {callGreeting} from './ngn_calls/greeting.js';
 import {createNewsFeedPoller} from '@masanawa/postgres';
 import {createCivicResponseRepository} from '@masanawa/postgres';
@@ -2327,7 +2328,7 @@ export async function startGatewayService(
       ...(ngnWallet ? { ngnWallet } : {}),
       ...(composedPrivateChatMedia ? { privateChatMedia: composedPrivateChatMedia } : {}),
       ...(customerAuth ? { customerAuth } : {}),
-      ...(featurePool&&sessions&&featureTenant&&customerAuth?{civicRatings:{pool:featurePool,authorize:resolveFeatureFan,beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}}:{}),
+      ...(featurePool&&sessions&&featureTenant&&customerAuth?{civicRatings:{pool:featurePool,publicTenantId:featureTenant,authorize:resolveFeatureFan,beforeWrite:(header:string|undefined)=>customerAuth!.authorizeSensitiveMutation({authorizationHeader:header})}}:{}),
       ...(featurePool&&sessions&&featureTenant?{civicResponse:{
         repository:createCivicResponseRepository(featurePool),authorize:resolveFeatureFan,
         ...(mediaConfiguration?.objects.putObject?{bulletinStore:createIncidentBulletinStore(mediaConfiguration)!}:{}),
@@ -2410,6 +2411,8 @@ export async function startGatewayService(
   let officialSocialRunning=false;
   let civicRegistryTimer:ReturnType<typeof setInterval>|undefined;
   let civicRegistryRun:Promise<void>|undefined;
+  let civicHistoryTimer:ReturnType<typeof setInterval>|undefined;
+  let civicHistoryRun:Promise<void>|undefined;
   let replyRecoveryTimer: ReturnType<typeof setInterval> | undefined;
   let statusRetention: StatusRetentionWorker | undefined;
   let replyRecoveryRunning=false;
@@ -2434,6 +2437,7 @@ export async function startGatewayService(
       clearInterval(replyRecoveryTimer);
       clearInterval(officialSocialTimer);
       clearInterval(civicRegistryTimer);
+      clearInterval(civicHistoryTimer);
       void statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
@@ -2447,6 +2451,7 @@ export async function startGatewayService(
       clearInterval(replyRecoveryTimer);
       clearInterval(officialSocialTimer);
       clearInterval(civicRegistryTimer);
+      clearInterval(civicHistoryTimer);
       await statusRetention?.stop();
       if (ownerAccessSweepTimer) {
         clearInterval(ownerAccessSweepTimer);
@@ -2454,6 +2459,7 @@ export async function startGatewayService(
       }
       await newsRun;
       await civicRegistryRun;
+      await civicHistoryRun;
       await composedBrowserPush?.stop();
       await database.close();
     },
@@ -2461,6 +2467,15 @@ export async function startGatewayService(
       processRef.exitCode = 1;
     },
   });
+
+  // Capture only published aggregate snapshots. Restart-safe and bounded.
+  if(process.env.NODE_ENV!=='test'&&featureTenant&&database.featurePool?.connect){
+    const tenant=featureTenant,pool=database.featurePool;
+    const run=()=>{if(civicHistoryRun||drain.isDraining())return;
+      civicHistoryRun=captureCivicAssessmentHistory(pool,tenant).catch(()=>{console.error(JSON.stringify({event:'civic_assessment_history_unavailable'}));}).finally(()=>{civicHistoryRun=undefined;});
+    };
+    run();civicHistoryTimer=setInterval(run,60*60*1000);civicHistoryTimer.unref();
+  }
 
   // Independently reconcile the published civic catalogue without blocking
   // Gateway readiness or depending on a chat, call or administrator click.
