@@ -2,6 +2,7 @@ import type {FastifyInstance} from 'fastify';
 import {withTransaction,type Pool} from '@masanawa/postgres';
 import {CIVIC_AGENCY_CATALOG} from './civic_agency_bootstrap.js';
 import {CIVIC_INSTITUTION_SEEDS} from './civic_institution_seeds.js';
+import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
 
 type Actor={tenantId:string;userId:string};
 export type CivicRatingPorts={pool:Pool;publicTenantId?:string;authorize:(authorization:string|undefined)=>Promise<Actor>;beforeWrite:(authorization:string|undefined)=>Promise<unknown>};
@@ -25,7 +26,7 @@ export function publicRatingSummary(histogram:readonly number[]){
  return {published:true,minimum:CIVIC_RATING_MINIMUM,count:Math.floor(count/10)*10,average:Math.round((one+2*two+3*three+4*four+5*five)/count*10)/10,approval:Math.round(((four+five)/count)*20)*5};
 }
 const eligibleSubjectsSql=`
- SELECT c.character_id, v.constitution->'disclosurePolicy'->>'civicPersonId' AS person_id, v.constitution->'disclosurePolicy'->>'civicAgencyId' AS agency_id, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
+ SELECT c.character_id, v.constitution->'disclosurePolicy'->>'civicPersonId' AS person_id, v.constitution->'disclosurePolicy'->>'civicAgencyId' AS agency_id, v.constitution->'publicOfficial'->>'officialName' AS official_name, CASE WHEN v.constitution->'disclosurePolicy'->>'representation'='independent_civic_ai_guide'
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>'') THEN 'agency' ELSE 'person' END AS kind
  FROM identity.characters c
  JOIN identity.character_versions v ON v.tenant_id=c.tenant_id AND v.character_version_id=c.active_character_version_id AND v.state='published'
@@ -44,6 +45,13 @@ function agencyAlias(id:string):string{
  const name=CIVIC_INSTITUTION_SEEDS.find(seed=>seed.id===id)?.name;
  return (name&&CIVIC_AGENCY_CATALOG.find(seed=>seed.name===name)?.id)||id;
 }
+// Fixed, reviewed national leadership bindings; never match by display name alone.
+const legacyProfileNames:Readonly<Record<string,string>>=Object.freeze({"person-bola-ahmed-tinubu":"Bola Ahmed Tinubu","person-kashim-shettima":"Kashim Shettima","person-godswill-akpabio":"Godswill Akpabio","person-tajudeen-abbas":"Tajudeen Abbas","person-kudirat-kekere-ekun":"Kudirat Kekere-Ekun","person-george-akume":"George Akume","person-nuhu-ribadu":"Nuhu Ribadu","person-olayemi-cardoso":"Olayemi Cardoso","person-taiwo-oyedele":"Taiwo Oyedele","person-nyesom-wike":"Nyesom Wike","person-chinda-kingsley-ogundu-rivers-house":"Chinda Kingsley Ogundu"});
+function legacyProfile(id:string){
+ const name=legacyProfileNames[id];if(!name)return null;
+ const matches=OFFICIAL_ROSTER_MANIFEST.filter(r=>r.officialName===name);
+ return matches.length===1?{name,characterId:matches[0]!.characterId}:null;
+}
 function publicDirectoryId(personId:string|null,agencyId:string|null):string|null{
  if(personId&&/^person-[a-z0-9-]{1,140}$/.test(personId))return personId;
  if(!agencyId)return null;
@@ -52,10 +60,11 @@ function publicDirectoryId(personId:string|null,agencyId:string|null):string|nul
  return CIVIC_INSTITUTION_SEEDS.find(seed=>seed.name===name)?.id??null;
 }
 async function publicSubject(db:Query,tenant:string,subject:string){
+ const legacy=legacyProfile(subject);
  const matches=await db.query<{character_id:string;kind:'person'|'agency'}>(`
  SELECT DISTINCT character_id,kind FROM (${eligibleSubjectsSql}) eligible
- WHERE character_id=$2 OR person_id=$2 OR agency_id=$2 OR agency_id=$3
- LIMIT 2`,[tenant,subject,agencyAlias(subject)]);
+ WHERE character_id=$2 OR person_id=$2 OR agency_id=$2 OR agency_id=$3 OR (character_id=$4 AND official_name=$5 AND kind='person')
+ LIMIT 2`,[tenant,subject,agencyAlias(subject),legacy?.characterId??null,legacy?.name??null]);
  if(matches.rows.length!==1)throw new RatingError(404,'civic_rating_subject_unavailable');
  const row=matches.rows[0]!;
  return row;
