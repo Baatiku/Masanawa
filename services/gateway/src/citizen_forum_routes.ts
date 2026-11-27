@@ -153,6 +153,13 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
    await budget(c,a);await c.query('INSERT INTO agents.forum_messages(tenant_id,id,topic_id,user_id,body,reply_to) VALUES($1,$2,$3,$4,$5,$6)',[tenant,messageId,id,a.userId,body,replyTo]);if(media)await c.query('INSERT INTO agents.forum_message_media(tenant_id,message_id,kind,mime_type,payload,sha256) VALUES($1,$2,$3,$4,$5,$6)',[tenant,messageId,media.kind,media.mimeType,media.data,media.sha256]);return {id:messageId,state:'pending'};
   });
  }));
+ app.get('/v1/forum/topics/:id/signals',async(q,r)=>fail(r,async()=>{
+  r.header('Cache-Control','private, no-store');
+  const a=await ports.authorize(q.headers.authorization);if(a.tenantId!==tenant)throw new ForumError(403,'forbidden');
+  const {id}=q.params as {id:string};if(!uuid.test(id))throw new ForumError(400,'invalid_topic');
+  const rows=(await db.query<{signal:string}>(`SELECT e.signal FROM agents.forum_engagement e JOIN agents.forum_topics t ON t.tenant_id=e.tenant_id AND t.id=e.topic_id WHERE ${visible} AND t.id=$2 AND e.user_id=$3`,[tenant,id,a.userId])).rows;
+  return {signals:rows.map(row=>row.signal).filter(signal=>signals.includes(signal))};
+ }));
  app.post('/v1/forum/topics/:id/signal',async(q,r)=>fail(r,async()=>{
   const a=await actor(q.headers.authorization),{id}=q.params as {id:string},b=q.body as {signal?:string;enabled?:boolean}|null;
   if(!uuid.test(id)||!b||!signals.includes(b.signal||'')||typeof b.enabled!=='boolean')throw new ForumError(400,'invalid_signal');
