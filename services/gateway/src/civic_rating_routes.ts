@@ -38,6 +38,20 @@ const eligibleSubjectsSql=`
  OR (r.approved_by='masanawa-civic-seed-v1' AND COALESCE(r.profile->>'civicAgencyId','')<>''))`;
 const eligibleSql=`SELECT kind FROM (${eligibleSubjectsSql}) eligible WHERE character_id=$2 ORDER BY kind LIMIT 1`;
 type Query=Pick<Pool,'query'>;
+/** Durable per-account write budget, shared across both questions. Removals are exempt. */
+export async function consumeAssessmentWrite(db:Query,actor:Actor){
+ const result=await db.query(`
+ INSERT INTO agents.civic_assessment_write_budget(tenant_id,user_id,hour_start,attempts)
+ VALUES($1,$2,date_trunc('hour',clock_timestamp()),1)
+ ON CONFLICT(tenant_id,user_id) DO UPDATE SET
+ hour_start=EXCLUDED.hour_start,
+ attempts=CASE WHEN civic_assessment_write_budget.hour_start=EXCLUDED.hour_start
+ THEN civic_assessment_write_budget.attempts+1 ELSE 1 END
+ WHERE civic_assessment_write_budget.hour_start<>EXCLUDED.hour_start OR civic_assessment_write_budget.attempts<120
+ RETURNING attempts`,[actor.tenantId,actor.userId]);
+ if(!result.rows.length)throw new RatingError(429,'civic_assessment_rate_limit');
+}
+
 export function publicAssessmentSubject(value:string):boolean{
  return idPattern.test(value)||/^(?:person|org)-[a-z0-9-]{1,140}$/.test(value);
 }
@@ -214,6 +228,7 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
    }
    const eligible=await client.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
    if(eligible.rows[0]?.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+   await consumeAssessmentWrite(client,actor);
    await client.query(`INSERT INTO agents.civic_leadership_confidence(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,$4,$5)
     ON CONFLICT(tenant_id,user_id,character_id) DO UPDATE SET score=EXCLUDED.score,consent_version=EXCLUDED.consent_version,updated_at=clock_timestamp()`,[actor.tenantId,actor.userId,id,body.score,CIVIC_RATING_CONSENT]);
    return readConfidence(client,actor,id);
@@ -237,10 +252,23 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
     return {withdrawn:true};
    }
    if(!(await client.query(eligibleSql,[actor.tenantId,id])).rows.length)throw new RatingError(404,'civic_rating_subject_unavailable');
+   await consumeAssessmentWrite(client,actor);
    await client.query(`INSERT INTO agents.civic_ratings(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,$4,$5)
     ON CONFLICT(tenant_id,user_id,character_id) DO UPDATE SET score=EXCLUDED.score,consent_version=EXCLUDED.consent_version,updated_at=clock_timestamp()`,[actor.tenantId,actor.userId,id,body.score,CIVIC_RATING_CONSENT]);
    return readSummary(client,actor,id);
   });
+ }));
+ // One private, account-scoped assessment history across both questions.
+ app.get('/v1/civic/my-assessments',async(q,r)=>execute(r,async()=>{
+  const actor=await ports.authorize(q.headers.authorization);
+  const result=await ports.pool.query<{characterId:string;measure:'record'|'confidence';score:number;updatedAt:Date}>(`
+   SELECT character_id AS "characterId",'record' AS measure,score,updated_at AS "updatedAt"
+    FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2
+   UNION ALL
+   SELECT character_id AS "characterId",'confidence' AS measure,score,updated_at AS "updatedAt"
+    FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2
+   ORDER BY "updatedAt" DESC,"characterId" ASC,measure ASC LIMIT 2500`,[actor.tenantId,actor.userId]);
+  return {assessments:result.rows};
  }));
  // A signed-in user can retrieve their own ratings, including withdrawn or retired subjects' remaining rows.
  app.get('/v1/civic/my-ratings',async(q,r)=>execute(r,async()=>{

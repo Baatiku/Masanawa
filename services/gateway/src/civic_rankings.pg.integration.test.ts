@@ -57,6 +57,12 @@ describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
    const guestConfidence=await app.inject({url:'/v1/civic/public-confidence/'+person});
    expect(guestConfidence.statusCode).toBe(200);expect(guestConfidence.json().published).toBe(false);
    expect(guestConfidence.json()).not.toHaveProperty('myRating');
+   const mine=await app.inject({url:'/v1/civic/my-assessments',headers:{authorization:'Bearer viewer'}});
+   expect(mine.statusCode).toBe(200);expect(mine.json().assessments).toHaveLength(1);
+   expect(mine.json().assessments[0]).toMatchObject({characterId:person,measure:'confidence',score:4});
+   expect((await app.inject({url:'/v1/civic/my-assessments',headers:{authorization:'Bearer other'}})).json().assessments).toEqual([]);
+   await pool.query('UPDATE agents.civic_assessment_write_budget SET attempts=120 WHERE tenant_id=$1 AND user_id=$2',[tenantId,viewer]);
+   expect((await post(person,5)).statusCode).toBe(429);
    expect((await post(person,null)).json()).toEqual({withdrawn:true});
    await captureCivicAssessmentHistory(pool,tenantId);
    expect((await app.inject({url:'/v1/civic/assessment-history/'+person})).json()).toEqual({measure:'record',points:[]});
