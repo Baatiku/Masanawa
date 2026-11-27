@@ -97,7 +97,7 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
   }
   const rawLink = data.deepLink;
   if (typeof rawLink === "string" && rawLink.length <= 300 &&
-      (rawLink === "masanawa://home" ||
+      (rawLink === "masanawa://home" || (data.type === "forum_update" && rawLink === "masanawa://forum") ||
       /^masanawa:\/\/(?:(?:wallet\/transaction|calls\/incoming)\/[A-Za-z0-9_-]{1,128}|wallet\/requests\/ngnreq_[A-Za-z0-9_-]{1,128}|wallet\/activity(?:\/(?:mb:\d+|ngn:[A-Za-z0-9_:.-]{1,160}))?)$/u.test(rawLink))) {
     try {
       const link = new URL(rawLink);
@@ -128,7 +128,7 @@ export function pushCategory(data: Readonly<Record<string, string>> | undefined)
       type.startsWith("transfer_") || type.startsWith("withdrawal_") ||
       type.startsWith("settlement_")) return "wallet";
   if (type === "news_update" || type === "news_article") return "status";
-  if (type.startsWith("room_")) return "rooms";
+  if (type === "forum_update" || type.startsWith("room_")) return "rooms";
   if (type.startsWith("status_") || type.startsWith("post_")) return "status";
   return "messages";
 }
@@ -140,7 +140,7 @@ export function pushCategory(data: Readonly<Record<string, string>> | undefined)
 function retiredNotification(category: MobileNotificationCategory,
   data: Readonly<Record<string, string>> | undefined): boolean {
   const type = data?.type ?? "";
-  return category === "rooms" || category === "p2p" ||
+  return (category === "rooms" && type !== "forum_update") || category === "p2p" ||
     type === "room" || type.startsWith("room_") ||
     type.startsWith("p2p_") || type.startsWith("human_");
 }
