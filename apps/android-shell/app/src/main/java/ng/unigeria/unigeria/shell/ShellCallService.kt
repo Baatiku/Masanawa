@@ -76,7 +76,7 @@ class ShellCallService : Service() {
     private fun showForeground(telecomRegistered: Boolean) {
         if (Build.VERSION.SDK_INT >= 26) {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(
-                NotificationChannel(CHANNEL, "Active Masanawa calls", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL, "Active Citizenvoice calls", NotificationManager.IMPORTANCE_LOW)
                     .apply { description = "An active voice session using the microphone" }
             )
         }
@@ -86,7 +86,7 @@ class ShellCallService : Service() {
             .setAction(HANG_UP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
-            .setContentTitle("Masanawa voice call")
+            .setContentTitle("Citizenvoice voice call")
             .setContentText("Voice call in progress")
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -94,7 +94,7 @@ class ShellCallService : Service() {
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setStyle(NotificationCompat.CallStyle.forOngoingCall(
-                Person.Builder().setName("Masanawa").build(), hangup))
+                Person.Builder().setName("Citizenvoice").build(), hangup))
             .build()
         if (Build.VERSION.SDK_INT >= 34) {
             val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
@@ -118,7 +118,7 @@ class ShellCallService : Service() {
             val manager = CallsManager(this)
             manager.registerAppWithTelecom(CallsManager.CAPABILITY_BASELINE)
             val attributes = CallAttributesCompat(
-                displayName = "Masanawa",
+                displayName = "Citizenvoice",
                 address = Uri.parse("masanawa://calls"),
                 direction = CallAttributesCompat.DIRECTION_OUTGOING,
                 callType = CallAttributesCompat.CALL_TYPE_AUDIO_CALL,

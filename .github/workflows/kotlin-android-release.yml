@@ -1,13 +1,13 @@
-name: Masanawa Android signed release
+name: Citizenvoice Android signed release
 
-# Release Masanawa Android 1.3.5: refresh web assets after an online native upgrade.
+# Release Citizenvoice Android 1.3.6: visible brand, CV icons and current web origin.
 # Produces a signed, installable APK and a Play-ready bundle without publishing
 # either to the store. The new package identity is distinct from Flutter.
 on:
   workflow_dispatch:
     inputs:
       version_code:
-        description: "Masanawa Kotlin release version code (must exceed previous Kotlin release)"
+        description: "Citizenvoice Kotlin release version code (must exceed previous Kotlin release)"
         required: true
         type: number
   # Owner-approved signed release; regular changes cannot trigger signing.
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   candidate:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, 'Release Masanawa Android'))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, 'Release Citizenvoice Android'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -36,7 +36,7 @@ jobs:
           set -euo pipefail
           headers="$(mktemp)"
           trap 'rm -f "$headers"' EXIT
-          curl --silent --show-error --max-time 20 --dump-header "$headers" --output /dev/null https://api.masanawa.com/readyz
+          curl --silent --show-error --max-time 20 --dump-header "$headers" --output /dev/null https://api.chatmeup.online/readyz
           awk 'BEGIN {IGNORECASE=1} /^HTTP\// || tolower($0) ~ /^x-masanawa-release:/ {print}' "$headers"
       - name: Install Android platform
         run: |
@@ -55,13 +55,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
           EXPECTED_SHA256: ${{ secrets.SHELL_EXPECTED_UPLOAD_SHA256 }}
-          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 17 }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 18 }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64" && test -n "$STORE_PASSWORD" &&
             test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$EXPECTED_SHA256"
-          # Release must supersede the previous Android 1.3.4 release (code 16).
-          test "$SHELL_RELEASE_VERSION_CODE" -gt 16
+          # Release must supersede the previous Android 1.3.5 release (code 17).
+          test "$SHELL_RELEASE_VERSION_CODE" -gt 17
           # Accept either the raw Base64 value or a copied .env assignment.
           # Never print signing material; keep invalid inputs failed closed.
           python3 - <<'PY'
@@ -115,27 +115,27 @@ jobs:
             exit 1
           fi
           echo "SHELL_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/masanawa-shell-upload.jks" >> "$GITHUB_ENV"
-      - name: Verify no native logo and correct Masanawa launcher
+      - name: Verify no native logo and correct Citizenvoice launcher
         working-directory: apps/android-shell
         run: |
           set -euo pipefail
           grep -Fq 'windowSplashScreenAnimatedIcon">@android:color/transparent' app/src/main/res/values/styles.xml
           ! grep -Fq 'Masanawa Test' app/build.gradle.kts
-          grep -Fq 'resValue("string", "masanawa_app_label", "Masanawa")' app/build.gradle.kts
+          grep -Fq 'resValue("string", "masanawa_app_label", "Citizenvoice")' app/build.gradle.kts
       - name: Build and verify signed APK and app bundle
         working-directory: apps/android-shell
         env:
           SHELL_RELEASE_STORE_PASSWORD: ${{ secrets.SHELL_RELEASE_STORE_PASSWORD }}
           SHELL_RELEASE_KEY_PASSWORD: ${{ secrets.SHELL_RELEASE_KEY_PASSWORD }}
           SHELL_RELEASE_KEY_ALIAS: ${{ secrets.SHELL_RELEASE_KEY_ALIAS }}
-          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 17 }}
+          SHELL_RELEASE_VERSION_CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code || 18 }}
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease :app:testDebugUnitTest
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
           # Android app-signing certificates are self-signed; verify bundle contents without PKIX CA-chain enforcement.
           jarsigner -verify app/build/outputs/bundle/release/app-release.aab
-      - name: Upload signed Masanawa APK
+      - name: Upload signed Citizenvoice APK
         uses: actions/upload-artifact@v4
         with:
           name: masanawa-android-signed-apk

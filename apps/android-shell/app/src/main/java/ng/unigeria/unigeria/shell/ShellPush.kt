@@ -65,20 +65,20 @@ internal object ShellPush {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(NotificationChannel(
-            updatesChannel, "Masanawa updates", NotificationManager.IMPORTANCE_HIGH).apply {
+            updatesChannel, "Citizenvoice updates", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Messages, account notices and call alerts"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             setShowBadge(true)
         })
         manager.createNotificationChannel(NotificationChannel(
-            callsChannel, "Masanawa incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Incoming Masanawa call invitations"
+            callsChannel, "Citizenvoice incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Incoming Citizenvoice call invitations"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             setShowBadge(true)
         })
         manager.createNotificationChannel(NotificationChannel(
             newsChannel, "News updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "Unread and newly published Masanawa news articles"
+            description = "Unread and newly published news articles"
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             setShowBadge(true)
         })
@@ -99,7 +99,7 @@ internal object ShellPush {
     private fun newsPendingIntent(context: Context, requestCode: Int): PendingIntent {
         val intent = Intent(context, ShellActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = android.net.Uri.parse("https://app.masanawa.com/?tab=home")
+            data = android.net.Uri.parse("https://app.chatmeup.online/?tab=home")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         return PendingIntent.getActivity(context, requestCode, intent,
@@ -116,7 +116,7 @@ internal object ShellPush {
         items.forEach { item ->
             val id = newsChildId(item.id)
             val child = NotificationCompat.Builder(context, newsChannel)
-                .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_stat_masanawa)
+                .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
                 .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
                 .setContentTitle(item.publisher)
                 .setContentText(item.title)
@@ -136,11 +136,11 @@ internal object ShellPush {
         }
         val title = if (count == 1) "1 unread news article" else "$count unread news articles"
         val inbox = NotificationCompat.InboxStyle().setBigContentTitle(title)
-            .setSummaryText("$count unread · Masanawa News")
+            .setSummaryText("$count unread · Citizenvoice")
         items.forEach { inbox.addLine(ShellNewsDigest.line(it)) }
         if (count > items.size && items.isNotEmpty()) inbox.addLine("+${count - items.size} more unread updates in Home")
         val summary = NotificationCompat.Builder(context, newsChannel)
-            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_stat_masanawa)
+            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
             .setSilent(quiet)
             .setContentTitle(title)
@@ -258,10 +258,10 @@ internal object ShellPush {
         val newsTitle = ShellNotificationIdentity.publicNewsText(headline, 180)
         val newsBody = ShellNotificationIdentity.publicNewsText(summary, 300)
         val notification = NotificationCompat.Builder(context, if (incomingCall) callsChannel else if (news) newsChannel else updatesChannel)
-            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_stat_masanawa)
+            .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
             .setNumber(1)
-            .setContentTitle(if (incomingCall) "Incoming call" else if (news) newsTitle ?: "Masanawa News" else "Masanawa")
+            .setContentTitle(if (incomingCall) "Incoming call" else if (news) newsTitle ?: "Masanawa News" else "Citizenvoice")
             .setContentText(if (incomingCall) "Open Calls to respond" else if (news) newsBody ?: newsTitle ?: "New publisher article" else "Open the app to view your update")
             .setStyle(if (news) NotificationCompat.BigTextStyle().bigText(newsBody ?: newsTitle ?: "New publisher article") else NotificationCompat.BigTextStyle())
             .setContentIntent(pending)
@@ -292,7 +292,7 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val type = message.data["type"] ?: return
         if (type == "news_article" || type == "news_update") {
-            ShellPush.showNotification(this, "https://app.masanawa.com/?tab=home",
+            ShellPush.showNotification(this, "https://app.chatmeup.online/?tab=home",
                 news = true, headline = message.data["headline"], summary = message.data["summary"],
                 eventId = message.data["eventId"], publisher = message.data["publisher"])
             return

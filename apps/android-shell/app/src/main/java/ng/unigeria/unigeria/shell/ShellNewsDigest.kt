@@ -21,7 +21,7 @@ internal object ShellNewsDigest {
         val cleanTitle = ShellNotificationIdentity.publicNewsText(title, 200)
             ?: ShellNotificationIdentity.publicNewsText(summary, 200)
             ?: return null
-        val cleanPublisher = ShellNotificationIdentity.publicNewsText(publisher, 72) ?: "Masanawa News"
+        val cleanPublisher = ShellNotificationIdentity.publicNewsText(publisher, 72) ?: "News"
         val cleanSummary = ShellNotificationIdentity.publicNewsText(summary, 230) ?: ""
         val cleanId = id?.trim()?.takeIf {
             it.length in 1..maxIdLength && it.none { ch -> ch.isISOControl() }
