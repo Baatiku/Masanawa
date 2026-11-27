@@ -254,7 +254,7 @@ class ShellActivity : ComponentActivity() {
                         // If a future web release changes the DOM selector,
                         // do not leave the tab looking clickable but inert.
                         if (result != "true" && WebOriginPolicy.isTrusted(webView.url)) {
-                            webView.loadUrl("https://app.masanawa.com/?tab=$destination")
+                            webView.loadUrl("https://app.chatmeup.online/?tab=$destination")
                         }
                     }
                 }
@@ -374,10 +374,10 @@ class ShellActivity : ComponentActivity() {
         setDownloadListener { url, _, contentDisposition, mimeType, _ ->
             if (url != null && WebOriginPolicy.isTrusted(url))
                 downloads.beginHttp(url, android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType), mimeType)
-            else Toast.makeText(this@ShellActivity, "Use Masanawa's private file download control.", Toast.LENGTH_LONG).show()
+            else Toast.makeText(this@ShellActivity, "Use Citizenvoice's private file download control.", Toast.LENGTH_LONG).show()
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            WebViewCompat.addWebMessageListener(this, "MasanawaNative", setOf("https://app.masanawa.com")) {
+            WebViewCompat.addWebMessageListener(this, "MasanawaNative", setOf("https://app.chatmeup.online")) {
                 _, message, origin, isMainFrame, reply ->
                 if (isMainFrame && WebOriginPolicy.isTrusted(origin.toString())) {
                     val payload = try { JSONObject(message.data ?: "") } catch (_: Exception) { null }
@@ -508,7 +508,7 @@ class ShellActivity : ComponentActivity() {
             pendingCameraUri = uri
             val camera = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
                 putExtra(MediaStore.EXTRA_OUTPUT, uri)
-                clipData = ClipData.newRawUri("Masanawa photo", uri)
+                clipData = ClipData.newRawUri("Citizenvoice photo", uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }
             filePicker.launch(Intent.createChooser(picker, "Choose or take a photo").apply {
@@ -598,7 +598,7 @@ class ShellActivity : ComponentActivity() {
                 if (value.isNotBlank()) startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, value)
-                }, "Share from Masanawa"))
+                }, "Share from Citizenvoice"))
             }
             "haptic" -> {
                 val effect = when (payload.optString("kind")) {

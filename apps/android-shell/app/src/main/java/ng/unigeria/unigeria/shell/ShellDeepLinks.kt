@@ -14,6 +14,13 @@ internal object ShellDeepLinks {
         val uri = URI(raw ?: return null)
         if (uri.rawUserInfo != null || uri.rawFragment != null || uri.port != -1) return null
         if (WebOriginPolicy.isTrusted(raw)) return raw
+        // Convert old application links to the new canonical origin without trusting the old origin.
+        if (uri.scheme.equals("https", true) && uri.host.equals("app.masanawa.com", true)) {
+            val path = uri.rawPath.orEmpty().ifEmpty { "/" }
+            val target = WebOriginPolicy.HOME.trimEnd('/') + path +
+                (uri.rawQuery?.let { "?$it" } ?: "")
+            return target.takeIf { WebOriginPolicy.isTrusted(it) }
+        }
 
         if (uri.scheme.equals("https", true) && uri.host.equals("masanawa.com", true)) {
             val parts = uri.path.trim('/').split('/')

@@ -4,12 +4,12 @@ import java.net.URI
 
 /** The only remotely hosted origin allowed to control the Masanawa shell. */
 internal object WebOriginPolicy {
-    const val HOME = "https://app.masanawa.com/"
+    const val HOME = "https://app.chatmeup.online/"
 
     fun isTrusted(url: String?): Boolean = try {
         val uri = URI(url ?: "")
         uri.scheme.equals("https", ignoreCase = true) &&
-            uri.host.equals("app.masanawa.com", ignoreCase = true) &&
+            uri.host.equals("app.chatmeup.online", ignoreCase = true) &&
             (uri.port == -1 || uri.port == 443) &&
             uri.userInfo == null
     } catch (_: IllegalArgumentException) {

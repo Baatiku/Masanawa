@@ -19,12 +19,12 @@
         android:dataExtractionRules="@xml/masanawa_private_backup_rules"
         android:usesCleartextTraffic="false"
         android:label="@string/masanawa_app_label"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:icon="@drawable/citizenvoice_launcher"
+        android:roundIcon="@drawable/citizenvoice_launcher"
         android:theme="@style/ShellSplashTheme">
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_stat_masanawa" />
+            android:resource="@drawable/ic_masanawa_notification" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/masanawa_notification_color" />
@@ -38,12 +38,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- Domain verification requires the com.masanawa.app signing
-                 fingerprint on app.masanawa.com/.well-known/assetlinks.json. -->
+                 fingerprint on app.chatmeup.online/.well-known/assetlinks.json. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="app.masanawa.com" />
+                <data android:scheme="https" android:host="app.chatmeup.online" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
