@@ -36,3 +36,23 @@ jobs:
           status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://api.chatmeup.online/v1/forum/mine)
           echo "Private Forum endpoint without authentication: $status"
           case "$status" in 401|403) ;; *) exit 1;; esac
+
+  release-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Inspect exact main push workflow status and both live origins
+        run: |
+          set -u
+          for spec in Baatiku/Masanawa:e13509c67c3abeb096dcf436ec36622e7c6726f0 Baatiku/Masanawa-Web:adfe7adc244bba9e9965469bd3bf698bbaab6b40; do
+            repo="${spec%:*}"; sha="${spec#*:}"
+            echo "Main release status: $repo $sha"
+            curl --silent --show-error --max-time 15 "https://api.github.com/repos/$repo/actions/runs?head_sha=$sha&event=push&per_page=20" | jq '{total_count,runs:[.workflow_runs[]? | {id,name,status,conclusion,html_url}]}'
+          done
+          for u in https://api.chatmeup.online/readyz https://api.chatmeup.online/v1/forum/rooms https://app.chatmeup.online/masanawa-web-release.json https://app.chatmeup.online/api/forum/rooms; do
+            echo "Public probe: $u"
+            if curl --silent --show-error --max-time 15 -H 'Cache-Control: no-cache' -D /tmp/h -o /tmp/b "$u"; then
+              grep -iE '^HTTP/|^x-masanawa-release:|^content-type:' /tmp/h || true
+              jq -c 'if type=="object" then {status,revision,rooms:(if (.rooms|type)=="array" then (.rooms|length) else null end),feePolicy,error} else {type:type} end' /tmp/b 2>/dev/null || true
+            fi
+          done
