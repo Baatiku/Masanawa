@@ -111,3 +111,45 @@ CREATE TABLE agents.forum_fee_policy_audit (
 );
 CREATE UNIQUE INDEX forum_fee_operation ON agents.forum_topics(tenant_id,fee_operation_id) WHERE fee_operation_id IS NOT NULL;
 REVOKE ALL ON agents.forum_fee_policy,agents.forum_fee_policy_audit FROM PUBLIC;
+
+-- New Forum notices use the retired preference slot only for explicitly scoped
+-- forum_update events. No legacy room event is revived, and previews are generic.
+CREATE FUNCTION agents.queue_forum_notice(p_tenant text,p_user text,p_key text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+ IF p_user IS NULL THEN RETURN; END IF;
+ PERFORM agents.queue_mobile_notice(p_tenant,p_user,
+  'forum-'||encode(sha256(convert_to(jsonb_build_array(p_tenant,p_user,p_key)::text,'UTF8')),'hex'),
+  'rooms','Citizen Forum update','forum_update','masanawa://forum');
+END $$;
+CREATE FUNCTION agents.forum_review_notice() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.state IS DISTINCT FROM NEW.state AND NEW.state<>'pending' AND NEW.reviewed_at IS NOT NULL THEN
+  PERFORM agents.queue_forum_notice(NEW.tenant_id,NEW.user_id,TG_TABLE_NAME||':'||NEW.id::text||':'||NEW.state||':'||NEW.reviewed_at::text);
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER forum_topic_review_notice AFTER UPDATE OF state ON agents.forum_topics FOR EACH ROW EXECUTE FUNCTION agents.forum_review_notice();
+CREATE TRIGGER forum_message_review_notice AFTER UPDATE OF state ON agents.forum_messages FOR EACH ROW EXECUTE FUNCTION agents.forum_review_notice();
+CREATE TRIGGER forum_case_review_notice AFTER UPDATE OF state ON agents.forum_cases FOR EACH ROW EXECUTE FUNCTION agents.forum_review_notice();
+
+-- At most one notice per follower/topic per 15-minute window. A bounded worker
+-- will fan out committed publications outside the moderator's transaction.
+CREATE TABLE agents.forum_push_events (
+ tenant_id text NOT NULL,topic_id uuid NOT NULL,bucket timestamptz NOT NULL,
+ cursor_user text,done boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(tenant_id,topic_id,bucket),
+ FOREIGN KEY(tenant_id,topic_id) REFERENCES agents.forum_topics(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX forum_push_pending ON agents.forum_push_events(created_at) WHERE NOT done;
+REVOKE ALL ON agents.forum_push_events FROM PUBLIC;
+CREATE FUNCTION agents.forum_published_reply_notice() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.state IS DISTINCT FROM NEW.state AND NEW.state='published' AND NEW.reviewed_at IS NOT NULL THEN
+  INSERT INTO agents.forum_push_events(tenant_id,topic_id,bucket)
+  VALUES(NEW.tenant_id,NEW.topic_id,date_bin(interval '15 minutes',NEW.reviewed_at,'2000-01-01'::timestamptz))
+  ON CONFLICT DO NOTHING;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER forum_reply_follow_notice AFTER UPDATE OF state ON agents.forum_messages FOR EACH ROW EXECUTE FUNCTION agents.forum_published_reply_notice();
