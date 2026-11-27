@@ -1,5 +1,5 @@
 import type {FastifyInstance} from 'fastify';
-import {withTransaction,type Pool} from '@masanawa/postgres';
+import {withTransaction,createNgnSpending,readForumFeePolicy,forumTopicFee,type Pool} from '@masanawa/postgres';
 import type {CivicRatingPorts} from './civic_rating_routes.js';
 import {createHash} from 'node:crypto';
 import {validateForumMedia} from './forum_media.js';
@@ -18,9 +18,9 @@ const signals=['follow','affected','attention','helpful','resolved'];
 const validText=(v:unknown,min:number,max:number):v is string=>typeof v==='string'&&v.trim().length>=min&&v.trim().length<=max;
 type Actor={tenantId:string;userId:string};
 class ForumError extends Error{constructor(readonly status:number,readonly code:string){super(code)}}
-export function validForumTopic(v:unknown):v is {id:string;room:string;title:string;body:string;kind:string;jurisdiction:string}{
+export function validForumTopic(v:unknown):v is {id:string;room:string;title:string;body:string;kind:string;jurisdiction:string;feeKobo?:number;feeRevision?:number}{
  if(!v||typeof v!=='object'||Array.isArray(v))return false;const b=v as Record<string,unknown>;
- return Object.keys(b).every(k=>['id','room','title','body','kind','jurisdiction'].includes(k))&&typeof b.id==='string'&&uuid.test(b.id)&&!channelFor(b.id.toLowerCase())&&FORUM_ROOMS.some(r=>r.id===b.room)&&validText(b.title,10,160)&&validText(b.body,30,4000)&&typeof b.kind==='string'&&kinds.includes(b.kind)&&validText(b.jurisdiction,2,100);
+ return Object.keys(b).every(k=>['id','room','title','body','kind','jurisdiction','feeKobo','feeRevision'].includes(k))&&typeof b.id==='string'&&uuid.test(b.id)&&!channelFor(b.id.toLowerCase())&&FORUM_ROOMS.some(r=>r.id===b.room)&&validText(b.title,10,160)&&validText(b.body,30,4000)&&typeof b.kind==='string'&&kinds.includes(b.kind)&&validText(b.jurisdiction,2,100)&&((b.feeKobo===undefined&&b.feeRevision===undefined)||(typeof b.feeKobo==='number'&&Number.isSafeInteger(b.feeKobo)&&b.feeKobo>=0&&b.feeKobo<=10000000&&typeof b.feeRevision==='number'&&Number.isSafeInteger(b.feeRevision)&&b.feeRevision>=0));
 }
 export const normalizeForumText=(s:string)=>s.trim().replace(/\s+/g,' ');
 export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts){
@@ -33,8 +33,21 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
  const visible=`t.tenant_id=$1 AND t.state='published' AND (t.system_channel OR EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active'))`;
  const ensureChannel=async(c:Pick<Pool,'query'>,id:string)=>{const room=channelFor(id.toLowerCase());if(room)await c.query(`INSERT INTO agents.forum_topics(tenant_id,id,user_id,room,title,body,kind,jurisdiction,state,system_channel) VALUES($1,$2,NULL,$3,'General discussion','A permanent public discussion for this civic room. Keep contributions constructive.','general','National','published',true) ON CONFLICT(tenant_id,id) DO NOTHING`,[tenant,id,room.id]);};
  const budget=async(c:Pick<Pool,'query'>,a:Actor)=>{const q=await c.query(`INSERT INTO agents.forum_write_budget(tenant_id,user_id,hour_start,attempts) VALUES($1,$2,date_trunc('hour',clock_timestamp()),1) ON CONFLICT(tenant_id,user_id) DO UPDATE SET hour_start=excluded.hour_start,attempts=CASE WHEN forum_write_budget.hour_start=excluded.hour_start THEN forum_write_budget.attempts+1 ELSE 1 END WHERE forum_write_budget.hour_start<>excluded.hour_start OR forum_write_budget.attempts<60 RETURNING attempts`,[a.tenantId,a.userId]);if(!q.rows.length)throw new ForumError(429,'rate_limited')};
- const fail=async(reply:{code:(n:number)=>unknown},work:()=>Promise<unknown>)=>{try{return await work()}catch(e){const error=e as {statusCode?:number;code?:string};const status=e instanceof ForumError?e.status:error.code==='23505'?409:error.statusCode===401||error.statusCode===403?error.statusCode:503;reply.code(status);return {error:e instanceof ForumError?e.code:status===409?'duplicate_topic':status===401?'sign_in_required':status===403?'forbidden':'forum_unavailable'}}};
- app.get('/v1/forum/rooms',async()=>({rooms:FORUM_ROOMS.map(room=>({...room,channelId:forumChannelId(room.id)})),feeKobo:0,moderated:true}));
+ const fail=async(reply:{code:(n:number)=>unknown},work:()=>Promise<unknown>)=>{try{return await work()}catch(e){const error=e as {statusCode?:number;code?:string;message?:string};if(error.message==='ngn.insufficient_balance'||error.message==='ngn.account_frozen'){reply.code(409);return {error:error.message==='ngn.insufficient_balance'?'insufficient_balance':'wallet_frozen'}}const status=e instanceof ForumError?e.status:error.code==='23505'?409:error.statusCode===401||error.statusCode===403?error.statusCode:503;reply.code(status);return {error:e instanceof ForumError?e.code:status===409?'duplicate_topic':status===401?'sign_in_required':status===403?'forbidden':'forum_unavailable'}}};
+ let recoveryTimer:ReturnType<typeof setInterval>|undefined,recovering=false;
+ const recoverForumHolds=async()=>{if(recovering)return;recovering=true;try{
+  const pending=(await db.query(`SELECT s.user_id,s.operation_id FROM gb_wallet.ngn_spends s LEFT JOIN agents.forum_topics t ON t.tenant_id=s.tenant_id AND t.fee_operation_id=s.operation_id WHERE s.tenant_id=$1 AND s.purpose='forum_topic' AND s.state='reserved' AND (t.id IS NULL OR (t.state='pending' AND t.created_at<clock_timestamp()-interval '72 hours')) ORDER BY s.created_at LIMIT 25`,[tenant])).rows;
+  for(const hold of pending)await withTransaction(db,async c=>{
+   const topic=(await c.query(`SELECT id,state,created_at<clock_timestamp()-interval '72 hours' AS expired FROM agents.forum_topics WHERE tenant_id=$1 AND fee_operation_id=$2 FOR UPDATE`,[tenant,hold.operation_id])).rows[0];
+   if(topic&&(topic.state!=='pending'||!topic.expired))return;
+   const who={tenantId:tenant,userId:hold.user_id,operationId:hold.operation_id};const spending=createNgnSpending(db,c);const receipt=await spending.read(tenant,who.operationId,who.userId);
+   if(receipt?.state==='reserved')await spending.release(who);
+   if(topic)await c.query(`UPDATE agents.forum_topics SET state='rejected',reviewed_at=clock_timestamp(),review_reason='Review expired; reserved fee released.' WHERE tenant_id=$1 AND id=$2 AND state='pending'`,[tenant,topic.id]);
+  });
+ }catch{app.log.warn('Forum reservation recovery failed')}finally{recovering=false}};
+ app.addHook('onReady',async()=>{recoveryTimer=setInterval(()=>void recoverForumHolds(),60000);recoveryTimer.unref();});
+ app.addHook('onClose',async()=>{if(recoveryTimer)clearInterval(recoveryTimer);});
+ app.get('/v1/forum/rooms',async(_q,r)=>fail(r,async()=>{const feePolicy=await readForumFeePolicy(db,tenant);return {rooms:FORUM_ROOMS.map(room=>({...room,channelId:forumChannelId(room.id)})),feeKobo:feePolicy.enabled?feePolicy.feeKobo:0,feePolicy,moderated:true};}));
  app.get('/v1/forum/pulse',async(q,r)=>fail(r,async()=>{
   const rows=await db.query<{room:string;topics:number;replies:number;participants:number}>(`WITH visible_topics AS (SELECT t.id,t.room,t.system_channel,t.created_at FROM agents.forum_topics t WHERE ${visible}),
  recent_topics AS (SELECT room,count(*)::int AS topics FROM visible_topics WHERE NOT system_channel AND created_at>=clock_timestamp()-interval '7 days' GROUP BY room),
@@ -67,7 +80,7 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
  }));
  app.get('/v1/forum/mine',async(q,r)=>fail(r,async()=>{
   const a=await ports.authorize(q.headers.authorization);if(a.tenantId!==tenant)throw new ForumError(403,'forbidden');
-  const topics=(await db.query(`SELECT id,room,title,body,kind,jurisdiction,state,created_at,review_reason FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
+  const topics=(await db.query(`SELECT id,room,title,body,kind,jurisdiction,state,created_at,review_reason,fee_kobo::int,fee_operation_id,fee_policy_revision FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
   const followed=(await db.query(`SELECT ${publicFields},${counts} FROM agents.forum_topics t JOIN agents.forum_engagement e ON e.tenant_id=t.tenant_id AND e.topic_id=t.id AND e.signal='follow' AND e.user_id=$2 WHERE ${visible} ORDER BY t.created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
   const messages=(await db.query(`SELECT id,topic_id,body,state,created_at,review_reason FROM agents.forum_messages WHERE tenant_id=$1 AND user_id=$2 AND state IN ('rejected','hidden') ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
   const cases=(await db.query(`SELECT id,kind,target_kind,target_id,state,review_reason,created_at FROM agents.forum_cases WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
@@ -105,11 +118,15 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   const a=await actor(q.headers.authorization);const b=q.body;if(!validForumTopic(b))throw new ForumError(400,'invalid_topic');
   return withTransaction(db,async c=>{
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['forum:'+tenant+':'+a.userId]);
-   const old=(await c.query('SELECT id,room,title,body,kind,jurisdiction,state FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 AND id=$3',[tenant,a.userId,b.id])).rows[0];
-   if(old){if(old.room!==b.room||old.title!==normalizeForumText(b.title)||old.body!==b.body.trim()||old.kind!==b.kind||old.jurisdiction!==normalizeForumText(b.jurisdiction))throw new ForumError(409,'request_conflict');return {id:old.id,state:old.state};}
+   const old=(await c.query('SELECT id,room,title,body,kind,jurisdiction,state,fee_kobo::int,fee_operation_id,fee_policy_revision FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 AND id=$3',[tenant,a.userId,b.id])).rows[0];
+   if(old){if(old.room!==b.room||old.title!==normalizeForumText(b.title)||old.body!==b.body.trim()||old.kind!==b.kind||old.jurisdiction!==normalizeForumText(b.jurisdiction)||(b.feeKobo!==undefined&&old.fee_kobo!==b.feeKobo)||(b.feeRevision!==undefined&&old.fee_policy_revision!==b.feeRevision))throw new ForumError(409,'request_conflict');return {id:old.id,state:old.state,feeKobo:old.fee_kobo,feeOperationId:old.fee_operation_id};}
    await budget(c,a);
    const recent=(await c.query('SELECT count(*)::int AS n FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 AND created_at>clock_timestamp()-interval \'1 day\'',[tenant,a.userId])).rows[0];if(Number(recent.n)>=5)throw new ForumError(429,'topic_daily_limit');
-   await c.query('INSERT INTO agents.forum_topics(tenant_id,id,user_id,room,title,body,kind,jurisdiction) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,b.id,a.userId,b.room,normalizeForumText(b.title),b.body.trim(),b.kind,normalizeForumText(b.jurisdiction)]);return {id:b.id,state:'pending'};
+   const policy=await readForumFeePolicy(c,tenant),feeKobo=forumTopicFee(policy,b.room,b.kind);
+   if((feeKobo>0||b.feeKobo!==undefined)&&(b.feeKobo!==feeKobo||b.feeRevision!==policy.revision))throw new ForumError(409,'fee_changed');
+   const operationId=feeKobo>0?'forum:'+b.id.toLowerCase():null;
+   if(operationId)await createNgnSpending(db,c).reserve({...a,operationId,idempotencyKey:operationId,purpose:'forum_topic',amountKobo:feeKobo});
+   await c.query('INSERT INTO agents.forum_topics(tenant_id,id,user_id,room,title,body,kind,jurisdiction,fee_kobo,fee_operation_id,fee_policy_revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[tenant,b.id,a.userId,b.room,normalizeForumText(b.title),b.body.trim(),b.kind,normalizeForumText(b.jurisdiction),feeKobo,operationId,policy.revision]);return {id:b.id,state:'pending',feeKobo,feeOperationId:operationId};
   });
  }));
  app.post('/v1/forum/topics/:id/messages',{bodyLimit:1500000},async(q,r)=>fail(r,async()=>{
