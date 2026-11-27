@@ -16,8 +16,38 @@ const lesson={
  {prompt:'What should you avoid posting in a public discussion?',options:['The title of a public document','A link to a public agency page','Private identity or financial credentials'],correct:2}
  ]
 };
-export function civicLearningLesson(){return {id:lesson.id,title:lesson.title,text:lesson.text,questions:lesson.questions.map(({prompt,options})=>({prompt,options:[...options]}))};}
-export function gradeCivicLearning(answers:unknown){return Array.isArray(answers)&&answers.length===lesson.questions.length&&lesson.questions.every((q,i)=>Number.isInteger(answers[i])&&answers[i]===q.correct);}
+const lessons=[
+ lesson,
+ {id:'public-services-access-v1',title:'Accessing public services safely',
+ text:'Use an agency’s official website or verified service desk to find its requirements, fees and processing times. Keep official receipts. If a request is unclear, ask the agency to clarify; do not pay a stranger who promises a shortcut.',
+ questions:[
+ {prompt:'How should you confirm a public service fee?',options:['Ask a stranger online','Check the agency’s official service information','Use the first social media post'],correct:1},
+ {prompt:'What should you keep after making an official payment?',options:['An official receipt','Only a screenshot of a stranger’s message','Nothing'],correct:0},
+ {prompt:'What should you do when a requirement is unclear?',options:['Pay an unverified intermediary','Send your password to a stranger','Ask the relevant agency to clarify'],correct:2}
+ ]},
+ {id:'privacy-and-digital-safety-v1',title:'Protecting personal information',
+ text:'Keep passwords, one-time codes and API keys private. Use verified channels when submitting personal documents. Report suspected fraud to the relevant official service and avoid forwarding unverified requests for sensitive information.',
+ questions:[
+ {prompt:'A stranger asks for your one-time code. What should you do?',options:['Send it immediately','Post it publicly','Keep it private'],correct:2},
+ {prompt:'Where should you submit identity documents required by a service?',options:['A verified official channel','Any group chat','An unknown link'],correct:0},
+ {prompt:'What should you do about a suspected fraudulent service request?',options:['Share your credentials','Report through an appropriate verified channel','Forward it as verified news'],correct:1}
+ ]},
+ {id:'public-records-literacy-v1',title:'Understanding public records',
+ text:'A proposal, announcement, approval and completed project are different stages. Check the record’s date, issuing institution and supporting evidence. If a claim lacks evidence, describe it as unverified rather than certain.',
+ questions:[
+ {prompt:'Does a project announcement prove the work is completed?',options:['Always','No, completion requires supporting evidence','Only when it has many likes'],correct:1},
+ {prompt:'What helps you interpret a public record?',options:['The record’s date, institution and evidence','The popularity of its author','The number of comments'],correct:0},
+ {prompt:'How should you describe a claim without supporting evidence?',options:['As definitely true','As an official finding','As unverified'],correct:2}
+ ]}
+] as const;
+function getLesson(id:string){
+ const item=lessons.find(value=>value.id===id);
+ if(!item)throw Error('civic_reward.lesson_unknown');
+ return item;
+}
+export function civicLearningCatalog(){return lessons.map(({id,title,text})=>({id,title,text}));}
+export function civicLearningLesson(id:string=lessonId){const item=getLesson(id);return {id:item.id,title:item.title,text:item.text,questions:item.questions.map(({prompt,options})=>({prompt,options:[...options]}))};}
+export function gradeCivicLearning(answers:unknown,id:string=lessonId){const item=getLesson(id);return Array.isArray(answers)&&answers.length===item.questions.length&&item.questions.every((q,i)=>Number.isInteger(answers[i])&&answers[i]===q.correct);}
 const key=(...v:string[])=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const operation=(kind:string,...v:string[])=>'civic-reward-'+kind+'-'+key(...v);
 const validId=(s:string)=>typeof s==='string'&&/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,159}$/.test(s);
@@ -110,25 +140,25 @@ export function createCivicLearningRewards(pool:Pool){
     await audit(c,a,id,action);return updated;
    });
   },
-  async begin(a:Actor){
-   check(a);return withTransaction(pool,async c=>{
+  async begin(a:Actor,lessonId:string='public-information-literacy-v1'){
+   check(a);getLesson(lessonId);return withTransaction(pool,async c=>{
     await lockActive(c,a,true);
     const old=(await c.query<{attempt_id:string;state:string;live:boolean;day_today:boolean;attempt_count:number}>(
      `SELECT attempt_id::text,state,expires_at>clock_timestamp() AS live,day=(clock_timestamp() AT TIME ZONE 'UTC')::date AS day_today,attempt_count
        FROM gb_wallet.civic_learning_attempts WHERE tenant_id=$1 AND user_id=$2 AND lesson_id=$3 FOR UPDATE`,[a.tenantId,a.userId,lessonId])).rows[0];
-    if(old?.state==='passed')return {lesson:civicLearningLesson(),attemptId:old.attempt_id,passed:true};
-    if(old?.state==='started'&&old.live)return {lesson:civicLearningLesson(),attemptId:old.attempt_id,passed:false};
+    if(old?.state==='passed')return {lesson:civicLearningLesson(lessonId),attemptId:old.attempt_id,passed:true};
+    if(old?.state==='started'&&old.live)return {lesson:civicLearningLesson(lessonId),attemptId:old.attempt_id,passed:false};
     const n=old?.day_today?old.attempt_count+1:1;if(n>3)throw Error('civic_reward.attempt_limit');
     const nonce=randomUUID();
     await c.query(`INSERT INTO gb_wallet.civic_learning_attempts(tenant_id,user_id,lesson_id,attempt_id,expires_at,day,attempt_count)
       VALUES($1,$2,$3,$4,clock_timestamp()+interval '20 minutes',(clock_timestamp() AT TIME ZONE 'UTC')::date,$5)
       ON CONFLICT(tenant_id,user_id,lesson_id) DO UPDATE SET attempt_id=EXCLUDED.attempt_id,started_at=clock_timestamp(),
       expires_at=EXCLUDED.expires_at,day=EXCLUDED.day,attempt_count=EXCLUDED.attempt_count,state='started'`,[a.tenantId,a.userId,lessonId,nonce,n]);
-    return {lesson:civicLearningLesson(),attemptId:nonce,passed:false};
+    return {lesson:civicLearningLesson(lessonId),attemptId:nonce,passed:false};
    });
   },
-  async complete(a:Actor,attemptId:string,answers:unknown){
-   check(a);if(!/^[0-9a-f-]{36}$/i.test(attemptId))throw Error('civic_reward.invalid_attempt');
+  async complete(a:Actor,attemptId:string,answers:unknown,lessonId:string='public-information-literacy-v1'){
+   check(a);getLesson(lessonId);if(!/^[0-9a-f-]{36}$/i.test(attemptId))throw Error('civic_reward.invalid_attempt');
    return withTransaction(pool,async c=>{
     await lockActive(c,a,true);
     const attempt=(await c.query<{state:string;ready:boolean}>(
@@ -137,13 +167,13 @@ export function createCivicLearningRewards(pool:Pool){
     if(!attempt)throw Error('civic_reward.invalid_attempt');
     if(attempt.state==='passed')return {passed:true};
     if(attempt.state!=='started'||!attempt.ready)throw Error('civic_reward.attempt_not_ready');
-    const passed=gradeCivicLearning(answers);
+    const passed=gradeCivicLearning(answers,lessonId);
     await c.query('UPDATE gb_wallet.civic_learning_attempts SET state=$4 WHERE tenant_id=$1 AND user_id=$2 AND lesson_id=$3',[a.tenantId,a.userId,lessonId,passed?'passed':'failed']);
     return {passed};
    });
   },
-  async award(a:Actor){
-   check(a);return withTransaction(pool,async c=>{
+  async award(a:Actor,lessonId:string='public-information-literacy-v1'){
+   check(a);getLesson(lessonId);return withTransaction(pool,async c=>{
     // A tenant budget row is the serialization point for financial claims.
     const b=(await c.query<Budget>("SELECT * FROM gb_wallet.civic_learning_budgets WHERE tenant_id=$1 AND state='active' FOR UPDATE",[a.tenantId])).rows[0];
     await lockActive(c,a,true);

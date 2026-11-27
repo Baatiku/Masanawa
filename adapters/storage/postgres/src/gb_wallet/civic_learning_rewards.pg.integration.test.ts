@@ -77,4 +77,21 @@ describe.skipIf(!connectionString)('civic learning funded reward PostgreSQL acce
   expect((await pool.query('SELECT count(*)::int AS n FROM gb_wallet.civic_learning_awards WHERE tenant_id=$1',[tenantId])).rows[0].n).toBe(0);
   await expect(pool.query('DELETE FROM gb_wallet.civic_learning_budget_audit WHERE tenant_id=$1',[tenantId])).rejects.toThrow('immutable');
  },30000);
+ it('binds attempts and immutable rewards to distinct neutral lessons across one budget',async()=>{
+  const {tenantId,funder,users,funding,reward,wallet,pass}=await setup();
+  const a=users[0]!;
+  await reward.fund({...funding,fundedKobo:1000,rewardKobo:250});
+  await reward.control(funder,funding.budgetId,'activate');
+  await pass(a);
+  const second='public-services-access-v1';
+  const first=await reward.award(a);
+  const attempt=await reward.begin(a,second);
+  await pool.query("UPDATE gb_wallet.civic_learning_attempts SET started_at=clock_timestamp()-interval '31 seconds' WHERE tenant_id=$1 AND user_id=$2 AND lesson_id=$3",[tenantId,a.userId,second]);
+  await expect(reward.complete(a,attempt.attemptId,[1,0,2],'privacy-and-digital-safety-v1')).rejects.toThrow('civic_reward.invalid_attempt');
+  expect(await reward.complete(a,attempt.attemptId,[1,0,2],second)).toEqual({passed:true});
+  const next=await reward.award(a,second);expect(next.operationId).not.toBe(first.operationId);
+  expect(await reward.award(a,second)).toEqual(next);
+  expect((await wallet.balance(a)).balanceKobo).toBe(500);
+  await expect(reward.award(a,'privacy-and-digital-safety-v1')).rejects.toThrow('civic_reward.lesson_required');
+ },30000);
 });
