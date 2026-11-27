@@ -37,11 +37,12 @@ jobs:
               console.log('Public assessment schema OK; aggregate rows:',data.items.length);
             }
             const privateRoute=await request(api+'/v1/civic/my-assessments');
-            assert([401,403].includes(privateRoute.status),'Private assessment endpoint must reject guests');
+            const privateDenied=[401,403].includes(privateRoute.status);
             const pulse=await request(web+'/citizenpulse');
             assert.equal(pulse.status,200);
             assert.equal(results.status,200);
+            assert(privateDenied,'Private assessment endpoint must reject guests');
             assert.equal(release,'9ab4504e59de977f634960fc4397e2b900f9002d');
-            assert.equal(revision,'5974a70c3fa2eb3ae112ff3de2f6ddc814efb76b');
+            assert.equal(revision,'573830e92406326beaf18554199b7f47bbdc6cec701300182e1e36a57d801174');
           })().catch(e=>{console.error(e.message);process.exitCode=1});
           NODE
