@@ -85,3 +85,13 @@ describe("public publisher news preview delivery", () => {
     });
   });
 });
+
+ it("delivers redacted Forum notices and refuses historical Rooms notices",async()=>{
+  const forum={...event,event_id:"forum-"+"a".repeat(64),category:"rooms",kind:"forum_update",deep_link:"masanawa://forum"};
+  const old={...event,event_id:"retired-room-1",category:"rooms",kind:"room_reply",deep_link:"masanawa://rooms"};
+  const query=vi.fn(async(sql:string)=>({rows:sql.includes("RETURNING o.tenant_id")?[forum,old]:[]}));
+  const send=vi.fn(async()=>({attempted:1,delivered:1}));
+  await createFinancialNotificationRuntime({pool:{query} as never,sender:{send}}).runOnce();
+  expect(send).toHaveBeenCalledTimes(1);expect(send).toHaveBeenCalledWith({scope:{tenantId:forum.tenant_id,userId:forum.user_id},title:"Citizen Forum update",body:"Open Forum to view your update",data:{type:forum.kind,eventId:forum.event_id,deepLink:forum.deep_link}});
+  expect(query.mock.calls.some(([sql])=>sql.includes("agents.fanout_forum_push"))).toBe(true);
+ });

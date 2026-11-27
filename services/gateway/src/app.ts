@@ -1,5 +1,6 @@
 import {registerBrowserPushRoutes} from './browser_push_routes.js';
 import {registerCivicRatingRoutes,type CivicRatingPorts} from './civic_rating_routes.js';
+import {registerCitizenForum} from './citizen_forum_routes.js';
 import {registerCivicResponseRoutes} from './civic_response_routes.js';
 import {registerWhatsAppLinkRoutes,type WhatsAppLinkPorts} from './whatsapp_link.js';
 import {registerWhatsAppDataRoutes} from './whatsapp_data.js';
@@ -1022,7 +1023,7 @@ export function createGatewayApp(options: GatewayAppOptions = {}) {
   if(options.browserPush)registerBrowserPushRoutes(app,options.browserPush);
   if(options.customerMemory)registerCustomerMemoryRoutes(app,options.customerMemory);
   if(options.civicResponse)registerCivicResponseRoutes(app,options.civicResponse);
-  if(options.civicRatings)registerCivicRatingRoutes(app,options.civicRatings);
+  if(options.civicRatings){registerCivicRatingRoutes(app,options.civicRatings);registerCitizenForum(app,options.civicRatings);}
   if(options.messageControls)registerMessageControlRoutes(app,options.messageControls);
   if (options.agentConversation) {
     const conversation = options.agentConversation;

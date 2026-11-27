@@ -14,6 +14,7 @@ type ClaimedNotice = {
 };
 
 const copy: Readonly<Record<string, { title: string; body: string }>> = {
+  rooms: {title:"Citizen Forum update",body:"Open Forum to view your update"},
   wallet: {
     title: "Wallet update",
     body: "Open Wallet to review this update",
@@ -84,7 +85,7 @@ export function createFinancialNotificationRuntime(input: {
         let success = false;
         try {
           const copyForEvent = copy[event.category];
-          if (!copyForEvent || (event.category === "status" && event.kind !== "news_update"))
+          if (!copyForEvent || (event.category === "status" && event.kind !== "news_update") || (event.category === "rooms" && (event.kind !== "forum_update" || !/^forum-[a-f0-9]{64}$/.test(event.event_id) || event.deep_link !== "masanawa://forum")))
             throw new Error("unsupported_notice_category");
           // Only canonical publisher news is public; personal alerts stay redacted.
           const article = event.category === "status" && event.kind === "news_update"
@@ -132,6 +133,8 @@ export function createFinancialNotificationRuntime(input: {
              AND lease_id=$4::uuid AND delivered_at IS NULL`,
           [event.tenant_id,event.user_id,event.event_id,event.lease_id,success]);
       }
+      // Fanout is a separate committed operation, bounded to 100 followers.
+      await input.pool.query("SELECT agents.fanout_forum_push()").catch(()=>undefined);
       return { claimed: result.rows.length, delivered, retried };
     },
   });

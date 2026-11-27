@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {withTransaction} from '../transaction.js';
 export interface NgnSpendActor {tenantId:string;userId:string;operationId:string}
-export type NgnSpendPurpose='reply'|'connected_call'|'data'|'send'|'request_pay';
+export type NgnSpendPurpose='reply'|'connected_call'|'data'|'send'|'request_pay'|'forum_topic';
 export interface NgnSpendInput extends NgnSpendActor {idempotencyKey:string;purpose:NgnSpendPurpose;amountKobo:number;recipientId?:string}
 export interface NgnSpendReceipt {operationId:string;state:'reserved'|'completed'|'failed';amountKobo:number;capturedKobo:number}
 export interface NgnSpendBalance {balanceKobo:number;heldKobo:number;availableKobo:number;debtKobo:number;frozen:boolean}
@@ -29,7 +29,7 @@ export function createNgnSpending(pool:Pool,transactionClient?:PoolClient){
  };
  const reserve=async(input:NgnSpendInput):Promise<NgnSpendReceipt>=>{
   check(input);id(input.idempotencyKey);positive(input.amountKobo);
-  if(!['reply','connected_call','data','send','request_pay'].includes(input.purpose))throw Error('ngn.invalid_purpose');
+  if(!['reply','connected_call','data','send','request_pay','forum_topic'].includes(input.purpose))throw Error('ngn.invalid_purpose');
   if(['send','request_pay'].includes(input.purpose)!==!!input.recipientId)throw Error('ngn.invalid_recipient');
   if(input.recipientId){id(input.recipientId);if(input.recipientId===input.userId)throw Error('ngn.self_send');}
   const fingerprint=hash(['NGN',input.userId,input.purpose,input.amountKobo,input.recipientId??null]);

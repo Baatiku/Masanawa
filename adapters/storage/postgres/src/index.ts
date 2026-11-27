@@ -78,3 +78,5 @@ export {newsCatalog,safeNewsArticleUrl} from './home_feed/news_catalog.js';
 export {fetchGatewayNews,newsGatewayOrigin} from './home_feed/news_gateway.js';
 
 export * from './gb_wallet/usage_billing.js';
+
+export * from './gb_wallet/forum_fee.js';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mobilePushAndroidChannel } from "./mobile_push.js";
-import { mobilePushSafeData, mobilePushSafePreview } from "@masanawa/mobile-push";
+import { mobilePushSafeData, mobilePushSafePreview, pushCategory, pushAllowed } from "@masanawa/mobile-push";
 
 describe("mobile FCM call channels", () => {
   const uuid = "6b943dad-7684-4ed3-9841-852588ae44ce";
@@ -78,3 +78,14 @@ describe("mobile FCM call channels", () => {
     expect(mobilePushAndroidChannel(undefined)).toBe("masanawa_work");
   });
 });
+
+ it("allows only scoped Forum updates using the existing explicit preference and generic previews",()=>{
+  const prefs={messages:true,calls:true,rooms:true,status:true,wallet:true,p2p:false,quietStart:null,quietEnd:null,utcOffsetMinutes:60};
+  const forum={type:"forum_update",eventId:"forum-"+"a".repeat(64),deepLink:"masanawa://forum"};
+  expect(pushCategory(forum)).toBe("rooms");expect(pushAllowed(prefs,"rooms",new Date(),forum)).toBe(true);
+  expect(pushAllowed({...prefs,rooms:false},"rooms",new Date(),forum)).toBe(false);
+  expect(pushAllowed(prefs,"rooms",new Date(),{type:"room_reply"})).toBe(false);
+  expect(mobilePushSafeData({...forum,body:"Sensitive moderation details"})).toEqual(forum);
+  expect(mobilePushSafePreview(forum)).toEqual({title:"Citizen Forum",body:"Open Forum to view your update"});
+  expect(mobilePushSafeData({type:"room_reply",deepLink:"masanawa://forum"})).toEqual({type:"room_reply"});
+ });
