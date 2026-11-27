@@ -159,7 +159,7 @@ DECLARE job agents.forum_push_events%ROWTYPE; member record; processed integer:=
 BEGIN
  DELETE FROM agents.forum_push_events WHERE created_at<clock_timestamp()-interval '1 day';
  SELECT * INTO job FROM agents.forum_push_events
- WHERE NOT done ORDER BY created_at,tenant_id,topic_id,bucket LIMIT 1 FOR UPDATE SKIP LOCKED;
+ WHERE NOT done AND bucket+interval '15 minutes'<=clock_timestamp() ORDER BY created_at,tenant_id,topic_id,bucket LIMIT 1 FOR UPDATE SKIP LOCKED;
  IF NOT FOUND THEN RETURN 0; END IF;
  FOR member IN
   SELECT e.user_id FROM agents.forum_engagement e
