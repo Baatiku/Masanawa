@@ -57,6 +57,41 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
       if(!row)throw new Error('media_unavailable');
       return {kind:row.kind,mimeType:row.mime_type,dataBase64:Buffer.from(row.payload).toString('base64')};
     },
+    async forumCommunity(header:string|undefined) {
+      const operator=await actor(header,'incidents.read');
+      const topics=(await input.pool.query(`SELECT t.id,t.room,t.title,t.kind,t.created_at,(p.topic_id IS NOT NULL) AS pinned,o.id AS poll_id,o.closed AS poll_closed,o.closes_at,COALESCE(c.status,'open') AS complaint_status FROM agents.forum_topics t JOIN identity.users u ON u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active' LEFT JOIN agents.forum_topic_pins p ON p.tenant_id=t.tenant_id AND p.topic_id=t.id LEFT JOIN agents.forum_polls o ON o.tenant_id=t.tenant_id AND o.topic_id=t.id LEFT JOIN agents.forum_complaint_progress c ON c.tenant_id=t.tenant_id AND c.topic_id=t.id WHERE t.tenant_id=$1 AND t.state='published' AND NOT t.system_channel ORDER BY (p.topic_id IS NOT NULL) DESC,t.created_at DESC LIMIT 200`,[operator.tenantId])).rows;
+      return {topics};
+    },
+    async forumCommunityAction(header:string|undefined,v:{topicId:string;action:string;reason:string;question?:string;options?:string[];durationDays?:number;status?:string}) {
+      const operator=await actor(header,'incidents.write'),tenant=operator.tenantId;
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.topicId)||v.reason.trim().length<8||!['pin','unpin','poll_create','poll_close','complaint_progress'].includes(v.action))throw new Error('invalid_community_action');
+      return withTransaction(input.pool,async c=>{
+        const topic=(await c.query(`SELECT t.id,t.room,t.kind FROM agents.forum_topics t JOIN identity.users u ON u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active' WHERE t.tenant_id=$1 AND t.id=$2 AND t.state='published' AND NOT t.system_channel FOR UPDATE OF t`,[tenant,v.topicId])).rows[0];
+        if(!topic)throw new Error('forum_target_conflict');
+        let details:Record<string,unknown>={};
+        if(v.action==='pin'){
+          await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",['forum-pins:'+tenant+':'+topic.room]);
+          const count=(await c.query('SELECT count(*)::int AS n FROM agents.forum_topic_pins WHERE tenant_id=$1 AND room=$2',[tenant,topic.room])).rows[0];
+          if(Number(count?.n)>=5&&!(await c.query('SELECT topic_id FROM agents.forum_topic_pins WHERE tenant_id=$1 AND topic_id=$2',[tenant,v.topicId])).rows.length)throw new Error('pin_limit');
+          await c.query('INSERT INTO agents.forum_topic_pins(tenant_id,topic_id,room,pinned_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[tenant,v.topicId,topic.room,operator.actorId]);
+        }else if(v.action==='unpin'){
+          await c.query('DELETE FROM agents.forum_topic_pins WHERE tenant_id=$1 AND topic_id=$2',[tenant,v.topicId]);
+        }else if(v.action==='poll_create'){
+          const question=v.question?.trim(),options=v.options?.map(x=>x.trim()),days=v.durationDays;
+          if(!question||question.length<10||question.length>200||!options||options.length<2||options.length>6||options.some(x=>!x||x.length>100)||new Set(options.map(x=>x.toLowerCase())).size!==options.length||!Number.isInteger(days)||Number(days)<1||Number(days)>30)throw new Error('invalid_poll');
+          const result=await c.query("INSERT INTO agents.forum_polls(tenant_id,id,topic_id,question,options,closes_at,created_by) VALUES($1,gen_random_uuid(),$2,$3,$4,clock_timestamp()+$5::int*interval '1 day',$6) ON CONFLICT(tenant_id,topic_id) DO NOTHING RETURNING id",[tenant,v.topicId,question,options,days,operator.actorId]);if(!result.rows.length)throw new Error('poll_exists');
+          details={pollId:result.rows[0]?.id};
+        }else if(v.action==='poll_close'){
+          const result=await c.query('UPDATE agents.forum_polls SET closed=true WHERE tenant_id=$1 AND topic_id=$2 RETURNING id',[tenant,v.topicId]);if(!result.rows.length)throw new Error('poll_not_found');
+        }else{
+          if(!['complaint','concern'].includes(topic.kind)||!['open','in_progress','resolved','unresolved'].includes(v.status||''))throw new Error('invalid_complaint_status');
+          await c.query('INSERT INTO agents.forum_complaint_progress(tenant_id,topic_id,status,updated_by) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,topic_id) DO UPDATE SET status=excluded.status,updated_by=excluded.updated_by,updated_at=clock_timestamp()',[tenant,v.topicId,v.status,operator.actorId]);
+          details={status:v.status};
+        }
+        await c.query('INSERT INTO agents.forum_community_audit(tenant_id,topic_id,action,actor_id,reason,details) VALUES($1,$2,$3,$4,$5,$6)',[tenant,v.topicId,v.action,operator.actorId,v.reason.trim(),JSON.stringify(details)]);
+        return {ok:true};
+      });
+    },
     async forumQueue(header:string|undefined) {
       const operator=await actor(header,'incidents.read');
       const topics=(await input.pool.query("SELECT id,room,title,body,kind,jurisdiction,state,created_at FROM agents.forum_topics WHERE tenant_id=$1 AND state='pending' ORDER BY created_at LIMIT 100",[operator.tenantId])).rows;
