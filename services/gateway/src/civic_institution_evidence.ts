@@ -4,6 +4,7 @@
 type InstitutionEvidence = {
   url: string;
   label: string;
+  reviewedAt?: string;
   responsibilities: string[];
   history?: string[];
   services?: string[];
@@ -11,6 +12,67 @@ type InstitutionEvidence = {
 };
 
 export const institutionEvidence: Readonly<Record<string, InstitutionEvidence>> = {
+  "org-national-human-rights-commission": {
+    "url": "https://nigeriarights.gov.ng/about/nhrc-mandate.html",
+    "label": "NHRC — statutory mandate and complaints",
+    "responsibilities": [
+      "Promote and protect human rights; investigate alleged violations and exercise statutory redress powers."
+    ],
+    "history": [
+      "National Human Rights Commission Act 1995; the 2010 amendment strengthened its independence and powers."
+    ],
+    "services": [
+      "Prepare a factual complaint addressed to the Executive Secretary and submit through an NHRC office. Keep identifying details and evidence private in public discussions."
+    ],
+    "reviewedAt": "2026-11-27"
+  },
+  "org-federal-competition-and-consumer-protection-commission": {
+    "url": "https://fccpc.gov.ng/consumers/complaint-handling/",
+    "label": "FCCPC — consumer complaint handling",
+    "responsibilities": [
+      "Protect consumers and promote fair competition within the applicable statutory mandate."
+    ],
+    "services": [
+      "Keep transaction documents, raise the issue with the supplier and use the FCCPC complaint process when necessary. Confirm the current procedure on the official site."
+    ],
+    "reviewedAt": "2026-11-27"
+  },
+  "org-nigeria-data-protection-commission": {
+    "url": "https://ndpc.gov.ng/ndpc-outlines-mandate-and-achievements-to-ministrys-new-permanent-secretary/",
+    "label": "NDPC — data protection mandate",
+    "responsibilities": [
+      "Regulate processing of personal data and support protection of privacy and data subject rights under the Nigeria Data Protection Act 2023."
+    ],
+    "history": [
+      "Established following the enactment of the Nigeria Data Protection Act in 2023."
+    ],
+    "services": [
+      "Explain applicable privacy requests and complaint channels; do not ask users to disclose identity numbers, authentication codes or private records in public."
+    ],
+    "reviewedAt": "2026-11-27"
+  },
+  "org-nigeria-police-force": {
+    "url": "https://www.npf.gov.ng/home/department/8",
+    "label": "NPF — public complaint and accountability functions",
+    "responsibilities": [
+      "Support public safety and lawful policing subject to constitutional and statutory safeguards."
+    ],
+    "services": [
+      "For concerns about police conduct, document facts privately and seek legal assistance or the appropriate police complaint channel. Never advise a citizen to physically resist arrest."
+    ],
+    "reviewedAt": "2026-11-27"
+  },
+  "org-nigerian-electricity-regulatory-commission": {
+    "url": "https://nerc.gov.ng/media/the-transition-to-state-electricity-regulation-key-takeaways-the-new-serc-directory/",
+    "label": "NERC — transition to state electricity regulation",
+    "responsibilities": [
+      "Regulate electricity within its applicable jurisdiction; the Electricity Act 2023 provides a framework for state electricity markets."
+    ],
+    "services": [
+      "Raise service and billing complaints with the electricity distributor first. Escalate unresolved complaints to the regulator with jurisdiction, rather than automatically directing all complaints to a federal NERC forum."
+    ],
+    "reviewedAt": "2026-11-27"
+  },
   "org-nigeria-centre-for-disease-control-and-prevention": {
     url: "https://www.ncdc.gov.ng/about/ncdc",
     label: "NCDC — national public health institute and mandate",
