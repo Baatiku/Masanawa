@@ -63,3 +63,19 @@ CREATE TABLE agents.forum_notification_seen (
  FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
 );
 REVOKE ALL ON agents.forum_notification_seen FROM PUBLIC;
+
+-- Verified agency affiliation is granted by an authorized operator after external verification.
+CREATE TABLE agents.forum_representatives (
+ tenant_id text NOT NULL,user_id text NOT NULL,room text NOT NULL,
+ active boolean NOT NULL DEFAULT true,evidence_url text NOT NULL CHECK(length(evidence_url) BETWEEN 8 AND 1000),
+ verified_by text NOT NULL,verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(tenant_id,user_id,room),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
+);
+CREATE TABLE agents.forum_representative_audit (
+ tenant_id text NOT NULL,id bigint GENERATED ALWAYS AS IDENTITY,user_id text NOT NULL,room text NOT NULL,
+ active boolean NOT NULL,evidence_url text NOT NULL,operator_id text NOT NULL,reason text NOT NULL,
+ occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(tenant_id,id),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
+);
+REVOKE ALL ON agents.forum_representatives,agents.forum_representative_audit FROM PUBLIC;
