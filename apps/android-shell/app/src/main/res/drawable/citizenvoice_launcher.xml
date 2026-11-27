@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="100" android:viewportHeight="100">
- <path android:fillColor="#25D366" android:pathData="M0,0 H100 V100 H0 Z"/>
- <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="10" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M46.86,35.62 A20,20 0,1 0,46.86,62.38 M56,29 L72,70 L89,29"/>
+<!-- Original handset and speech-bubble silhouette; CV replaces the former M. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="512" android:viewportHeight="512">
+ <path android:fillColor="#25D366" android:pathData="M0,0 H512 V512 H0 Z"/>
+ <path android:fillColor="#FFFFFF" android:pathData="M298.6,87 C285,84 270,82 255,82 C160,82 83,159 83,255 C83,286 92,316 107,341 L82,430 L173,406 C198,420 226,427 255,427 C350,427 428,350 428,255 C428,241 426,227 423,214 L393,214 C397,227 399,241 399,255 C399,334 335,398 255,398 C228,398 201,390 178,375 L123,389 L138,337 C121,313 112,285 112,255 C112,176 176,111 255,111 C271,111 285,114 298.6,118 Z M193,175 C182,175 168,194 168,216 C168,248 195,282 224,305 C252,327 281,338 301,338 C324,338 343,325 343,298 C343,295 339,293 334,290 L305,277 C300,274 298,275 294,280 L281,296 C279,299 276,299 270,296 C244,286 226,268 214,247 C211,243 213,239 217,235 L225,225 C229,221 227,216 225,211 L212,183 C210,177 207,175 202,175 Z"/>
+ <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="17" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M356,113 A21,34 0,1 0,356,169 M375,107 L394,175 L414,107"/>
 </vector>
