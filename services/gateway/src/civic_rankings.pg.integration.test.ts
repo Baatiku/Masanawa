@@ -77,7 +77,7 @@ describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
    // Move the observation to a completed day to exercise the release boundary.
    await pool.query("UPDATE agents.civic_early_assessments SET observed_day=observed_day-1 WHERE tenant_id=$1 AND character_id=$2",[tenantId,person]);
    const early=(await app.inject({url:'/v1/civic/public-assessments/'+person})).json();
-   expect(early).toEqual({kind:'person',published:false,minimum:20,count:null,approval:null,early:{low:50,high:75,asOf:expect.stringMatching(/^\\d{4}-\\d{2}-\\d{2}$/)}});
+   expect(early).toEqual({kind:'person',published:false,minimum:20,count:null,approval:null,early:{low:50,high:75,asOf:expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)}});
    expect((await app.inject({url:'/v1/civic/ratings/'+person,headers:{authorization:'Bearer viewer'}})).json()).toMatchObject({early:early.early,average:null,approval:null,count:null});
    // A single edit cannot alter the already recorded early band.
    await pool.query('UPDATE agents.civic_ratings SET score=1 WHERE tenant_id=$1 AND character_id=$2',[tenantId,person]);
