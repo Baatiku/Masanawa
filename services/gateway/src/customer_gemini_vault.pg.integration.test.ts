@@ -55,4 +55,15 @@ describe.skipIf(!url)('customer Gemini credential custody on PostgreSQL',()=>{
   await rejected;
   expect(await v.resolve(actor)).toBeNull();
  },30000);
+ it('clears credentials on account disablement and blocks disabled accounts from enrolling',async()=>{
+  const v=vault();
+  await v.save(other,key);
+  expect((await v.resolve(other))?.use(s=>s)).toBe(key);
+  await pool.query("UPDATE identity.users SET state='disabled' WHERE tenant_id=$1 AND user_id=$2",[other.tenantId,other.userId]);
+  expect(await v.resolve(other)).toBeNull();
+  expect((await v.status(other)).configured).toBe(false);
+  expect((await pool.query('SELECT 1 FROM security.customer_gemini_credentials WHERE tenant_id=$1 AND user_id=$2',[other.tenantId,other.userId])).rowCount).toBe(0);
+  await expect(v.save(other,replacement)).rejects.toThrow('inactive_account');
+ },30000);
+
 });
