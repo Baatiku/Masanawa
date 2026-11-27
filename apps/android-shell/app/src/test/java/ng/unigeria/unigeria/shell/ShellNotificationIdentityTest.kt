@@ -12,7 +12,7 @@ class ShellNotificationIdentityTest {
     }
 
     @Test fun stableForRepeatedNotificationsToTheSameChat() {
-        val route = "https://app.masanawa.com/?tab=chats&profile=character_12345678-1234-1234-1234-123456789abc"
+        val route = "https://app.chatmeup.online/?tab=chats&profile=character_12345678-1234-1234-1234-123456789abc"
         assertEquals(ShellNotificationIdentity.requestCode(route, false),
             ShellNotificationIdentity.requestCode(route, false))
     }
@@ -25,7 +25,7 @@ class ShellNotificationIdentityTest {
     }
 
     @Test fun incomingCallDoesNotReplaceChatNotification() {
-        val route = "https://app.masanawa.com/?tab=calls"
+        val route = "https://app.chatmeup.online/?tab=calls"
         assertNotEquals(ShellNotificationIdentity.requestCode(route, true),
             ShellNotificationIdentity.requestCode(route, false))
     }

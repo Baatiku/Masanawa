@@ -99,7 +99,7 @@ internal class ShellArticleReader(
             setMargins(0, 0, 6.dp(), 0)
         })
         brand.addView(TextView(activity).apply {
-            text = "Masanawa"
+            text = "Citizenvoice"
             textSize = 21f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.rgb(17, 27, 33))
@@ -123,7 +123,7 @@ internal class ShellArticleReader(
             }.show()
         }
         brand.addView(more)
-        brand.addView(actionButton("×", "Close article and return to Masanawa", 29f) { close() })
+        brand.addView(actionButton("×", "Close article and return to Citizenvoice", 29f) { close() })
         page.addView(brand)
         // A 2dp Masanawa-green progress line provides feedback without a second toolbar.
         val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
