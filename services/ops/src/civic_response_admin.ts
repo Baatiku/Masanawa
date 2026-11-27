@@ -32,10 +32,17 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
         return {representative:row};
       });
     },
+    async forumMedia(header:string|undefined,id:string) {
+      const operator=await actor(header,'incidents.read');
+      if(!/^[0-9a-f-]{36}$/i.test(id))throw new Error('invalid_media');
+      const row=(await input.pool.query("SELECT kind,mime_type,payload FROM agents.forum_message_media WHERE tenant_id=$1 AND message_id=$2 AND expires_at>clock_timestamp()",[operator.tenantId,id])).rows[0];
+      if(!row)throw new Error('media_unavailable');
+      return {kind:row.kind,mimeType:row.mime_type,dataBase64:Buffer.from(row.payload).toString('base64')};
+    },
     async forumQueue(header:string|undefined) {
       const operator=await actor(header,'incidents.read');
       const topics=(await input.pool.query("SELECT id,room,title,body,kind,jurisdiction,state,created_at FROM agents.forum_topics WHERE tenant_id=$1 AND state='pending' ORDER BY created_at LIMIT 100",[operator.tenantId])).rows;
-      const messages=(await input.pool.query("SELECT m.id,m.topic_id,m.body,m.created_at,t.title FROM agents.forum_messages m JOIN agents.forum_topics t ON t.tenant_id=m.tenant_id AND t.id=m.topic_id WHERE m.tenant_id=$1 AND m.state='pending' AND t.state='published' ORDER BY m.created_at LIMIT 100",[operator.tenantId])).rows;
+      const messages=(await input.pool.query("SELECT m.id,m.topic_id,m.body,m.created_at,t.title,f.kind AS media_kind FROM agents.forum_messages m LEFT JOIN agents.forum_message_media f ON f.tenant_id=m.tenant_id AND f.message_id=m.id AND f.expires_at>clock_timestamp() JOIN agents.forum_topics t ON t.tenant_id=m.tenant_id AND t.id=m.topic_id WHERE m.tenant_id=$1 AND m.state='pending' AND t.state='published' ORDER BY m.created_at LIMIT 100",[operator.tenantId])).rows;
       const cases=(await input.pool.query(`SELECT c.id,c.kind,c.target_kind,c.target_id,c.reason AS body,c.created_at,COALESCE(t.title,'Public reply') AS title,COALESCE(t.body,m.body) AS target_body FROM agents.forum_cases c LEFT JOIN agents.forum_topics t ON c.target_kind='topic' AND t.tenant_id=c.tenant_id AND t.id=c.target_id LEFT JOIN agents.forum_messages m ON c.target_kind='message' AND m.tenant_id=c.tenant_id AND m.id=c.target_id WHERE c.tenant_id=$1 AND c.state='pending' ORDER BY c.created_at LIMIT 100`,[operator.tenantId])).rows;
       return {topics,messages,cases};
     },
