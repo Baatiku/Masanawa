@@ -44,7 +44,7 @@ export function createCivicAgencyEvidenceReader(input:{fetch?:typeof fetch;now?:
       const reviewed=institutionEvidence[canonicalDirectoryId];
       const reviewedEvidence:CivicAgencyEvidence|undefined=reviewed?Object.freeze({
         id:`reviewed_${agencyId}`,title:reviewed.label,sourceUrl:reviewed.url,
-        sourceDate:'2026-11-17',sourceDateKind:'review',
+        sourceDate:reviewed.reviewedAt??'2026-11-17',sourceDateKind:'review',
         content:[...reviewed.responsibilities,...(reviewed.history??[]),...(reviewed.services??[])].join(' '),
       }):undefined;
       const starting:readonly CivicAgencyEvidence[]=Object.freeze(reviewedEvidence?[seed,reviewedEvidence]:[seed]);

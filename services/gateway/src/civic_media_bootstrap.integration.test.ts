@@ -43,7 +43,13 @@ it('recovers civic startup interrupted by the stock-media guard while retaining 
   const beforeExpansion=(await db.query<{character_id:string}>('SELECT character_id FROM identity.characters WHERE tenant_id=$1',[tenantId])).rows.length;
   expect(beforeExpansion).toBe(17); // 16 legacy guides plus the first interrupted new guide
   await db.exec(await readFile(new URL('../../../packages/masana/migrations/0018_reviewed_civic_catalog_media.sql',import.meta.url),'utf8'));
-  expect(await ensureCivicAgencyAgents(args)).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:CIVIC_AGENCY_CATALOG.length-beforeExpansion});
+  // The previously published 73-entry guard must reject the five new identities
+  // until the supplemental forward-only migration is applied.
+  await expect(ensureCivicAgencyAgents(args)).rejects.toThrow('masana_media_unverified');
+  const beforeSupplement=(await db.query<{character_id:string}>('SELECT character_id FROM identity.characters WHERE tenant_id=$1',[tenantId])).rows.length;
+  expect(beforeSupplement).toBe(74);
+  await db.exec(await readFile(new URL('../../../packages/masana/migrations/0991_forum_supplemental_civic_media.sql',import.meta.url),'utf8'));
+  expect(await ensureCivicAgencyAgents(args)).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:CIVIC_AGENCY_CATALOG.length-beforeSupplement});
   expect(await ensureCivicAgencyAgents(args)).toEqual({prepared:CIVIC_AGENCY_CATALOG.length,created:0});
   const approved=(await db.query<{character_id:string;profile:Record<string,unknown>}>(
    "SELECT character_id,profile FROM masana.character_revisions WHERE tenant_id=$1 AND state='approved'",[tenantId])).rows;

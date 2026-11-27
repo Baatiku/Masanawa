@@ -3,9 +3,10 @@ import {CIVIC_AGENCY_CATALOG,approvedCivicAgencyId,ensureCivicAgencyAgents} from
 
 describe('independently operated agency AI guides',()=>{
  it('requires an exact published agency key, not a lookalike or an arbitrary organisation',()=>{
-  expect(CIVIC_AGENCY_CATALOG).toHaveLength(73);
+  expect(CIVIC_AGENCY_CATALOG).toHaveLength(78);
   expect(approvedCivicAgencyId('org-national-bureau-of-statistics')).toBe('org-national-bureau-of-statistics');
   expect(approvedCivicAgencyId('org-senate-of-nigeria')).toBe('org-senate-of-nigeria');
+  for(const id of ["org-national-human-rights-commission","org-federal-competition-and-consumer-protection-commission","org-nigeria-data-protection-commission","org-nigeria-police-force","org-nigerian-electricity-regulatory-commission"])expect(approvedCivicAgencyId(id)).toBe(id);
   expect(approvedCivicAgencyId('org-national-identity-management-commission')).toBeNull(); // legacy identity preserved
   expect(approvedCivicAgencyId('nimc')).toBe('nimc');
   expect(approvedCivicAgencyId('NIMC')).toBeNull();
