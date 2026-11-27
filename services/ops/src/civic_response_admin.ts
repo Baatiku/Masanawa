@@ -22,7 +22,7 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
     async forumReview(header:string|undefined,id:string,kind:'topic'|'message',state:'published'|'rejected'|'hidden',reason:string) {
       const operator=await actor(header,'incidents.write');
       const table=kind==='topic'?'agents.forum_topics':'agents.forum_messages';
-      const row=await input.pool.query(`UPDATE ${table} SET state=$3,reviewed_at=clock_timestamp(),reviewed_by=$4,review_reason=$5 WHERE tenant_id=$1 AND id=$2 AND (state='pending' OR (state='published' AND $3='hidden')) RETURNING id,state`,[operator.tenantId,id,state,operator.actorId,reason]);
+      const row=await input.pool.query(`UPDATE ${table} SET state=$3,reviewed_at=clock_timestamp(),reviewed_by=$4,review_reason=$5 WHERE tenant_id=$1 AND id=$2 ${kind==='topic'?'AND NOT system_channel':''} AND (state='pending' OR (state='published' AND $3='hidden')) RETURNING id,state`,[operator.tenantId,id,state,operator.actorId,reason]);
       if(!row.rows[0])throw new Error('forum_review_conflict');
       return row.rows[0];
     },
