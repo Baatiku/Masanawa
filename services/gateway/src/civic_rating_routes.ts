@@ -51,15 +51,16 @@ function publicDirectoryId(personId:string|null,agencyId:string|null):string|nul
  const name=CIVIC_AGENCY_CATALOG.find(seed=>seed.id===agencyId)?.name;
  return CIVIC_INSTITUTION_SEEDS.find(seed=>seed.name===name)?.id??null;
 }
-async function readPublicSummary(db:Query,tenant:string,subject:string){
+async function readPublicSummary(db:Query,tenant:string,subject:string,confidence=false){
  const matches=await db.query<{character_id:string;kind:'person'|'agency'}>(`
  SELECT DISTINCT character_id,kind FROM (${eligibleSubjectsSql}) eligible
  WHERE character_id=$2 OR person_id=$2 OR agency_id=$2 OR agency_id=$3
  LIMIT 2`,[tenant,subject,agencyAlias(subject)]);
  if(matches.rows.length!==1)throw new RatingError(404,'civic_rating_subject_unavailable');
  const row=matches.rows[0]!;
+ if(confidence&&row.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
  const result=await db.query<{score:number;count:number}>(`
- SELECT x.score,count(*)::integer AS count FROM agents.civic_ratings x
+ SELECT x.score,count(*)::integer AS count FROM ${confidence?'agents.civic_leadership_confidence':'agents.civic_ratings'} x
  JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
  WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[tenant,row.character_id]);
  const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
@@ -75,6 +76,14 @@ async function readSummary(db:Query,actor:Actor,id:string){
  const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
  const histogram=[0,0,0,0,0];for(const r of result.rows){histogram[r.score-1]=r.count;}
  return {kind:eligible.rows[0].kind,myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
+}
+async function readConfidence(db:Query,actor:Actor,id:string){
+ const eligible=await db.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
+ if(eligible.rows[0]?.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+ const result=await db.query<{score:number;count:number}>(`SELECT x.score,count(*)::integer AS count FROM agents.civic_leadership_confidence x JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active' WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[actor.tenantId,id]);
+ const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
+ const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
+ return {kind:'person',myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
 }
 export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingPorts){
  const execute=async(reply:{header:(k:string,v:string)=>unknown;code:(n:number)=>unknown},work:()=>Promise<unknown>)=>{
@@ -117,6 +126,38 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
   return withTransaction(ports.pool,async client=>{
    await client.query("SET LOCAL statement_timeout = '1500ms'");
    return readPublicSummary(client,ports.publicTenantId!,q.params.id);
+  });
+ }));
+ // Leadership confidence is an independent question, never a conversion of legacy scores.
+ app.get<{Params:{id:string}}>('/v1/civic/public-confidence/:id',async(q,r)=>execute(r,async()=>{
+  if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id))throw new RatingError(404,'civic_rating_subject_unavailable');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '1500ms'");
+   return readPublicSummary(client,ports.publicTenantId!,q.params.id,true);
+  });
+ }));
+ app.get<{Params:{id:string}}>('/v1/civic/confidence/:id',async(q,r)=>execute(r,async()=>{
+  if(!idPattern.test(q.params.id))throw new RatingError(400,'invalid_rating_subject');
+  const actor=await ports.authorize(q.headers.authorization);
+  return readConfidence(ports.pool,actor,q.params.id);
+ }));
+ app.post<{Params:{id:string};Body:unknown}>('/v1/civic/confidence/:id',{bodyLimit:1024},async(q,r)=>execute(r,async()=>{
+  if(!idPattern.test(q.params.id)||!validCivicRatingBody(q.body))throw new RatingError(400,'invalid_rating');
+  const actor=await ports.authorize(q.headers.authorization);
+  await ports.beforeWrite(q.headers.authorization);
+  const body=q.body,id=q.params.id;
+  return withTransaction(ports.pool,async client=>{
+   const user=await client.query("SELECT 1 FROM identity.users WHERE tenant_id=$1 AND user_id=$2 AND state='active' FOR UPDATE",[actor.tenantId,actor.userId]);
+   if(!user.rows.length)throw new RatingError(403,'inactive_account');
+   if(body.score===null){
+    await client.query('DELETE FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3',[actor.tenantId,actor.userId,id]);
+    return {withdrawn:true};
+   }
+   const eligible=await client.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
+   if(eligible.rows[0]?.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
+   await client.query(`INSERT INTO agents.civic_leadership_confidence(tenant_id,user_id,character_id,score,consent_version) VALUES($1,$2,$3,$4,$5)
+    ON CONFLICT(tenant_id,user_id,character_id) DO UPDATE SET score=EXCLUDED.score,consent_version=EXCLUDED.consent_version,updated_at=clock_timestamp()`,[actor.tenantId,actor.userId,id,body.score,CIVIC_RATING_CONSENT]);
+   return readConfidence(client,actor,id);
   });
  }));
  app.get<{Params:{id:string}}>('/v1/civic/ratings/:id',async(q,r)=>execute(r,async()=>{

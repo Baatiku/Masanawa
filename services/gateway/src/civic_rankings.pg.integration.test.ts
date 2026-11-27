@@ -48,6 +48,16 @@ describe.skipIf(!url)('civic engagement rankings in real PostgreSQL',()=>{
    expect((await app.inject({url:'/v1/civic/public-assessments/not-a-subject'})).statusCode).toBe(404);
    const publicWithAuth=await app.inject({url:'/v1/civic/public-assessments/'+person,headers:{authorization:'Bearer other'}});
    expect(publicWithAuth.json()).toEqual(publicResult.json());
+   const post=async(id:string,score:number|null)=>app.inject({method:'POST',url:'/v1/civic/confidence/'+id,headers:{authorization:'Bearer viewer'},payload:score===null?{score:null}:{score,consentVersion:1}});
+   expect((await post(agency,5)).statusCode).toBe(404);
+   expect((await post(hidden,5)).statusCode).toBe(404);
+   const confidence=await post(person,4);expect(confidence.statusCode).toBe(200);expect(confidence.json().myRating).toBe(4);
+   const original=await app.inject({url:'/v1/civic/ratings/'+person,headers:{authorization:'Bearer viewer'}});
+   expect(original.json().myRating).toBeNull();
+   const guestConfidence=await app.inject({url:'/v1/civic/public-confidence/'+person});
+   expect(guestConfidence.statusCode).toBe(200);expect(guestConfidence.json().published).toBe(false);
+   expect(guestConfidence.json()).not.toHaveProperty('myRating');
+   expect((await post(person,null)).json()).toEqual({withdrawn:true});
    const month=await get('30','all');expect(month.statusCode).toBe(200);expect(month.json().rankings).toEqual([{characterId:person,kind:'person',count:75,rank:1},{characterId:agency,kind:'agency',count:50,rank:2}]);
    const week=await get('7','all');expect(week.statusCode).toBe(200);expect(week.json().rankings).toEqual([{characterId:person,kind:'person',count:75,rank:1}]);
    expect((await get('30','agency')).json().rankings).toEqual([{characterId:agency,kind:'agency',count:50,rank:1}]);
