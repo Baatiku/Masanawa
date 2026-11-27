@@ -8,6 +8,8 @@ CREATE TABLE agents.forum_topics (
  kind text NOT NULL CHECK(kind IN ('question','complaint','concern','awareness','suggestion','feedback','general')),
  jurisdiction text NOT NULL CHECK(length(jurisdiction) BETWEEN 2 AND 100),
  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','published','rejected','hidden')),
+ fee_kobo bigint NOT NULL DEFAULT 0 CHECK(fee_kobo BETWEEN 0 AND 10000000), fee_operation_id text, fee_policy_revision integer NOT NULL DEFAULT 0,
+ CHECK((fee_kobo>0)=(fee_operation_id IS NOT NULL)),
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(), reviewed_at timestamptz,
  reviewed_by text, review_reason text,
  PRIMARY KEY(tenant_id,id),
@@ -93,3 +95,19 @@ CREATE TABLE agents.forum_message_media (
 );
 CREATE INDEX forum_media_expiry ON agents.forum_message_media(tenant_id,expires_at);
 REVOKE ALL ON agents.forum_message_media FROM PUBLIC;
+
+CREATE TABLE agents.forum_fee_policy (
+ tenant_id text PRIMARY KEY,enabled boolean NOT NULL DEFAULT false,
+ fee_kobo bigint NOT NULL DEFAULT 10000 CHECK(fee_kobo BETWEEN 100 AND 10000000),
+ free_rooms text[] NOT NULL DEFAULT ARRAY['rights','police'],
+ free_kinds text[] NOT NULL DEFAULT ARRAY['question'],
+ revision integer NOT NULL DEFAULT 1 CHECK(revision>0),updated_by text NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE agents.forum_fee_policy_audit (
+ tenant_id text NOT NULL,revision integer NOT NULL,policy jsonb NOT NULL,
+ updated_by text NOT NULL,reason text NOT NULL,created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(tenant_id,revision)
+);
+CREATE UNIQUE INDEX forum_fee_operation ON agents.forum_topics(tenant_id,fee_operation_id) WHERE fee_operation_id IS NOT NULL;
+REVOKE ALL ON agents.forum_fee_policy,agents.forum_fee_policy_audit FROM PUBLIC;
