@@ -72,6 +72,7 @@ export function mobilePushSafePreview(data: Readonly<Record<string, string>> | u
   readonly title: string;
   readonly body: string;
 } {
+  if(data?.type==="forum_update")return {title:"Citizen Forum",body:"Open Forum to view your update"};
   const channel = mobilePushAndroidChannel(data);
   if (channel === "masanawa_news") {
     const safe = mobilePushSafeData(data);
