@@ -56,3 +56,10 @@ CREATE TABLE agents.forum_cases (
 CREATE UNIQUE INDEX forum_case_one_pending ON agents.forum_cases(tenant_id,user_id,kind,target_kind,target_id) WHERE state='pending';
 CREATE INDEX forum_case_queue ON agents.forum_cases(tenant_id,state,created_at);
 REVOKE ALL ON agents.forum_cases FROM PUBLIC;
+
+CREATE TABLE agents.forum_notification_seen (
+ tenant_id text NOT NULL,user_id text NOT NULL,seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(tenant_id,user_id),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
+);
+REVOKE ALL ON agents.forum_notification_seen FROM PUBLIC;
