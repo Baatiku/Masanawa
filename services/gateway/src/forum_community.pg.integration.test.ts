@@ -21,7 +21,7 @@ describe.skipIf(!url)('Forum community tools in PostgreSQL',()=>{
   await pool.query("INSERT INTO agents.forum_polls(tenant_id,id,topic_id,question,options,closes_at,created_by) VALUES($1,$2,$3,'Which service needs improvement?',ARRAY['Processing','Support'],now()+interval '1 day','fixture')",[tenant,poll,topic]);
   await pool.query("INSERT INTO agents.forum_complaint_progress(tenant_id,topic_id,status,updated_by) VALUES($1,$2,'in_progress','fixture')",[tenant,topic]);
   app=Fastify({logger:false});
-  registerCitizenForum(app,{pool,publicTenantId:tenant,authorize:async header=>{const user=header?.slice(7);if(user===outsider)return {tenantId:other,userId:outsider};if(!user||!members.includes(user))throw Object.assign(new Error('unauthorized'),{statusCode:401});return {tenantId:tenant,userId:user}},beforeWrite:async()=>{}});
+  registerCitizenForum(app,{pool,publicTenantId:tenant,authorize:async header=>{const user=header?.slice(7);if(user===outsider)return {tenantId:other,userId:outsider};if(!user||!members.some(member=>member===user))throw Object.assign(new Error('unauthorized'),{statusCode:401});return {tenantId:tenant,userId:user}},beforeWrite:async()=>{}});
   await app.ready();
  },120000);
  afterAll(async()=>{await app?.close();await pool?.end()});
