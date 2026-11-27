@@ -76,6 +76,21 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
             const guard=item.target_kind==='topic'?' AND NOT system_channel':'';
             const next=item.kind==='report'?'hidden':'published';
             const eligible=item.kind==='report'?"state IN ('published','hidden')":"state IN ('rejected','hidden','published')";
+            // Reinstatement never creates a new debit without the citizen's consent.
+            // A released original reservation is explicitly waived and audited in this case.
+            if(item.kind==='appeal'&&item.target_kind==='topic'){
+              const topic=(await c.query("SELECT user_id,fee_operation_id,fee_kobo FROM agents.forum_topics WHERE tenant_id=$1 AND id=$2 AND NOT system_channel FOR UPDATE",[operator.tenantId,item.target_id])).rows[0];
+              if(!topic)throw new Error('forum_target_conflict');
+              if(topic.fee_operation_id){
+                const who={tenantId:operator.tenantId,userId:topic.user_id,operationId:topic.fee_operation_id};
+                const spending=createNgnSpending(input.pool,c);
+                const receipt=await spending.read(who.tenantId,who.operationId,who.userId);
+                if(!receipt)throw new Error('forum_fee_receipt_missing');
+                if(receipt.state==='reserved')await spending.capture(who,Number(topic.fee_kobo));
+                else if(receipt.state==='failed')await c.query("INSERT INTO agents.forum_fee_appeal_waivers(tenant_id,topic_id,case_id,operation_id,waived_kobo,operator_id,reason) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,topic_id) DO NOTHING",[operator.tenantId,item.target_id,id,topic.fee_operation_id,topic.fee_kobo,operator.actorId,reason]);
+                else if(receipt.state!=='completed'||receipt.capturedKobo!==Number(topic.fee_kobo))throw new Error('forum_fee_receipt_conflict');
+              }
+            }
             const changed=await c.query(`UPDATE ${table} SET state=$3,reviewed_at=clock_timestamp(),reviewed_by=$4,review_reason=$5 WHERE tenant_id=$1 AND id=$2 AND ${eligible}${guard} RETURNING id`,[operator.tenantId,item.target_id,next,operator.actorId,reason]);
             if(!changed.rows.length)throw new Error('forum_target_conflict');
           }
