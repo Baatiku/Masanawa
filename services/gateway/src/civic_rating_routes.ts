@@ -44,6 +44,13 @@ function agencyAlias(id:string):string{
  const name=CIVIC_INSTITUTION_SEEDS.find(seed=>seed.id===id)?.name;
  return (name&&CIVIC_AGENCY_CATALOG.find(seed=>seed.name===name)?.id)||id;
 }
+function publicDirectoryId(personId:string|null,agencyId:string|null):string|null{
+ if(personId&&/^person-[a-z0-9-]{1,140}$/.test(personId))return personId;
+ if(!agencyId)return null;
+ if(/^org-[a-z0-9-]{1,140}$/.test(agencyId))return agencyId;
+ const name=CIVIC_AGENCY_CATALOG.find(seed=>seed.id===agencyId)?.name;
+ return CIVIC_INSTITUTION_SEEDS.find(seed=>seed.name===name)?.id??null;
+}
 async function readPublicSummary(db:Query,tenant:string,subject:string){
  const matches=await db.query<{character_id:string;kind:'person'|'agency'}>(`
  SELECT DISTINCT character_id,kind FROM (${eligibleSubjectsSql}) eligible
@@ -77,6 +84,33 @@ export function registerCivicRatingRoutes(app:FastifyInstance,ports:CivicRatingP
    return {error:error instanceof RatingError?error.code:'civic_ratings_unavailable'};
   }
  };
+ // Public volume dashboard, not a political preference leaderboard.
+ app.get<{Querystring:unknown}>('/v1/civic/public-assessments',async(q,r)=>execute(r,async()=>{
+  const query=q.query as Record<string,unknown>;
+  if(!ports.publicTenantId||Object.keys(query).length!==1||!['all','person','agency'].includes(String(query.kind)))throw new RatingError(400,'invalid_assessment_filter');
+  return withTransaction(ports.pool,async client=>{
+   await client.query("SET LOCAL statement_timeout = '2500ms'");
+   const rows=await client.query<{character_id:string;person_id:string|null;agency_id:string|null;kind:'person'|'agency';count:number;positive:number}>(`
+    WITH eligible AS (SELECT DISTINCT character_id,person_id,agency_id,kind FROM (${eligibleSubjectsSql}) candidates),
+    counts AS (
+     SELECT x.character_id,count(*)::integer AS count,count(*) FILTER (WHERE x.score>=4)::integer AS positive
+     FROM agents.civic_ratings x JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
+     WHERE x.tenant_id=$1 GROUP BY x.character_id HAVING count(*) >= $3
+    )
+    SELECT e.character_id,e.person_id,e.agency_id,e.kind,c.count,c.positive
+    FROM eligible e JOIN counts c ON c.character_id=e.character_id
+    WHERE ($2='all' OR e.kind=$2) AND (e.person_id IS NOT NULL OR e.agency_id IS NOT NULL)
+    ORDER BY (c.count/10) DESC,e.character_id ASC LIMIT 100`,[ports.publicTenantId,query.kind,CIVIC_RATING_MINIMUM]);
+   const byId=new Map<string,{id:string;kind:'person'|'agency';count:number;approval:number}>();
+   const ambiguous=new Set<string>();
+   for(const row of rows.rows){
+    const id=publicDirectoryId(row.person_id,row.agency_id);if(!id||ambiguous.has(id))continue;
+    if(byId.has(id)){byId.delete(id);ambiguous.add(id);continue;}
+    byId.set(id,{id,kind:row.kind,count:Math.floor(row.count/10)*10,approval:Math.round(row.positive/row.count*20)*5});
+   }
+   return {kind:query.kind,minimum:CIVIC_RATING_MINIMUM,items:[...byId.values()].sort((a,b)=>b.count-a.count||a.id.localeCompare(b.id)).slice(0,50)};
+  });
+ }));
  // Public, read-only results use the configured platform tenant, never caller-selected scope.
  app.get<{Params:{id:string}}>('/v1/civic/public-assessments/:id',async(q,r)=>execute(r,async()=>{
   if(!ports.publicTenantId||!publicAssessmentSubject(q.params.id))throw new RatingError(404,'civic_rating_subject_unavailable');
