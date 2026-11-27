@@ -663,5 +663,50 @@ export const CIVIC_INSTITUTION_SEEDS = Object.freeze([
     "source": "https://ohcsf.gov.ng/",
     "jurisdiction": "Federal",
     "parentName": "Office of the Head of the Civil Service of the Federation"
+  },
+  {
+    "id": "org-national-human-rights-commission",
+    "name": "National Human Rights Commission",
+    "short": "NHRC",
+    "kind": "Agency",
+    "topic": "human rights awareness, investigation of alleged violations and statutory redress",
+    "source": "https://nigeriarights.gov.ng/",
+    "jurisdiction": "Federal"
+  },
+  {
+    "id": "org-federal-competition-and-consumer-protection-commission",
+    "name": "Federal Competition and Consumer Protection Commission",
+    "short": "FCCPC",
+    "kind": "Agency",
+    "topic": "consumer rights, competition, unfair trading, product safety and complaints",
+    "source": "https://fccpc.gov.ng/",
+    "jurisdiction": "Federal"
+  },
+  {
+    "id": "org-nigeria-data-protection-commission",
+    "name": "Nigeria Data Protection Commission",
+    "short": "NDPC",
+    "kind": "Agency",
+    "topic": "data subject rights, privacy, lawful processing and data protection complaints",
+    "source": "https://ndpc.gov.ng/",
+    "jurisdiction": "Federal"
+  },
+  {
+    "id": "org-nigeria-police-force",
+    "name": "Nigeria Police Force",
+    "short": "NPF",
+    "kind": "Agency",
+    "topic": "lawful policing, public safety, arrest safeguards and police complaints",
+    "source": "https://www.npf.gov.ng/",
+    "jurisdiction": "Federal"
+  },
+  {
+    "id": "org-nigerian-electricity-regulatory-commission",
+    "name": "Nigerian Electricity Regulatory Commission",
+    "short": "NERC",
+    "kind": "Agency",
+    "topic": "electricity regulation, billing, metering and complaints within federal and state regulatory jurisdiction",
+    "source": "https://nerc.gov.ng/",
+    "jurisdiction": "Federal"
   }
 ] as const);
