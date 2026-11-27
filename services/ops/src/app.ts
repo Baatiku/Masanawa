@@ -226,6 +226,8 @@ export function createOpsApp(options: OpsAppOptions = {}) {
       }
     };
     const Id=Type.Object({id:Type.String({pattern:'^[0-9a-f-]{36}$'})},{additionalProperties:false});
+    app.get('/v1/admin/forum',async(q,r)=>fail(r,()=>response.forumQueue(q.headers.authorization)));
+    app.post('/v1/admin/forum/:id',{schema:{params:Id,body:Type.Object({kind:Type.Union([Type.Literal('topic'),Type.Literal('message')]),state:Type.Union([Type.Literal('published'),Type.Literal('rejected'),Type.Literal('hidden')]),reason:Type.String({minLength:8,maxLength:1000})},{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.forumReview(q.headers.authorization,q.params.id,q.body.kind,q.body.state,q.body.reason)));
     app.get('/v1/admin/incidents',{schema:{querystring:Type.Object({status:Type.Optional(Type.String({maxLength:32})),category:Type.Optional(Type.String({maxLength:60})),limit:Type.Optional(Type.Integer({minimum:1,maximum:100})),offset:Type.Optional(Type.Integer({minimum:0,maximum:10000})),includeHidden:Type.Optional(Type.Boolean())},{additionalProperties:false})}},async(q,r)=>fail(r,()=>response.queue(q.headers.authorization,q.query)));
     app.get('/v1/admin/incidents/:id',{schema:{params:Id}},async(q,r)=>fail(r,()=>response.detail(q.headers.authorization,q.params.id)));
     app.post('/v1/admin/incidents/:id/update',{schema:{params:Id,body:Type.Object({
