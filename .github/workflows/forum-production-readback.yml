@@ -1,0 +1,67 @@
+name: Citizen Forum production readback
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/forum-production-readback.yml']
+permissions:
+  contents: read
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - name: Verify approved Gateway release and public Forum contract
+        env:
+          EXPECTED: 708b64f6b8e743dac9343e1b599cc594e319d830
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 44); do
+            if curl -sS --max-time 10 -D /tmp/ready-headers -o /tmp/ready https://api.chatmeup.online/readyz; then
+              release=$(awk 'tolower($1)=="x-masanawa-release:" {gsub("\r","",$2);print $2}' /tmp/ready-headers)
+              echo "Gateway release: ${release:-unavailable}"
+              if [ "$release" = "$EXPECTED" ]; then break; fi
+            fi
+            sleep 15
+          done
+          test "${release:-}" = "$EXPECTED"
+          jq '{service,status}' /tmp/ready
+          curl --fail --silent --show-error --max-time 20 https://api.chatmeup.online/v1/forum/rooms -o /tmp/rooms
+          jq -e '.rooms|length==23' /tmp/rooms
+          jq '{rooms:(.rooms|length),feePolicy}' /tmp/rooms
+          jq -e '.feePolicy.enabled==false' /tmp/rooms
+          curl --fail --silent --show-error --max-time 20 https://api.chatmeup.online/v1/forum/topics -o /tmp/topics
+          jq -e '.topics|type=="array"' /tmp/topics
+          curl --fail --silent --show-error --max-time 20 https://api.chatmeup.online/v1/forum/pulse -o /tmp/pulse
+          jq -e 'type=="object"' /tmp/pulse
+          curl --fail --silent --show-error --max-time 20 'https://api.chatmeup.online/v1/forum/community?room=cac' -o /tmp/community
+          jq -e '(.pinned|type=="array") and (.polls|type=="array") and (.complaints|type=="array") and (.representatives|type=="array")' /tmp/community
+          jq '{pins:(.pinned|length),polls:(.polls|length),complaints:(.complaints|length),representatives:(.representatives|length)}' /tmp/community
+          private=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://api.chatmeup.online/v1/forum/community/mine)
+          echo "Private community endpoint without authentication: $private"
+          case "$private" in 401|403) ;; *) exit 1;; esac
+          status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://api.chatmeup.online/v1/forum/mine)
+          echo "Private Forum endpoint without authentication: $status"
+          case "$status" in 401|403) ;; *) exit 1;; esac
+
+  release-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Inspect exact main push workflow status and both live origins
+        run: |
+          set -u
+          for spec in Baatiku/Masanawa:708b64f6b8e743dac9343e1b599cc594e319d830 Baatiku/Masanawa-Web:693b8fe218843d42fff8d17223a333f6e6c4bca6; do
+            repo="${spec%:*}"; sha="${spec#*:}"
+            echo "Main release status: $repo $sha"
+            curl --silent --show-error --max-time 15 "https://api.github.com/repos/$repo/actions/runs?head_sha=$sha&event=push&per_page=20" | jq '{total_count,runs:[.workflow_runs[]? | {id,name,status,conclusion,html_url}]}'
+          done
+          echo "Deployment request and ancestry:"
+          curl --fail --silent --show-error --max-time 15 https://raw.githubusercontent.com/Baatiku/Masanawa/deploy/digitalocean-production/digitalocean-release.json | jq .
+          curl --fail --silent --show-error --max-time 15 'https://api.github.com/repos/Baatiku/Masanawa/compare/708b64f6b8e743dac9343e1b599cc594e319d830...main?per_page=1' | jq '{status,ahead_by,behind_by}'
+          for u in https://api.chatmeup.online/readyz https://api.chatmeup.online/v1/forum/rooms https://api.chatmeup.online/v1/forum/community https://app.chatmeup.online/masanawa-web-release.json https://app.chatmeup.online/api/forum/rooms; do
+            echo "Public probe: $u"
+            if curl --silent --show-error --max-time 15 -H 'Cache-Control: no-cache' -D /tmp/h -o /tmp/b "$u"; then
+              grep -iE '^HTTP/|^x-masanawa-release:|^content-type:' /tmp/h || true
+              jq -c 'if type=="object" then {status,revision,rooms:(if (.rooms|type)=="array" then (.rooms|length) else null end),feePolicy,error} else {type:type} end' /tmp/b 2>/dev/null || true
+            fi
+          done
