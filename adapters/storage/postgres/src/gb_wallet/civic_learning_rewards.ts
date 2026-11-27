@@ -35,12 +35,16 @@ async function lockWallets(c:PoolClient,t:string,...ids:string[]){
  }
 }
 async function depositProof(c:PoolClient,t:string,funder:string,event:string){
+ // Match provider reversal's event-before-wallet lock order. Use a second
+ // statement after the lock so READ COMMITTED sees a reversal that committed
+ // while the first statement was waiting; never trust a pre-lock snapshot.
+ const locked=await c.query('SELECT 1 FROM gb_wallet.ngn_deposit_events WHERE tenant_id=$1 AND account_id=$2 AND provider_event_id=$3 FOR SHARE',[t,funder,event]);
+ if(!locked.rows.length)throw Error('civic_reward.unverified_funding');
  const d=await c.query<{amount_kobo:string}>(`SELECT d.amount_kobo::text FROM gb_wallet.ngn_deposit_events d
  JOIN gb_wallet.ngn_entries e ON e.tenant_id=d.tenant_id AND e.operation_id=d.operation_id
  WHERE d.tenant_id=$1 AND d.account_id=$2 AND d.provider_event_id=$3
  AND e.account_id=d.account_id AND e.kind='deposit' AND e.delta_kobo=d.amount_kobo
- AND NOT EXISTS(SELECT 1 FROM gb_wallet.ngn_entries r WHERE r.tenant_id=e.tenant_id AND r.reverses_operation_id=e.operation_id)
- FOR SHARE OF d`,[t,funder,event]);
+ AND NOT EXISTS(SELECT 1 FROM gb_wallet.ngn_entries r WHERE r.tenant_id=e.tenant_id AND r.reverses_operation_id=e.operation_id)`,[t,funder,event]);
  if(!d.rows[0])throw Error('civic_reward.unverified_funding');
  return Number(d.rows[0].amount_kobo);
 }
@@ -71,8 +75,8 @@ export function createCivicLearningRewards(pool:Pool){
     await lockActive(c,input);
     const escrow='civic-reward-escrow-'+key(t,id),op=operation('fund',t,id);
     if((await c.query('SELECT 1 FROM identity.users WHERE tenant_id=$1 AND user_id=$2',[t,escrow])).rows.length)throw Error('civic_reward.escrow_conflict');
-    await lockWallets(c,t,input.userId,escrow);
     if(await depositProof(c,t,input.userId,input.providerEventId)<input.fundedKobo)throw Error('civic_reward.insufficient_proof');
+    await lockWallets(c,t,input.userId,escrow);
     const balance=await createNgnSpending(pool,c).balance({tenantId:t,userId:escrow});
     if(balance.balanceKobo||balance.heldKobo||balance.debtKobo||balance.frozen)throw Error('civic_reward.escrow_conflict');
     await transfer(c,t,input.userId,escrow,input.fundedKobo,op);
@@ -90,8 +94,8 @@ export function createCivicLearningRewards(pool:Pool){
     await lockActive(c,a);
     let returned=0;
     if(action==='activate'){
-     await lockWallets(c,a.tenantId,b.funder_id,b.escrow_id);
      await depositProof(c,a.tenantId,b.funder_id,b.provider_event_id);
+     await lockWallets(c,a.tenantId,b.funder_id,b.escrow_id);
      const w=await createNgnSpending(pool,c).balance({tenantId:a.tenantId,userId:b.funder_id});
      if(w.frozen||w.debtKobo)throw Error('civic_reward.funding_restricted');
      if(Number(b.funded_kobo)-Number(b.spent_kobo)<Number(b.reward_kobo))throw Error('civic_reward.budget_exhausted');
@@ -150,8 +154,8 @@ export function createCivicLearningRewards(pool:Pool){
     if(!(await c.query("SELECT 1 FROM gb_wallet.civic_learning_attempts WHERE tenant_id=$1 AND user_id=$2 AND lesson_id=$3 AND state='passed'",[a.tenantId,a.userId,lessonId])).rows.length)throw Error('civic_reward.lesson_required');
     const kobo=Number(b.reward_kobo);
     if(Number(b.funded_kobo)-Number(b.spent_kobo)<kobo)throw Error('civic_reward.budget_exhausted');
-    await lockWallets(c,a.tenantId,b.funder_id,b.escrow_id,a.userId);
     await depositProof(c,a.tenantId,b.funder_id,b.provider_event_id);
+    await lockWallets(c,a.tenantId,b.funder_id,b.escrow_id,a.userId);
     const w=await createNgnSpending(pool,c).balance({tenantId:a.tenantId,userId:b.funder_id});
     if(w.frozen||w.debtKobo)throw Error('civic_reward.funding_restricted');
     const op=operation('pay',a.tenantId,a.userId,lessonId);
