@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {createCanonicalId} from '@masanawa/contracts';
 import {createPostgresPool,runMigrations,platformProductMigrationRoots,type Pool} from '@masanawa/postgres';
-import {registerCitizenForum} from './citizen_forum_routes.js';
+import {registerCitizenForum,forumChannelId} from './citizen_forum_routes.js';
 
 const url=process.env.MASANAWA_TEST_DATABASE_URL;
 describe.skipIf(!url)('Forum community tools in PostgreSQL',()=>{
@@ -28,6 +28,12 @@ describe.skipIf(!url)('Forum community tools in PostgreSQL',()=>{
  const get=(path:string,user?:string)=>app.inject({url:'/v1/forum/'+path,headers:user?{authorization:'Bearer '+user}:{}});
  const post=(path:string,payload:object,user?:string)=>app.inject({method:'POST',url:'/v1/forum/community/'+path,payload,headers:user?{authorization:'Bearer '+user}:{}});
  it('scopes public content, private bookmarks and one current vote per account; suppresses low samples and rejects closed votes',async()=>{
+  const channel=forumChannelId('cac');
+  await pool.query("INSERT INTO agents.forum_topics(tenant_id,id,room,title,body,kind,jurisdiction,state,system_channel) VALUES($1,$2,'cac','General discussion','A permanent public discussion for this civic room.','general','National','published',true)",[tenant,channel]);
+  await pool.query("INSERT INTO agents.forum_messages(tenant_id,id,topic_id,user_id,body,state) VALUES($1,$2,$3,$4,'Unique search fixture for licensing','published'),($1,$5,$3,$4,'Private pending marker','pending')",[tenant,randomUUID(),channel,members[0],randomUUID()]);
+  expect((await get('topics?query=Unique%20search%20fixture')).json().topics).toEqual([expect.objectContaining({id:channel,system_channel:true})]);
+  expect((await get('topics?query=Private%20pending%20marker')).json().topics).toEqual([]);
+  expect((await get('topics')).json().topics).toEqual([expect.objectContaining({id:topic,system_channel:false})]);
   const first=await get('community?room=cac');expect(first.statusCode).toBe(200);
   expect(first.json().pinned.map((p:{id:string})=>p.id)).toEqual([topic]);
   expect(first.json().complaints).toEqual([expect.objectContaining({id:topic,status:'in_progress'})]);
