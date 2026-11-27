@@ -182,3 +182,14 @@ BEGIN
  RETURN processed;
 END $$;
 REVOKE ALL ON FUNCTION agents.queue_forum_notice(text,text,text),agents.fanout_forum_push() FROM PUBLIC;
+
+-- Successful appeals after release do not impose a fresh charge. Preserve the
+-- original financial receipt and record the authorized waiver separately.
+CREATE TABLE agents.forum_fee_appeal_waivers (
+ tenant_id text NOT NULL,topic_id uuid NOT NULL,case_id uuid NOT NULL,
+ operation_id text NOT NULL,waived_kobo bigint NOT NULL CHECK(waived_kobo>0),
+ operator_id text NOT NULL,reason text NOT NULL,created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(tenant_id,topic_id),
+ FOREIGN KEY(tenant_id,topic_id) REFERENCES agents.forum_topics(tenant_id,id) ON DELETE CASCADE
+);
+REVOKE ALL ON agents.forum_fee_appeal_waivers FROM PUBLIC;
