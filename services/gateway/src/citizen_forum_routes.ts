@@ -66,6 +66,21 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   const cases=(await db.query(`SELECT id,kind,target_kind,target_id,state,review_reason,created_at FROM agents.forum_cases WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
   return {topics,followed,messages,cases};
  }));
+ app.get('/v1/forum/notifications',async(q,r)=>fail(r,async()=>{
+  const a=await ports.authorize(q.headers.authorization);if(a.tenantId!==tenant)throw new ForumError(403,'forbidden');
+  const rows=(await db.query(`WITH items AS (
+   SELECT 'topic:'||t.id::text AS id,'topic_review' AS kind,t.id AS topic_id,t.title AS title,t.state AS state,t.reviewed_at AS occurred_at FROM agents.forum_topics t WHERE t.tenant_id=$1 AND t.user_id=$2 AND t.reviewed_at IS NOT NULL
+   UNION ALL SELECT 'message:'||m.id::text,'message_review',t.id,t.title,m.state,m.reviewed_at FROM agents.forum_messages m JOIN agents.forum_topics t ON t.tenant_id=m.tenant_id AND t.id=m.topic_id WHERE m.tenant_id=$1 AND m.user_id=$2 AND m.reviewed_at IS NOT NULL AND (t.user_id=$2 OR (t.state='published' AND (t.system_channel OR EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active'))))
+   UNION ALL SELECT 'case:'||c.id::text,'case_review',NULL::uuid,'Moderation case',c.state,c.reviewed_at FROM agents.forum_cases c WHERE c.tenant_id=$1 AND c.user_id=$2 AND c.reviewed_at IS NOT NULL
+   UNION ALL SELECT 'follow:'||t.id::text,'followed_activity',t.id,t.title,'published',max(m.reviewed_at) FROM agents.forum_engagement e JOIN agents.forum_topics t ON t.tenant_id=e.tenant_id AND t.id=e.topic_id JOIN agents.forum_messages m ON m.tenant_id=t.tenant_id AND m.topic_id=t.id AND m.state='published' AND m.user_id<>$2 JOIN identity.users mu ON mu.tenant_id=m.tenant_id AND mu.user_id=m.user_id AND mu.state='active' WHERE e.tenant_id=$1 AND e.user_id=$2 AND e.signal='follow' AND t.state='published' AND (t.system_channel OR EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active')) GROUP BY t.id,t.title
+  )
+  SELECT i.*,i.occurred_at>COALESCE(s.seen_at,'1970-01-01'::timestamptz) AS unread FROM items i LEFT JOIN agents.forum_notification_seen s ON s.tenant_id=$1 AND s.user_id=$2 WHERE i.occurred_at>=clock_timestamp()-interval '30 days' ORDER BY i.occurred_at DESC,i.id LIMIT 100`,[tenant,a.userId])).rows;
+  return {notifications:rows,unread:rows.filter(row=>row.unread===true).length};
+ }));
+ app.post('/v1/forum/notifications/read',async(q,r)=>fail(r,async()=>{
+  const a=await actor(q.headers.authorization);
+  await db.query(`INSERT INTO agents.forum_notification_seen(tenant_id,user_id,seen_at) VALUES($1,$2,clock_timestamp()) ON CONFLICT(tenant_id,user_id) DO UPDATE SET seen_at=EXCLUDED.seen_at`,[tenant,a.userId]);return {ok:true};
+ }));
  app.post('/v1/forum/cases',async(q,r)=>fail(r,async()=>{
   const a=await actor(q.headers.authorization),b=q.body as Record<string,unknown>|null;
   if(!b||typeof b!=='object'||Array.isArray(b)||!Object.keys(b).every(k=>['id','kind','targetKind','targetId','reason'].includes(k))||typeof b.id!=='string'||!uuid.test(b.id)||typeof b.targetId!=='string'||!uuid.test(b.targetId)||(b.kind!=='report'&&b.kind!=='appeal')||(b.targetKind!=='topic'&&b.targetKind!=='message')||!validText(b.reason,8,1000))throw new ForumError(400,'invalid_case');
