@@ -7,7 +7,8 @@ CREATE TABLE security.customer_gemini_credentials (
  PRIMARY KEY(tenant_id,user_id),
  FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE,
  CHECK ((ciphertext IS NULL AND nonce IS NULL AND tag IS NULL AND key_suffix IS NULL AND verified_at IS NULL)
- OR (ciphertext IS NOT NULL AND octet_length(nonce)=12 AND octet_length(tag)=16 AND length(key_suffix)=4 AND verified_at IS NOT NULL))
+ OR (ciphertext IS NOT NULL AND nonce IS NOT NULL AND tag IS NOT NULL AND key_suffix IS NOT NULL
+     AND octet_length(nonce)=12 AND octet_length(tag)=16 AND length(key_suffix)=4 AND verified_at IS NOT NULL))
 );
 CREATE FUNCTION security.clear_inactive_customer_gemini() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
