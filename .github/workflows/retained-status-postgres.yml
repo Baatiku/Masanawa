@@ -94,6 +94,7 @@ jobs:
           pnpm exec vitest run --no-file-parallelism
           services/gateway/src/ngn_wallet services/gateway/src/ngn_data services/gateway/src/ngn_calls
           adapters/storage/postgres/src/gb_wallet/ngn_spending.integration.test.ts
+          adapters/storage/postgres/src/gb_wallet/civic_learning_rewards.pg.integration.test.ts
           adapters/storage/postgres/src/gb_wallet/ngn_call_admissions.integration.test.ts
           adapters/storage/postgres/src/gb_wallet/ngn_request_repository.integration.test.ts
           adapters/storage/postgres/src/agents/mb-reply-billing.integration.test.ts
