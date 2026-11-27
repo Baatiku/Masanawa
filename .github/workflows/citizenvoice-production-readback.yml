@@ -1,0 +1,47 @@
+name: Citizenvoice production readback
+on:
+  push:
+    branches: [diagnostic/citizenvoice-release-20261127]
+permissions:
+  contents: read
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read live releases and public API
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const api='https://api.chatmeup.online';
+            const web='https://app.chatmeup.online';
+            async function request(url){
+              const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Cache-Control':'no-cache'}});
+              console.log(url, 'HTTP',r.status,'release',r.headers.get('x-masanawa-release')||'-');
+              return r;
+            }
+            const ready=await request(api+'/readyz');
+            assert.equal(ready.status,200);
+            const release=ready.headers.get('x-masanawa-release');
+            const frontend=await request(web+'/masanawa-web-release.json?t='+Date.now());
+            assert.equal(frontend.status,200);
+            const revision=(await frontend.json()).revision;
+            console.log('Frontend revision:',revision);
+            const results=await request(api+'/v1/civic/public-assessments?kind=all');
+            if(results.ok){
+              const data=await results.json();
+              assert.equal(data.kind,'all');
+              assert(Array.isArray(data.items));
+              assert(data.items.every(x=>Object.keys(x).every(k=>['id','kind','count','approval'].includes(k))));
+              console.log('Public assessment schema OK; aggregate rows:',data.items.length);
+            }
+            const privateRoute=await request(api+'/v1/civic/my-assessments');
+            assert([401,403].includes(privateRoute.status),'Private assessment endpoint must reject guests');
+            const pulse=await request(web+'/citizenpulse');
+            assert.equal(pulse.status,200);
+            assert.equal(results.status,200);
+            assert.equal(release,'9ab4504e59de977f634960fc4397e2b900f9002d');
+            assert.equal(revision,'5974a70c3fa2eb3ae112ff3de2f6ddc814efb76b');
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
