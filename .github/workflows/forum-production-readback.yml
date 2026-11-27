@@ -1,0 +1,38 @@
+name: Citizen Forum production readback
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/forum-production-readback.yml']
+permissions:
+  contents: read
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Verify approved Gateway release and public Forum contract
+        env:
+          EXPECTED: e13509c67c3abeb096dcf436ec36622e7c6726f0
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 18); do
+            if curl -sS --max-time 10 -D /tmp/ready-headers -o /tmp/ready https://api.chatmeup.online/readyz; then
+              release=$(awk 'tolower($1)=="x-masanawa-release:" {gsub("\r","",$2);print $2}' /tmp/ready-headers)
+              echo "Gateway release: ${release:-unavailable}"
+              if [ "$release" = "$EXPECTED" ]; then break; fi
+            fi
+            sleep 15
+          done
+          test "${release:-}" = "$EXPECTED"
+          jq '{service,status}' /tmp/ready
+          curl --fail --silent --show-error --max-time 20 https://api.chatmeup.online/v1/forum/rooms -o /tmp/rooms
+          jq -e '.rooms|length==23' /tmp/rooms
+          jq '{rooms:(.rooms|length),feePolicy}' /tmp/rooms
+          jq -e '.feePolicy.enabled==false' /tmp/rooms
+          curl --fail --silent --show-error --max-time 20 https://api.chatmeup.online/v1/forum/topics -o /tmp/topics
+          jq -e '.topics|type=="array"' /tmp/topics
+          curl --fail --silent --show-error --max-time 20 https://api.chatmeup.online/v1/forum/pulse -o /tmp/pulse
+          jq -e 'type=="object"' /tmp/pulse
+          status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://api.chatmeup.online/v1/forum/mine)
+          echo "Private Forum endpoint without authentication: $status"
+          case "$status" in 401|403) ;; *) exit 1;; esac
