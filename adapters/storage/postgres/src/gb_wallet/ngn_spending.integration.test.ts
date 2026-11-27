@@ -18,7 +18,7 @@ describe('direct NGN spending SQL and transaction invariants',()=>{
  };
  beforeAll(async()=>{
   db=new PGlite();
-  for(const name of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql'])
+  for(const name of ['0200_gb_wallet_foundation.sql','0205_ngn_funding_wallet.sql','0212_direct_ngn_spending.sql','0990_forum_topic_spend.sql'])
    await db.exec(await readFile(new URL(`../../../../../packages/commerce/migrations/${name}`,import.meta.url),'utf8'));
   let tail=Promise.resolve();
   pool={query:(sql:string,params:unknown[]=[])=>db.query(sql,params),connect:async()=>{
@@ -78,6 +78,22 @@ describe('direct NGN spending SQL and transaction invariants',()=>{
   await db.query('UPDATE gb_wallet.ngn_accounts SET balance_kobo=0,debt_kobo=300,frozen=true WHERE tenant_id=$1 AND account_id=$2',[actor.tenantId,actor.userId]);
   await w.capture(r,200);expect(await w.balance(actor)).toMatchObject({balanceKobo:0,debtKobo:500,heldKobo:0,availableKobo:0,frozen:true});
   await expect(w.reserve(input())).rejects.toThrow('ngn.account_frozen');
+ });
+ it('reserves a ₦100 Forum topic once, captures approval once and releases rejection',async()=>{
+  await db.query('UPDATE gb_wallet.ngn_accounts SET balance_kobo=30000 WHERE tenant_id=$1 AND account_id=$2',[actor.tenantId,actor.userId]);
+  const w=createNgnSpending(pool),approved={...input(10000),purpose:'forum_topic' as const},rejected={...input(10000),purpose:'forum_topic' as const};
+  await w.reserve(approved);await w.reserve(approved);await w.reserve(rejected);
+  expect(await w.balance(actor)).toMatchObject({balanceKobo:30000,heldKobo:20000,availableKobo:10000});
+  await w.capture(approved,10000);await w.capture(approved,10000);await w.release(rejected);await w.release(rejected);
+  expect(await w.balance(actor)).toMatchObject({balanceKobo:20000,heldKobo:0,availableKobo:20000});
+  expect((await db.query("SELECT delta_kobo::text,purpose FROM gb_wallet.ngn_spend_entries WHERE tenant_id=$1",[actor.tenantId])).rows).toEqual([{delta_kobo:'-10000',purpose:'forum_topic'}]);
+  await expect(w.capture(rejected,10000)).rejects.toThrow('ngn.settlement_conflict');
+ });
+ it('rolls back a Forum reservation if its topic insertion fails',async()=>{
+  const r={...input(500),purpose:'forum_topic' as const};
+  await expect(withTransaction(pool,async c=>{await createNgnSpending(pool,c).reserve(r);throw Error('topic_insert_failed')})).rejects.toThrow('topic_insert_failed');
+  expect(await createNgnSpending(pool).read(actor.tenantId,r.operationId,actor.userId)).toBeNull();
+  expect(await createNgnSpending(pool).balance(actor)).toMatchObject({balanceKobo:1000,heldKobo:0});
  });
  it('preserves immutable NGN receipts and leaves historical MB balances untouched',async()=>{
   await db.query(`INSERT INTO gb_wallet.accounts(tenant_id,account_kind,account_id,purchased_mb,welcome_mb) VALUES($1,'human',$2,12345,500)`,[actor.tenantId,actor.userId]);
