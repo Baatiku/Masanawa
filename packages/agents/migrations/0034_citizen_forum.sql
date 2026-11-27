@@ -19,6 +19,7 @@ CREATE INDEX forum_topic_owner ON agents.forum_topics(tenant_id,user_id,created_
 CREATE UNIQUE INDEX forum_topic_duplicate ON agents.forum_topics(tenant_id,room,lower(regexp_replace(title,'[[:space:]]+',' ','g'))) WHERE NOT system_channel AND state IN ('pending','published');
 CREATE TABLE agents.forum_messages (
  tenant_id text NOT NULL, id uuid NOT NULL, topic_id uuid NOT NULL,user_id text NOT NULL,
+ reply_to uuid,
  body text NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),
  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','published','rejected','hidden')),
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),reviewed_at timestamptz,reviewed_by text,review_reason text,
