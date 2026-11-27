@@ -62,7 +62,22 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   const a=await ports.authorize(q.headers.authorization);if(a.tenantId!==tenant)throw new ForumError(403,'forbidden');
   const topics=(await db.query(`SELECT id,room,title,body,kind,jurisdiction,state,created_at,review_reason FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
   const followed=(await db.query(`SELECT ${publicFields},${counts} FROM agents.forum_topics t JOIN agents.forum_engagement e ON e.tenant_id=t.tenant_id AND e.topic_id=t.id AND e.signal='follow' AND e.user_id=$2 WHERE ${visible} ORDER BY t.created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
-  return {topics,followed};
+  const messages=(await db.query(`SELECT id,topic_id,body,state,created_at,review_reason FROM agents.forum_messages WHERE tenant_id=$1 AND user_id=$2 AND state IN ('rejected','hidden') ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
+  const cases=(await db.query(`SELECT id,kind,target_kind,target_id,state,review_reason,created_at FROM agents.forum_cases WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[tenant,a.userId])).rows;
+  return {topics,followed,messages,cases};
+ }));
+ app.post('/v1/forum/cases',async(q,r)=>fail(r,async()=>{
+  const a=await actor(q.headers.authorization),b=q.body as Record<string,unknown>|null;
+  if(!b||typeof b!=='object'||Array.isArray(b)||!Object.keys(b).every(k=>['id','kind','targetKind','targetId','reason'].includes(k))||typeof b.id!=='string'||!uuid.test(b.id)||typeof b.targetId!=='string'||!uuid.test(b.targetId)||(b.kind!=='report'&&b.kind!=='appeal')||(b.targetKind!=='topic'&&b.targetKind!=='message')||!validText(b.reason,8,1000))throw new ForumError(400,'invalid_case');
+  const id=b.id,targetId=b.targetId.toLowerCase(),kind=b.kind,targetKind=b.targetKind,reason=b.reason.trim();
+  return withTransaction(db,async c=>{
+   await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['forum:'+tenant+':'+a.userId]);
+   const old=(await c.query('SELECT id,kind,target_kind,target_id,reason,state FROM agents.forum_cases WHERE tenant_id=$1 AND user_id=$2 AND id=$3',[tenant,a.userId,id])).rows[0];
+   if(old){if(old.kind!==kind||old.target_kind!==targetKind||old.target_id!==targetId||old.reason!==reason)throw new ForumError(409,'request_conflict');return {id:old.id,state:old.state};}
+   const target=targetKind==='topic'?(await c.query(`SELECT t.user_id,t.state,t.system_channel,EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active') AS active FROM agents.forum_topics t WHERE t.tenant_id=$1 AND t.id=$2 FOR SHARE`,[tenant,targetId])).rows[0]:(await c.query(`SELECT m.user_id,m.state,false AS system_channel,(t.state='published' AND (t.system_channel OR EXISTS(SELECT 1 FROM identity.users tu WHERE tu.tenant_id=t.tenant_id AND tu.user_id=t.user_id AND tu.state='active')) AND EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=m.tenant_id AND u.user_id=m.user_id AND u.state='active')) AS active FROM agents.forum_messages m JOIN agents.forum_topics t ON t.tenant_id=m.tenant_id AND t.id=m.topic_id WHERE m.tenant_id=$1 AND m.id=$2 FOR SHARE OF m`,[tenant,targetId])).rows[0];
+   if(!target||target.system_channel||(kind==='appeal'?(target.user_id!==a.userId||!['rejected','hidden'].includes(target.state)):(target.state!=='published'||!target.active)))throw new ForumError(404,'case_target_unavailable');
+   await budget(c,a);await c.query('INSERT INTO agents.forum_cases(tenant_id,id,user_id,kind,target_kind,target_id,reason) VALUES($1,$2,$3,$4,$5,$6,$7)',[tenant,id,a.userId,kind,targetKind,targetId,reason]);return {id,state:'pending'};
+  });
  }));
  app.post('/v1/forum/topics',async(q,r)=>fail(r,async()=>{
   const a=await actor(q.headers.authorization);const b=q.body;if(!validForumTopic(b))throw new ForumError(400,'invalid_topic');
