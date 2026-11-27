@@ -17,7 +17,7 @@ export function validForumTopic(v:unknown):v is {id:string;room:string;title:str
  if(!v||typeof v!=='object'||Array.isArray(v))return false;const b=v as Record<string,unknown>;
  return Object.keys(b).every(k=>['id','room','title','body','kind','jurisdiction'].includes(k))&&typeof b.id==='string'&&uuid.test(b.id)&&FORUM_ROOMS.some(r=>r.id===b.room)&&validText(b.title,10,160)&&validText(b.body,30,4000)&&typeof b.kind==='string'&&kinds.includes(b.kind)&&validText(b.jurisdiction,2,100);
 }
-const clean=(s:string)=>s.trim().replace(/\s+/g,' ');
+export const normalizeForumText=(s:string)=>s.trim().replace(/\s+/g,' ');
 export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts){
  const db=ports.pool,tenant=ports.publicTenantId;
  if(!tenant)return;
@@ -55,10 +55,10 @@ export function registerCitizenForum(app:FastifyInstance,ports:CivicRatingPorts)
   return withTransaction(db,async c=>{
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['forum:'+tenant+':'+a.userId]);
    const old=(await c.query('SELECT id,room,title,body,kind,jurisdiction,state FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 AND id=$3',[tenant,a.userId,b.id])).rows[0];
-   if(old){if(old.room!==b.room||old.title!==clean(b.title)||old.body!==b.body.trim()||old.kind!==b.kind||old.jurisdiction!==clean(b.jurisdiction))throw new ForumError(409,'request_conflict');return {id:old.id,state:old.state};}
+   if(old){if(old.room!==b.room||old.title!==normalizeForumText(b.title)||old.body!==b.body.trim()||old.kind!==b.kind||old.jurisdiction!==normalizeForumText(b.jurisdiction))throw new ForumError(409,'request_conflict');return {id:old.id,state:old.state};}
    await budget(c,a);
    const recent=(await c.query('SELECT count(*)::int AS n FROM agents.forum_topics WHERE tenant_id=$1 AND user_id=$2 AND created_at>clock_timestamp()-interval \'1 day\'',[tenant,a.userId])).rows[0];if(Number(recent.n)>=5)throw new ForumError(429,'topic_daily_limit');
-   await c.query('INSERT INTO agents.forum_topics(tenant_id,id,user_id,room,title,body,kind,jurisdiction) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,b.id,a.userId,b.room,clean(b.title),b.body.trim(),b.kind,clean(b.jurisdiction)]);return {id:b.id,state:'pending'};
+   await c.query('INSERT INTO agents.forum_topics(tenant_id,id,user_id,room,title,body,kind,jurisdiction) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,b.id,a.userId,b.room,normalizeForumText(b.title),b.body.trim(),b.kind,normalizeForumText(b.jurisdiction)]);return {id:b.id,state:'pending'};
   });
  }));
  app.post('/v1/forum/topics/:id/messages',async(q,r)=>fail(r,async()=>{
