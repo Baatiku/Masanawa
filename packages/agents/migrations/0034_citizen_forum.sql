@@ -79,3 +79,17 @@ CREATE TABLE agents.forum_representative_audit (
  FOREIGN KEY(tenant_id,user_id) REFERENCES identity.users(tenant_id,user_id) ON DELETE CASCADE
 );
 REVOKE ALL ON agents.forum_representatives,agents.forum_representative_audit FROM PUBLIC;
+
+-- Media is inseparable from its moderated parent message; no unmoderated public object URLs.
+CREATE TABLE agents.forum_message_media (
+ tenant_id text NOT NULL,message_id uuid NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('image','audio')),
+ mime_type text NOT NULL CHECK(mime_type IN ('image/jpeg','image/png','image/webp','audio/webm','audio/ogg','audio/wav','audio/mp4','audio/mpeg')),
+ payload bytea NOT NULL CHECK(octet_length(payload) BETWEEN 1 AND 1048576),
+ sha256 text NOT NULL CHECK(sha256 ~ '^[0-9a-f]{64}$'),
+ expires_at timestamptz NOT NULL DEFAULT (clock_timestamp()+interval '30 days'),
+ PRIMARY KEY(tenant_id,message_id),
+ FOREIGN KEY(tenant_id,message_id) REFERENCES agents.forum_messages(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX forum_media_expiry ON agents.forum_message_media(tenant_id,expires_at);
+REVOKE ALL ON agents.forum_message_media FROM PUBLIC;
