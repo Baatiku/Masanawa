@@ -7,6 +7,7 @@ import {OFFICIAL_ROSTER_MANIFEST} from './official_roster_manifest.js';
 type Actor={tenantId:string;userId:string};
 export type CivicRatingPorts={pool:Pool;publicTenantId?:string;authorize:(authorization:string|undefined)=>Promise<Actor>;beforeWrite:(authorization:string|undefined)=>Promise<unknown>};
 export const CIVIC_RATING_MINIMUM=20;
+export const CIVIC_EARLY_MINIMUM=5;
 export const CIVIC_RATING_CONSENT=1;
 const idPattern=/^character_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 class RatingError extends Error{constructor(readonly statusCode:number,readonly code:string){super(code);}}
@@ -83,6 +84,16 @@ async function publicSubject(db:Query,tenant:string,subject:string){
  const row=matches.rows[0]!;
  return row;
 }
+/** A historical band is published once, only after the UTC observation day.
+ * It is never recalculated or accompanied by a small-cohort count. */
+async function readEarlyBand(db:Query,tenant:string,id:string,measure:'record'|'confidence'){
+ const row=(await db.query<{low:number;asOf:string}>(`
+  SELECT band_low AS low,to_char(observed_day,'YYYY-MM-DD') AS "asOf"
+  FROM agents.civic_early_assessments WHERE tenant_id=$1 AND character_id=$2 AND measure=$3
+   AND observed_day < (clock_timestamp() AT TIME ZONE 'UTC')::date
+ `,[tenant,id,measure])).rows[0];
+ return row?{early:{low:row.low,high:row.low+25,asOf:row.asOf}}:{};
+}
 async function readPublicSummary(db:Query,tenant:string,subject:string,confidence=false){
  const row=await publicSubject(db,tenant,subject);
  if(confidence&&row.kind!=='person')throw new RatingError(404,'civic_rating_subject_unavailable');
@@ -93,7 +104,7 @@ async function readPublicSummary(db:Query,tenant:string,subject:string,confidenc
  const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
  const {published,minimum,count,approval}=publicRatingSummary(histogram);
  // Never expose account identity, personal rating, precise score mean or raw histogram.
- return {kind:row.kind,published,minimum,count,approval};
+ return {kind:row.kind,published,minimum,count,approval,...(published?{}:await readEarlyBand(db,tenant,row.character_id,confidence?'confidence':'record'))};
 }
 
 async function readSummary(db:Query,actor:Actor,id:string){
@@ -102,7 +113,8 @@ async function readSummary(db:Query,actor:Actor,id:string){
  const result=await db.query<{score:number;count:number}>(`SELECT x.score,count(*)::integer AS count FROM agents.civic_ratings x JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active' WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[actor.tenantId,id]);
  const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_ratings WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
  const histogram=[0,0,0,0,0];for(const r of result.rows){histogram[r.score-1]=r.count;}
- return {kind:eligible.rows[0].kind,myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
+ const summary=publicRatingSummary(histogram);
+ return {kind:eligible.rows[0].kind,myRating:own.rows[0]?.score??null,...summary,...(summary.published?{}:await readEarlyBand(db,actor.tenantId,id,'record'))};
 }
 async function readConfidence(db:Query,actor:Actor,id:string){
  const eligible=await db.query<{kind:'person'|'agency'}>(eligibleSql,[actor.tenantId,id]);
@@ -110,9 +122,10 @@ async function readConfidence(db:Query,actor:Actor,id:string){
  const result=await db.query<{score:number;count:number}>(`SELECT x.score,count(*)::integer AS count FROM agents.civic_leadership_confidence x JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active' WHERE x.tenant_id=$1 AND x.character_id=$2 GROUP BY x.score`,[actor.tenantId,id]);
  const own=await db.query<{score:number}>(`SELECT score FROM agents.civic_leadership_confidence WHERE tenant_id=$1 AND user_id=$2 AND character_id=$3`,[actor.tenantId,actor.userId,id]);
  const histogram=[0,0,0,0,0];for(const r of result.rows)histogram[r.score-1]=r.count;
- return {kind:'person',myRating:own.rows[0]?.score??null,...publicRatingSummary(histogram)};
+ const summary=publicRatingSummary(histogram);
+ return {kind:'person',myRating:own.rows[0]?.score??null,...summary,...(summary.published?{}:await readEarlyBand(db,actor.tenantId,id,'confidence'))};
 }
-/** Daily public snapshots: no individual IDs, raw scores or inferred past results. */
+/** Daily mature snapshots and a single delayed early band. No individual IDs, raw scores or inferred past results. */
 export async function captureCivicAssessmentHistory(pool:Pool,tenant:string){
  return withTransaction(pool,async client=>{
   await client.query("SET LOCAL statement_timeout = '5000ms'");
@@ -128,15 +141,27 @@ export async function captureCivicAssessmentHistory(pool:Pool,tenant:string){
     SELECT x.character_id,'confidence' AS measure,x.score FROM agents.civic_leadership_confidence x
      JOIN identity.users u ON u.tenant_id=x.tenant_id AND u.user_id=x.user_id AND u.state='active'
      WHERE x.tenant_id=$1
+   ), stats AS (
+    SELECT x.character_id,x.measure,count(*) AS n,count(*) FILTER(WHERE x.score>=4) AS positive
+    FROM combined x JOIN eligible e ON e.character_id=x.character_id
+    WHERE x.measure='record' OR e.kind='person'
+    GROUP BY x.character_id,x.measure
+   ), mature AS (
+    INSERT INTO agents.civic_assessment_history(tenant_id,character_id,measure,day,count_bucket,positive_percent)
+    SELECT $1,s.character_id,s.measure,(clock_timestamp() AT TIME ZONE 'UTC')::date,
+     (s.n/10*10)::integer,(round(s.positive::numeric/s.n*20)*5)::integer
+    FROM stats s WHERE s.n >= $2
+    ON CONFLICT(tenant_id,character_id,measure,day) DO NOTHING
+    RETURNING character_id
    )
-   INSERT INTO agents.civic_assessment_history(tenant_id,character_id,measure,day,count_bucket,positive_percent)
-   SELECT $1,x.character_id,x.measure,(clock_timestamp() AT TIME ZONE 'UTC')::date,
-    (count(*)/10*10)::integer,(round(count(*) FILTER(WHERE x.score>=4)::numeric/count(*)*20)*5)::integer
-   FROM combined x JOIN eligible e ON e.character_id=x.character_id
-   WHERE x.measure='record' OR e.kind='person'
-   GROUP BY x.character_id,x.measure HAVING count(*) >= $2
-   ON CONFLICT(tenant_id,character_id,measure,day) DO NOTHING
-  `,[tenant,CIVIC_RATING_MINIMUM]);
+   INSERT INTO agents.civic_early_assessments(tenant_id,character_id,measure,observed_day,band_low)
+   SELECT $1,s.character_id,s.measure,(clock_timestamp() AT TIME ZONE 'UTC')::date,
+    LEAST(75,(floor(s.positive::numeric/s.n*4)*25)::integer)
+   FROM stats s WHERE s.n >= $3 AND s.n < $2
+    AND NOT EXISTS (SELECT 1 FROM agents.civic_assessment_history h
+      WHERE h.tenant_id=$1 AND h.character_id=s.character_id AND h.measure=s.measure)
+   ON CONFLICT(tenant_id,character_id,measure) DO NOTHING
+  `,[tenant,CIVIC_RATING_MINIMUM,CIVIC_EARLY_MINIMUM]);
   await client.query("DELETE FROM agents.civic_assessment_history WHERE tenant_id=$1 AND day < (clock_timestamp() AT TIME ZONE 'UTC')::date - 365",[tenant]);
  });
 }
