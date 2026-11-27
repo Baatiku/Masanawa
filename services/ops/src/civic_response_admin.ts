@@ -13,6 +13,25 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
     input.authorize({authorizationHeader:header,capability});
   const principal=(operator:AdminActor):ResponseActor=>({tenantId:operator.tenantId,userId:operator.actorId});
   return {
+    async forumRepresentatives(header:string|undefined) {
+      const operator=await actor(header,'contacts.read');
+      return {representatives:(await input.pool.query("SELECT user_id,room,active,verified_at FROM agents.forum_representatives WHERE tenant_id=$1 ORDER BY verified_at DESC LIMIT 100",[operator.tenantId])).rows};
+    },
+    async forumRepresentative(header:string|undefined,inputValue:{userId:string;room:string;active:boolean;evidenceUrl:string;reason:string}) {
+      const operator=await actor(header,'contacts.write');
+      const rooms=new Set(['cac','nimc','inec','efcc','icpc','nafdac','frsc','nhrc','fccpc','cbn','ndpc']);
+      if(!rooms.has(inputValue.room)||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(inputValue.userId)||inputValue.reason.trim().length<8)throw new Error('invalid_representative');
+      let evidence:URL;try{evidence=new URL(inputValue.evidenceUrl)}catch{throw new Error('invalid_evidence')};
+      if(evidence.protocol!=='https:'||evidence.username||evidence.password||evidence.hash||evidence.search)throw new Error('invalid_evidence');
+      return withTransaction(input.pool,async c=>{
+        if(!(await c.query("SELECT user_id FROM identity.users WHERE tenant_id=$1 AND user_id=$2 AND state='active' FOR SHARE",[operator.tenantId,inputValue.userId])).rows.length)throw new Error('representative_account_unavailable');
+        if(!inputValue.active&&!(await c.query("SELECT user_id FROM agents.forum_representatives WHERE tenant_id=$1 AND user_id=$2 AND room=$3 FOR UPDATE",[operator.tenantId,inputValue.userId,inputValue.room])).rows.length)throw new Error('representative_not_found');
+        const values=[operator.tenantId,inputValue.userId,inputValue.room,inputValue.active,evidence.href,operator.actorId];
+        const row=(await c.query(`INSERT INTO agents.forum_representatives(tenant_id,user_id,room,active,evidence_url,verified_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,user_id,room) DO UPDATE SET active=excluded.active,evidence_url=excluded.evidence_url,verified_by=excluded.verified_by,verified_at=clock_timestamp() RETURNING user_id,room,active,verified_at`,values)).rows[0];
+        await c.query("INSERT INTO agents.forum_representative_audit(tenant_id,user_id,room,active,evidence_url,operator_id,reason) VALUES($1,$2,$3,$4,$5,$6,$7)",[...values,inputValue.reason.trim()]);
+        return {representative:row};
+      });
+    },
     async forumQueue(header:string|undefined) {
       const operator=await actor(header,'incidents.read');
       const topics=(await input.pool.query("SELECT id,room,title,body,kind,jurisdiction,state,created_at FROM agents.forum_topics WHERE tenant_id=$1 AND state='pending' ORDER BY created_at LIMIT 100",[operator.tenantId])).rows;
