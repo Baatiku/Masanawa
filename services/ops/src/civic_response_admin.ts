@@ -66,11 +66,13 @@ export function createCivicResponseAdmin(input:{pool:Pool;authorize:Authorize}) 
       const operator=await actor(header,'incidents.write'),tenant=operator.tenantId;
       if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.topicId)||v.reason.trim().length<8||!['pin','unpin','poll_create','poll_close','complaint_progress'].includes(v.action))throw new Error('invalid_community_action');
       return withTransaction(input.pool,async c=>{
-        const topic=(await c.query(`SELECT t.id,t.room,t.kind FROM agents.forum_topics t JOIN identity.users u ON u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active' WHERE t.tenant_id=$1 AND t.id=$2 AND t.state='published' AND NOT t.system_channel FOR UPDATE OF t`,[tenant,v.topicId])).rows[0];
+        const topic=(await c.query(`SELECT t.id,t.room,t.kind FROM agents.forum_topics t WHERE t.tenant_id=$1 AND t.id=$2 AND NOT t.system_channel AND ($3::boolean OR (t.state='published' AND EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active'))) FOR UPDATE OF t`,[tenant,v.topicId,v.action==='unpin'])).rows[0];
         if(!topic)throw new Error('forum_target_conflict');
         let details:Record<string,unknown>={};
         if(v.action==='pin'){
           await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",['forum-pins:'+tenant+':'+topic.room]);
+          // Remove no-longer-visible pins under the room capacity lock.
+          await c.query(`DELETE FROM agents.forum_topic_pins p USING agents.forum_topics t WHERE p.tenant_id=$1 AND p.room=$2 AND t.tenant_id=p.tenant_id AND t.id=p.topic_id AND (t.state<>'published' OR t.system_channel OR NOT EXISTS(SELECT 1 FROM identity.users u WHERE u.tenant_id=t.tenant_id AND u.user_id=t.user_id AND u.state='active'))`,[tenant,topic.room]);
           const count=(await c.query('SELECT count(*)::int AS n FROM agents.forum_topic_pins WHERE tenant_id=$1 AND room=$2',[tenant,topic.room])).rows[0];
           if(Number(count?.n)>=5&&!(await c.query('SELECT topic_id FROM agents.forum_topic_pins WHERE tenant_id=$1 AND topic_id=$2',[tenant,v.topicId])).rows.length)throw new Error('pin_limit');
           await c.query('INSERT INTO agents.forum_topic_pins(tenant_id,topic_id,room,pinned_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[tenant,v.topicId,topic.room,operator.actorId]);
