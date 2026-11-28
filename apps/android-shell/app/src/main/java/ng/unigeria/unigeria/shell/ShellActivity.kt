@@ -70,6 +70,7 @@ class ShellActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var articleReader: ShellArticleReader
     private lateinit var failureView: View
+    private lateinit var offlineHome: ShellOfflineNewsView
     private lateinit var failureText: TextView
     private lateinit var loadingBar: ProgressBar
     private var firstPageVisible = false
@@ -262,11 +263,13 @@ class ShellActivity : ComponentActivity() {
         }
         setupLoadingBar()
         setupFailureView()
+        setupOfflineHome()
         setContentView(container)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (articleReader.back()) return
+                if (offlineHome.visibility == View.VISIBLE) { exitShell(); return }
                 if (!WebOriginPolicy.isTrusted(webView.url)) {
                     fallbackBack()
                     return
@@ -329,6 +332,7 @@ class ShellActivity : ComponentActivity() {
         if (!protectScreen) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         webView.onResume()
         articleReader.onResume()
+        if (offlineHome.visibility == View.VISIBLE) offlineHome.update(ShellPush.offlineHome(this))
         if (WebOriginPolicy.isTrusted(webView.url))
             webView.evaluateJavascript("window.dispatchEvent(new Event('masanawa-native-resume'))", null)
         webUpdateHandler.removeCallbacks(webUpdatePoll)
@@ -405,6 +409,7 @@ class ShellActivity : ComponentActivity() {
                     firstPageVisible = false
                     lastTrustedUrl = url
                     failureView.visibility = View.GONE
+                    if (::offlineHome.isInitialized) offlineHome.visibility = View.GONE
                 }
             }
 
@@ -561,6 +566,9 @@ class ShellActivity : ComponentActivity() {
                         .put("requestId", requestId).put("opened", opened).toString())
                 }
             }
+            "news-cache-snapshot" -> {
+                ShellPush.savePublicWebFeed(this, payload.optJSONArray("articles"))
+            }
             "news-cache-request" -> {
                 val requestId = payload.optString("requestId")
                 if (Regex("^[a-fA-F0-9-]{36}$").matches(requestId))
@@ -714,9 +722,31 @@ class ShellActivity : ComponentActivity() {
         ))
     }
 
+    private fun setupOfflineHome() {
+        offlineHome = ShellOfflineNewsView(this) { webView.loadUrl(lastTrustedUrl) }.apply {
+            visibility = View.GONE
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(offlineHome) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        container.addView(offlineHome, FrameLayout.LayoutParams(-1, -1))
+    }
+
     private fun showFailure(security: Boolean) {
         firstPageVisible = true
         if (::loadingBar.isInitialized) loadingBar.visibility = View.GONE
+        // A connectivity error must never hide already received public news.
+        // Certificate errors remain a distinct security failure, without bypass.
+        if (!security && ::offlineHome.isInitialized) {
+            failureView.visibility = View.GONE
+            offlineHome.update(ShellPush.offlineHome(this))
+            offlineHome.visibility = View.VISIBLE
+            ViewCompat.requestApplyInsets(offlineHome)
+            return
+        }
+        if (::offlineHome.isInitialized) offlineHome.visibility = View.GONE
         failureText.setText(if (security) ng.unigeria.unigeria.R.string.shell_security_description
             else if (!hasInternetNetwork()) ng.unigeria.unigeria.R.string.shell_offline_description
             else ng.unigeria.unigeria.R.string.shell_connection_description)
