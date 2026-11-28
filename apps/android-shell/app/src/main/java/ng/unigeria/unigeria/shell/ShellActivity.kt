@@ -70,9 +70,11 @@ class ShellActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var articleReader: ShellArticleReader
     private lateinit var failureView: View
+    private lateinit var offlineHome: ShellOfflineNewsView
     private lateinit var failureText: TextView
     private lateinit var loadingBar: ProgressBar
     private var firstPageVisible = false
+    private var mainFrameFailed = false
     private var keyboardVisible = false
     private var safeTopDp = 0
     private var safeBottomDp = 0
@@ -262,11 +264,13 @@ class ShellActivity : ComponentActivity() {
         }
         setupLoadingBar()
         setupFailureView()
+        setupOfflineHome()
         setContentView(container)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (articleReader.back()) return
+                if (offlineHome.visibility == View.VISIBLE) { exitShell(); return }
                 if (!WebOriginPolicy.isTrusted(webView.url)) {
                     fallbackBack()
                     return
@@ -329,6 +333,7 @@ class ShellActivity : ComponentActivity() {
         if (!protectScreen) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         webView.onResume()
         articleReader.onResume()
+        if (offlineHome.visibility == View.VISIBLE) offlineHome.update(ShellPush.offlineHome(this))
         if (WebOriginPolicy.isTrusted(webView.url))
             webView.evaluateJavascript("window.dispatchEvent(new Event('masanawa-native-resume'))", null)
         webUpdateHandler.removeCallbacks(webUpdatePoll)
@@ -380,7 +385,8 @@ class ShellActivity : ComponentActivity() {
             WebViewCompat.addWebMessageListener(this, "MasanawaNative", setOf("https://app.chatmeup.online")) {
                 _, message, origin, isMainFrame, reply ->
                 if (isMainFrame && WebOriginPolicy.isTrusted(origin.toString())) {
-                    val payload = try { JSONObject(message.data ?: "") } catch (_: Exception) { null }
+                    val raw = message.data ?: ""
+                    val payload = if (raw.length <= 1_000_000) try { JSONObject(raw) } catch (_: Exception) { null } else null
                     if (payload != null) handleNativeMessage(payload, reply)
                 }
             }
@@ -403,6 +409,7 @@ class ShellActivity : ComponentActivity() {
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 if (WebOriginPolicy.isTrusted(url)) {
                     firstPageVisible = false
+                    mainFrameFailed = false
                     lastTrustedUrl = url
                     failureView.visibility = View.GONE
                 }
@@ -417,7 +424,10 @@ class ShellActivity : ComponentActivity() {
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {
-                if (WebOriginPolicy.isTrusted(url)) firstPageVisible = true
+                if (WebOriginPolicy.isTrusted(url) && !mainFrameFailed) {
+                    firstPageVisible = true
+                    if (::offlineHome.isInitialized) offlineHome.visibility = View.GONE
+                }
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -560,6 +570,9 @@ class ShellActivity : ComponentActivity() {
                     reply.postMessage(JSONObject().put("type", "open-article-result")
                         .put("requestId", requestId).put("opened", opened).toString())
                 }
+            }
+            "news-cache-snapshot" -> {
+                ShellPush.savePublicWebFeed(this, payload.optJSONArray("articles"))
             }
             "news-cache-request" -> {
                 val requestId = payload.optString("requestId")
@@ -714,9 +727,32 @@ class ShellActivity : ComponentActivity() {
         ))
     }
 
+    private fun setupOfflineHome() {
+        offlineHome = ShellOfflineNewsView(this) { webView.loadUrl(lastTrustedUrl) }.apply {
+            visibility = View.GONE
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(offlineHome) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        container.addView(offlineHome, FrameLayout.LayoutParams(-1, -1))
+    }
+
     private fun showFailure(security: Boolean) {
         firstPageVisible = true
+        mainFrameFailed = true
         if (::loadingBar.isInitialized) loadingBar.visibility = View.GONE
+        // A connectivity error must never hide already received public news.
+        // Certificate errors remain a distinct security failure, without bypass.
+        if (!security && ::offlineHome.isInitialized) {
+            failureView.visibility = View.GONE
+            offlineHome.update(ShellPush.offlineHome(this))
+            offlineHome.visibility = View.VISIBLE
+            ViewCompat.requestApplyInsets(offlineHome)
+            return
+        }
+        if (::offlineHome.isInitialized) offlineHome.visibility = View.GONE
         failureText.setText(if (security) ng.unigeria.unigeria.R.string.shell_security_description
             else if (!hasInternetNetwork()) ng.unigeria.unigeria.R.string.shell_offline_description
             else ng.unigeria.unigeria.R.string.shell_connection_description)
