@@ -29,6 +29,7 @@ internal object ShellPush {
     private const val newsEntriesKey = "articles-v2"
     private const val presentedNewsKey = "presented-articles-v1"
     private const val newsArchiveKey = "public-news-archive-v1"
+    private const val webSnapshotKey = "public-web-feed-v1"
 
     fun initialize(context: Context): Boolean {
         if (FirebaseApp.getApps(context).isNotEmpty()) return true
@@ -108,6 +109,29 @@ internal object ShellPush {
     @Synchronized
     fun publicNewsUnreadCount(context: Context): Int =
         context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE).getInt("unread", 0).coerceIn(0, 999)
+
+    // Mirror the public RSS snapshot without touching unread or notification state.
+    @Synchronized
+    fun savePublicWebFeed(context: Context, data: JSONArray?) {
+        val rows = ShellNewsDigest.read(data, ShellNewsDigest.maxArchiveItems)
+            .filter { it.url != null && it.publishedAt != null }
+        if (rows.isEmpty()) return
+        val prefs = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+        val prior = try { ShellNewsDigest.read(JSONArray(prefs.getString(webSnapshotKey, "[]") ?: "[]"),
+            ShellNewsDigest.maxArchiveItems) } catch (_: org.json.JSONException) { emptyList() }
+        val combined = ShellNewsDigest.merge(rows, prior, ShellNewsDigest.maxArchiveItems)
+        prefs.edit().putString(webSnapshotKey, ShellNewsDigest.encode(combined, ShellNewsDigest.maxArchiveItems)).apply()
+    }
+
+    @Synchronized
+    fun offlineHome(context: Context): List<ShellNewsPreview> {
+        val prefs = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+        val feed = try { ShellNewsDigest.read(JSONArray(prefs.getString(webSnapshotKey, "[]") ?: "[]"),
+            ShellNewsDigest.maxArchiveItems) } catch (_: org.json.JSONException) { emptyList() }
+        val pushed = ShellNewsDigest.read(publicNewsArchive(context), ShellNewsDigest.maxArchiveItems)
+        return (pushed + feed).distinctBy { it.id }.sortedByDescending { it.publishedAt.orEmpty() }
+            .take(ShellNewsDigest.maxArchiveItems)
+    }
 
     private fun archiveNews(context: Context, rows: List<ShellNewsPreview>) {
         if (rows.isEmpty()) return
