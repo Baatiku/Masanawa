@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest';
-import {randomBytes} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 import {createWhatsAppWorker} from './whatsapp.js';
 import {encryptLinkedSecret} from './whatsapp_linked.js';
 
@@ -18,7 +18,7 @@ const row={job_id:'job-1',kind:'reply',message_id:'message-1',tenant_id:'tenant-
 
 function setup(overrides:Record<string,unknown>,options:{env?:Record<string,string>;fetch?:typeof fetch;
   transcribe?:(channelId:string,ciphertext:Buffer)=>Promise<string>;
-  geminiKeyCiphertext?:Buffer;liveGate?:{enabled:boolean;reply_mode:string;mode:string}}={}){
+  receiptApproval?:Record<string,unknown>;geminiKeyCiphertext?:Buffer;liveGate?:{enabled:boolean;reply_mode:string;mode:string}}={}){
   const calls:{sql:string;parameters:unknown[]}[]=[];
   const pool={query:async(sql:string,params:unknown[]=[])=>{
     calls.push({sql,parameters:params});
@@ -30,6 +30,7 @@ function setup(overrides:Record<string,unknown>,options:{env?:Record<string,stri
       enabled:overrides.enabled??row.enabled,reply_mode:overrides.reply_mode??row.reply_mode,
       mode:overrides.mode??row.mode,
     }]};
+    if(sql.includes('FROM security.whatsapp_purchase_approvals p JOIN'))return {rows:options.receiptApproval?[options.receiptApproval]:[]};
     if(sql.includes('created_at>$3'))return {rows:[]};
     if(sql.includes('count(*)::int'))return {rows:[{count:1}]};
     return {rows:[]};
@@ -263,4 +264,29 @@ it('registration guidance uses configured web origin without changing account or
   expect(outgoing?.parameters[3]).toContain('Citizenvoice');
   expect(mock.calls.some(c=>c.sql.includes('DELETE FROM security.whatsapp'))).toBe(false);
  }
+});
+
+describe('Citizenvoice receipt dispatch',()=>{
+  const channelId='12345678-1234-1234-1234-123456789abc',operation='ngndata_'+'a'.repeat(48);
+  const approval={user_id:'user-1',idempotency_key:'approved_original_key',bundle_id:'MTN:DATA',recipient_phone:'08012345678',reviewed_cost_kobo:10000,operation_id:operation};
+  const requestId='wa_data_'+createHash('sha256').update('tenant-1:'+approval.user_id+':'+approval.idempotency_key).digest('hex');
+  const body='Citizenvoice Buy Data receipt: MTN:DATA for ••••5678. Amount: ₦100.00. Status: delivered. Reference: '+operation+'.';
+  const receipt={kind:'send',direction:'outbound',channel_id:channelId,operator_request_id:requestId,body,role_level:4,permissions:['receipts']};
+  const env={MASANAWA_CITIZENVOICE_WHATSAPP_PILOT_CHANNELS:channelId};
+  it('permits the exact verified receipt while the conversation is in AI mode',async()=>{
+    const mock=setup(receipt,{env,receiptApproval:approval});
+    await mock.worker.runOnce();
+    expect(mock.send).toHaveBeenCalledWith(channelId,row.customer_wa_id,body);
+  });
+  it('rejects revoked or missing approval and unqualified channels',async()=>{
+    for(const options of [{env},{env:{},receiptApproval:approval}]){
+      const mock=setup(receipt,options);await mock.worker.runOnce();
+      expect(mock.send).not.toHaveBeenCalled();
+      expect(mock.calls.some(c=>c.parameters.includes('receipt_authorization_unavailable'))).toBe(true);
+    }
+  });
+  it('rejects altered receipt content',async()=>{
+    const mock=setup({...receipt,body:body.replace('₦100.00','₦999.00')},{env,receiptApproval:approval});
+    await mock.worker.runOnce();expect(mock.send).not.toHaveBeenCalled();
+  });
 });

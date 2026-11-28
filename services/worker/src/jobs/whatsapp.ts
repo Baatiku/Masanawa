@@ -10,7 +10,7 @@ import {availableCitizenvoiceSkills,citizenvoiceCapabilityInstructions,citizenvo
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
-  body:string|null;direction:string;message_kind:string;media_payload_ciphertext:Buffer|null;reply_to_message_id:string|null;
+  body:string|null;direction:string;message_kind:string;media_payload_ciphertext:Buffer|null;reply_to_message_id:string|null;operator_request_id:string|null;
   source_created_at:Date|string|null;
   thread_id:string;customer_wa_id:string;mode:string;
   inbound_created_at:Date|string;last_human_reply_at:Date|string|null;
@@ -423,7 +423,34 @@ export function createWhatsAppWorker(input:Input){
       return;
     }
   }
+  async function verifyDataReceipt(row:Row):Promise<boolean>{
+    // An operator-request ID alone is not permission to send financial data.
+    // Recheck the current link, dedicated service role, approved pilot and the
+    // exact canonical delivered approval before dispatch. No provider call.
+    const ctx={channelId:row.channel_id,numberPurpose:row.number_purpose,roleLevel:row.role_level,permissions:row.permissions};
+    if(!row.enabled||!isCitizenvoicePilot(ctx,input.env)||row.message_kind!=='text'||row.direction!=='outbound'||row.mode==='closed'||!allowed(row,'receipts'))return false;
+    const operation=row.body?.match(/Reference: (ngndata_[a-f0-9]{48})\.$/)?.[1];
+    if(!operation)return false;
+    const result=await input.pool.query(`SELECT p.user_id,p.idempotency_key,p.bundle_id,p.recipient_phone,p.reviewed_cost_kobo,p.operation_id
+      FROM security.whatsapp_purchase_approvals p JOIN security.whatsapp_account_links l
+        ON l.tenant_id=p.tenant_id AND l.thread_id=p.thread_id AND l.user_id=p.user_id
+      JOIN identity.users u ON u.tenant_id=l.tenant_id AND u.user_id=l.user_id AND u.state='active'
+      JOIN security.whatsapp_threads t ON t.tenant_id=p.tenant_id AND t.thread_id=p.thread_id
+      JOIN security.whatsapp_channels c ON c.tenant_id=t.tenant_id AND c.channel_id=t.channel_id
+      JOIN security.whatsapp_assistants s ON s.tenant_id=t.tenant_id AND s.channel_id=t.channel_id
+      WHERE p.tenant_id=$1 AND p.thread_id=$2 AND t.channel_id=$3 AND p.operation_id=$4
+        AND p.state='delivered' AND l.revoked_at IS NULL AND c.enabled AND c.state='connected'
+        AND t.mode<>'closed' AND s.number_purpose='service' AND s.role_level>=4 AND s.permissions ? 'receipts'`,
+      [row.tenant_id,row.thread_id,row.channel_id,operation]);
+    return result.rows.some(p=>{
+      const key='wa_data_'+createHash('sha256').update(`${row.tenant_id}:${p.user_id}:${p.idempotency_key}`).digest('hex');
+      const expected=`Citizenvoice Buy Data receipt: ${p.bundle_id} for ••••${String(p.recipient_phone).slice(-4)}. Amount: ₦${(Number(p.reviewed_cost_kobo)/100).toFixed(2)}. Status: delivered. Reference: ${p.operation_id}.`;
+      return key===row.operator_request_id&&expected===row.body;
+    });
+  }
   async function processSend(row:Row){
+    const isDataReceipt=!!row.operator_request_id?.startsWith('wa_data_');
+    if(isDataReceipt&&!await verifyDataReceipt(row)){await complete(row.job_id,'failed','receipt_authorization_unavailable');return;}
     if(row.message_kind==='audio'&&!row.media_payload_ciphertext){
       // Older TTS-based replies may remain queued after an upgrade. They do
       // not contain a native Live transcript/audio pair and must not produce
@@ -440,7 +467,7 @@ export function createWhatsAppWorker(input:Input){
     // Pausing AI must not prevent an authorized human operator from replying
     // through a thread explicitly placed in human takeover mode.
     if((!row.enabled&&row.reply_to_message_id)||!row.body||
-      (!row.reply_to_message_id&&row.mode!=='human')){
+      (!row.reply_to_message_id&&row.mode!=='human'&&!isDataReceipt)){
       await complete(row.job_id,'failed','channel_disabled_or_empty');return;
     }
     if(row.state!=='connected'){
@@ -511,7 +538,7 @@ export function createWhatsAppWorker(input:Input){
       let completed=0;
       for(const claimed of claims.rows){
         const q=await input.pool.query(`SELECT j.job_id,j.kind,j.message_id,j.tenant_id,j.channel_id,
-          m.body,m.direction,m.kind AS message_kind,m.media_payload_ciphertext,m.reply_to_message_id,m.thread_id,
+          m.body,m.direction,m.kind AS message_kind,m.media_payload_ciphertext,m.reply_to_message_id,m.operator_request_id,m.thread_id,
           m.created_at AS inbound_created_at,original.created_at AS source_created_at,
           t.customer_wa_id,t.mode,t.last_message_at,t.last_human_reply_at,t.last_away_notice_at,t.welcome_sent_at,
           t.account_match,t.memory_summary,t.verified_contact_name,
