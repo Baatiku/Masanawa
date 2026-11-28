@@ -561,6 +561,13 @@ class ShellActivity : ComponentActivity() {
                         .put("requestId", requestId).put("opened", opened).toString())
                 }
             }
+            "news-cache-request" -> {
+                val requestId = payload.optString("requestId")
+                if (Regex("^[a-fA-F0-9-]{36}$").matches(requestId))
+                    reply.postMessage(JSONObject().put("type", "news-cache-result")
+                        .put("requestId", requestId)
+                        .put("articles", ShellPush.publicNewsArchive(this)).toString())
+            }
             "news-unread-count" -> {
                 // Trusted main-frame origin; public headline, never account data.
                 val count = payload.optInt("count", -1)
