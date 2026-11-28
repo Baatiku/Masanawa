@@ -27,6 +27,8 @@ internal object ShellPush {
     private const val newsGroupKey = "masanawa.news.articles"
     private const val newsPrefsName = "masanawa-shell-news"
     private const val newsEntriesKey = "articles-v2"
+    private const val presentedNewsKey = "presented-articles-v1"
+    private const val newsArchiveKey = "public-news-archive-v1"
 
     fun initialize(context: Context): Boolean {
         if (FirebaseApp.getApps(context).isNotEmpty()) return true
@@ -94,6 +96,48 @@ internal object ShellPush {
         catch (_: org.json.JSONException) { emptyList() }
     }
 
+    /** Public article archive survives shade dismissal and explicit mark-read. */
+    @Synchronized
+    fun publicNewsArchive(context: Context): JSONArray {
+        val raw = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+            .getString(newsArchiveKey, null)
+        return try { if (raw == null) JSONArray() else JSONArray(raw) }
+        catch (_: org.json.JSONException) { JSONArray() }
+    }
+
+    @Synchronized
+    fun publicNewsUnreadCount(context: Context): Int =
+        context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE).getInt("unread", 0).coerceIn(0, 999)
+
+    private fun archiveNews(context: Context, rows: List<ShellNewsPreview>) {
+        if (rows.isEmpty()) return
+        val received = rows.map { if (it.receivedAt > 0) it else it.copy(receivedAt = System.currentTimeMillis()) }
+        val previous = ShellNewsDigest.read(publicNewsArchive(context), ShellNewsDigest.maxArchiveItems)
+        val combined = ShellNewsDigest.merge(received, previous, ShellNewsDigest.maxArchiveItems)
+        context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE).edit()
+            .putString(newsArchiveKey, ShellNewsDigest.encode(combined, ShellNewsDigest.maxArchiveItems)).apply()
+    }
+
+    private fun presentedNews(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+        val raw = prefs.getString(presentedNewsKey, null)
+        // Upgrade: existing unread previews were already presented by old APKs.
+        if (raw == null) return storedNews(context).map { it.id }.toSet()
+        return try {
+            val rows = JSONArray(raw)
+            (0 until minOf(rows.length(), ShellNewsPresentation.limit))
+                .map { rows.optString(it) }.filter { it.isNotBlank() }.toSet()
+        } catch (_: org.json.JSONException) { storedNews(context).map { it.id }.toSet() }
+    }
+
+    private fun rememberPresented(context: Context, previous: Set<String>, incoming: List<String>) {
+        val ids = ShellNewsPresentation.remember(previous, incoming)
+        val encoded = JSONArray()
+        ids.forEach { encoded.put(it) }
+        context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+            .edit().putString(presentedNewsKey, encoded.toString()).apply()
+    }
+
     private fun newsChildId(id: String): Int = 0x20000000 or (id.hashCode() and 0x0fffffff)
 
     private fun newsPendingIntent(context: Context, requestCode: Int): PendingIntent {
@@ -106,14 +150,20 @@ internal object ShellPush {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun publishNewsGroup(context: Context, count: Int, items: List<ShellNewsPreview>, quiet: Boolean = false) {
+    private fun publishNewsGroup(context: Context, count: Int, items: List<ShellNewsPreview>,
+                                 fresh: List<ShellNewsPreview>) {
+        if (fresh.isEmpty()) return
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         ensureChannels(context)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         // Every entry owns its own expandable BigTextStyle row. Children are
         // silent, so one group does not buzz multiple times.
-        items.forEach { item ->
+        val activeIds = if (Build.VERSION.SDK_INT >= 23)
+            manager.activeNotifications.map { it.id }.toSet() else emptySet()
+        val freshIds = fresh.map { it.id }.toSet()
+        val visibleItems = items.filter { it.id in freshIds || newsChildId(it.id) in activeIds }
+        fresh.forEach { item ->
             val id = newsChildId(item.id)
             val child = NotificationCompat.Builder(context, newsChannel)
                 .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
@@ -137,14 +187,13 @@ internal object ShellPush {
         val title = if (count == 1) "1 unread news article" else "$count unread news articles"
         val inbox = NotificationCompat.InboxStyle().setBigContentTitle(title)
             .setSummaryText("$count unread · Citizenvoice")
-        items.forEach { inbox.addLine(ShellNewsDigest.line(it)) }
-        if (count > items.size && items.isNotEmpty()) inbox.addLine("+${count - items.size} more unread updates in Home")
+        visibleItems.forEach { inbox.addLine(ShellNewsDigest.line(it)) }
         val summary = NotificationCompat.Builder(context, newsChannel)
             .setSmallIcon(ng.unigeria.unigeria.R.drawable.ic_masanawa_notification)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
-            .setSilent(quiet)
+            .setSilent(false)
             .setContentTitle(title)
-            .setContentText(items.firstOrNull()?.let { "${it.publisher}: ${it.title}" } ?: title)
+            .setContentText(visibleItems.firstOrNull()?.let { "${it.publisher}: ${it.title}" } ?: title)
             .setStyle(inbox)
             .setContentIntent(newsPendingIntent(context, newsNotificationId))
             .setOnlyAlertOnce(true)
@@ -160,18 +209,13 @@ internal object ShellPush {
         manager.notify(newsNotificationId, summary)
     }
 
-    /** Restore a quiet aggregate after process recreation, retaining unread
-     * state until the trusted web client reports it read. Do not reset launcher
-     * or channel preferences chosen in Android Settings. */
+    /** Do not recreate the Android notification shade from unread storage.
+     * A swipe or process restart must not replay an old notification. */
+    @Synchronized
     fun restoreUnreadNewsBadge(context: Context) {
-        val count = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
-            .getInt("unread", 0)
-        val previews = storedNews(context)
-        if (count !in 1..999 || previews.isEmpty()) return
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= 23 &&
-            manager.activeNotifications.any { it.id == newsNotificationId && it.tag == null }) return
-        publishNewsGroup(context, count, previews, quiet = true)
+        val prior = storedNews(context)
+        if (publicNewsArchive(context).length() == 0) archiveNews(context, prior)
+        rememberPresented(context, presentedNews(context), prior.map { it.id })
     }
 
     private fun storeNews(context: Context, count: Int, rows: List<ShellNewsPreview>) {
@@ -179,13 +223,16 @@ internal object ShellPush {
             .edit().putInt("unread", count).putString(newsEntriesKey, ShellNewsDigest.encode(rows)).apply()
     }
 
+    @Synchronized
     fun updateNewsBadge(context: Context, count: Int, latestHeadline: String? = null,
                         previews: JSONArray? = null) {
         if (count !in 0..999) return
         val prefs = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val prior = storedNews(context)
+        val presented = presentedNews(context)
         if (count == 0) {
+            rememberPresented(context, presented, prior.map { it.id })
             prior.forEach { manager.cancel(newsChildId(it.id)) }
             // System-rendered background FCM news uses a tagged notification,
             // not our native child ID. Clear it only after the web app confirms
@@ -200,28 +247,32 @@ internal object ShellPush {
             return
         }
         val incoming = ShellNewsDigest.read(previews)
+        archiveNews(context, incoming)
         val fallback = if (incoming.isEmpty() && prior.isEmpty())
             ShellNewsDigest.normalized("news-last", "Masanawa News", latestHeadline, null)
                 ?.let { listOf(it) } ?: emptyList() else emptyList()
         val items = ShellNewsDigest.merge(incoming + fallback, prior)
-        val encoded = ShellNewsDigest.encode(items)
-        val unchanged = prefs.getInt("unread", -1) == count &&
-            prefs.getString(newsEntriesKey, null) == encoded &&
-            Build.VERSION.SDK_INT >= 23 &&
-            manager.activeNotifications.any { it.id == newsNotificationId }
-        if (unchanged) return
+        val freshIds = ShellNewsPresentation.fresh((incoming + fallback).map { it.id }, presented).toSet()
+        val fresh = items.filter { it.id in freshIds }
+        rememberPresented(context, presented, items.map { it.id })
         val liveIds = items.map { it.id }.toSet()
         prior.filter { it.id !in liveIds }.forEach { manager.cancel(newsChildId(it.id)) }
-        storeNews(context, count, items)
-        publishNewsGroup(context, count, items)
+        val reconciledCount = maxOf(count, publicNewsUnreadCount(context) + fresh.size).coerceAtMost(999)
+        storeNews(context, reconciledCount, items)
+        publishNewsGroup(context, reconciledCount, items, fresh)
     }
 
     /** FCM child and foreground-web hints feed the same persistent public-news
      * digest, keyed by article ID rather than by whichever arrived last. */
+    @Synchronized
     private fun postNewsArticle(context: Context, eventId: String?, publisher: String?,
-                                headline: String?, description: String?) {
-        val item = ShellNewsDigest.normalized(eventId, publisher, headline, description) ?: return
+                                headline: String?, description: String?, url: String?, publishedAt: String?) {
+        val item = ShellNewsDigest.normalized(eventId, publisher, headline, description, url, publishedAt,
+            System.currentTimeMillis()) ?: return
+        archiveNews(context, listOf(item))
         val previous = storedNews(context)
+        val presented = presentedNews(context)
+        if (item.id in presented) return
         val merged = ShellNewsDigest.merge(listOf(item), previous)
         val current = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
             .getInt("unread", 0)
@@ -232,14 +283,16 @@ internal object ShellPush {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(newsChildId(it.id))
         }
+        rememberPresented(context, presented, listOf(item.id))
         storeNews(context, count, merged)
-        publishNewsGroup(context, count, merged)
+        publishNewsGroup(context, count, merged, listOf(item))
     }
 
     fun showNotification(context: Context, route: String, incomingCall: Boolean = false,
                          news: Boolean = false, headline: String? = null, summary: String? = null,
-                         eventId: String? = null, publisher: String? = null) {
-        if (news) { postNewsArticle(context, eventId, publisher, headline, summary); return }
+                         eventId: String? = null, publisher: String? = null,
+                         sourceUrl: String? = null, publishedAt: String? = null) {
+        if (news) { postNewsArticle(context, eventId, publisher, headline, summary, sourceUrl, publishedAt); return }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             return
@@ -294,7 +347,8 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
         if (type == "news_article" || type == "news_update") {
             ShellPush.showNotification(this, "https://app.chatmeup.online/?tab=home",
                 news = true, headline = message.data["headline"], summary = message.data["summary"],
-                eventId = message.data["eventId"], publisher = message.data["publisher"])
+                eventId = message.data["eventId"], publisher = message.data["publisher"],
+                sourceUrl = message.data["sourceUrl"], publishedAt = message.data["publishedAt"])
             return
         }
         if (!Regex("^[a-z][a-z0-9_]{0,63}$").matches(type) || type.startsWith("human_") ||

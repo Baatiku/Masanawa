@@ -113,6 +113,17 @@ export function mobilePushSafeData(data: Readonly<Record<string, string>> | unde
     const summary = publicNewsText(data.summary, 300);
     if (headline) safe.headline = headline;
     if (summary) safe.summary = summary;
+    const publisher = publicNewsText(data.publisher, 100);
+    if (publisher) safe.publisher = publisher;
+    if (typeof data.sourceUrl === "string" && data.sourceUrl.length <= 1000) {
+      try {
+        const source = new URL(data.sourceUrl);
+        if (source.protocol === "https:" && !source.username && !source.password && source.hostname.includes("."))
+          safe.sourceUrl = source.href;
+      } catch { /* No unvalidated publisher link reaches the device. */ }
+    }
+    if (typeof data.publishedAt === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(data.publishedAt) &&
+        Number.isFinite(Date.parse(data.publishedAt))) safe.publishedAt = data.publishedAt;
   }
   return Object.freeze(safe);
 }
@@ -258,6 +269,9 @@ export function createFcmPushSender(input: {
       const bearer = await accessToken(signal);
       let delivered = 0;
       const safePreview = mobilePushSafePreview(safeData);
+      // Kotlin must receive news in onMessageReceived even when the app is
+      // backgrounded. Mixed notification+data bypasses that handler until tap.
+      const nativeNews = mobilePushAndroidChannel(safeData) === "masanawa_news";
       for (const registration of registrations) {
         const response = await fetchImpl(
           `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(
@@ -273,10 +287,10 @@ export function createFcmPushSender(input: {
             body: JSON.stringify({
               message: {
                 token: registration.token,
-                notification: {
+                ...(!nativeNews ? {notification: {
                   title: safePreview.title,
                   body: safePreview.body,
-                },
+                }} : {}),
                 data: {
                   ...safeData,
                   masanawa: "1",
@@ -286,7 +300,7 @@ export function createFcmPushSender(input: {
                   ...(mobilePushAndroidChannel(safeData) === "masanawa_calls"
                     ? { ttl: "60s" }
                     : {}),
-                  notification: {
+                  ...(nativeNews ? {ttl:"86400s"} : {notification: {
                     channel_id: mobilePushAndroidChannel(safeData),
                     visibility: mobilePushAndroidChannel(safeData) === "masanawa_news"
                       ? "PUBLIC" : "PRIVATE",
@@ -299,7 +313,7 @@ export function createFcmPushSender(input: {
                           tag: `masanawa-call-${safeData.callId}`,
                         }
                       : {}),
-                  },
+                  }}),
                 },
                 apns: {
                   payload: { aps: { sound: "default" } },
