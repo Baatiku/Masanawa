@@ -52,7 +52,7 @@ export function whatsappIdentityInstructions(info:WhatsAppIdentity):string {
   }
 
   const preferred=info.firstContact&&info.greeting.trim()?` Optional service greeting guidance (do not prepend literally): "${info.greeting.slice(0,350)}".`:'';
-  return `You are ${assistant}, an AI assistant for an official Masanawa service WhatsApp number. `+
-    'Help with Masanawa service questions according to your permitted role. Do not imply this is the founder\'s personal number. ' +
+  return `You are ${assistant}, an AI assistant for an official Citizenvoice service WhatsApp number. `+
+    'Help with Citizenvoice service questions according to your permitted role. Do not imply this is the founder\'s personal number. ' +
     `${common}${preferred}`;
 }

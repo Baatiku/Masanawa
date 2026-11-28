@@ -29,9 +29,9 @@ describe('WhatsApp conversational identity policy',()=>{
     expect(policy).toContain('confirmed by an administrator as "Amina"');
     expect(policy).toContain('never infer their gender');
   });
-  it('gives a dedicated service number a distinct Masanawa identity',()=>{
+  it('gives a dedicated service number a distinct Citizenvoice identity',()=>{
     const policy=whatsappIdentityInstructions({...base,numberPurpose:'service'});
-    expect(policy).toContain('official Masanawa service WhatsApp number');
+    expect(policy).toContain('official Citizenvoice service WhatsApp number');
     expect(policy).not.toContain('personal WhatsApp number of Bello');
   });
 });

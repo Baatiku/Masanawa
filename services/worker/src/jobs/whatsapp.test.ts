@@ -260,7 +260,7 @@ it('registration guidance uses configured web origin without changing account or
   await mock.worker.runOnce();
   const outgoing=mock.calls.find(c=>c.sql.includes('INSERT INTO security.whatsapp_messages'));
   expect(outgoing?.parameters[3]).toContain(configured||'https://app.chatmeup.online');
-  expect(outgoing?.parameters[3]).toContain('ChatMeUp');
+  expect(outgoing?.parameters[3]).toContain('Citizenvoice');
   expect(mock.calls.some(c=>c.sql.includes('DELETE FROM security.whatsapp'))).toBe(false);
  }
 });

@@ -6,6 +6,7 @@ import {whatsappIdentityInstructions} from './whatsapp_identity.js';
 import {encryptLinkedSecret} from './whatsapp_linked.js';
 import {formatWhatsAppTranscript,generateLiveReply,LiveProviderError,withGeminiKeyPool} from './whatsapp_live.js';
 import {resolveWhatsAppLiveVoice} from './whatsapp_voices.js';
+import {availableCitizenvoiceSkills,citizenvoiceCapabilityInstructions,citizenvoiceIntent,getCitizenvoiceNews,isCitizenvoicePilot,requestedNewsState,wantsAccountLink,wantsAccountRegistration,wantsData} from './citizenvoice_whatsapp.js';
 
 type Row = {
   job_id:string;kind:'reply'|'send';message_id:string;tenant_id:string;channel_id:string;
@@ -77,8 +78,8 @@ export function createWhatsAppWorker(input:Input){
       `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na ${owner}. `:''}A yanzu ina samun matsala wajen ba da amsa mai inganci. Don Allah a sake gwadawa nan gaba kaɗan.`:
       `${row.first_contact?`I'm ${row.assistant_name}, an AI assistant helping ${owner}. `:''}I'm having trouble answering your question reliably right now. Please try again shortly.`;
     return row.language==='ha'?
-      `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na ChatMeUp. `:''}A yanzu ba zan iya ba da amsa mai inganci ba. Don Allah a sake gwadawa nan gaba kaɗan, ko a nemi taimakon ma'aikaci idan abin yana da gaggawa.`:
-      `${row.first_contact?`I'm ${row.assistant_name}, ChatMeUp's AI assistant. `:''}I cannot give you a reliable answer right now. Please try again shortly, or ask for human support if this is urgent.`;
+      `${row.first_contact?`Ni ne ${row.assistant_name}, mataimakin AI na Citizenvoice. `:''}A yanzu ba zan iya ba da amsa mai inganci ba. Don Allah a sake gwadawa nan gaba kaɗan, ko a nemi taimakon ma'aikaci idan abin yana da gaggawa.`:
+      `${row.first_contact?`I'm ${row.assistant_name}, Citizenvoice's AI assistant. `:''}I cannot give you a reliable answer right now. Please try again shortly, or ask for human support if this is urgent.`;
   }
   async function complete(jobId:string,state:'completed'|'failed'|'uncertain',code:string|null=null){
     await input.pool.query(`WITH changed AS (
@@ -133,7 +134,7 @@ export function createWhatsAppWorker(input:Input){
       const system=mode==='scripted'?
         `Speak the following pre-approved assistant message exactly, in its original language. Do not add, paraphrase, omit or translate any word. Read URLs and one-time codes accurately. Only speak the provided message. ${identity}`:
         `${identity}\n${source.personality}. ${source.instructions}\n`+
-        'Speak natural standard Hausa at a gentle measured pace, regardless of the sender’s language.'+
+        (source.language==='ha'?'Speak natural standard Hausa at a gentle measured pace.':source.language==='en'?'Speak natural English with a clear Nigerian cadence.':'Match the sender’s language; speak natural English or standard Hausa at a gentle pace.')+
         '\nRespond conversationally, with enough depth to answer the actual question. A simple greeting can be short; substantive topics deserve thoughtful explanation. Avoid repetitive sign-offs and unsolicited message-taking. Use conversation context. Never invent financial records, prices, identity, wallet authorization or transactions. Do not request passwords, PINs, OTPs, BVN or NIN. You have no account tools.';
       let prompt=actual;
       if(mode==='assistant'&&source.remember_context){
@@ -151,7 +152,7 @@ export function createWhatsAppWorker(input:Input){
           `Current sender message:\n${actual}`;
       }
       try{
-        // Custom ChatMeUp voice enrollment IDs are not Google prebuilt Live
+        // Custom Citizenvoice voice enrollment IDs are not Google prebuilt Live
         // voice names. Never send an unsupported custom ID as prebuiltVoiceConfig.
         const selectedVoice=resolveWhatsAppLiveVoice(source.live_voice_name);
         const generated=await withGeminiKeyPool({pool:input.pool,tenantId:source.tenant_id,
@@ -273,9 +274,17 @@ export function createWhatsAppWorker(input:Input){
           WHERE tenant_id=$1 AND thread_id=$2`,[row.tenant_id,row.thread_id]);
       return;
     }
-    if(/^link(?:\s+account)?$/i.test(body)){
+    const serviceContext={channelId:row.channel_id,numberPurpose:row.number_purpose,roleLevel:row.role_level,permissions:row.permissions};
+    const pilot=isCitizenvoicePilot(serviceContext,input.env);
+    if(pilot){
+      const intent=citizenvoiceIntent(body),skills=availableCitizenvoiceSkills(serviceContext,input.env);
+      if(intent==='menu'&&skills.some(s=>s.id==='help')){await enqueueReply(row,'Citizenvoice services available on this number:\n'+skills.map(s=>'• '+s.label+(s.mode==='authenticated_web'?' (secure sign-in)':'')).join('\n')+'\n\nTell me what you need in your own words.');return;}
+      if(intent==='news'&&skills.some(s=>s.id==='news')){await enqueueReply(row,await getCitizenvoiceNews(publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL),requestedNewsState(body),call));return;}
+      if(intent==='unsupported'){await enqueueReply(row,'That service is not enabled on this WhatsApp number. I cannot carry out that action here.');return;}
+    }
+    if(wantsAccountLink(body)){
       if(!allowed(row,'account_link')){
-        await enqueueReply(row,'Secure account linking is not enabled on this WhatsApp number. Please use the ChatMeUp app.');return;
+        await enqueueReply(row,'Secure account linking is not enabled on this WhatsApp number. Please use the Citizenvoice app.');return;
       }
       const code=randomBytes(12).toString('base64url');
       const codeHash=createHash('sha256').update(code).digest('hex');
@@ -285,7 +294,7 @@ export function createWhatsAppWorker(input:Input){
           WHERE tenant_id=$2 AND thread_id=$3 AND created_at>clock_timestamp()-interval '1 hour')<5
         RETURNING code_hash`,[codeHash,row.tenant_id,row.thread_id]);
       await enqueueReply(row,claim.rows.length?
-        `To securely link your WhatsApp chat, sign in to ChatMeUp at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link and enter this one-time code: ${code}. It expires in 10 minutes. Do not share your password or OTP.`:
+        `To securely link your WhatsApp chat, sign in to Citizenvoice at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link and enter this one-time code: ${code}. It expires in 10 minutes. Do not share your password or OTP.`:
         'Too many linking requests. Please wait and try again later.');return;
     }
     const balance=/\b(balance|wallet balance)\b/i.test(body)||/sauran kudi/i.test(body);
@@ -298,21 +307,16 @@ export function createWhatsAppWorker(input:Input){
         WHERE l.tenant_id=$1 AND l.thread_id=$2 AND l.revoked_at IS NULL`,[row.tenant_id,row.thread_id]);
       const userId=ownership.rows[0]?.user_id as string|undefined;
       if(!userId){await enqueueReply(row,
-        'Account details require a recent, authenticated ChatMeUp authorization. Send LINK to connect your account, then grant 10-minute read access in the signed-in app.');return;}
+        'Account details require a recent, authenticated Citizenvoice authorization. Send LINK to connect your account, then grant 10-minute read access in the signed-in app.');return;}
       if(balance){
         const wallet=await input.pool.query(`SELECT balance_kobo::text,held_kobo::text,frozen FROM gb_wallet.ngn_accounts
           WHERE tenant_id=$1 AND account_id=$2`,[row.tenant_id,userId]);
         const entry=wallet.rows[0];
-        if(entry?.frozen){await enqueueReply(row,'Your wallet is restricted. Please contact ChatMeUp support through the signed-in app.');return;}
+        if(entry?.frozen){await enqueueReply(row,'Your wallet is restricted. Please contact Citizenvoice support through the signed-in app.');return;}
         const balanceKobo=Number(entry?.balance_kobo??0),heldKobo=Number(entry?.held_kobo??0);
         await enqueueReply(row,`Your verified NGN wallet balance is ${money(balanceKobo)}. Reserved: ${money(heldKobo)}. This read authorization expires after 10 minutes.`);return;
       }
-      const account=await input.pool.query(`SELECT bank_name,account_name,account_number FROM gb_wallet.billstack_accounts
-        WHERE tenant_id=$1 AND account_id=$2 AND status='assigned'`,[row.tenant_id,userId]);
-      const a=account.rows[0];
-      await enqueueReply(row,a?.account_number?
-        `Your ChatMeUp funding details: ${a.bank_name??'9PSB'} · ${a.account_name??'ChatMeUp'} · ${a.account_number}. Confirm the beneficiary name in your bank app before sending money.`:
-        'A verified funding account is not yet available. Open your signed-in ChatMeUp wallet for the latest status.');return;
+      await enqueueReply(row,`For your security, full funding account details are only available in your signed-in Citizenvoice wallet at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}. Never send account credentials or one-time codes in WhatsApp.`);return;
     }
     const handoff=row.escalation_keywords.some(word=>word&&body.toLowerCase().includes(word.toLowerCase()));
     if(handoff){
@@ -326,18 +330,18 @@ export function createWhatsAppWorker(input:Input){
           AND (language='auto' OR language=$4) LIMIT 1`,[row.tenant_id,row.channel_id,body.slice(1),row.language]);
       if(saved.rows[0]?.body){await enqueueReply(row,String(saved.rows[0].body));return;}
     }
-    if(/\b(buy data|purchase data|data bundles|data plans|data packages)\b/i.test(body)||/sayen data|siyan data|tsarin data/i.test(body)){
+    if(wantsData(body)){
       if(allowed(row,'data_catalog')&&allowed(row,'data_purchase')){
         const linked=await input.pool.query(`SELECT 1 FROM security.whatsapp_account_links l
           WHERE l.tenant_id=$1 AND l.thread_id=$2 AND l.revoked_at IS NULL`,[row.tenant_id,row.thread_id]);
         await enqueueReply(row,linked.rows.length?
-          `You can buy verified MTN, Airtel, Glo and 9mobile data through this WhatsApp assistant. Open ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link in your authenticated ChatMeUp account, choose this conversation, select a live data plan and confirm the exact debit. Your receipt and transaction status will appear there and your receipt can be sent here.`:
-          `To purchase data securely, send LINK first and connect this chat to your signed-in ChatMeUp account at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link. Then select a verified data bundle, review the live price and approve the wallet debit.`);
-      }else await enqueueReply(row,'Data purchases are not authorized on this WhatsApp number. Please use your signed-in ChatMeUp account.');
+          `You can buy verified MTN, Airtel, Glo and 9mobile data through this WhatsApp assistant. Open ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link in your authenticated Citizenvoice account, choose this conversation, select a live data plan and confirm the exact debit. Your receipt and transaction status will appear there and your receipt can be sent here.`:
+          `To purchase data securely, send LINK first and connect this chat to your signed-in Citizenvoice account at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}/whatsapp/link. Then select a verified data bundle, review the live price and approve the wallet debit.`);
+      }else await enqueueReply(row,'Data purchases are not authorized on this WhatsApp number. Please use your signed-in Citizenvoice account.');
       return;
     }
-    if(/\b(register|registration|sign up|create account)\b/i.test(body)&&allowed(row,'registration_guide')){
-      await enqueueReply(row,`To register with ChatMeUp, open ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} and create your account using the secure sign-up and verification steps. Never share an OTP or password in WhatsApp.`);return;
+    if(wantsAccountRegistration(body)&&allowed(row,'registration_guide')){
+      await enqueueReply(row,`To register with Citizenvoice, open ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} and create your account using the secure sign-up and verification steps. Never share an OTP or password in WhatsApp.`);return;
     }
     if(/\b(receipt|transaction status|data status)\b/i.test(body)&&
       (allowed(row,'transaction_status')||allowed(row,'receipts'))){
@@ -348,7 +352,7 @@ export function createWhatsAppWorker(input:Input){
     // all account and money requests are directed to the signed-in app.
     if(asksForProtectedData(body)){
       await enqueueReply(row,row.language==='ha'?
-        `Don kare asusunka, shiga ChatMeUp ta ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} domin duba walat, bayanan asusu ko sayen data. Kada ka aiko da PIN ko OTP a WhatsApp.`:
+        `Don kare asusunka, shiga Citizenvoice ta ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} domin duba walat, bayanan asusu ko sayen data. Kada ka aiko da PIN ko OTP a WhatsApp.`:
         `For your security, sign in at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)} to view your wallet, funding details or buy data. Never send a PIN or OTP in WhatsApp.`);return;
     }
     if(!allowed(row,'faq')&&!allowed(row,'greet')){
@@ -364,7 +368,7 @@ export function createWhatsAppWorker(input:Input){
         const person=row.owner_name.trim()||'the owner';
         const intro=row.first_contact?
           personal?` I am ${row.assistant_name}, helping ${person} with messages.`:
-          ` I am ${row.assistant_name}, ChatMeUp's assistant.`:'';
+          ` I am ${row.assistant_name}, Citizenvoice's assistant.`:'';
         await enqueueReply(row,`${salutation}${intro} How may I help you?`);
       }else await complete(row.job_id,'completed');
       return;
@@ -387,15 +391,15 @@ export function createWhatsAppWorker(input:Input){
         ORDER BY created_at DESC LIMIT 24`,[row.tenant_id,row.thread_id,row.message_id]):{rows:[]};
       const safeContext=row.remember_context?safeWhatsAppHistory((history.rows as {direction:string;body:string}[]).reverse()):'';
       const memory=row.remember_context?(await readWhatsAppMemory(input.pool,row.tenant_id,row.thread_id,body)||row.memory_summary):'';
-      const language='Respond in natural, standard Hausa. Understand English and Hausa; preserve exact technical identifiers.';
+      const language= row.language==='ha'?'Respond in natural standard Hausa, preserving technical identifiers.':row.language==='en'?'Respond in natural English, preserving technical identifiers.':'Match the sender’s language and code-switching. Use natural English or standard Hausa; preserve exact technical identifiers.';
       const lastAway=row.last_away_notice_at?new Date(row.last_away_notice_at).getTime():0;
       const system=`${whatsappIdentityInstructions({numberPurpose:row.number_purpose??'service',
         ownerName:row.owner_name??'',ownerTitle:row.owner_title??'',assistantName:row.assistant_name,
         greeting:row.greeting,verifiedContactName:row.verified_contact_name??'',firstContact:row.first_contact??false,
         replyMode:row.reply_mode,absenceMessage:row.absence_message,
         mentionAbsence:row.reply_mode==='away'&&Date.now()-lastAway>6*3600*1000})}\n`+
-        `${row.personality}. ${language}\n${row.instructions}\n`+
-        'Answer general ChatMeUp service questions only where relevant. Do not impersonate a human or an official. ' +
+        `${row.personality}. ${language}\n${row.instructions}\n${citizenvoiceCapabilityInstructions(serviceContext,input.env)}\n`+
+        'Answer general Citizenvoice service questions only where relevant. Do not impersonate a human or an official. ' +
         'You have NO tools, NO access to customer balances, identities or payment records. Never invent balances, accounts, data prices, receipts, or claim a transaction succeeded. ' +
         `For account-specific or money matters, tell customers to sign in at ${publicWebOrigin(input.env.MASANAWA_WEB_BASE_URL)}. Never request passwords, PINs, OTPs, BVN or NIN. ` +
         'If uncertain, say what is uncertain without prematurely ending the conversation. Make replies feel human, varied and relevant to the sender. ' +
