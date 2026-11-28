@@ -105,6 +105,10 @@ internal object ShellPush {
         catch (_: org.json.JSONException) { JSONArray() }
     }
 
+    @Synchronized
+    fun publicNewsUnreadCount(context: Context): Int =
+        context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE).getInt("unread", 0).coerceIn(0, 999)
+
     private fun archiveNews(context: Context, rows: List<ShellNewsPreview>) {
         if (rows.isEmpty()) return
         val received = rows.map { if (it.receivedAt > 0) it else it.copy(receivedAt = System.currentTimeMillis()) }
@@ -253,8 +257,9 @@ internal object ShellPush {
         rememberPresented(context, presented, items.map { it.id })
         val liveIds = items.map { it.id }.toSet()
         prior.filter { it.id !in liveIds }.forEach { manager.cancel(newsChildId(it.id)) }
-        storeNews(context, count, items)
-        publishNewsGroup(context, count, items, fresh)
+        val reconciledCount = maxOf(count, publicNewsUnreadCount(context) + fresh.size).coerceAtMost(999)
+        storeNews(context, reconciledCount, items)
+        publishNewsGroup(context, reconciledCount, items, fresh)
     }
 
     /** FCM child and foreground-web hints feed the same persistent public-news
