@@ -21,6 +21,19 @@ describe('Citizenvoice WhatsApp service catalogue',()=>{
   expect(citizenvoiceIntent('What can you do?')).toBe('menu');
   expect(citizenvoiceIntent('Latest Kano news')).toBe('news');
  });
+ it('distinguishes information requests from money and account actions',()=>{
+  expect(citizenvoiceIntent('Send me the latest Kano news')).toBe('news');
+  expect(citizenvoiceIntent('Send me 5 headlines')).toBe('news');
+  expect(citizenvoiceIntent('Transfer 2000 to my brother')).toBe('unsupported');
+  expect(citizenvoiceIntent('Send my sister ₦500')).toBe('unsupported');
+  expect(citizenvoiceIntent('Tura kuɗi')).toBe('unsupported');
+  expect(citizenvoiceIntent('Labaran Kano')).toBe('news');
+  expect(wantsData('I need personal data protection advice')).toBe(false);
+  expect(wantsData('I want data privacy guidance')).toBe(false);
+  expect(wantsAccountRegistration('How can I open an account with my bank?')).toBe(false);
+  expect(wantsAccountRegistration('Create my account on Citizenvoice')).toBe(true);
+  expect(wantsAccountLink('Link my account to my bank')).toBe(false);
+ });
  it('filters old, social, wrong-state and malformed publisher rows',()=>{
   const now=Date.parse('2026-11-28T13:00:00Z');
   const row={title:'New public information',publisher:'Publisher',publishedAt:'2026-11-27T13:00:00Z',url:'https://example.com/a',states:['kano']};
