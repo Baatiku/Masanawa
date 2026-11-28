@@ -89,11 +89,14 @@ export function createFinancialNotificationRuntime(input: {
             throw new Error("unsupported_notice_category");
           // Only canonical publisher news is public; personal alerts stay redacted.
           const article = event.category === "status" && event.kind === "news_update"
-            ? (await input.pool.query<{headline:string;summary:string}>(`
-                SELECT a.headline,a.summary
+            ? (await input.pool.query<{headline:string;summary:string;publisher?:string;sourceUrl?:string;publishedAt?:string}>(`
+                SELECT a.headline,a.summary,p.display_name AS publisher,a.source_url AS "sourceUrl",
+                       to_char(a.original_published_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "publishedAt"
                 FROM feed.news_notification_events e
                 JOIN feed.news_articles a
                   ON a.tenant_id=e.tenant_id AND a.post_id=e.post_id
+                JOIN feed.news_publishers p
+                  ON p.tenant_id=a.tenant_id AND p.publisher_id=a.publisher_id
                 WHERE e.tenant_id=$1 AND e.event_id=$2
                 ORDER BY a.original_published_at DESC LIMIT 1`,
                 [event.tenant_id,event.event_id])).rows[0]
@@ -110,7 +113,10 @@ export function createFinancialNotificationRuntime(input: {
               type: event.kind,
               eventId: event.event_id,
               deepLink: event.deep_link,
-              ...(article ? {headline:article.headline,summary:article.summary} : {}),
+              ...(article ? {headline:article.headline,summary:article.summary,
+                ...(article.publisher?{publisher:article.publisher}:{}),
+                ...(article.sourceUrl?{sourceUrl:article.sourceUrl}:{}),
+                ...(article.publishedAt?{publishedAt:article.publishedAt}:{})} : {}),
             },
           });
           // Disabled categories, no device permission and quiet hours do not
