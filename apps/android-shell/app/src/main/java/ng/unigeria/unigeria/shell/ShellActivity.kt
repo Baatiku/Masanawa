@@ -74,6 +74,7 @@ class ShellActivity : ComponentActivity() {
     private lateinit var failureText: TextView
     private lateinit var loadingBar: ProgressBar
     private var firstPageVisible = false
+    private var mainFrameFailed = false
     private var keyboardVisible = false
     private var safeTopDp = 0
     private var safeBottomDp = 0
@@ -384,7 +385,8 @@ class ShellActivity : ComponentActivity() {
             WebViewCompat.addWebMessageListener(this, "MasanawaNative", setOf("https://app.chatmeup.online")) {
                 _, message, origin, isMainFrame, reply ->
                 if (isMainFrame && WebOriginPolicy.isTrusted(origin.toString())) {
-                    val payload = try { JSONObject(message.data ?: "") } catch (_: Exception) { null }
+                    val raw = message.data ?: ""
+                    val payload = if (raw.length <= 1_000_000) try { JSONObject(raw) } catch (_: Exception) { null } else null
                     if (payload != null) handleNativeMessage(payload, reply)
                 }
             }
@@ -407,9 +409,9 @@ class ShellActivity : ComponentActivity() {
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 if (WebOriginPolicy.isTrusted(url)) {
                     firstPageVisible = false
+                    mainFrameFailed = false
                     lastTrustedUrl = url
                     failureView.visibility = View.GONE
-                    if (::offlineHome.isInitialized) offlineHome.visibility = View.GONE
                 }
             }
 
@@ -422,7 +424,10 @@ class ShellActivity : ComponentActivity() {
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {
-                if (WebOriginPolicy.isTrusted(url)) firstPageVisible = true
+                if (WebOriginPolicy.isTrusted(url) && !mainFrameFailed) {
+                    firstPageVisible = true
+                    if (::offlineHome.isInitialized) offlineHome.visibility = View.GONE
+                }
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -736,6 +741,7 @@ class ShellActivity : ComponentActivity() {
 
     private fun showFailure(security: Boolean) {
         firstPageVisible = true
+        mainFrameFailed = true
         if (::loadingBar.isInitialized) loadingBar.visibility = View.GONE
         // A connectivity error must never hide already received public news.
         // Certificate errors remain a distinct security failure, without bypass.
