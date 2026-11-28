@@ -243,19 +243,18 @@ internal object ShellPush {
         val item = ShellNewsDigest.normalized(eventId, publisher, headline, description) ?: return
         val previous = storedNews(context)
         val presented = presentedNews(context)
-        val alreadyPresented = item.id in presented
+        if (item.id in presented) return
         val merged = ShellNewsDigest.merge(listOf(item), previous)
         val current = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
             .getInt("unread", 0)
         val count = ShellNewsDigest.nextUnreadCount(current,
-            alreadyStored = alreadyPresented || previous.any { it.id == item.id }, visibleCount = if (alreadyPresented) previous.size else merged.size)
+            alreadyStored = previous.any { it.id == item.id }, visibleCount = merged.size)
         val retained = merged.map { it.id }.toSet()
         previous.filter { it.id !in retained }.forEach {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(newsChildId(it.id))
         }
         rememberPresented(context, presented, listOf(item.id))
-        if (alreadyPresented) return
         storeNews(context, count, merged)
         publishNewsGroup(context, count, merged, listOf(item))
     }
