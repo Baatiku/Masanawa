@@ -133,7 +133,7 @@ export function createWhatsAppWorker(input:Input){
         mentionAbsence:source.reply_mode==='away'&&!source.last_away_notice_at});
       const system=mode==='scripted'?
         `Speak the following pre-approved assistant message exactly, in its original language. Do not add, paraphrase, omit or translate any word. Read URLs and one-time codes accurately. Only speak the provided message. ${identity}`:
-        `${identity}\n${source.personality}. ${source.instructions}\n`+
+        `${identity}\n${source.personality}. ${source.instructions}\n${citizenvoiceCapabilityInstructions({channelId:source.channel_id,numberPurpose:source.number_purpose,roleLevel:source.role_level,permissions:source.permissions},input.env)}\n`+
         (source.language==='ha'?'Speak natural standard Hausa at a gentle measured pace.':source.language==='en'?'Speak natural English with a clear Nigerian cadence.':'Match the sender’s language; speak natural English or standard Hausa at a gentle pace.')+
         '\nRespond conversationally, with enough depth to answer the actual question. A simple greeting can be short; substantive topics deserve thoughtful explanation. Avoid repetitive sign-offs and unsolicited message-taking. Use conversation context. Never invent financial records, prices, identity, wallet authorization or transactions. Do not request passwords, PINs, OTPs, BVN or NIN. You have no account tools.';
       let prompt=actual;

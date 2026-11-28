@@ -21,3 +21,6 @@ The pilot allowlist MASANAWA_CITIZENVOICE_WHATSAPP_PILOT_CHANNELS is empty by de
 5. Subscription scheduler, notification preferences, complaints/support, official calling capability, interactive renderer and admin monitoring. Reuse existing services and avoid extra infrastructure until load-tested.
 6. Frontend secure review recovery and complete service control centre; end-to-end browser, PostgreSQL, provider, security, policy and handset acceptance.
 7. Exact-head CI, review, merge, production deployment and independent readback before release claims.
+
+## Financial recovery follow-up
+An account-fenced recent-purchases endpoint returns only masked recipient details. Status recovers an interrupted approval from the original canonical operation key, without making a new payment. An approval with no canonical operation remains requested and must not be reported as failed or delivered. A separate receipt-dispatch gate still needs dedicated tests; do not infer receipt delivery from queuing alone.

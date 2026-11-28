@@ -63,7 +63,7 @@ export function registerWhatsAppDataRoutes(app:FastifyInstance,input:Input){
     ) INSERT INTO security.whatsapp_jobs(tenant_id,channel_id,message_id,kind)
       SELECT tenant_id,channel_id,message_id,'send' FROM outbound ON CONFLICT DO NOTHING`,
       [a.tenantId,a.userId,b.threadId,
-        `Masanawa Buy Data receipt: ${b.bundleId} for ${b.recipientPhone}. Amount: ₦${(b.reviewedCostKobo/100).toFixed(2)}. Status: delivered. Reference: ${operationId}.`,
+        `Citizenvoice Buy Data receipt: ${b.bundleId} for ••••${b.recipientPhone.slice(-4)}. Amount: ₦${(b.reviewedCostKobo/100).toFixed(2)}. Status: delivered. Reference: ${operationId}.`,
         messageKey(a,b.idempotencyKey)]);
   };
   app.get('/v1/whatsapp/link/data/bundles',{schema:{querystring:Type.Object({threadId:uuid},{additionalProperties:false})}},async(q,r)=>{
@@ -125,6 +125,22 @@ export function registerWhatsAppDataRoutes(app:FastifyInstance,input:Input){
       return {currency:'NGN',unit:'kobo',...result};
     }catch(e){return deny(e,r);}
   });
+  // Recovery is account-scoped and survives a browser reload. Never expose full
+  // recipient details or provider credentials in this list.
+  app.get('/v1/whatsapp/link/data/recent',{schema:{querystring:Type.Object({threadId:uuid},{additionalProperties:false})}},async(q,r)=>{
+    r.header('cache-control','private, no-store');
+    try{
+      const a=await actor(q.headers.authorization);const {threadId}=q.query as {threadId:string};
+      await linked(a,threadId,'transaction_status');
+      const recent=await input.pool.query(`SELECT idempotency_key AS "idempotencyKey",bundle_id AS "bundleId",
+        right(recipient_phone,4) AS "recipientLast4",reviewed_cost_kobo::int AS "costKobo",
+        operation_id AS "operationId",state,created_at AS "createdAt"
+        FROM security.whatsapp_purchase_approvals
+        WHERE tenant_id=$1 AND user_id=$2 AND thread_id=$3
+        ORDER BY (state IN ('requested','pending')) DESC,created_at DESC LIMIT 30`,[a.tenantId,a.userId,threadId]);
+      return {purchases:recent.rows};
+    }catch(e){return deny(e,r);}
+  });
   app.get('/v1/whatsapp/link/data/status',{schema:{querystring:Type.Object({threadId:uuid,
     idempotencyKey:Type.String({minLength:16,maxLength:100})},{additionalProperties:false})}},async(q,r)=>{
     r.header('cache-control','private, no-store');
@@ -133,11 +149,23 @@ export function registerWhatsAppDataRoutes(app:FastifyInstance,input:Input){
       await linked(a,threadId,'transaction_status');
       const approval=await input.pool.query(`SELECT operation_id,reviewed_cost_kobo,bundle_id,recipient_phone FROM security.whatsapp_purchase_approvals
         WHERE tenant_id=$1 AND user_id=$2 AND thread_id=$3 AND idempotency_key=$4`,[a.tenantId,a.userId,threadId,idempotencyKey]);
-      const operationId=approval.rows[0]?.operation_id as string|undefined;
-      if(!operationId){r.code(404);return {error:'purchase_not_found'};}
+      const record=approval.rows[0];
+      if(!record){r.code(404);return {error:'purchase_not_found'};}
+      let operationId=record.operation_id as string|undefined;
+      if(!operationId){
+        // Gateway may have stopped after canonical admission but before updating
+        // the WhatsApp approval. Recover by the original account-scoped key,
+        // never dispatch a new provider purchase from a status request.
+        try{operationId=(await service.readOriginal(a,idempotencyKey)).operationId;}
+        catch(e){
+          if(e instanceof Error&&e.message==='data_redemption_not_found')
+            return {operationId:null,state:'requested',costKobo:Number(record.reviewed_cost_kobo)};
+          throw e;
+        }
+      }
       const result=await service.reconcile(a,operationId);
-      await input.pool.query(`UPDATE security.whatsapp_purchase_approvals SET state=$5
-        WHERE tenant_id=$1 AND user_id=$2 AND thread_id=$3 AND idempotency_key=$4`,[a.tenantId,a.userId,threadId,idempotencyKey,result.state]);
+      await input.pool.query(`UPDATE security.whatsapp_purchase_approvals SET state=$5,operation_id=$6
+        WHERE tenant_id=$1 AND user_id=$2 AND thread_id=$3 AND idempotency_key=$4`,[a.tenantId,a.userId,threadId,idempotencyKey,result.state,operationId]);
       if(result.state==='delivered')await queueReceipt(a,{threadId,idempotencyKey,
         bundleId:String(approval.rows[0]!.bundle_id),recipientPhone:String(approval.rows[0]!.recipient_phone),
         reviewedCostKobo:Number(approval.rows[0]!.reviewed_cost_kobo)},operationId);
