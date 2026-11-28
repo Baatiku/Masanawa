@@ -31,26 +31,31 @@ export function citizenvoiceCapabilityInstructions(ctx:Context,env:Env):string{
   'Follow the current request, use prior context only as context, ask one necessary question at a time, and avoid repetitive greetings or sign-offs. Match the sender’s language; use natural English or standard Hausa and preserve code-switching.';
 }
 export function wantsData(text:string):boolean{
- return /\b(?:buy|purchase|recharge|get|need|want|subscribe|top up)\b[^.!?\n]{0,70}\bdata\b/i.test(text)||
-  /\bdata (?:bundles|plans|packages|purchase)\b/i.test(text)||
-  /(?:sayen data|siyan data|tsarin data|saya min data)/i.test(text);
+ const s=text.trim();
+ if(/\b(?:personal|private|customer|user|health|medical|research|financial|mobile app|public|sensitive)\s+data\b|\bdata\s+(?:privacy|protection|breach|security|analysis|collection|processing|storage|sharing)\b/i.test(s))return false;
+ return /\b(?:buy|purchase|recharge|get|need|want|subscribe|top up)\b[^.!?\n]{0,70}\bdata\b/i.test(s)||
+  /\bdata (?:bundles|plans|packages|purchase)\b/i.test(s)||
+  /(?:sayen data|siyan data|tsarin data|saya min data)/i.test(s);
 }
 export function wantsAccountRegistration(text:string):boolean{
  const s=text.trim();
+ if(/\b(?:bank|banking|cac|business|company|corporate|school|email|facebook|google|whatsapp|third.party)\b/i.test(s)&&!/\b(?:citizenvoice|chatmeup|masanawa)\b/i.test(s))return false;
  return /^(?:register|registration|sign up|create account)[.!?]*$/i.test(s)||
   /\b(?:register|sign up|create (?:an?|my) account)\b[^.!?\n]{0,45}\b(?:citizenvoice|chatmeup|masanawa)\b/i.test(s)||
-  /\b(?:create|open|register|set up)\s+(?:an? |my |a new )?account\b/i.test(s);
+  /^(?:please\s+)?(?:create|open|register|set up)\s+(?:an? |my |a new )?account[.!?]*$/i.test(s);
 }
 export function wantsAccountLink(text:string):boolean{
- return /^link(?:\s+account)?[.!?]*$/i.test(text.trim())||
-  /\b(?:link|connect)\s+(?:my |this )?(?:citizenvoice |chatmeup |masanawa |whatsapp )?account\b/i.test(text);
+ const s=text.trim();
+ if(/\b(?:bank|banking|cac|business|company|corporate|email|facebook|google)\b/i.test(s)&&!/\b(?:citizenvoice|chatmeup|masanawa)\b/i.test(s))return false;
+ return /^link(?:\s+account)?[.!?]*$/i.test(s)||
+  /\b(?:link|connect)\s+(?:my |this )?(?:citizenvoice |chatmeup |masanawa |whatsapp )?account\b/i.test(s);
 }
 export function citizenvoiceIntent(text:string):'menu'|'news'|'unsupported'|'none'{
  const s=text.trim();
  if(/\b(?:vote|rating|rate (?:the|my|a) governor|citizenpulse|political campaign|candidate comparison|forum|public official)\b/i.test(s))return 'unsupported';
- if(/^(?:menu|services|help|what can you do|what services (?:do you offer|are available))[.!?]*$/i.test(s))return 'menu';
- if(/\b(?:send|transfer)\s+(?:me |him |her |them |money|₦|NGN|[0-9])/i.test(s)||/\b(?:buy|purchase|recharge)\b[^.!?]{0,50}\bairtime\b/i.test(s)||/\bpay\b[^.!?]{0,50}\b(?:bill|electricity|utility)\b/i.test(s))return 'unsupported';
- if(/\b(?:news|headlines|news briefing)\b/i.test(s)&&!/[\r\n]/.test(s))return 'news';
+ if(/^(?:menu|services|help|what can you do|what services (?:do you offer|are available)|me za ka iya yi|me za ki iya yi|ayyuka|taimako)[.!?]*$/i.test(s))return 'menu';
+ if(/\b(?:send|transfer)\s+(?:(?:me|him|her|them)\s+)?(?:money\b|funds\b|cash\b|₦|NGN\b|(?:[0-9][0-9,.]*\s*)(?:naira\b|to\b|NGN\b))/i.test(s)||/\b(?:send|transfer)\b[^.!?\n]{0,50}(?:₦\s*[0-9]|[0-9][0-9,.]*\s*(?:naira|NGN)\b)/i.test(s)||/\b(?:buy|purchase|recharge)\b[^.!?]{0,50}\bairtime\b/i.test(s)||/\bpay\b[^.!?]{0,50}\b(?:bill|electricity|utility)\b/i.test(s)||/\b(?:aika|tura)\b[^.!?\n]{0,35}\bku[ɗd]i\b/i.test(s))return 'unsupported';
+ if(/\b(?:news|headlines|news briefing|labarai|labaran)\b/i.test(s)&&!/[ \t]*(?:\r|\n)/.test(s))return 'news';
  return 'none';
 }
 const states=['abia','adamawa','akwa-ibom','anambra','bauchi','bayelsa','benue','borno','cross-river','delta','ebonyi','edo','ekiti','enugu','gombe','imo','jigawa','kaduna','kano','katsina','kebbi','kogi','kwara','lagos','nasarawa','niger','ogun','ondo','osun','oyo','plateau','rivers','sokoto','taraba','yobe','zamfara','fct'];
