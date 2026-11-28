@@ -359,6 +359,13 @@
       "description": "Production configuration for MASANAWA_BOOTSTRAP_PLATFORM_AGENTS."
     },
     {
+      "name": "MASANAWA_CITIZENVOICE_WHATSAPP_PILOT_CHANNELS",
+      "owner": "worker/whatsapp",
+      "classification": "public",
+      "requiredIn": [],
+      "description": "Optional comma-separated dedicated service channel UUID allowlist for the Citizenvoice pilot; empty by default. Does not confer WhatsApp provider eligibility or financial approval."
+    },
+    {
       "name": "MASANAWA_CREATOR_GENERATION_MODEL",
       "owner": "gateway/creator-agents",
       "classification": "public",

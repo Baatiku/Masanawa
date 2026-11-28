@@ -15,6 +15,8 @@ describe('WhatsApp Buy Data Gateway authority',()=>{
       const threadId='6c7eb432-2250-4d76-8ae4-17a41bbc92ca';
       const catalog=await app.inject({method:'GET',url:`/v1/whatsapp/link/data/bundles?threadId=${threadId}`});
       expect(catalog.statusCode).toBe(403);
+      const recent=await app.inject({method:'GET',url:`/v1/whatsapp/link/data/recent?threadId=${threadId}`});
+      expect(recent.statusCode).toBe(403);
       const buy=await app.inject({method:'POST',url:'/v1/whatsapp/link/data/buy',payload:{
         threadId,bundleId:'MTN:DATA',version:'v1',recipientPhone:'08012345678',
         idempotencyKey:'wa_abc123456789012345',reviewedCostKobo:100000}});
