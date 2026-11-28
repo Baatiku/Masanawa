@@ -566,7 +566,8 @@ class ShellActivity : ComponentActivity() {
                 if (Regex("^[a-fA-F0-9-]{36}$").matches(requestId))
                     reply.postMessage(JSONObject().put("type", "news-cache-result")
                         .put("requestId", requestId)
-                        .put("articles", ShellPush.publicNewsArchive(this)).toString())
+                        .put("articles", ShellPush.publicNewsArchive(this))
+                        .put("unread", ShellPush.publicNewsUnreadCount(this)).toString())
             }
             "news-unread-count" -> {
                 // Trusted main-frame origin; public headline, never account data.
