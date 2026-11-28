@@ -28,6 +28,7 @@ internal object ShellPush {
     private const val newsPrefsName = "masanawa-shell-news"
     private const val newsEntriesKey = "articles-v2"
     private const val presentedNewsKey = "presented-articles-v1"
+    private const val newsArchiveKey = "public-news-archive-v1"
 
     fun initialize(context: Context): Boolean {
         if (FirebaseApp.getApps(context).isNotEmpty()) return true
@@ -93,6 +94,24 @@ internal object ShellPush {
             .getString(newsEntriesKey, null) ?: return emptyList()
         return try { ShellNewsDigest.read(JSONArray(raw)) }
         catch (_: org.json.JSONException) { emptyList() }
+    }
+
+    /** Public article archive survives shade dismissal and explicit mark-read. */
+    @Synchronized
+    fun publicNewsArchive(context: Context): JSONArray {
+        val raw = context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE)
+            .getString(newsArchiveKey, null)
+        return try { if (raw == null) JSONArray() else JSONArray(raw) }
+        catch (_: org.json.JSONException) { JSONArray() }
+    }
+
+    private fun archiveNews(context: Context, rows: List<ShellNewsPreview>) {
+        if (rows.isEmpty()) return
+        val received = rows.map { if (it.receivedAt > 0) it else it.copy(receivedAt = System.currentTimeMillis()) }
+        val previous = ShellNewsDigest.read(publicNewsArchive(context), ShellNewsDigest.maxArchiveItems)
+        val combined = ShellNewsDigest.merge(received, previous, ShellNewsDigest.maxArchiveItems)
+        context.getSharedPreferences(newsPrefsName, Context.MODE_PRIVATE).edit()
+            .putString(newsArchiveKey, ShellNewsDigest.encode(combined, ShellNewsDigest.maxArchiveItems)).apply()
     }
 
     private fun presentedNews(context: Context): Set<String> {
@@ -190,7 +209,9 @@ internal object ShellPush {
      * A swipe or process restart must not replay an old notification. */
     @Synchronized
     fun restoreUnreadNewsBadge(context: Context) {
-        rememberPresented(context, presentedNews(context), storedNews(context).map { it.id })
+        val prior = storedNews(context)
+        if (publicNewsArchive(context).length() == 0) archiveNews(context, prior)
+        rememberPresented(context, presentedNews(context), prior.map { it.id })
     }
 
     private fun storeNews(context: Context, count: Int, rows: List<ShellNewsPreview>) {
@@ -222,6 +243,7 @@ internal object ShellPush {
             return
         }
         val incoming = ShellNewsDigest.read(previews)
+        archiveNews(context, incoming)
         val fallback = if (incoming.isEmpty() && prior.isEmpty())
             ShellNewsDigest.normalized("news-last", "Masanawa News", latestHeadline, null)
                 ?.let { listOf(it) } ?: emptyList() else emptyList()
@@ -239,8 +261,10 @@ internal object ShellPush {
      * digest, keyed by article ID rather than by whichever arrived last. */
     @Synchronized
     private fun postNewsArticle(context: Context, eventId: String?, publisher: String?,
-                                headline: String?, description: String?) {
-        val item = ShellNewsDigest.normalized(eventId, publisher, headline, description) ?: return
+                                headline: String?, description: String?, url: String?, publishedAt: String?) {
+        val item = ShellNewsDigest.normalized(eventId, publisher, headline, description, url, publishedAt,
+            System.currentTimeMillis()) ?: return
+        archiveNews(context, listOf(item))
         val previous = storedNews(context)
         val presented = presentedNews(context)
         if (item.id in presented) return
@@ -261,8 +285,9 @@ internal object ShellPush {
 
     fun showNotification(context: Context, route: String, incomingCall: Boolean = false,
                          news: Boolean = false, headline: String? = null, summary: String? = null,
-                         eventId: String? = null, publisher: String? = null) {
-        if (news) { postNewsArticle(context, eventId, publisher, headline, summary); return }
+                         eventId: String? = null, publisher: String? = null,
+                         sourceUrl: String? = null, publishedAt: String? = null) {
+        if (news) { postNewsArticle(context, eventId, publisher, headline, summary, sourceUrl, publishedAt); return }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             return
@@ -317,7 +342,8 @@ class ShellFirebaseMessagingService : FirebaseMessagingService() {
         if (type == "news_article" || type == "news_update") {
             ShellPush.showNotification(this, "https://app.chatmeup.online/?tab=home",
                 news = true, headline = message.data["headline"], summary = message.data["summary"],
-                eventId = message.data["eventId"], publisher = message.data["publisher"])
+                eventId = message.data["eventId"], publisher = message.data["publisher"],
+                sourceUrl = message.data["sourceUrl"], publishedAt = message.data["publishedAt"])
             return
         }
         if (!Regex("^[a-z][a-z0-9_]{0,63}$").matches(type) || type.startsWith("human_") ||
